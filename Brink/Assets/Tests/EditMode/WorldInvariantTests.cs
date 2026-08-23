@@ -18,26 +18,21 @@ namespace Brink.Tests
     /// </summary>
     public class WorldInvariantTests
     {
-        /// <summary>A fully wired game, exactly as GameController assembles one.</summary>
+        /// <summary>
+        /// A fully wired game, exactly as the shipping game assembles one.
+        ///
+        /// **This must go through `SimulationPipeline.Wire` and nothing else.**
+        /// It used to be a hand-copied third version of the monthly list and had
+        /// already drifted by six systems — `CabinetLifecycle`, both halves of
+        /// `AcquisitionSystem`, `AccessionSystem`, `SecessionSystem`,
+        /// `TerritorySystem` and `Telemetry` were all absent. A world-health
+        /// harness that omits systems is worse than no harness: it certifies as
+        /// healthy a world nobody plays. Never re-expand this into a list.
+        /// </summary>
         static TurnManager FullyWired(GameState state)
         {
             var turns = new TurnManager(state);
-            turns.ResolveMonth += CabinetSystem.MonthlyAct;
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += EconomySystem.AgeSanctions;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
-            turns.ResolveMonth += TechnologySystem.MonthlyUpdate;
-            turns.ResolveMonth += EndgameSystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += ProgressionSystem.MonthlyXP;
-            turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
-            turns.ResolveMonth += CrisisSystem.SystemicCheck;
+            SimulationPipeline.Wire(turns, state);
             return turns;
         }
 

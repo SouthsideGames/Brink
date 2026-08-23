@@ -16,6 +16,13 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 7070);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: every test writes the six relationship dimensions
+            // it cares about by hand and then runs at most 24 months to assert
+            // DiplomacySystem's own monthly arithmetic (relations cooling under
+            // sanctions, dependence collapsing under embargo, war memory). The
+            // AI is the significant omission and is omitted on purpose — a
+            // foreign government acting on these relationships would overwrite
+            // the very values the tests set as preconditions.
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
         }

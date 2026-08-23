@@ -37,6 +37,15 @@ namespace Brink.UI
         /// </summary>
         public static bool ShortScreen { get; private set; }
 
+        /// <summary>
+        /// Measured panel height in points. Exposed so an overlay can bound
+        /// itself against the screen rather than against its own content — on a
+        /// landscape phone an unbounded panel will happily push its own buttons
+        /// below the fold, which is how the orientation panel became impossible
+        /// to finish on an iPhone.
+        /// </summary>
+        public static float PanelHeight { get; private set; } = 640f;
+
         public static SizeClass Size { get; private set; } = SizeClass.Compact;
 
         /// <summary>Raised when the usable grid changes, so open views can rebuild.</summary>
@@ -58,6 +67,7 @@ namespace Brink.UI
             }
 
             bool shortScreen = heightPt > 0f && heightPt < ShortScreenHeight;
+            if (heightPt > 0f) PanelHeight = heightPt;
 
             if (columns == Columns && shortScreen == ShortScreen && size == Size) return false;
 

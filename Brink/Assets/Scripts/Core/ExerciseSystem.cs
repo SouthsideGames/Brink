@@ -129,6 +129,16 @@ namespace Brink.Core
             ApplyReadiness(player, focus, readinessGain);
             ApplyReadiness(partner, focus, readinessGain * 0.7f);
 
+            // **The peacetime route to veterancy, and the reason war games are
+            // now worth their exposure cost.** Experience otherwise settles at
+            // whatever a force's own training sustains; an exercise is how a
+            // country that is not fighting pushes past that ceiling. Both sides
+            // gain — a joint exercise is not something done *to* a partner —
+            // and coming off worse teaches more here too, on the same principle
+            // as the readiness gain above.
+            ApplyExperience(player, focus, (weOutperformed ? 2.4f : 3.2f) * depth);
+            ApplyExperience(partner, focus, (weOutperformed ? 3.2f : 2.4f) * depth);
+
             float interoperabilityGain = 7f * depth;
             relationship.interoperability = Clamp(relationship.interoperability + interoperabilityGain);
 
@@ -228,6 +238,35 @@ namespace Brink.Core
                     mil.ground.readiness = Clamp(mil.ground.readiness + amount * 0.5f);
                     mil.air.readiness = Clamp(mil.air.readiness + amount * 0.5f);
                     mil.naval.readiness = Clamp(mil.naval.readiness + amount * 0.5f);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Training value, on the same branch mapping as <see cref="ApplyReadiness"/>
+        /// — including Joint, which spreads across all three. Gain shrinks as a
+        /// force approaches 100: there is progressively less an exercise can teach
+        /// an army that has already been everywhere.
+        /// </summary>
+        static void ApplyExperience(CountryState country, ExerciseFocus focus, float amount)
+        {
+            var mil = country.military;
+
+            void Train(BranchForce force, float share)
+            {
+                float room = (100f - force.experience) / 100f;
+                force.experience = Clamp(force.experience + amount * share * room);
+            }
+
+            switch (focus)
+            {
+                case ExerciseFocus.Ground: Train(mil.ground, 1f); break;
+                case ExerciseFocus.Air: Train(mil.air, 1f); break;
+                case ExerciseFocus.Naval: Train(mil.naval, 1f); break;
+                default:
+                    Train(mil.ground, 0.5f);
+                    Train(mil.air, 0.5f);
+                    Train(mil.naval, 0.5f);
                     break;
             }
         }

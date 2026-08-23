@@ -15,6 +15,16 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 6600);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: the regime tick alone, here and in the per-test
+            // worlds below, and the omission is the experiment rather than an
+            // oversight — every case re-pins stability, approval, unity,
+            // military loyalty, cohesion and the economy every single month to
+            // hold conditions fixed, so any other system moving those inputs
+            // would destroy the control that the coup-rate, cannot-topple-a-
+            // stable-state and thirty-years-without-collapse claims are
+            // measured against, and RegimeSystem.MonthlyUpdate is the only
+            // producer of coups, so those negative claims are not vacuous (the
+            // successful-coup cases in this file fire under the same wiring).
             turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
         }
 
@@ -52,6 +62,23 @@ namespace Brink.Tests
             country.government.legislativeSupport = 85f;
         }
 
+        /// <summary>
+        /// Re-apply the fixture's conditions every month and advance.
+        ///
+        /// **The `setup(country)` call must stay *before* `EndMonth`.** Several of
+        /// these fixtures inject values that a fuller pipeline would erase within
+        /// a month or two — `MakeFailingState` sets `inflation = 25` and
+        /// `unemployment = 25`, which `EconomySystem` approaches back toward
+        /// ~2 and ~7 at 30% and 25% a month. Re-pinning first is what makes the
+        /// conditions actually hold while the regime tick reads them; flipping the
+        /// order would leave the tests measuring a recovery and calling it a
+        /// failing state.
+        ///
+        /// This is also why the narrow wiring above is load-bearing rather than
+        /// merely economical. If `EconomySystem` or `GovernmentSystem` is ever
+        /// added to this fixture, check that every value these setups inject is
+        /// still at its intended level at the point the assertion runs.
+        /// </summary>
         void HoldConditions(CountryState country, System.Action<CountryState> setup, int months)
         {
             for (int i = 0; i < months; i++)

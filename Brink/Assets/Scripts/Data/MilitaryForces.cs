@@ -28,6 +28,34 @@ namespace Brink.Data
         public float supply;    // 0..100 fuel, munitions, sustainment
 
         /// <summary>
+        /// What this branch has learned by doing (0..100).
+        ///
+        /// **The military pillar was the only one that did not compound.** The
+        /// economy grows, networks deepen, treaties accumulate, institutions
+        /// strengthen — a decade of engagement leaves every other playstyle
+        /// further ahead than it started. A decade of war left the army where it
+        /// began, minus the losses, which is the structural reason militarism
+        /// graded lowest of the five (ECON component 17.2 against 28–51) rather
+        /// than anything about conquest yields.
+        ///
+        /// Three rules keep it from being a free ratchet, and each is the answer
+        /// to a bug this codebase has already shipped:
+        ///
+        /// 1. **It decays without use.** An army that neither fights nor trains
+        ///    forgets, so a peacetime power cannot bank elite status for decades.
+        /// 2. **Replacements dilute it.** Casualties are replaced by people who
+        ///    have not been there, so a bloody victory can leave a force *less*
+        ///    experienced than it started — which is what makes attrition a real
+        ///    cost rather than a number that refills.
+        /// 3. **Everyone has it.** It is written and read actor-generically; a
+        ///    veteran opponent is exactly as dangerous as a veteran of ours.
+        ///
+        /// Exercises are the peacetime path to it (`ExerciseSystem`), which
+        /// finally gives war games a reason to exist beyond readiness and trust.
+        /// </summary>
+        public float experience;
+
+        /// <summary>
         /// What this branch actually holds (GDD §19, amended). Counts are the
         /// truth; <see cref="strength"/> is a cached mirror of them.
         ///
@@ -69,8 +97,51 @@ namespace Brink.Data
             strength = target;
         }
 
-        /// <summary>Combat power actually available this month.</summary>
-        public float EffectivePower => strength * (0.35f + 0.65f * readiness / 100f) * (0.4f + 0.6f * supply / 100f) / 100f;
+        /// <summary>
+        /// Combat power actually available this month.
+        ///
+        /// Experience is a modest multiplier — 0.88 green to 1.18 at 100 — so a
+        /// veteran force is worth roughly a fifth more than a raw one. It is
+        /// deliberately smaller than readiness or supply: what a force has
+        /// learned should matter, but never enough to beat having more of it.
+        /// Seeded around 30, so a fresh world sits near 0.97 and this is not a
+        /// silent across-the-board buff to every army at world creation.
+        /// </summary>
+        public float EffectivePower => strength
+                                       * (0.35f + 0.65f * readiness / 100f)
+                                       * (0.4f + 0.6f * supply / 100f)
+                                       * ExperienceFactor / 100f;
+
+        /// <summary>The multiplier <see cref="experience"/> contributes. 0.88 .. 1.18.</summary>
+        public float ExperienceFactor => 0.88f + 0.30f * (experience < 0f ? 0f : experience > 100f ? 100f : experience) / 100f;
+
+        /// <summary>
+        /// Take in replacements who have not been where the veterans have.
+        ///
+        /// A weighted average against zero-experience arrivals, which is what
+        /// makes losses genuinely costly: a force that takes 30% casualties and
+        /// buys them back is at full strength on paper and measurably worse in
+        /// the field. Without this, veterancy would be a pure ratchet — the exact
+        /// class of bug that has cost this project seven fixes.
+        /// </summary>
+        public void AbsorbReplacements(float arrivingStrength)
+        {
+            if (arrivingStrength <= 0.001f) return;
+
+            float existing = strength < 0f ? 0f : strength;
+            float total = existing + arrivingStrength;
+            if (total <= 0.001f) { experience = 0f; return; }
+
+            experience = experience * existing / total;
+        }
+
+        /// <summary>Plain-language band, for readouts and after-action reports.</summary>
+        public string ExperienceBand
+            => experience >= 75f ? "VETERAN"
+             : experience >= 50f ? "SEASONED"
+             : experience >= 28f ? "TRAINED"
+             : experience >= 12f ? "GREEN"
+             : "UNBLOODED";
     }
 
     /// <summary>

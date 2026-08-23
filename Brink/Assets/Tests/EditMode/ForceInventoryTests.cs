@@ -155,11 +155,23 @@ namespace Brink.Tests
             player.resources.treasury = 40000f;
 
             float strengthBefore = player.military.air.strength;
+            float fightersBefore = player.military.air.inventory.CountOf(AssetKind.Fighters);
             AcquisitionSystem.OrderBy(state, player.id, AssetKind.Fighters, 600f);
 
             var turns = new TurnManager(state);
             SimulationPipeline.Wire(turns, state);
             for (int month = 0; month < 36; month++) turns.EndMonth();
+
+            // Precondition: strength is a *mirror* of the inventory and the full
+            // pipeline has other reasons to move it (routine restock, losses,
+            // SyncStrength). If the 600 fighters never actually arrived, the
+            // assertion below is measuring something else entirely.
+            Assert.Greater(player.military.air.inventory.CountOf(AssetKind.Fighters),
+                fightersBefore + 300f,
+                "The ordered fighters never reached the inventory, so any change in "
+                + "air strength below is not the delivery this test is about "
+                + $"(fighters {fightersBefore:F0} -> "
+                + $"{player.military.air.inventory.CountOf(AssetKind.Fighters):F0}).");
 
             Assert.Greater(player.military.air.strength, strengthBefore,
                 "Six hundred fighters were bought and delivered and the air force is no stronger.");

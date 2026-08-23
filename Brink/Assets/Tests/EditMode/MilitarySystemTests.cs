@@ -16,6 +16,16 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 4040);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: upkeep and the confrontation tick only, here and
+            // in the per-test worlds below — the AI, crisis, diplomacy and
+            // government ticks are omitted because these cases set the garrison,
+            // escalation, war support, momentum and treasury they need directly
+            // and then assert MilitarySystem's and ConfrontationSystem's own
+            // arithmetic, and a thinking world would move the very figures the
+            // assertions pin (an AI settling the war would end the long-war
+            // exhaustion case outright). Note the multi-year sustainment cases
+            // top up treasury by hand precisely because the economy tick is not
+            // here to refill it.
             turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
         }

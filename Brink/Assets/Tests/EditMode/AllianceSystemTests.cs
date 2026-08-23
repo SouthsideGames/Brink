@@ -16,6 +16,10 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 3300);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: AISystem and the rest of the world tick are omitted, and no
+            // test here advances more than a single month — every treaty, escalation and
+            // relationship is set directly and the assertions are AllianceSystem's own
+            // invocation and repudiation arithmetic, which needs no world evolution.
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             state.commandPoints.current = 60;

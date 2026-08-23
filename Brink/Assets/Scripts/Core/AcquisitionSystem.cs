@@ -98,6 +98,46 @@ namespace Brink.Core
         /// this themselves, and they had already drifted — only the AI's copy
         /// knew that a landlocked state should not be ordering carriers.
         /// </summary>
+        /// <summary>
+        /// What this country's military capability says it *should* be fielding
+        /// in a branch, as a 0..100 strength.
+        ///
+        /// **This is what makes a shortfall possible at all.** Measuring the
+        /// inventory against the branch's own current strength can never find a
+        /// gap: `BranchForce.SetStrength` rescales the inventory to match, so
+        /// `have == target` holds by construction and every ratio is exactly 1.0
+        /// forever. Restocking was unreachable for the AI, for the player's
+        /// PREPARE FOR WAR minister and for the routine desk alike — three verbs
+        /// resting on a comparison that could not return anything but "fully
+        /// stocked".
+        ///
+        /// So the anchor has to be something other than what we currently have.
+        /// `pillars.military` is the natural one, and giving it this job also
+        /// makes the pillar mean something concrete: **capability is what the
+        /// nation can support, branch strength is what it has actually fielded
+        /// today.** Both paths to a gap now work — losing a division drops
+        /// fielded strength below establishment, and *growing* the pillar raises
+        /// establishment above what is fielded, so a country that has invested in
+        /// its military then goes and buys the equipment to realise it.
+        ///
+        /// Branch factors match world creation (`WorldFactory.MakeCountry`), so a
+        /// fresh world opens exactly at establishment and nobody starts the game
+        /// already behind.
+        /// </summary>
+        public static float EstablishmentFor(CountryState country, ForceBranch branch)
+        {
+            if (country == null) return 0f;
+            float capability = country.pillars.military;
+
+            switch (branch)
+            {
+                case ForceBranch.Ground: return capability * 0.95f;
+                case ForceBranch.Air: return capability * 0.90f;
+                default:
+                    return capability * WorldFactory.NavalScaleFor(GeographySystem.AccessOf(country.id));
+            }
+        }
+
         public static AssetProfile WorstShortfall(CountryState country, out float ratio)
         {
             AssetProfile worst = null;
@@ -114,7 +154,7 @@ namespace Brink.Core
                 if (asset.branch == ForceBranch.Naval && landlocked) continue;
 
                 var force = country.military.Get(asset.branch);
-                float target = asset.baselineAt100 * (force.strength / 100f);
+                float target = asset.baselineAt100 * (EstablishmentFor(country, asset.branch) / 100f);
                 if (target <= 0.01f) continue;
 
                 float have = force.inventory.CountOf(asset.kind) + force.inventory.OnOrderOf(asset.kind);
@@ -197,11 +237,18 @@ namespace Brink.Core
         {
             foreach (var country in state.countries)
             {
-                bool delivered = false;
-
                 foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
                 {
                     var force = country.military.Get(branch);
+
+                    // Per branch, not per country. `delivered` used to be declared
+                    // once for the whole country, so a delivery to the army also
+                    // marked the navy and the air force as having received
+                    // something. Harmless while SyncStrength was idempotent —
+                    // decidedly not harmless now that arrival dilutes experience.
+                    bool delivered = false;
+                    float strengthBefore = force.strength;
+
                     foreach (var stock in force.inventory.stocks)
                     {
                         if (stock.onOrder <= 0.01f) continue;
@@ -213,7 +260,15 @@ namespace Brink.Core
                         stock.count += arriving;
                         delivered = true;
                     }
-                    if (delivered) force.SyncStrength();
+
+                    if (!delivered) continue;
+                    force.SyncStrength();
+
+                    // Replacements arrive green, and dilute what the survivors
+                    // know. This is what makes a bloody victory expensive: the
+                    // force is back to full strength on paper and measurably
+                    // worse in the field until it has been somewhere again.
+                    force.AbsorbReplacements(Math.Max(0f, force.strength - strengthBefore));
                 }
             }
         }

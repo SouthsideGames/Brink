@@ -309,16 +309,10 @@ namespace Brink.Tests
             ProgressionSystem.CaptureYearSnapshot(state);
 
             var turns = new TurnManager(state);
-            turns.ResolveMonth += CabinetSystem.MonthlyAct;
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += CrisisSystem.SystemicCheck;
-            turns.ResolveMonth += ProgressionSystem.MonthlyXP;
-            turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
+            // MUST use the real pipeline. The claim under test is that a world
+            // generated from *any* assessment posting is fully playable, and
+            // "playable" can only mean the systems the shipped game runs.
+            SimulationPipeline.Wire(turns, state);
 
             for (int i = 0; i < 60; i++)
             {

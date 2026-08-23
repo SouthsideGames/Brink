@@ -16,6 +16,12 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 4400);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: the long-running tests on this turn manager
+            // (QuietWorld / TroubledWorld / Cooldown) are controlled
+            // experiments that re-pin every value their eligibility functions
+            // read at the top of each month, so the omitted systems — economy,
+            // government, intelligence, AI — would only overwrite the
+            // conditions being tested rather than change what is asserted.
             turns.ResolveMonth += CrisisSystem.SystemicCheck;
         }
 
@@ -162,12 +168,26 @@ namespace Brink.Tests
         {
             // A quiet world, not merely a quiet player: several events key off
             // foreign instability, which is correct — trouble abroad reaches us.
+            //
+            // **Every dimension an eligibility function reads has to be settled,
+            // or the invariant is only proven against whichever ones happened to
+            // be listed.** This helper used to pin nine values and the catalog
+            // reads twenty-eight. The gap was not theoretical: SUCCESSION_QUESTION
+            // (an ageing leader with no successor) and DEFECTION (a foreign
+            // service running a network against us) were both live in a world this
+            // helper called settled — and both are real problems, so a world with
+            // them in it was never quiet to begin with.
+            //
+            // Derived from the catalog rather than guessed: grep `isEligible` for
+            // everything it touches. If you add an event that reads a new field,
+            // add it here too, or this test quietly stops covering it.
             void SettleTheWorld()
             {
                 foreach (var country in state.countries)
                 {
                     country.resources.foodSecurity = 95f;
                     country.resources.energy = 95f;
+                    country.resources.industrialCapacity = 80f;
                     country.economy.inflation = 2f;
                     country.economy.confidence = 85f;
                     country.economy.debtToGdp = 30f;
@@ -175,7 +195,31 @@ namespace Brink.Tests
                     country.stability = 85f;
                     country.warExhaustion = 0f;
                     foreach (var sector in country.economy.sectors) sector.health = 95f;
+
+                    // The social layer. Unrest, grievance and living standards are
+                    // read by four events and were entirely unpinned.
+                    country.livingStandards = 70f;
+                    country.socialUnrest = 5f;
+                    country.publicGrievance = 0f;
+                    country.nationalUnity = 80f;
+
+                    // A settled succession. An ageing leader with no heir is a
+                    // problem the world has, not one it invents.
+                    country.government.leader.age = 52f;
+                    country.government.successorReadiness = 80f;
+                    country.government.coupsExperienced = 0;
+
+                    // Nobody is mobilising.
+                    country.military.alertPosture = false;
                 }
+
+                // No foreign service is running against us. Ordinary espionage is
+                // not "manufactured adversity", but it is adversity, and a world
+                // where it is happening is not the world this test describes.
+                for (int n = state.networks.Count - 1; n >= 0; n--)
+                    if (state.networks[n].targetId == state.playerCountryId)
+                        state.networks.RemoveAt(n);
+
                 foreach (var official in state.cabinet) official.trust = 90f;
                 foreach (var relationship in state.relationships) relationship.relations = 85f;
             }
@@ -239,7 +283,11 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed);
                 var simTurns = new TurnManager(sim);
-                simTurns.ResolveMonth += CrisisSystem.SystemicCheck;
+                // Must use the real pipeline: unlike the controlled tests above
+                // this one lets the world run for 200 months, and selection is
+                // only meaningfully deterministic if it is deterministic against
+                // the same evolving world the player gets.
+                SimulationPipeline.Wire(simTurns, sim);
 
                 var fired = new List<string>();
                 for (int i = 0; i < 200; i++)

@@ -289,7 +289,21 @@ namespace Brink.Tests
                 var minister = player.FindOfficial(Pillar.Military);
                 minister.competence = 80f;
 
-                float tanksBefore = player.military.ground.inventory.CountOf(AssetKind.Tanks);
+                // Valued across the whole force, not one asset class. DRAW DOWN
+                // sells whatever the force is holding *most* of relative to
+                // establishment, which is rarely tanks — an earlier version
+                // watched AssetKind.Tanks alone and read a successful sell-off of
+                // helicopters as "nothing was sold".
+                float InventoryValue()
+                {
+                    float total = 0f;
+                    foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+                        foreach (var stock in player.military.Get(branch).inventory.stocks)
+                            total += AssetCatalog.CostOf(stock.kind, stock.count);
+                    return total;
+                }
+
+                float valueBefore = InventoryValue();
 
                 var turns = new TurnManager(world);
                 SimulationPipeline.Wire(turns, world);
@@ -300,8 +314,7 @@ namespace Brink.Tests
                     turns.EndMonth();
                 }
 
-                float sold = tanksBefore - player.military.ground.inventory.CountOf(AssetKind.Tanks);
-                soldValue = AssetCatalog.CostOf(AssetKind.Tanks, Math.Max(0f, sold));
+                soldValue = Math.Max(0f, valueBefore - InventoryValue());
                 return player.resources.treasury;
             }
 

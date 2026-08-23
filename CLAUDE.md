@@ -900,13 +900,297 @@ re-running it:
       **written-down debt — the list may only shrink**, and a new file that
       hand-wires fails the build. The bug was never that 26 exist; it is that
       number 27 could be written without anybody noticing.
-      **Any test that runs more than a year and asserts emergent behaviour should
-      be assumed wrong until it is checked against this list.**
+      **The sweep is now complete.** All 26 were audited. **Eight were making
+      long-run claims about a world that could not behave** and were converted:
+      `WorldInvariantTests` (360mo), `AISystemTests` (360mo),
+      `GovernmentSystemTests.LongRun` (240mo), `ChronicleTests` (240mo),
+      `SaveMigrationTests` long-run (240mo), the `CrisisSystemTests` and
+      `EventCatalogTests` determinism helpers (200mo), `ProgressionSystemTests`
+      `TenYearRun` (120mo), `AsciiWorldMapTests` (120mo) and one
+      `BugRegressionTests` site. The other 18 set their own preconditions and
+      assert one system's arithmetic; each now carries a `NARROW PIPELINE:` line
+      naming what it omits and why its assertions survive the omission.
+      Three worth remembering:
+      - **`WorldInvariantTests` had no `AcquisitionSystem`**, so
+        `ThirtyYears_TheWorldsArmiesDoNotHollowOut` was measuring supply in a
+        world where nobody could buy anything — the harness that should have
+        caught the restocking bug was structurally blind to it — and
+        `ASaveResumesIndistinguishably` never exercised equipment orders or
+        secession-created states for save fidelity.
+      - **Two 200-month "is deterministic" tests ran with only
+        `CrisisSystem.SystemicCheck` attached** — a world frozen at month zero.
+        Event eligibility reads economy, government, social and intel state, so
+        they sampled one static eligibility set forever and called it determinism.
+      - **`AsciiWorldMapTests`** claimed a decade of war and regime change must not
+        corrupt the map while omitting the only two systems that create countries
+        (`SecessionSystem`) or move ground (`TerritorySystem`).
+      `AISystemTests.FullSimulation` carried the doc comment *"every system live,
+      as the real game runs it"*. It was false for eight systems. **A comment
+      asserting correctness is not a check.**
+      The `Grandfathered` list is now **empty and must stay empty** — a grandfather
+      list that outlives its debt stops recording what needs fixing and quietly
+      becomes a list of permitted exceptions.
+      Still open: `EventCatalogTests.QuietWorld_ProducesNoCrises` is proven only
+      against a *frozen* world — `SettleTheWorld` does not pin `socialUnrest`,
+      `publicGrievance`, `livingStandards` or leader age, so under the real
+      pipeline `SUCCESSION_QUESTION` and `DEFECTION` would fire for reasons
+      unrelated to its claim. Making it real needs the helper extended.
+
+- [x] **The economy had no crisis regime** — found by chasing a social-layer test.
+      A country whose market index had fallen from 100 to **7.6** (sectors gutted,
+      confidence 12, energy 7) was still reporting 9% unemployment, 9% inflation
+      and living standards of 31.7. That was the *worst outcome the model could
+      produce*. Three things were structurally impossible: **mass unemployment**
+      (driven only by growth and sanctions, and growth is bounded, so it could
+      never pass ~12); **real deprivation** (the market-index term ran at
+      0.15/point in both directions, so total collapse subtracted only 14 points);
+      and **grievance accruing at all** (it needed living standards below 35,
+      which yielded 0.026/month against a *flat* 0.045 decay — pinned at zero —
+      or unrest above 45, which unrest could not reach without the grievance it
+      was gated behind: a circular deadlock where the memory of hardship required
+      hardship the country was not allowed to suffer).
+      Consequences: **economic warfare could never reach a population** (sanctions,
+      blockades and bombing moved numbers nobody feels), and **every event gated on
+      unrest was dead content** — `GENERAL_STRIKE` (58), `SEPARATIST_MOVEMENT` (42)
+      and `PORT_STRIKE` (40) could not fire in any playthrough.
+      Fixed with a `distress` term (`max(0, 55 − marketIndex)/55`) feeding
+      unemployment ×22 and inflation ×9, **zero by construction in normal play** so
+      it adds a crisis regime without retuning the ordinary one; a steeper
+      market-index slope below the line (0.42) than above it (0.15); grievance
+      decay made **proportional** (`0.045 + grievance × 0.004`) so every level of
+      hardship has a resting point instead of ratcheting to the cap; and unrest
+      rising faster than it falls (0.11 / 0.05) because anger organises quickly and
+      disperses slowly. **The crisis regime has a multi-year lead time** — the
+      market index is fundamentals-anchored, so a test wanting to observe a real
+      collapse must run four years, not two.
+
+- [x] **Restocking was impossible for everyone** — `BranchForce.SetStrength`
+      rescales the inventory to match, so `have == target` held **by construction**
+      and `WorstShortfall` could never return a ratio below 1.0. The AI's
+      `OrderWhatIsShort`, the player's PREPARE FOR WAR minister and the routine
+      desk restock all rested on a comparison that could only answer "fully
+      stocked". `AcquisitionSystem.EstablishmentFor` anchors on `pillars.military`
+      instead: **capability is what the nation can support, branch strength is what
+      it has fielded today.** Both paths to a gap now work — losing a division
+      drops fielded strength below establishment, and growing the pillar raises
+      establishment above what is fielded.
+
+- [x] **Balance re-measured after the pipeline audit and the economy fix.**
+      **These supersede every earlier figure** — the previous numbers predate the
+      crisis regime, the social layer's real range and eight harness conversions.
+
+      | Playstyle | Was | Now |
+      |---|---|---|
+      | PASSIVE (baseline) | 2.58 | **2.24** |
+      | DIPLOMACY | +0.82 | **+0.84** |
+      | ECONOMY | +0.92 | **+0.78** |
+      | GOVERNMENT | +0.40 | **+0.44** |
+      | MILITARY | +0.62 | **+0.40** |
+      | INTELLIGENCE | +0.48 | **+0.38** |
+
+      Healthier than before: every playstyle still beats passive and the spread
+      **tightened from a 0.60 range to 0.46**, with ECONOMY no longer an outlier.
+      The passive baseline falling is the economy work landing — a world that can
+      express hardship punishes inattention.
+      Two notes for whoever reads this table next:
+      - **`CRIS` is 70.1 for all six playstyles, identical to the decimal.** Not a
+        bug: every harness bot resolves every crisis it faces, so the ratio is
+        always 1.0 and only the count of quiet years varies. **11% of the grade is
+        a constant in every measurement we have**, and the harness cannot say
+        whether crisis handling is tuned. A bot that lets crises lapse would be
+        needed to find out.
+      - **INTELLIGENCE's trajectory is 43.4 against 53–57 for everyone else** — a
+        10-point gap and the specific reason it is now last. Consistent with the
+        counter-play design (an operator caught running covert action finds
+        hardened services), but worth checking it is not overtuned.
+      - MILITARY's ECON component (17.2 vs 28–51) still reflects the documented
+        opportunity cost of commitment: the bot takes its objective in 4/5 seeds
+        and still ends at net −1 location. **That conclusion survived the harness
+        being corrected**, which is the point of re-running it.
+
+- [x] **Being caught spying cost the wrong thing** (GDD §14). `IntelligenceSystem`
+      charged exposure `pillars.diplomacy -= 4f` — raw, undamped — beside a
+      notification reading *"Diplomatic damage taken"* while **nothing in the block
+      touched a single relationship**. Three faults: it charged national
+      *capability* rather than *standing* (an expelled station chief changes how
+      others regard you, not how capable your foreign ministry is); it had **no
+      recovery path for the operator incurring it**, since only the diplomacy
+      playstyle regrows that pillar (~0.16/month against a −4 hit); and because it
+      moved a pillar the whole cost landed in the evaluation's *trajectory*
+      component instead of *position*. At ~65 exposures a decade it demanded ~260
+      points from a pillar with a range of 70.
+      **Fixing it by 80% did nothing** — cut to −0.8, trajectory moved 43.4 → 43.3,
+      because even a fifth of the cost outran the only repair. The rule that
+      settles it is this file's own: *does every value it decrements have a
+      reachable recovery path under the same conditions?* Repairing that pillar
+      meant abandoning the playstyle that damaged it, so the cost was a slow
+      **disqualification, not a price**. Removed entirely; exposure now costs
+      relations −9, trust −12, a diplomatic memory, and trust −1.5 with everyone
+      else — all recoverable, all landing in `position` where standing belongs.
+      Found alongside: the success path was `pillars.intelligence + 2f`, raw and
+      undamped — the same ratchet family — and it was **masking** the penalty by
+      inflating one of the five pillars trajectory sums. Now via `Growth.Apply`.
+      **Two bugs pointing opposite ways net out to a plausible-looking number**,
+      which is why the component breakdown mattered more than the headline grade.
+      Result: INTELLIGENCE TRAJ 43.3 → **56.6**, grade +0.34 → **+0.64**.
+
+- [x] **The `CRIS` grade component was a constant** — every harness bot resolved
+      every crisis, so the resolved/faced ratio was 1.0 in every run and the
+      component read 70.1 for all six playstyles, identical to the decimal. **11%
+      of the grade was unmeasured in every balance figure this project ever took.**
+      `Play(..., answerCrises: false)` adds a `DRIFTER` row; nothing in the game
+      needed changing (`TurnManager.EndMonth` already lapses), the harness simply
+      never exercised the path. Drifting measures **−0.32 of a grade** against the
+      identical routine that answers — so ignoring a decision genuinely costs, and
+      that design promise now has a measurement behind it. `CRIS` 70.1 → 46.7 for
+      the drifter.
+
+- [x] **`doctrineFamiliarity` never decayed** — written in one place, read in two,
+      with **no decay path anywhere**. The one-way-value family again, running
+      upward: knowledge of a 1984 doctrine stayed current in 2034, and the test
+      asserting it "outlives the friendship" could not fail. Now decays
+      proportionally in `DiplomacySystem.MonthlyUpdate` — it *should* outlive the
+      friendship, so a decade of usefulness is right and permanence is not.
+      **Seventh instance of this bug family.**
+
+- [x] **Balance after all of the above — the tightest spread yet.**
+      | Playstyle | Prev | Now |
+      |---|---|---|
+      | PASSIVE (baseline) | 2.24 | 2.24 |
+      | DIPLOMACY | +0.84 | **+0.84** |
+      | ECONOMY | +0.78 | **+0.78** |
+      | INTELLIGENCE | +0.34 | **+0.64** |
+      | DRIFTER (new) | — | **+0.52** |
+      | GOVERNMENT | +0.44 | **+0.44** |
+      | MILITARY | +0.40 | **+0.40** |
+      Range **0.44** (was 0.60 two measurements ago). MILITARY is now the low
+      outlier; its ECON component (17.2) is the documented opportunity cost of
+      commitment and has survived every harness correction, so treat it as
+      **measured and closed** unless the war-outcome table changes.
+      Note `DRIFTER` runs the *diplomacy* routine, so the honest comparison is
+      DRIFTER vs DIPLOMACY (−0.32), not DRIFTER vs the other playstyles.
+
+**Harness hazards found the hard way (all three fail silently):**
+1. **A killed run leaves a complete-looking results file.** No compile error, no
+   abort message, previous totals read green. `extract-failures.sh` now requires
+   Unity's clean-shutdown line. Caught only by checking a renamed test appeared.
+2. **`GameLog.MirrorToUnityConsole` during a balance run produced a 577 MB log**
+   (every mirrored call carries a ~40-line stack trace × seventy country-decades)
+   and that is what killed the run. Mirroring is now on only to print the report;
+   16.7 MB. **Never mirror during a playthrough.**
+3. **A narrow fixture can be the only thing holding a test up.**
+   `TerritorySystemTests` has three tests whose injected values drift *the
+   direction the assertion looks for* — adding `GovernmentSystem` there converts
+   three real tests into three that always pass. Documented at the wiring line;
+   the robust fix is A/B against an unoccupied control.
+
+**Test-authoring rule learned three times in one session: assert your setup took
+hold before judging what it caused.** Three tests injected a symptom that a
+system downstream recomputes from causes, then measured the recovery and called
+it the damage — `HardshipEventuallyOrganises` (inflation/unemployment, erased by
+`EconomySystem` before the social tick read them),
+`SevereDistress_ErodesApprovalAndStability` (inflation/growth, approached back to
+normal by month 3 of a 6-month test) and a drawdown test that watched one asset
+class while the code sold another. One line — `Assert.Greater(inflation, 8f, "the
+economy never became distressed")` — turns a silently-wrong test into one that
+reports its own broken fixture. A sweep for this across the suite is worthwhile.
 - [x] **A secession successor gets a real cabinet.** `WorldFactory.AppointCabinet`
       silently returned when a country had no authored profile, which every
       breakaway state is by definition — so a sovereign state existed with nobody
       governing it. It now falls back to the parent's name pool and **warns**
       instead of returning quietly.
+
+- [x] **The military pillar compounds** (`BranchForce.experience`, save v5 → **v6**).
+      Every other pillar accumulates — the economy grows, networks deepen,
+      treaties stack, institutions strengthen — and **a decade of war left the
+      army where it started, minus the losses.** That, not conquest yields, is the
+      structural reason militarism graded lowest (ECON component 17.2 vs 28–51).
+      Three rules stop it being an eighth one-way value:
+      1. **It decays without use** toward a ceiling set by the force's own
+         readiness and doctrine investment. Nothing in the monthly tick raises it;
+         peacetime improvement must be bought.
+      2. **Replacements dilute it** (`AbsorbReplacements`, applied on delivery).
+         A force that takes 45% casualties and buys them back is at full strength
+         on paper and measurably worse in the field. **This is what finally makes
+         attrition cost something that does not refill.**
+      3. **Everyone has it.** Written and read actor-generically.
+      Modest multiplier (0.88 → 1.18), deliberately the smallest of the three on
+      `EffectivePower`: what a force has learned should matter, never enough to
+      beat having more of it. **Exercises are the peacetime route to it**, which
+      finally justifies their exposure cost.
+      **Scaled by the assessed odds, not by losses taken.** The first version used
+      losses, on the reasoning that a bloody fight teaches more — it measured
+      backwards, because losses follow verb intensity and casualty appetite far
+      more than what you were up against. The odds are the only term in the
+      resolution that knows how hard the fight was.
+- [x] **Three military readouts** — all data that existed and was never shown:
+      - **`WHAT WE ARE LEAVING UNCOVERED`** — `TheatreSystem.IsOverstretched` had
+        two readers, `AISystem` (as an opening to attack us) and an event gate.
+        **The AI could see our overstretch and the operator could not**, and the
+        harness showed the cost: the military bot takes its objective in 4 seeds
+        of 5 and still ends at net −1 location. Losing ground while committed is a
+        fine thing to happen; happening *invisibly* is the difference between a
+        trap and a decision.
+      - **Casualties** — `initiatorCasualties`/`defenderCasualties` were counted
+        every operation and had **zero readers in the entire UI**. Ours stated
+        plainly, theirs as a band through `IntelReadout`: we count our own dead and
+        estimate the enemy's, which is correct fog discipline *and* an honest
+        description of what a government at war knows.
+      - **`BALANCE OF FORCES`** — `MilitaryAdvice` says whether *this strike* is
+        wise and only exists once a war is running, so intelligence paid off
+        during a war and never in the decision to start one. Reports
+        `EffectivePower`, not paper strength, so a large force that cannot move
+        reads as one. **NO ASSESSMENT for an uncollected state is the feature.**
+
+- [x] **A latent crash since `SecessionSystem` shipped.** `RegimeSystem.MonthlyUpdate`
+      enumerated `state.countries` while, three calls down, `SecessionSystem.Fracture`
+      appended a breakaway to it. Needs a successful coup then an eight-month
+      collapse neither unity nor loyalty recovers from, so nothing exercised it and
+      a 30-year stochastic run found it first. Fixed by iterating a snapshot, which
+      is also the right semantics (a state that secedes this month should not then
+      be processed for its own coups in the same tick). **`state.countries` is
+      genuinely mutable at runtime now** — any monthly loop over it that can reach
+      `Fracture` needs the same treatment. Deterministic regression test added.
+
+**Three tests found to be measuring something other than what they claimed** — all
+three had passed for a long time:
+- `AHardFightTeachesMoreThanAWalkover`: the easy arm **captured** the position on
+  the first assault and then "attacked" ground we already held four more times,
+  banking four free wins. The fixture was running a different experiment.
+- `RaiseReadinessDirective_IsPaidForInTreasury`: the autonomous *Economy* minister
+  adds `treasury += amount * 10`, precisely what the military directive subtracts.
+  They cancelled, so the result turned on which official rolled better competence
+  — it was **passing on a coin flip**. Third instance this session of *measuring a
+  net when the claim is about a delta*; measure against a control run.
+- `ADecadeOfCrisesLeavesAMarkOnTheWorld`: sampled summed relations plus two
+  counters, and crisis effects in that world are overwhelmingly TRUST and
+  MARKET_SHOCK. The decades genuinely differed (trust 44 vs 28, confidence 4.5 vs
+  0.0, conspiracy 20.4 vs 31.9) and it reported them identical. **Relations is the
+  worst possible field to sample over a decade** — it mean-reverts and clamps, so
+  a one-off ±8 nudge is erased inside ~20 months, and any test relying on one
+  surviving is flaky by construction. It had been passing only because
+  `DIPLOMATIC_INSULT` was eligible in every world; tightening that eligibility
+  removed the coincidence.
+  (`crisesFacedThisYear` is useless as a non-vacuity counter — it resets annually
+  and reads 0 at the end of a decade run. Count locally.)
+
+- [x] **The telemetry ratchet detector cried wolf.** It gated on `up + down < 6`,
+      which counts *months that moved*, not *how far* — seventeen nudges of 0.11
+      cleared it as easily as six moves of five points. It flagged the economy
+      pillar for travelling 85.0 → 86.9 in three years: a heavily damped value near
+      its ceiling doing nothing, the opposite of a ratchet. With the only
+      ordinary-play downward path firing at ~3%/month, P(no decrease in 35 months)
+      ≈ 34% across six watched values — **a healthy session flagging something was
+      close to the expected outcome.** Added a series-level magnitude gate
+      (`max(5, 5% of start)`); the planted-fault tests travel 11.5 points and still
+      catch.
+      **Separately real and NOT fixed:** recession, sanctions, embargo, debt crisis
+      and falling industrial capacity all move `economy.confidence`/`growthRate`/
+      `marketIndex` and **never touch `pillars.economy`** — a decade of depression
+      leaves national economic *capability* untouched, its only recurring downward
+      path being a minister's bad month. Compare the military pillar, which erodes
+      from losses, peace terms and purges. Adding a drag to silence the detector
+      would have left the detector still eager; this deserves its own measurement.
 
 Recommended next:
 - **ECONOMY is now the high outlier at +0.92 over passive** (next is MILITARY at
@@ -1054,6 +1338,19 @@ Quick compile check without Unity (catches syntax/type errors only): compile
 against `Editor\Data\Managed\UnityEngine\*.dll` + `Editor\Data\NetStandard\ref\2.1.0`.
 Regenerate the response file whenever a source file is added — a stale one
 silently compiles the old set.
+
+**This works for `Assets/Scripts` and does NOT work for `Assets/Tests`.** The
+NUnit assembly Unity ships is a net40 build, so compiling test sources outside
+Unity produces ~1000 `CS0012 mscorlib` errors on every `[Test]` attribute, and
+that flood **suppresses semantic binding in the files behind it** — a genuinely
+broken call like `record.analysis` on a type with no such member is reported by
+Unity and not by the local check. Filtering the CS0012 lines out makes the
+output look clean, which is worse than not running it. Attempts to supply the
+facade (`shims/netfx`, MonoBleedingEdge `mscorlib`) collide with `netstandard`
+and produce `CS0518 System.Void is not defined`.
+**So: the local check verifies runtime code only. For test code, Unity is the
+authority — run the suite.** A compile check that passes on broken code is the
+same class of hazard as a validation harness that does not run the game.
 
 Unity nests NUnit suites, so grepping the results XML for `result="Failed"` also
 matches ancestor suites. `Tools/extract-failures.sh [results.xml]` prints the

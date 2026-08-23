@@ -75,6 +75,7 @@ namespace Brink.Core
             }
 
             CheckRatchets(findings);
+            CheckIdleTreasury(findings);
             CheckUnspentCapacity(findings);
             CheckUnusedVerbs(findings, state);
             CheckFutileActions(findings);
@@ -106,9 +107,23 @@ namespace Brink.Core
                 ("unity", "National unity"),
                 ("appr", "Government approval"),
                 ("mil", "Military pillar"),
-                ("eco", "Economy pillar"),
-                ("treas", "Treasury")
+                ("eco", "Economy pillar")
             };
+
+            // **Treasury is deliberately not on this list.**
+            //
+            // Every value above is a bounded 0..100 statistic that approaches a
+            // target, so one that only ever moves one way is missing its
+            // restoring force — the bug this detector exists for. Treasury is a
+            // *stock*: the running total of income minus spending, with no
+            // equilibrium by design. A state at peace running a surplus rises
+            // every single month, and that is correct behaviour, not a ratchet.
+            // Flagging it taught the reader to ignore the detector.
+            //
+            // The question worth asking about money is not "does it come back
+            // down" but "was it ever scarce" — a treasury that never constrains
+            // anything means nothing costs enough to matter. That is a different
+            // finding with a different shape, and it lives in CheckIdleTreasury.
 
             foreach (var (field, name) in watched)
             {
@@ -124,6 +139,32 @@ namespace Brink.Core
                 }
 
                 if (up + down < 6) continue; // barely moved; nothing to conclude
+
+                // **How far it went, not how often it twitched.**
+                //
+                // The gate above counts *months that moved*, which is not a size
+                // test at all: seventeen nudges of 0.11 clear it exactly as easily
+                // as six moves of five points. That flagged the economy pillar for
+                // travelling 85.0 -> 86.9 across three years — 0.05 a month, a
+                // heavily damped value sitting near its ceiling doing nothing, and
+                // the precise opposite of a ratchet, which is a value going
+                // somewhere.
+                //
+                // This matters more than one false alarm. The economy pillar's
+                // only ordinary-play downward path is a minister's bad month, at
+                // roughly 3%/month — so P(no decrease in 35 months) is about 34%,
+                // and six values are watched. A healthy session flagging
+                // *something* was close to the expected outcome, which is exactly
+                // the review nobody reads that this analysis exists to avoid.
+                //
+                // Five points on a 0..100 scale is about the smallest change any
+                // consumer treats as different (the economy pillar reaches the
+                // growth rate as `(value - 50) * 0.035`, so 1.9 points is 0.066pp
+                // — under the noise of every other term; 5 points is 0.175pp and
+                // visible). The relative arm is kept for any future watched value
+                // that is not on a 0..100 scale.
+                float travelled = Math.Abs(series[series.Count - 1] - series[0]);
+                if (travelled < Math.Max(5f, Math.Abs(series[0]) * 0.05f)) continue;
 
                 // A value that moved a lot and never once went the other way is
                 // the shape of every mean-reversion bug this project has had.
@@ -199,6 +240,44 @@ namespace Brink.Core
                 detail = $"Mean {total / series.Count:F1} against a cap of {cap:F0}. Either there is " +
                          "nothing worth buying, or what there is costs too little. This is exactly " +
                          "how the Government pillar's problem was diagnosed."
+            });
+        }
+
+        /// <summary>
+        /// Was money ever actually a constraint?
+        ///
+        /// The right question for a stock. A treasury that grows without ever
+        /// being drawn down is not a mean-reversion bug — it means nothing in the
+        /// game costs enough to make the operator choose, which is the same
+        /// diagnosis <see cref="CheckPool"/> makes about a resource pinned at its
+        /// ceiling, one shape along.
+        ///
+        /// Deliberately generous: a peaceful decade *should* accumulate. This
+        /// fires only when the balance more than doubles and never once falls,
+        /// which is a state that has stopped being able to spend rather than one
+        /// that chose not to.
+        /// </summary>
+        static void CheckIdleTreasury(List<TelemetryFinding> findings)
+        {
+            var series = Telemetry.Series("treas");
+            if (series.Count < MinimumMonths) return;
+
+            int fell = 0;
+            for (int i = 1; i < series.Count; i++)
+                if (series[i] < series[i - 1] - 0.01f) fell++;
+
+            float start = series[0];
+            float end = series[series.Count - 1];
+            if (fell > 0 || start <= 0.01f || end < start * 2f) return;
+
+            findings.Add(new TelemetryFinding
+            {
+                severity = FindingSeverity.Warning,
+                headline = $"Treasury never fell across {series.Count} months "
+                           + $"({start:F0} → {end:F0})",
+                detail = "Money was never a constraint: the balance more than doubled and was "
+                         + "never once drawn down. Either nothing on offer costs enough to make "
+                         + "spending a decision, or the things that do cost were never reachable."
             });
         }
 

@@ -15,6 +15,16 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1200);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: deliberately only TechnologySystem — every test here
+            // sets its own preconditions directly (grants a mature capability, adds
+            // the treaty or the network diffusion needs) and then asserts
+            // TechnologySystem's own arithmetic, so the omitted systems (AI,
+            // diplomacy, confrontations, economy, territory, cabinet lifecycle)
+            // could only add noise to a controlled measurement. Even
+            // `AiStates_PursueResearchOfTheirOwn` stays honest: `ConsiderAiResearch`
+            // lives inside `TechnologySystem.MonthlyUpdate`, so the AI branch under
+            // test is running. Running the full pipeline would also let the economy
+            // move treasury underneath the funding assertions, which are the point.
             turns.ResolveMonth += TechnologySystem.MonthlyUpdate;
             state.commandPoints.current = 40;
             state.PlayerCountry.resources.treasury = 8000f;
@@ -150,6 +160,9 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(1202);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: an A/B on one capability — only collection may
+                // run, or AI counter-intelligence and covert action would move
+                // penetration for reasons unrelated to CAP_SIGINT.
                 simTurns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
                 sim.commandPoints.current = 40;
                 if (sigint) GrantMature(sim.PlayerCountry, "CAP_SIGINT");
@@ -169,6 +182,9 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(1203);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: one month, one variable. Only collection runs so
+                // the estimate's margin can be attributed to CAP_SECCOMMS and not to
+                // deception, decay or an AI service acting on its own account.
                 simTurns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
                 if (hardened) GrantMature(sim.PlayerCountry, "CAP_SECCOMMS");
 
@@ -194,6 +210,10 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(1204);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: only the economy runs, because the assertion is
+                // that CAP_ADVMFG compounds capacity over 36 months — territory,
+                // acquisition and war would all move industrial capacity too and
+                // make the A/B unattributable.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 if (advanced) GrantMature(sim.PlayerCountry, "CAP_ADVMFG");
 
@@ -327,6 +347,11 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: 20 years, but the only claims are that maturity
+                // stays inside 0–100 and that the same seed reproduces itself —
+                // both properties of TechnologySystem alone. The whole-world version
+                // of this assertion lives in WorldInvariantTests, on the real
+                // pipeline.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 simTurns.ResolveMonth += TechnologySystem.MonthlyUpdate;
                 for (int i = 0; i < 240; i++) simTurns.EndMonth();

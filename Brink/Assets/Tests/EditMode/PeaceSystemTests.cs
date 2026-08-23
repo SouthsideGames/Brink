@@ -21,6 +21,12 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1300);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: the confrontation tick alone, and in fact no
+            // test in this file ever advances a month — each case sets war
+            // support, exhaustion, momentum and ownership directly and then
+            // asserts PeaceSystem's term pricing, acceptance test and
+            // application, so the omitted economy, AI, government and regime
+            // ticks have no opportunity to contribute anything.
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
             state.commandPoints.current = 60;
 

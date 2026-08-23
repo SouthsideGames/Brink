@@ -186,9 +186,18 @@ namespace Brink.Core
             // Anchored on the market index because it is already fundamentals-
             // anchored and reads 100 at world creation, so "how much better off
             // is this country than when the save began" needs no new field.
+            // The market-index term is deliberately steeper below the line than
+            // above it. At 0.15/point a *total* economic collapse — index 7.6 —
+            // subtracted only 14, so the worst living standards this model could
+            // describe were about 32 out of 100: an unpleasant decade, not a
+            // catastrophe. Prosperity accumulating slowly is right; deprivation
+            // being capped is not.
+            float indexGap = eco.marketIndex - 100f;
+            float indexTerm = indexGap >= 0f ? indexGap * 0.15f : indexGap * 0.42f;
+
             float standardsTarget = Clamp(
                 52f
-                + (eco.marketIndex - 100f) * 0.15f
+                + indexTerm
                 + eco.growthRate * 1.6f
                 - Math.Max(0f, eco.inflation - 4f) * 1.5f
                 - Math.Max(0f, eco.unemployment - 6f) * 1.2f
@@ -221,9 +230,17 @@ namespace Brink.Core
             // four years of severe deprivation produced literally zero organised
             // anger. A subtraction is the wrong shape for a resilience term: a
             // cohesive society under real hardship still ends up in the street, it
-            // simply takes more to put it there. 0 -> x1.25, 50 -> x0.85,
-            // 100 -> x0.45.
-            unrestPressure *= 1.25f - country.nationalUnity / 125f;
+            // simply takes more to put it there. 0 -> x1.18, 50 -> x0.88,
+            // 100 -> x0.58.
+            //
+            // The range is deliberately narrower than the first version's
+            // (1.25 → 0.45). At an ordinary unity of 64 that took 26% off, which
+            // in a *total* economic collapse is not resilience but near-immunity —
+            // it held the ceiling on unrest around 45 and so made GENERAL_STRIKE,
+            // gated at 58, unreachable for any country in any playthrough.
+            // In normal times the pressure sum is near zero, so widening the
+            // multiplier here changes nothing outside a genuine crisis.
+            unrestPressure *= 1.18f - country.nationalUnity / 165f;
 
             // Some states argue about everything. Hardship organises faster there.
             float unrestTarget = Clamp(unrestPressure * NationalTraitCatalog.UnrestVolatility(country));
@@ -234,19 +251,49 @@ namespace Brink.Core
             if (gov.civicPosture == CivicPosture.Restrictive) unrestTarget *= 0.45f;
             else if (gov.civicPosture == CivicPosture.Open) unrestTarget *= 1.15f;
 
-            country.socialUnrest = Approach(country.socialUnrest, unrestTarget, 0.07f);
+            // Asymmetric, like living standards above and for the same reason:
+            // anger organises faster than it disperses. A single rate meant that
+            // four years into a total economic collapse unrest had reached only
+            // three quarters of the level that collapse justified, because the
+            // target kept moving while the value crawled after it.
+            //
+            // The slow fall matters as much as the quick rise — a government that
+            // repairs the economy does not get its streets back the same quarter,
+            // which is what stops unrest from being a number you buy off.
+            float unrestRate = unrestTarget > country.socialUnrest ? 0.11f : 0.05f;
+            country.socialUnrest = Approach(country.socialUnrest, unrestTarget, unrestRate);
 
             // ---- public grievance: what is not forgotten ----
             //
             // Accrues only from real hardship, and decays on a decade scale. The
             // floor is deliberate: a country that has been through something does
             // not return to the condition of one that has not.
+            // The deprivation threshold is 40, not 35, and it has to be above the
+            // decay rate to accumulate at all. At 35 the gain from living
+            // standards of 31.7 was 0.026/month against a decay of 0.045, so
+            // grievance sat pinned at exactly zero — and the only other source
+            // needed unrest above 45, which unrest could not reach without the
+            // grievance it was gated behind. A circular deadlock: the memory of
+            // hardship required hardship the country was not allowed to suffer.
             float grievanceGain =
                 Math.Max(0f, country.socialUnrest - 45f) * 0.010f
-                + Math.Max(0f, 35f - country.livingStandards) * 0.008f
+                + Math.Max(0f, 40f - country.livingStandards) * 0.011f
                 + (state.IsAtWar(country.id) ? country.warExhaustion * 0.004f : 0f);
 
-            country.publicGrievance = Clamp(country.publicGrievance + grievanceGain - 0.045f);
+            // Decay is **proportional to what has accumulated**, not a flat
+            // subtraction. A constant 0.045/month has no equilibrium: any
+            // hardship producing more than that ratchets grievance to 100 and
+            // pins it there forever, which is this codebase's most-repeated bug
+            // and which the first version of this line reintroduced.
+            //
+            // Proportional decay gives every level of hardship its own resting
+            // point instead — sustained living standards of 25 settle near 30,
+            // and only permanent total deprivation approaches the ceiling. The
+            // floor still does its job: a country that has been through something
+            // does not return to the condition of one that has not, it just no
+            // longer does so irreversibly.
+            float grievanceDecay = 0.045f + country.publicGrievance * 0.004f;
+            country.publicGrievance = Clamp(country.publicGrievance + grievanceGain - grievanceDecay);
 
             // ---- what the layer does to the rest of the state ----
             //

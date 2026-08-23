@@ -16,6 +16,14 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1010);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: the economy tick and monthly XP only — the AI,
+            // military, intelligence, regime and crisis ticks are omitted
+            // because every case on this fixture runs at most one year and
+            // asserts ProgressionSystem's own XP, evaluation-component and
+            // skill-effect arithmetic from preconditions it sets directly,
+            // while the one decade-long run in the file
+            // (TenYearRun_ProducesEvaluationsAndRemainsDeterministic) does make
+            // a claim about the world and therefore uses the real pipeline.
             turns.ResolveMonth += EconomySystem.MonthlyUpdate;
             turns.ResolveMonth += ProgressionSystem.MonthlyXP;
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
@@ -578,16 +586,14 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed);
                 var simTurns = new TurnManager(sim);
-                simTurns.ResolveMonth += CabinetSystem.MonthlyAct;
-                simTurns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-                simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
-                simTurns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-                simTurns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-                simTurns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-                simTurns.ResolveMonth += AISystem.MonthlyThink;
-                simTurns.ResolveMonth += CrisisSystem.SystemicCheck;
-                simTurns.ResolveMonth += ProgressionSystem.MonthlyXP;
-                simTurns.YearEnded += year => ProgressionSystem.EvaluateYear(sim, year);
+
+                // A decade-long run makes a claim about how the world behaves,
+                // so it must use the real pipeline. The hand-copied list this
+                // replaced had drifted by a dozen systems; a test that measures
+                // a different game than the one that ships is worse than no
+                // test, because it is trusted. `Wire` also attaches the
+                // year-end evaluation, so it is not registered separately here.
+                SimulationPipeline.Wire(simTurns, sim);
 
                 for (int i = 0; i < 120; i++)
                 {

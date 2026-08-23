@@ -14,6 +14,11 @@ namespace Brink.Tests
         {
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 555);
+            // NARROW PIPELINE: deliberately no monthly systems at all — every
+            // test on this turn manager triggers a crisis by hand and advances
+            // at most one month, asserting CrisisSystem's own trigger/resolve/
+            // lapse arithmetic, so nothing the omitted systems do could reach
+            // the assertions.
             turns = new TurnManager(state);
         }
 
@@ -114,7 +119,12 @@ namespace Brink.Tests
         {
             var simState = WorldFactory.CreateDebugWorld(seed);
             var simTurns = new TurnManager(simState);
-            simTurns.ResolveMonth += CrisisSystem.SystemicCheck;
+            // Must use the real pipeline: 200 months of systemic crisis
+            // selection is a claim about the world evolving, and event
+            // eligibility reads economy, government and social state. With only
+            // SystemicCheck wired the world is frozen at month zero, so the
+            // crisis stream samples one static eligibility set forever.
+            SimulationPipeline.Wire(simTurns, simState);
 
             var crisisMonths = new System.Collections.Generic.List<string>();
             for (int i = 0; i < months; i++)

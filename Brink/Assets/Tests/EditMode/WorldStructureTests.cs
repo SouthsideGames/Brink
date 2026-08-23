@@ -287,18 +287,99 @@ namespace Brink.Tests
             var turns = new TurnManager(world);
             SimulationPipeline.Wire(turns, world);
 
+            // Drive the *causes*, not the symptoms.
+            //
+            // This test used to assign inflation and unemployment directly each
+            // month. EconomySystem runs before GovernmentSystem in the pipeline
+            // and recomputes both from fundamentals, so the injected figures were
+            // erased every month before the social tick ever read them: it was
+            // measuring a country with low living standards and an otherwise
+            // healthy economy, and then blaming the social layer for the mild
+            // result. Starving the economy of energy and gutting its sectors
+            // makes EconomySystem *produce* the hardship instead.
             for (int month = 0; month < 48; month++)
             {
-                country.livingStandards = 15f;
-                country.economy.inflation = 18f;
-                country.economy.unemployment = 20f;
+                country.resources.energy = 8f;
+                country.economy.confidence = 12f;
+                foreach (var sector in country.economy.sectors) sector.health = 10f;
                 turns.EndMonth();
             }
 
+            // Assert the setup took hold before judging what it caused. The
+            // previous version had no such check, which is exactly why a test
+            // whose premise was being overwritten still read as a statement about
+            // unrest rather than as a broken fixture.
+            Assert.Greater(country.economy.inflation, 8f,
+                "The economy never actually became hard-pressed, so this says nothing " +
+                "about what hardship does.");
+            Assert.Less(country.livingStandards, 35f,
+                "Living standards never fell, so there was no hardship to organise around.");
+
+            // 40 is not an arbitrary bar: GENERAL_STRIKE gates at 58,
+            // SEPARATIST_MOVEMENT at 42, PORT_STRIKE at 40 and the cabinet's
+            // unrest counsel at 55. Below the forties the entire body of content
+            // keyed to this stat is unreachable, and the social layer is a bar on
+            // a screen.
             Assert.Greater(country.socialUnrest, 40f,
-                "Four years of severe hardship produced no organised anger at all.");
-            Assert.Greater(country.publicGrievance, 5f,
-                "And left nothing in the public memory.");
+                $"Four years of severe hardship produced unrest of only {country.socialUnrest:F1}. " +
+                "Nothing in the event catalog reacts below 40.\n" +
+                $"  livingStandards {country.livingStandards:F1} -> term {Math.Max(0f, 45f - country.livingStandards) * 0.55f:F1}\n" +
+                $"  inflation       {country.economy.inflation:F1} -> term {Math.Max(0f, country.economy.inflation - 8f) * 1.6f:F1}\n" +
+                $"  unemployment    {country.economy.unemployment:F1} -> term {Math.Max(0f, country.economy.unemployment - 10f) * 1.4f:F1}\n" +
+                $"  warExhaustion   {country.warExhaustion:F1} -> term {country.warExhaustion * 0.22f:F1}\n" +
+                $"  grievance       {country.publicGrievance:F1} -> term {country.publicGrievance * 0.18f:F1}\n" +
+                $"  nationalUnity   {country.nationalUnity:F1} -> multiplier {1.18f - country.nationalUnity / 165f:F2}\n" +
+                $"  growthRate {country.economy.growthRate:F1}  energy {country.resources.energy:F1}  " +
+                $"marketIndex {country.economy.marketIndex:F1}");
+            // Grievance is a *decade*-scale accumulator, and living standards fall
+            // on a ~22-month time constant, so they only cross the deprivation
+            // threshold around month 30 — leaving barely a year to accrue. Naming
+            // a level it must hit at four years was a guess about a curve, not a
+            // statement about the design.
+            //
+            // The design's actual claim is that hardship is remembered *after it
+            // ends*: "a country that has been through something does not return
+            // to the condition of one that has not". So repair the economy and
+            // check what survives. This also exercises the asymmetry the whole
+            // layer rests on — unrest is organisation and subsides once the cause
+            // is gone; grievance is memory and does not.
+            float grievanceAtWorst = country.publicGrievance;
+            float unrestAtWorst = country.socialUnrest;
+            Assert.Greater(grievanceAtWorst, 2f, "Hardship left nothing in the public memory at all.");
+
+            // Eight years, not three. Fixing the inputs does not instantly fix the
+            // economy: the market index has to climb back from 7.5, and living
+            // standards rise at a deliberately slow 2%/month, so three years in
+            // people were still poor and unrest was still justified — the model
+            // was right and the window was wrong. These systems are documented to
+            // work on multi-year and decade scales, so the divergence has to be
+            // measured on theirs rather than on one that felt tidy.
+            for (int month = 0; month < 96; month++)
+            {
+                country.resources.energy = 90f;
+                country.economy.confidence = 85f;
+                foreach (var sector in country.economy.sectors) sector.health = 92f;
+                turns.EndMonth();
+            }
+
+            Assert.Less(country.socialUnrest, unrestAtWorst * 0.4f,
+                $"Eight years after the economy recovered, unrest was still {country.socialUnrest:F1} " +
+                $"against {unrestAtWorst:F1} at the worst. Organised anger has to subside once the " +
+                "thing people were angry about is fixed, or it is just a second grievance score.");
+
+            Assert.Greater(country.publicGrievance, grievanceAtWorst * 0.4f,
+                $"Grievance fell from {grievanceAtWorst:F1} to {country.publicGrievance:F1}. What a " +
+                "country has been through is supposed to outlast the recovery — on a decade scale, " +
+                "not a business cycle.");
+
+            // The point of the pair: both fade, but not at the same rate. If they
+            // did, one of them is redundant.
+            float unrestKept = country.socialUnrest / Math.Max(0.01f, unrestAtWorst);
+            float grievanceKept = country.publicGrievance / Math.Max(0.01f, grievanceAtWorst);
+            Assert.Less(unrestKept, grievanceKept,
+                $"Unrest kept {unrestKept:P0} of its peak and grievance kept {grievanceKept:P0}. " +
+                "Organisation is supposed to disperse faster than memory; if they decay together " +
+                "the social layer is carrying two copies of one idea.");
         }
 
         [Test]

@@ -128,6 +128,25 @@ namespace Brink.Core
             return best;
         }
 
+        /// <summary>
+        /// Whether our coldest relationship is genuinely cold, rather than merely
+        /// the coolest among warm ones.
+        ///
+        /// <see cref="ColdestRival"/> returns the minimum of a list, so it is
+        /// non-null in every world that contains another country. Any eligibility
+        /// written as `ColdestRival(s) != null` is therefore a constant `true`
+        /// wearing the costume of a condition, and the situation it guards fires
+        /// in a world at peace with everyone.
+        /// </summary>
+        static bool IsActuallyCold(GameState state, float threshold)
+        {
+            var rival = ColdestRival(state);
+            if (rival == null) return false;
+
+            var relationship = state.FindRelationship(state.playerCountryId, rival.id);
+            return relationship != null && relationship.relations < threshold;
+        }
+
         /// <summary>The non-player country with the coldest relations toward us.</summary>
         static CountryState ColdestRival(GameState state)
         {
@@ -960,7 +979,11 @@ namespace Brink.Core
                 id = "DIPLOMATIC_INSULT",
                 title = "A REMARK BECOMES AN INCIDENT",
                 cooldownMonths = 14,
-                isEligible = s => ColdestRival(s) != null,
+                // "Somebody is coldest" is always true — there is a minimum in
+                // every list — so this fired in worlds where every relationship
+                // stood at 85 and nobody was a rival at all. An eligibility test
+                // has to name a condition the world can fail.
+                isEligible = s => IsActuallyCold(s, 55f),
                 weight = s => 1.1f,
                 body = s => $"A senior figure in {ColdestRival(s)?.displayName} has said something " +
                             "about this country that was probably meant for their own audience. " +

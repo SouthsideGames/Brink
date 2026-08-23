@@ -15,6 +15,11 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 2024);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: the cabinet tick is deliberately the only writer
+            // of pillar capability here — DirectControl_SidelinedOfficial...
+            // asserts the military pillar does not move at all while its
+            // minister is sidelined, which is only a statement about the cabinet
+            // if acquisition, technology and the AI are not also raising it.
             turns.ResolveMonth += CabinetSystem.MonthlyAct;
         }
 
@@ -62,6 +67,9 @@ namespace Brink.Tests
         {
             var stateB = WorldFactory.CreateDebugWorld(seed: 2024);
             var turnsB = new TurnManager(stateB);
+            // NARROW PIPELINE: must mirror the SetUp wiring exactly — this is a
+            // determinism claim about CabinetSystem.MonthlyAct specifically, and
+            // full-pipeline determinism is covered by the validation harness.
             turnsB.ResolveMonth += CabinetSystem.MonthlyAct;
 
             for (int i = 0; i < 36; i++) { turns.EndMonth(); turnsB.EndMonth(); }
@@ -76,6 +84,10 @@ namespace Brink.Tests
             {
                 var simState = WorldFactory.CreateDebugWorld(seed: 7);
                 var simTurns = new TurnManager(simState);
+                // NARROW PIPELINE: two directives compared against each other,
+                // both arms wired identically; the government tick is omitted so
+                // the stability delta is the directive's doing and not the
+                // political system's drift toward its own target.
                 simTurns.ResolveMonth += CabinetSystem.MonthlyAct;
                 var official = simState.FindOfficial(Pillar.Government);
                 official.mode = ControlMode.Directed;

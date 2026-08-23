@@ -15,6 +15,12 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1515);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: an exercise resolves the moment it is conducted,
+            // so the only monthly behaviour any assertion depends on is
+            // readiness upkeep and relationship drift. The longest run here is
+            // the 24 months of DoctrineKnowledge_OutlivesTheFriendship, which
+            // collapses the relationship by hand and asserts a decay floor —
+            // omitting the economy, government and AI cannot reach it.
             turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             state.commandPoints.current = 40;

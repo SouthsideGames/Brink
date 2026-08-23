@@ -164,13 +164,12 @@ namespace Brink.Tests
         public void Map_SurvivesAFullWorldSimulation()
         {
             var turns = new TurnManager(state);
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
+            // MUST use the real pipeline — the test's whole claim is that a decade
+            // of the *real* world does not corrupt the map. The hand-wired subset
+            // omitted SecessionSystem and TerritorySystem, which are precisely the
+            // two systems that add countries and change who owns ground, i.e. the
+            // only things that could plausibly break a map render.
+            SimulationPipeline.Wire(turns, state);
 
             for (int i = 0; i < 120; i++)
             {

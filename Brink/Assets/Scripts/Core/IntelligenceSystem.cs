@@ -445,7 +445,14 @@ namespace Brink.Core
                         break;
                     case CovertOperation.TheftOfPlans:
                         network.penetration = Clamp(network.penetration + 20f);
-                        player.pillars.intelligence = Clamp(player.pillars.intelligence + 2f);
+                        // Through Growth.Apply, like every other capability gain.
+                        // A raw +2 on a monthly-cadence action is the un-damped
+                        // ratchet this codebase has now fixed six times — and here
+                        // it was quietly *masking* the exposure penalty below,
+                        // since the pillar it inflated is one of the five that
+                        // trajectory sums.
+                        player.pillars.intelligence =
+                            Growth.Apply(player.pillars.intelligence, 2f);
                         break;
                 }
 
@@ -467,10 +474,71 @@ namespace Brink.Core
             {
                 network.compromised = true;
                 network.penetration = Clamp(network.penetration - 25f);
-                player.pillars.diplomacy = Clamp(player.pillars.diplomacy - 4f);
                 target.counterIntel.counterIntelligence = Clamp(target.counterIntel.counterIntelligence + 6f);
+
+                // Being caught costs you **how you are regarded**, not your
+                // government's capacity to conduct diplomacy.
+                //
+                // This was `pillars.diplomacy -= 4f` — raw, undamped, and paired
+                // with a notification reading "Diplomatic damage taken" while
+                // nothing in the block touched a single relationship. Three things
+                // were wrong with it. It charged the wrong quantity: an expelled
+                // station chief changes what other states think of you, not how
+                // capable your foreign ministry is. It had no recovery path for
+                // the operator incurring it, since only the diplomacy playstyle
+                // regrows that pillar (~0.16/month against a −4 hit — one exposure
+                // erasing two years of a ministry's work). And because it moved a
+                // pillar, the entire cost landed in the annual evaluation's
+                // *trajectory* component rather than *position*, where standing
+                // damage belongs.
+                //
+                // Measured effect: the intelligence playstyle took ~65 exposures a
+                // decade, demanding ~260 points from a pillar with a range of 70.
+                // Its diplomacy pillar floored at zero around month 15 and stayed
+                // there, which is why intelligence graded below doing nothing.
+                var relationship = state.FindRelationship(player.id, targetId);
+                if (relationship != null)
+                {
+                    relationship.relations = Clamp(relationship.relations - 9f);
+                    relationship.trust = Clamp(relationship.trust - 12f);
+                    relationship.AddMemory(state.date,
+                        $"Caught running a covert operation against us.", 1.2f);
+                }
+
+                // Everyone else hears about it too, and thinks a little less of a
+                // government that gets caught — smaller, because it is somebody
+                // else's embassy that was burgled.
+                foreach (var other in state.relationships)
+                {
+                    if (other == relationship) continue;
+                    if (!other.Involves(player.id)) continue;
+                    other.trust = Clamp(other.trust - 1.5f);
+                }
+
+                // **No pillar cost at all.** The first pass at this cut the old −4
+                // to −0.8, on the reasoning that a service whose officers keep
+                // being expelled genuinely gets less done. Measurement said that
+                // was still wrong: at ~0.6 exposures a month it is −5.8 a year
+                // against a diplomacy ministry that regrows +1.9, so an 80%
+                // reduction changed the *rate* of an unrecoverable decline and
+                // nothing else. The intelligence playstyle's trajectory did not
+                // move (43.4 -> 43.3).
+                //
+                // The rule this violates is the project's own: does every value
+                // this decrements have a **reachable recovery path under the same
+                // conditions**? For an operator running intelligence, the
+                // diplomacy pillar does not — repairing it means abandoning the
+                // playstyle that damaged it. Any cost with that shape is a slow
+                // disqualification rather than a price.
+                //
+                // The cost of being caught is the standing damage above plus the
+                // target's counterintelligence hardening below, and both of those
+                // *are* recoverable: relations can be rebuilt, and a burned
+                // network can be rebuilt somewhere else.
+
                 state.AddNotification(NotificationClass.Priority, "OPERATION EXPOSED",
-                    $"{target.displayName} has attributed the operation. Diplomatic damage taken.", targetId,
+                    $"{target.displayName} has attributed the operation. Our standing with them " +
+                    "has suffered, and others have noticed.", targetId,
                     desk: ReportingDesk.Intelligence);
                 state.AddChronicle(ChronicleCategory.Intelligence, player.id,
                     $"Covert operation against {target.displayName} exposed.");

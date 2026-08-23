@@ -15,6 +15,13 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 8080);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: every test on this turn manager forces its own
+            // preconditions (approval, growth, legislative support, election
+            // date, leader age) and then asserts GovernmentSystem's own
+            // arithmetic — elections, succession, emergency powers, PC accrual.
+            // The omitted systems (cabinet, military, AI, intel) would move the
+            // capability figures these tests hold constant rather than the
+            // political ones they assert on.
             turns.ResolveMonth += EconomySystem.MonthlyUpdate;
             turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
         }
@@ -143,6 +150,9 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed: 8080);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: declared-vs-not A/B with both arms wired
+                // identically; omitting the cabinet and AI keeps the approval
+                // gap attributable to emergency rule alone.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 simTurns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
                 sim.politicalCapital = 20f;
@@ -185,6 +195,10 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed: 4321);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: the cabinet tick is the only thing a national
+                // priority acts through, and it is the only difference between
+                // the two arms; anything else wired here would add pillar growth
+                // that has nothing to do with the priority being measured.
                 simTurns.ResolveMonth += CabinetSystem.MonthlyAct;
                 sim.PlayerCountry.government.leader.priority = priority;
 
@@ -243,6 +257,18 @@ namespace Brink.Tests
 
             turns.EndMonth();
 
+            // `EconomySystem.MonthlyUpdate` is wired ahead of `GovernmentSystem`
+            // in this fixture and approaches growth back toward ~2 at 35%/month
+            // and inflation back toward ~2.2 at 30%/month — so the slump the
+            // election reads is not the slump written above. It only has to
+            // survive one tick here, but if it ever stops surviving it, the
+            // assertion below becomes a coin flip on the ±14 election jitter.
+            Assert.Less(player.economy.growthRate, 0f,
+                $"Growth recovered to {player.economy.growthRate:F1} before the election was held, "
+                + "so this is no longer a government going to the country in a slump.");
+            Assert.Greater(player.economy.inflation, 8f,
+                $"Inflation fell to {player.economy.inflation:F1} before the election was held.");
+
             Assert.AreNotEqual(incumbent, gov.leader.name, "A collapse this severe should end the administration.");
             Assert.AreEqual(2, state.administrationsServed);
             Assert.Greater(player.governmentApproval, 40f, "New leadership starts with a honeymoon.");
@@ -265,6 +291,14 @@ namespace Brink.Tests
             gov.nextElectionDate = state.date;
 
             turns.EndMonth();
+
+            // Same ordering hazard as the slump case above, and it matters more
+            // here: an election with an erased fixture sits near the 50 coin flip
+            // and "the incumbent was retained" would pass roughly half the time
+            // while asserting nothing about a boom.
+            Assert.Greater(player.economy.growthRate, 0f,
+                $"Growth fell to {player.economy.growthRate:F1} before the election was held, "
+                + "so this is no longer a popular government in a boom.");
 
             Assert.AreEqual(incumbent, gov.leader.name);
             Assert.AreEqual(1, state.administrationsServed);
@@ -339,6 +373,15 @@ namespace Brink.Tests
 
             turns.EndMonth();
 
+            // The two sibling tests that force a leadership change this way both
+            // assert it actually happened; this one did not. Without it, an
+            // election the incumbent survives — which the injected slump only
+            // avoids because it outlasts one economy tick — leaves the test
+            // asserting that progression survives an ordinary month.
+            Assert.AreEqual(2, state.administrationsServed,
+                "Precondition: leadership changed. Nothing here outlives an administration "
+                + "if no administration ended.");
+
             Assert.AreEqual(500, state.strategistXP, "The operator's progression outlives administrations.");
             Assert.AreEqual(3, state.skillPoints);
             Assert.IsNotNull(state.PlayerCountry);
@@ -386,6 +429,7 @@ namespace Brink.Tests
         [Test]
         public void EconomicMisery_ErodesApprovalOverTime()
         {
+            // NARROW PIPELINE: the omission is the point of the test.
             // Isolate the political response: run without the economy hook so the
             // injected slump persists instead of self-correcting toward target.
             var politicalOnly = new TurnManager(state);
@@ -442,6 +486,10 @@ namespace Brink.Tests
                 {
                     var sim = WorldFactory.CreateDebugWorld(seed * 17 + 3);
                     var simTurns = new TurnManager(sim);
+                    // NARROW PIPELINE: one month per seed, with approval, growth
+                    // and support pinned immediately before the election — only
+                    // the incumbency term count varies, so nothing else needs to
+                    // run for the electoral arithmetic to be measured.
                     simTurns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
 
                     var gov = sim.PlayerCountry.government;
@@ -493,13 +541,12 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed);
                 var simTurns = new TurnManager(sim);
-                simTurns.ResolveMonth += CabinetSystem.MonthlyAct;
-                simTurns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-                simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
-                simTurns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-                simTurns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
-                simTurns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-                simTurns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+                // Must use the real pipeline: a twenty-year world-health and
+                // determinism invariant is exactly the claim a hand-copied
+                // subset cannot make. This list had drifted from the shipped
+                // order by regime change, technology, territory, endgames,
+                // acquisition and cabinet lifecycle.
+                SimulationPipeline.Wire(simTurns, sim);
                 for (int i = 0; i < 240; i++) simTurns.EndMonth(); // 20 years
                 return sim;
             }

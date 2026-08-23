@@ -78,6 +78,15 @@ namespace Brink.Tests
         {
             GameDate dateDuringResolve = default;
             var before = state.date;
+            // NARROW PIPELINE: not a pipeline at all — a probe that records the date
+            // the handler was called with. `SimulationPipeline` is omitted on
+            // purpose throughout this file: these tests are about the turn manager
+            // itself (date arithmetic, CP refresh and reserve, the year-end hook,
+            // handler ordering), and every assertion is on TurnManager's own
+            // bookkeeping, which no monthly system touches. The ten-year run below
+            // asserts only that 120 months elapsed and the roster survived — it is
+            // checking the loop, not the world; the world's long-run health is
+            // WorldInvariantTests' job, on the real pipeline.
             turns.ResolveMonth += s => dateDuringResolve = s.date;
             turns.EndMonth();
             Assert.AreEqual(before, dateDuringResolve);

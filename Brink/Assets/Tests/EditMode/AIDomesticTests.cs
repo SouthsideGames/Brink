@@ -143,6 +143,10 @@ namespace Brink.Tests
             rival.resources.strategicMaterials = 20f;
             rival.resources.treasury = 500000f;
 
+            // NARROW PIPELINE: EconomySystem's own monthly drift is omitted on purpose —
+            // the assertion is that `SecureResources` alone respects `EnergyCeilingFor`,
+            // and wiring the drift that also approaches that ceiling would make a passing
+            // run unattributable to the AI verb this test exists to bound.
             var simulation = new TurnManager(state);
             simulation.ResolveMonth += AISystem.MonthlyThink;
 
@@ -164,6 +168,9 @@ namespace Brink.Tests
             rival.resources.treasury = 4000f;
             float before = rival.resources.treasury;
 
+            // NARROW PIPELINE: EconomySystem is omitted so treasury has exactly one mover.
+            // The assertion is "the AI's resource verb debits money"; with revenue and
+            // upkeep also running, a fall in treasury would prove nothing about the verb.
             var simulation = new TurnManager(state);
             simulation.ResolveMonth += AISystem.MonthlyThink;
             for (int i = 0; i < 24; i++) simulation.EndMonth();

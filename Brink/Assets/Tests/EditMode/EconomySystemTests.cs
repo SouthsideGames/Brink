@@ -16,10 +16,13 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 5150);
             turns = new TurnManager(state);
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += EconomySystem.AgeSanctions;
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
+            // Must use the real pipeline: this class runs decade-length
+            // invariants on the live world (Economy_NeverCollapsesToZero holds a
+            // foreign economy under existential sanctions for 120 months,
+            // MarketHistory_TrimsToCap runs longer still). A hand-wired subset
+            // measures an economy that no government, cabinet, acquisition
+            // programme or AI can respond to — a different game.
+            SimulationPipeline.Wire(turns, state);
         }
 
         [TearDown]
@@ -71,6 +74,11 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed: 61);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: a controlled A/B where both arms are wired
+                // identically and the sanction is the only difference — omitting
+                // the AI, government and cabinet keeps the comparison about
+                // EconomySystem's own sanction arithmetic rather than about how
+                // a rival government chose to respond.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 simTurns.ResolveMonth += EconomySystem.AgeSanctions;
                 if (sanctioned)
@@ -99,6 +107,9 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed: 62);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: same controlled A/B as above — both arms are
+                // wired identically, so omitting the AI/government/cabinet keeps
+                // the measured difference the sender's own blowback arithmetic.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 simTurns.ResolveMonth += EconomySystem.AgeSanctions;
                 if (sanctioned)
@@ -177,6 +188,10 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed: 71);
                 var simTurns = new TurnManager(sim);
+                // NARROW PIPELINE: peace-vs-war A/B with both arms wired the
+                // same. The AI is omitted deliberately — if it could settle or
+                // widen the war the two arms would stop differing only by the
+                // war, and the assertion is EconomySystem's war-cost arithmetic.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
                 simTurns.ResolveMonth += ConfrontationSystem.MonthlyTick;
                 if (war)
@@ -206,10 +221,26 @@ namespace Brink.Tests
             player.resources.energy = 5f;
             var control = WorldFactory.CreateDebugWorld(seed: 5150);
             var controlTurns = new TurnManager(control);
-            controlTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
+            // The control arm must be wired exactly like the treatment arm (the
+            // shared `turns`, which runs the real pipeline), or the comparison
+            // measures the difference in pipelines rather than in energy.
+            SimulationPipeline.Wire(controlTurns, control);
             control.PlayerCountry.resources.energy = 95f;
 
             for (int i = 0; i < 12; i++) { turns.EndMonth(); controlTurns.EndMonth(); }
+
+            // `resources.energy` drifts toward `EnergyCeilingFor` every month, so
+            // both arms of this A/B are being pulled back toward the same authored
+            // endowment (78 for the USA) the whole time it runs. `energyDrag` — the
+            // entire mechanism under test — only exists below 40, so if the shortage
+            // arm has climbed past that line the assertions below are comparing two
+            // healthy economies and mean nothing.
+            Assert.Less(player.resources.energy, 40f,
+                $"The shortage arm recovered to {player.resources.energy:F1} energy, above the 40 "
+                + "threshold where energyDrag exists, so this asserts nothing about a shortage.");
+            Assert.Greater(control.PlayerCountry.resources.energy, 40f,
+                $"The control arm fell to {control.PlayerCountry.resources.energy:F1} energy and is "
+                + "itself short, so the two arms no longer differ by the thing being measured.");
 
             Assert.Less(player.economy.growthRate, control.PlayerCountry.economy.growthRate);
             Assert.Greater(player.economy.inflation, control.PlayerCountry.economy.inflation);
@@ -219,15 +250,44 @@ namespace Brink.Tests
         public void SevereDistress_ErodesApprovalAndStability()
         {
             var player = state.PlayerCountry;
-            player.economy.inflation = 25f;
-            player.economy.growthRate = -6f;
             float approvalBefore = player.governmentApproval;
             float stabilityBefore = player.stability;
 
-            for (int i = 0; i < 6; i++) turns.EndMonth();
+            // Sustain the distress by its causes, and run long enough to outlast
+            // a government working against it.
+            //
+            // This used to assign inflation and growth once and run six months.
+            // EconomySystem approaches inflation back toward ~2.2 at 30%/month,
+            // so the "severe distress" was over by month three — and once this
+            // fixture was wired to the real pipeline, six months of a functioning
+            // cabinet left the country *better off than it started*. The test was
+            // measuring a brief shock followed by a recovery and calling the
+            // result erosion.
+            //
+            // A government resisting a slump is correct behaviour, so the distress
+            // has to be ongoing for the assertion to mean anything.
+            // Four years. The market index is fundamentals-anchored and falls
+            // slowly, and it is what drives the crisis regime, so at two years the
+            // distress term had only reached a third of its depth and inflation
+            // sat at 7.4 — the precondition below caught that rather than letting
+            // the real assertions pass or fail on a fixture that had not taken.
+            for (int i = 0; i < 48; i++)
+            {
+                player.resources.energy = 10f;
+                player.economy.confidence = 15f;
+                foreach (var sector in player.economy.sectors) sector.health = 15f;
+                turns.EndMonth();
+            }
 
-            Assert.Less(player.governmentApproval, approvalBefore);
-            Assert.Less(player.stability, stabilityBefore);
+            Assert.Greater(player.economy.inflation, 8f,
+                "The economy never became distressed, so this asserts nothing about distress.");
+
+            Assert.Less(player.governmentApproval, approvalBefore,
+                $"Four years of severe distress left approval at {player.governmentApproval:F1} " +
+                $"against {approvalBefore:F1} before it.");
+            Assert.Less(player.stability, stabilityBefore,
+                $"Four years of severe distress left stability at {player.stability:F1} " +
+                $"against {stabilityBefore:F1} before it.");
         }
 
         [Test]
@@ -283,10 +343,9 @@ namespace Brink.Tests
             {
                 var sim = WorldFactory.CreateDebugWorld(seed);
                 var simTurns = new TurnManager(sim);
-                simTurns.ResolveMonth += CabinetSystem.MonthlyAct;
-                simTurns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-                simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
-                simTurns.ResolveMonth += EconomySystem.AgeSanctions;
+                // Must use the real pipeline: a determinism claim about "the
+                // simulation" is worth nothing if it covers four of its systems.
+                SimulationPipeline.Wire(simTurns, sim);
                 for (int i = 0; i < 60; i++) simTurns.EndMonth();
                 return sim;
             }

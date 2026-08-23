@@ -351,28 +351,67 @@ namespace Brink.Tests
             // End to end: play a decade answering every crisis with its first
             // option and check the world is measurably different from one where
             // nothing was ever decided.
+            int faced = 0;
+
             string PlayDecade(bool answer)
             {
                 var world = WorldFactory.CreateDebugWorld(seed: 6120);
                 var turns = new TurnManager(world);
                 SimulationPipeline.Wire(turns, world);
 
+                int seen = 0;
                 for (int month = 0; month < 120; month++)
                 {
                     if (answer)
                         while (world.activeCrises.Count > 0)
+                        {
+                            seen++;
                             CrisisSystem.Resolve(world, world.activeCrises[0], 0);
+                        }
                     turns.EndMonth();
                 }
 
-                float relations = 0f;
-                foreach (var relationship in world.relationships) relations += relationship.relations;
-                return $"{relations:F0}|{world.confrontations.Count}|{world.sanctions.Count}";
+                if (answer) faced = seen;
+
+                // **The broad fingerprint, not three fields.**
+                //
+                // This used to sample summed relations, confrontation count and
+                // sanction count — and passed for a long time on a coincidence.
+                // Crisis effects in this world are overwhelmingly TRUST and
+                // MARKET_SHOCK, none of which it looked at: the two decades
+                // genuinely differ (trust 44 vs 28, confidence 4.5 vs 0.0, market
+                // index 9.1 vs 7.1, conspiracy 20.4 vs 31.9) and it reported them
+                // identical.
+                //
+                // The one field it did watch was the worst possible choice.
+                // Relations mean-revert and clamp at 0/100, so a one-off ±8 nudge
+                // is fully erased inside about twenty months — **any test relying
+                // on a relations delta surviving a decade is flaky by
+                // construction.** It only ever passed because DIPLOMATIC_INSULT
+                // was eligible in every world, and tightening that eligibility
+                // (it was gated on `ColdestRival != null`, which is always true)
+                // removed the last routinely-firing RELATIONS effect and exposed
+                // this.
+                return Fingerprint(world)
+                       + $"|{world.PlayerCountry.stability:F2}"
+                       + $"|{world.PlayerCountry.governmentApproval:F2}"
+                       + $"|{world.PlayerCountry.nationalUnity:F2}"
+                       + $"|{world.PlayerCountry.resources.treasury:F2}";
             }
 
-            Assert.AreNotEqual(PlayDecade(true), PlayDecade(false),
+            string answered = PlayDecade(true);
+            string drifted = PlayDecade(false);
+
+            // A decade that produced no crises would compare two identical runs
+            // and pass while proving nothing. `crisesFacedThisYear` is no use as
+            // the counter — it resets annually and reads 0 at the end of both.
+            Assert.GreaterOrEqual(faced, 5,
+                $"Only {faced} crises fired in the whole decade, so this says nothing about " +
+                "whether answering them matters.");
+
+            Assert.AreNotEqual(answered, drifted,
                 "Answering every crisis for a decade and answering none produced the same " +
-                "world. Crisis decisions are not reaching it.");
+                $"world. Crisis decisions are not reaching it.\n  answered: {answered}\n  drifted:  {drifted}");
         }
     }
 }

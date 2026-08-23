@@ -614,6 +614,7 @@ namespace Brink.Data
                     {
                         branch = ForceBranch.Ground,
                         strength = Jitter(profile.military * 0.95f, 5f),
+                        experience = Jitter(22f + profile.government * 0.18f, 5f),
                         readiness = Jitter(55f + profile.government * 0.15f, 6f),
                         supply = Jitter(60f + profile.industry * 0.25f, 6f)
                     },
@@ -621,6 +622,7 @@ namespace Brink.Data
                     {
                         branch = ForceBranch.Air,
                         strength = Jitter(profile.military * 0.9f, 5f),
+                        experience = Jitter(22f + profile.government * 0.18f, 5f),
                         readiness = Jitter(55f + profile.government * 0.15f, 6f),
                         supply = Jitter(60f + profile.industry * 0.25f, 6f)
                     },
@@ -633,6 +635,7 @@ namespace Brink.Data
                     {
                         branch = ForceBranch.Naval,
                         strength = navalRoll,
+                        experience = Jitter(20f + profile.government * 0.18f, 5f),
                         readiness = Jitter(50f + profile.government * 0.15f, 6f),
                         supply = Jitter(58f + profile.industry * 0.25f, 6f)
                     }

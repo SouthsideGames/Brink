@@ -284,6 +284,24 @@ namespace Brink.Core
                             * (1f - TechnologySystem.Effectiveness(country, "CAP_LIFT") * 0.35f);
 
                     force.supply = MoveToward(force.supply, Clamp(supplyTarget - drag), 3f);
+
+                    // Institutional memory fades. A force that is not fighting
+                    // settles toward what its peacetime training sustains, which
+                    // its own readiness and doctrine investment decide — so a
+                    // well-drilled army forgets slowly and a neglected one
+                    // forgets fast.
+                    //
+                    // This is the restoring force that stops veterancy being a
+                    // ratchet. Nothing here can push experience *up*: peacetime
+                    // improvement has to be bought through exercises, which is
+                    // what finally gives war games a reason to exist beyond
+                    // readiness and trust. Only wartime pulls above the ceiling.
+                    if (!atWar)
+                    {
+                        float trainingCeiling = 18f + force.readiness * 0.22f + mil.logistics * 0.08f;
+                        if (force.experience > trainingCeiling)
+                            force.experience = MoveToward(force.experience, trainingCeiling, 0.45f);
+                    }
                 }
 
                 country.resources.treasury -= PostureUpkeep(mil.posture, atWar);
@@ -756,6 +774,14 @@ namespace Brink.Core
             float basePower = OperationPower(attacker, operationType) * PowerScale;
             float attackPower = basePower * reach * focus
                                 + Math.Max(0f, coalitionSupport) * PowerScale;
+
+            // Experience is already inside EffectivePower, so it is already
+            // deciding the outcome. Recording it is what lets the after-action
+            // report *name* it — otherwise a green force loses and the report
+            // ranks everything except the reason.
+            float experienceFactor = WeightedExperienceFactor(attacker.military, operationType);
+            analysis.Record(OperationAnalysis.Labels.Experience, experienceFactor, false,
+                $"{DescribeForceExperience(attacker.military, operationType)}");
 
             analysis.Record(OperationAnalysis.Labels.Reach, reach, false,
                 $"force arrives at {reach * 100f:F0}% weight");
@@ -1277,6 +1303,95 @@ namespace Brink.Core
         /// costs ships, and only the operations that put people on the ground
         /// cost the army.
         /// </summary>
+        /// <summary>
+        /// What the branches that actually fought learn from an operation.
+        ///
+        /// Distributed by the same weights that decided the outcome and took the
+        /// losses, so a blockade teaches the fleet and nothing else.
+        ///
+        /// Two deliberate shapes:
+        /// - **A hard fight teaches more than a walkover.** Gain scales with the
+        ///   losses the branch took, so grinding down a defended position is worth
+        ///   more than a dozen unopposed sorties. Otherwise the optimal way to
+        ///   build a veteran army is to attack the weakest thing on the map
+        ///   repeatedly, which is not a lesson about war.
+        /// - **Losing teaches too, slightly less.** A failed assault is where an
+        ///   army learns what it cannot do, and `OperationAnalysis` already exists
+        ///   to tell the operator the same thing. Zero on defeat would make the
+        ///   whole mechanic a reward for already being strong.
+        ///
+        /// Diminishing: the closer to 100, the less there is left to learn, so a
+        /// long war produces a seasoned force rather than an invincible one.
+        /// </summary>
+        /// <summary>
+        /// The experience multiplier the branches doing this operation contribute,
+        /// weighted the same way their power is. Reported, not applied — the
+        /// factor is already inside <see cref="BranchForce.EffectivePower"/>.
+        /// </summary>
+        public static float WeightedExperienceFactor(MilitaryState mil, OperationType operationType)
+        {
+            var profile = OperationCatalog.For(operationType);
+            if (mil == null || profile == null || profile.usesIntelligence) return 1f;
+
+            float weight = profile.ground + profile.air + profile.naval;
+            if (weight <= 0.01f) return 1f;
+
+            return (mil.ground.ExperienceFactor * profile.ground
+                    + mil.air.ExperienceFactor * profile.air
+                    + mil.naval.ExperienceFactor * profile.naval) / weight;
+        }
+
+        /// <summary>Plain-language band for the branch that carries this operation.</summary>
+        public static string DescribeForceExperience(MilitaryState mil, OperationType operationType)
+        {
+            var profile = OperationCatalog.For(operationType);
+            if (mil == null || profile == null) return "";
+
+            var lead = mil.ground;
+            if (profile.air >= profile.ground && profile.air >= profile.naval) lead = mil.air;
+            else if (profile.naval >= profile.ground && profile.naval >= profile.air) lead = mil.naval;
+
+            return $"{lead.ExperienceBand.ToLowerInvariant()} ({lead.experience:F0})";
+        }
+
+        /// <param name="odds">
+        /// The chance this side was given before the order — low odds mean a hard
+        /// fight, and a hard fight is what teaches. Pass the defender's view
+        /// (1 − attacker odds) when awarding to the defender.
+        ///
+        /// **Measured backwards on the first attempt.** This scaled with the
+        /// losses the branch took, on the reasoning that a bloody fight teaches
+        /// more. It does not work: losses are driven by the verb's intensity and
+        /// our own casualty appetite far more than by what we were up against, and
+        /// an easy operation succeeds every time while a hard one takes the
+        /// reduced defeat share. Walking into undefended ground five times taught
+        /// 10.7; grinding down a fortified position taught 6.6 — the exact
+        /// inversion of the intent. The odds are the only term in the resolution
+        /// that actually knows how hard the fight was.
+        /// </param>
+        static void AwardExperience(MilitaryState mil, OperationType operationType,
+            float odds, bool success)
+        {
+            if (mil == null) return;
+
+            var profile = OperationCatalog.For(operationType);
+            if (profile == null || profile.usesIntelligence) return;
+
+            float difficulty = 1f - (odds < 0f ? 0f : odds > 1f ? 1f : odds);
+            float scale = (success ? 1f : 0.75f) * (0.45f + 1.75f * difficulty);
+
+            void Learn(BranchForce force, float weight)
+            {
+                if (force == null || weight <= 0.01f) return;
+                float room = (100f - force.experience) / 100f;   // less left to learn
+                force.experience = Clamp(force.experience + scale * weight * room * 2.2f);
+            }
+
+            Learn(mil.ground, profile.ground);
+            Learn(mil.air, profile.air);
+            Learn(mil.naval, profile.naval);
+        }
+
         static void ApplyAttackerAttrition(MilitaryState mil, OperationType operationType, float losses)
         {
             var profile = OperationCatalog.For(operationType);
@@ -1385,6 +1500,13 @@ namespace Brink.Core
             attacker.military.ground.supply = Clamp(attacker.military.ground.supply - 6f);
             attacker.military.air.supply = Clamp(attacker.military.air.supply - 4f);
             ApplyDefenderAttrition(defender, target, operationType, record.defenderLosses);
+
+            // What the branches that fought take away from it. Both sides learn —
+            // the defender arguably more, since surviving an attack teaches you
+            // where you were weak.
+            AwardExperience(attacker.military, operationType, record.oddsAtOrder, record.success);
+            if (defender != null)
+                AwardExperience(defender.military, operationType, 1f - record.oddsAtOrder, !record.success);
 
             attacker.resources.treasury -= 45f;
             // A country cannot spend more people than it has.

@@ -42,6 +42,21 @@ if [ -f "$log" ] && [ "$(grep -ac '' "$log")" -lt 200 ]; then
   stale=1
 fi
 
+# A run that was killed part-way leaves a complete-looking results file from the
+# PREVIOUS run and a log with no compile error and no abort message, so every
+# check above passes and the totals read green. This has happened.
+#
+# Unity shuts down cleanly through the package manager and the memory-leak
+# report; neither appears if the process was killed. Their absence in a log
+# that is otherwise long and healthy means the run did not finish.
+if [ "$stale" = "0" ] && [ -f "$log" ] \
+   && ! grep -a -q "Server process was shutdown" "$log"; then
+  echo "!!! THE RUN DID NOT FINISH — Unity never shut down cleanly (killed, or still running)."
+  echo "    The results below are from a PREVIOUS run."
+  echo
+  stale=1
+fi
+
 # NOTE: do not compare the timestamps of the log and the results file. Unity
 # writes the results when the tests finish and keeps appending to the log until
 # it exits, so the log is *always* newer on a healthy run. An earlier version of

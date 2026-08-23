@@ -499,6 +499,24 @@ namespace Brink.Core
                 var b = state.FindCountry(relationship.countryB);
                 if (a == null || b == null) continue;
 
+                // What you learned of a partner's doctrine goes stale.
+                //
+                // `doctrineFamiliarity` was written in exactly one place
+                // (`ExerciseSystem`) and had **no decay path anywhere in the
+                // codebase** — the one-way-value class again, running upward.
+                // Knowledge of how an army fought in 1984 stayed perfectly current
+                // fifty years later, and the test asserting it "outlives the
+                // friendship" could not fail.
+                //
+                // Deliberately slow, and proportional so a deep familiarity fades
+                // faster than a shallow one: the design point is that it *does*
+                // outlive the friendship (a former partner is genuinely easier to
+                // fight), so a decade of usefulness is right and permanence is not.
+                if (relationship.doctrineFamiliarity > 0f)
+                    relationship.doctrineFamiliarity = Clamp(
+                        relationship.doctrineFamiliarity
+                        - (0.05f + relationship.doctrineFamiliarity * 0.004f));
+
                 // Threat perception tracks capability and posture.
                 relationship.threatPerceptionOfA = Approach(relationship.threatPerceptionOfA,
                     Clamp(a.pillars.military * 0.45f + (a.military.alertPosture ? 15f : 0f)), 0.1f);

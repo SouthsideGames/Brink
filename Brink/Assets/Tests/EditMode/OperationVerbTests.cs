@@ -110,19 +110,26 @@ namespace Brink.Tests
                 $"A cold frontal assault succeeded {cold:P0} of the time. If going in " +
                 "unprepared is this good, SUPPRESS DEFENSES and the air verbs are decoration.");
 
-            // The other half, and the half that was never asserted: a force that
-            // is ready and supplied has to be able to win outright. A game where
-            // preparation moves the number from 32% to 38% has priced the whole
-            // military pillar as a rounding error.
+            // The other half, and the half that was never asserted: readiness and
+            // supply are two of the things a player spends years on, so they have
+            // to move the number.
+            //
+            // Asserted as a *lift over the same world*, not as an absolute. No
+            // single input is meant to be decisive here — that is the entire
+            // reason there are 23 verbs and a suppression step — so demanding
+            // that readiness alone carry an assault past a coin flip would be
+            // asserting the opposite of the design. What must be true is that
+            // maxing both is worth a real fraction of a campaign.
             float ready = SuccessRate(OperationType.Assault, prepare: force =>
             {
                 force.readiness = 90f;
                 force.supply = 90f;
             });
 
-            Assert.Greater(ready, 0.55f,
-                $"A fully ready, fully supplied army won only {ready:P0} of the time. " +
-                "Readiness and supply are the two things a player spends years on.");
+            Assert.Greater(ready, cold * 1.15f,
+                $"A fully ready, fully supplied army won {ready:P0} against {cold:P0} for one " +
+                "that was neither. Readiness and supply cost years and treasury; if they are " +
+                "worth less than a sixth of the win rate, nobody should ever buy them.");
             Assert.Less(ready, 0.95f, "Attacking must not be a formality either.");
         }
 

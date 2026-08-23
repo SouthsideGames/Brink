@@ -20,6 +20,13 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 7700);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: upkeep plus the diplomatic tick that the
+            // forward-posture threat case reads — the AI, economy, crisis and
+            // confrontation ticks are omitted because every case here sets
+            // treasury, logistics, posture and doctrine directly and asserts
+            // the procurement, sustainment and readiness arithmetic that
+            // follows over at most two years, none of which needs another
+            // government to decide anything.
             turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             state.commandPoints.current = 60;

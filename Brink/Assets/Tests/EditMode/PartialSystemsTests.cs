@@ -239,17 +239,40 @@ namespace Brink.Tests
         [Test]
         public void RaiseReadinessDirective_IsPaidForInTreasury()
         {
-            var player = state.PlayerCountry;
-            var official = state.FindOfficial(Pillar.Military);
-            official.mode = ControlMode.Directed;
-            official.directiveId = "MIL_READINESS";
-            official.competence = 80f;
+            // Measured against a control run rather than against the starting
+            // balance. The whole cabinet acts each month, and an autonomous
+            // Economy minister *adds* `amount * 10` to the treasury — precisely
+            // the magnitude this directive subtracts. The two roughly cancelled,
+            // so the result turned on which official happened to roll the better
+            // competence that year, and the test passed on a coin flip.
+            //
+            // Same defect as the DRAW DOWN test: measuring a net when the claim is
+            // about a delta. Only the difference between the two runs is
+            // attributable to the directive.
+            float TreasuryAfterAYear(bool raiseReadiness)
+            {
+                var world = WorldFactory.CreateDebugWorld(seed: 4242);
+                var minister = world.PlayerCountry.FindOfficial(Pillar.Military);
+                minister.competence = 80f;
 
-            float before = player.resources.treasury;
-            for (int i = 0; i < 12; i++) CabinetSystem.MonthlyAct(state);
+                if (raiseReadiness)
+                {
+                    minister.mode = ControlMode.Directed;
+                    minister.directiveId = "MIL_READINESS";
+                }
+                else
+                {
+                    minister.mode = ControlMode.Autonomous;
+                    minister.directiveId = "";
+                }
 
-            Assert.Less(player.resources.treasury, before,
-                "'Prioritize force readiness over budget' has to cost the budget.");
+                for (int i = 0; i < 12; i++) CabinetSystem.MonthlyAct(world);
+                return world.PlayerCountry.resources.treasury;
+            }
+
+            Assert.Less(TreasuryAfterAYear(true), TreasuryAfterAYear(false),
+                "'Prioritize force readiness over budget' has to cost the budget — a year of "
+                + "it left the treasury no worse off than leaving the minister alone.");
         }
 
         [Test]

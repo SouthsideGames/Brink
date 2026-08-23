@@ -230,6 +230,15 @@
     margin-bottom: 4px;
 }
 
+/* The prose area only. Height is capped in code against the measured panel
+   (TutorialPanel.Refresh) because a percentage here would need a definite
+   parent height, which this column does not have. flex-shrink lets it give
+   way; the button row below it must never be pushed off-screen. */
+.tutorial-reader {
+    flex-shrink: 1;
+    margin-bottom: 4px;
+}
+
 .tutorial-body {
     color: rgb(200, 255, 210);
     font-size: 12px;

@@ -16,6 +16,15 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 6060);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: collection and decay only, here and in the
+            // per-test worlds below — the AI, economy, government and
+            // confrontation ticks are omitted because every assertion in this
+            // file sets penetration, counterintelligence and deception strength
+            // directly and then reads the estimate arithmetic that follows, so
+            // nothing measured here depends on the world moving underneath it
+            // (the long runs are decay and RNG determinism, both internal to
+            // this system, and each negative claim is backed by a positive one
+            // under the same wiring).
             turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
             turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
         }
@@ -75,6 +84,14 @@ namespace Brink.Tests
             state.FindCountry("CHN").counterIntel.counterIntelligence = 10f;
             turns.EndMonth();
 
+            // Precondition: `penetration` is written by the collection tick — a
+            // rollup slashes it to ~35% of what it was. If that happened the
+            // network is no longer "deep" and the comparison below says nothing
+            // about depth.
+            Assert.Greater(network.penetration, 80f,
+                "The deep network was rolled up by the collection tick, so nothing "
+                + $"deeply penetrated was ever measured (penetration {network.penetration:F0}).");
+
             var deep = IntelligenceSystem.GetEstimate(state, "USA", "CHN", IntelDomain.Military);
             Assert.Less(deep.margin, shallowMargin);
             Assert.Greater((int)deep.confidence, (int)shallowGrade);
@@ -90,6 +107,14 @@ namespace Brink.Tests
             korval.counterIntel.counterIntelligence = 5f;
 
             for (int i = 0; i < 6; i++) turns.EndMonth();
+
+            // Precondition: the "excellent access" this asserts about is written
+            // every month by `MonthlyCollection`, which can roll the network up
+            // and cut penetration to ~35%. Six months of a compromised network
+            // would make the closeness assertion below a measurement of luck.
+            Assert.Greater(network.penetration, 60f,
+                "Access never stayed excellent across the six months, so this asserts "
+                + $"nothing about excellent access (penetration {network.penetration:F0}).");
 
             var estimate = IntelligenceSystem.GetEstimate(state, "USA", "CHN", IntelDomain.Military);
             float truth = IntelligenceSystem.TrueValue(korval, IntelDomain.Military);
@@ -229,7 +254,7 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void Exposure_CompromisesNetworkAndCostsDiplomacy()
+        public void Exposure_CompromisesNetworkAndCostsStanding()
         {
             IntelligenceSystem.EstablishNetwork(state, turns, "CHN", IntelDomain.Military);
             var network = state.FindNetwork("USA", "CHN");
@@ -238,7 +263,10 @@ namespace Brink.Tests
             korval.counterIntel.counterIntelligence = 100f; // near-certain attribution
 
             var player = state.PlayerCountry;
-            float diplomacyBefore = player.pillars.diplomacy;
+            var relationship = state.FindRelationship("USA", "CHN");
+            float diplomacyPillarBefore = player.pillars.diplomacy;
+            float relationsBefore = relationship.relations;
+            float trustBefore = relationship.trust;
 
             // Run operations until one is exposed; exposure is probabilistic.
             bool exposed = false;
@@ -251,7 +279,24 @@ namespace Brink.Tests
             }
 
             Assert.IsTrue(exposed, "High counterintelligence should eventually attribute an operation.");
-            Assert.Less(player.pillars.diplomacy, diplomacyBefore);
+
+            // Being caught costs *standing*, which is what the operation actually
+            // spent — the target now regards us worse and trusts us less.
+            Assert.Less(relationship.relations, relationsBefore,
+                "Being caught running an operation against them did not cool relations.");
+            Assert.Less(relationship.trust, trustBefore,
+                "Being caught did not cost their trust, which is the thing spying spends.");
+
+            // And it must NOT cost the diplomacy pillar. That is national
+            // capability, not standing, and an intelligence operator has no way to
+            // repair it without abandoning the playstyle — measurement showed a
+            // −4 hit (later −0.8) driving the pillar to zero and holding it there,
+            // which graded the whole playstyle below doing nothing.
+            Assert.AreEqual(diplomacyPillarBefore, player.pillars.diplomacy, 0.01f,
+                "Exposure charged the diplomacy pillar. Getting caught changes how others " +
+                "regard us, not how capable our foreign ministry is — and a cost with no " +
+                "recovery path under the conditions that cause it is a disqualification, " +
+                "not a price.");
         }
 
         [Test]

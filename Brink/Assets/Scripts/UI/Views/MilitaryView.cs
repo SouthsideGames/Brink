@@ -44,6 +44,7 @@ namespace Brink.UI.Views
             AddAuthorityBadge(state, Pillar.Military);
 
             BuildForceStructure(state, player);
+            BuildHomeExposure(state, player);
             BuildStrategicMap(state);
 
             BuildExercises(state);
@@ -71,6 +72,80 @@ namespace Brink.UI.Views
                 AddText("sig-hostile").text =
                     "\n THE FORCE IS COMMITTED TO ITS LIMIT. Settle or wind down a front " +
                     "before opening another.";
+        }
+
+        /// <summary>
+        /// What we are leaving uncovered (GDD §16, §19).
+        ///
+        /// **The AI could see this and the operator could not.**
+        /// `TheatreSystem.IsOverstretched` had exactly two readers — `AISystem`,
+        /// which treats it as an opening to attack us, and an event trigger. There
+        /// was no player readout of it anywhere, and the measured consequence was
+        /// visible in the balance harness: the military playstyle **takes its
+        /// objective in four seeds out of five and still ends at net −1 location**,
+        /// because it wins the war it chose and loses ground elsewhere while
+        /// committed.
+        ///
+        /// That is a fine thing to have happen. It is not a fine thing to have
+        /// happen *invisibly* — the difference between a trap and a decision is
+        /// whether the operator could have known. So this names the commitment,
+        /// the theatres we are absent from, and the specific holdings that are
+        /// thinnest right now.
+        ///
+        /// Shown whenever we hold ground, not only at war: a garrison that has
+        /// been quietly hollowed out by upkeep is worth seeing before somebody
+        /// else notices it.
+        /// </summary>
+        void BuildHomeExposure(GameState state, CountryState player)
+        {
+            var ours = new System.Collections.Generic.List<StrategicLocation>();
+            foreach (var location in state.locations)
+                if (location.ownerId == state.playerCountryId) ours.Add(location);
+            if (ours.Count == 0) return;
+
+            float commitment = TheatreSystem.TotalCommitment(state, state.playerCountryId);
+            bool overstretched = TheatreSystem.IsOverstretched(state, state.playerCountryId);
+
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("WHAT WE ARE LEAVING UNCOVERED", W);
+
+            var committedTheatres = TheatreSystem.ActiveTheatresFor(state, state.playerCountryId);
+            if (committedTheatres.Count > 0)
+            {
+                var names = new System.Collections.Generic.List<string>();
+                foreach (var theatre in committedTheatres) names.Add(TheatreSystem.Name(theatre));
+                AddText(overstretched ? "sig-hostile" : "terminal-text-dim").text =
+                    $" COMMITTED IN {string.Join(", ", names)} — weight {commitment:F1}"
+                    + (overstretched
+                        ? ".  OVERSTRETCHED: every government that can see us knows it."
+                        : ".");
+            }
+            else
+            {
+                AddText("terminal-text-dim").text =
+                    " The force is uncommitted. Everything we hold is defended at its own weight.";
+            }
+
+            // The three thinnest positions we hold. Ranked by garrison and works
+            // together, because either alone is misleading: a fortress with nobody
+            // in it and a full garrison in the open are both openings.
+            ours.Sort((a, b) => (a.garrison + a.defenseValue * 0.7f)
+                .CompareTo(b.garrison + b.defenseValue * 0.7f));
+
+            int shown = 0;
+            foreach (var location in ours)
+            {
+                if (shown++ >= 3) break;
+
+                var theatre = TheatreSystem.Of(location);
+                bool covered = committedTheatres.Contains(theatre);
+                float focus = TheatreSystem.FocusFactor(state, state.playerCountryId, theatre);
+
+                AddText(location.garrison < 25f ? "sig-hostile" : "terminal-text-dim").text =
+                    $"   {AsciiChart.Cell(location.displayName.ToUpperInvariant(), AsciiChart.NameWidth(W, 0.34f))}"
+                    + $" GARRISON {location.garrison,4:F0}  WORKS {location.defenseValue,4:F0}"
+                    + $"  {TheatreSystem.Name(theatre)}"
+                    + (covered ? "" : $"  (we would fight here at {focus * 100f:F0}% weight)");
+            }
         }
 
         /// <summary>
@@ -505,6 +580,8 @@ namespace Brink.UI.Views
             sb.AppendLine("   " + AsciiChart.LabeledBar("STRENGTH", force.strength, 100, 10, 18));
             sb.AppendLine("   " + AsciiChart.LabeledBar("READINESS", force.readiness, 100, 10, 18));
             sb.AppendLine("   " + AsciiChart.LabeledBar("SUPPLY", force.supply, 100, 10, 18));
+            sb.AppendLine("   " + AsciiChart.LabeledBar("EXPERIENCE", force.experience, 100, 10, 18)
+                          + $"  {force.ExperienceBand}");
             sb.AppendLine();
         }
 
@@ -692,6 +769,68 @@ namespace Brink.UI.Views
                     Refresh();
                 });
             }
+
+            BuildBalanceOfForces(state);
+        }
+
+        /// <summary>
+        /// What a war with each state would look like, *before* opening one.
+        ///
+        /// `MilitaryAdvice` tells the operator whether this strike is wise; it
+        /// exists only once a confrontation is running. Nothing said whether the
+        /// war itself was winnable, so intelligence paid off during a war and
+        /// never in the decision to start one — which is the decision it should
+        /// most obviously inform.
+        ///
+        /// Every foreign figure here routes through `IntelReadout`, so a state we
+        /// have never collected against reads NO ASSESSMENT rather than a number.
+        /// **That absence is the feature.** The comparison is worth buying, and an
+        /// operator who opens a war against an unread opponent should be able to
+        /// see that they are doing exactly that.
+        /// </summary>
+        void BuildBalanceOfForces(GameState state)
+        {
+            var player = state.PlayerCountry;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("BALANCE OF FORCES", W);
+
+            var sb = new StringBuilder();
+            int nameWidth = AsciiChart.NameWidth(W, 0.26f);
+            sb.AppendLine($" {AsciiChart.Cell("STATE", nameWidth)} GROUND        AIR           NAVAL         REACH");
+
+            foreach (var country in state.countries)
+            {
+                if (country.isPlayer) continue;
+
+                sb.AppendLine($" {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
+                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Ground), 13)}"
+                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Air), 13)}"
+                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Naval), 13)}"
+                              + $" {ReachTo(state, country)}");
+            }
+
+            var figure = AddFigure("terminal-text");
+            figure.text = sb.ToString();
+
+            AddText("terminal-text-dim").text =
+                $" Ours: ground {player.military.ground.EffectivePower:F1}"
+                + $" ({player.military.ground.ExperienceBand.ToLowerInvariant()}),"
+                + $" air {player.military.air.EffectivePower:F1}"
+                + $" ({player.military.air.ExperienceBand.ToLowerInvariant()}),"
+                + $" naval {player.military.naval.EffectivePower:F1}"
+                + $" ({player.military.naval.ExperienceBand.ToLowerInvariant()}).";
+
+            AddText("terminal-text-dim").text =
+                " REACH is how much of our weight would arrive there. Bands widen with poor "
+                + "collection — buy intelligence before buying a war.";
+        }
+
+        /// <summary>How much of our force would actually reach this country's ground.</summary>
+        static string ReachTo(GameState state, CountryState country)
+        {
+            foreach (var location in state.locations)
+                if (location.originalOwnerId == country.id)
+                    return $"{GeographySystem.ReachFactorFor(state, state.playerCountryId, location) * 100f:F0}%";
+            return "—";
         }
 
         void BuildConfrontationConsole(GameState state, Confrontation confrontation)
@@ -712,6 +851,26 @@ namespace Brink.UI.Views
             sb.AppendLine($" MOMENTUM:        {ourMomentum,+6:F1}");
             sb.AppendLine($" OUR EXHAUSTION:  {ourExhaustion,6:F1}    THEIR EXHAUSTION: {theirExhaustion,6:F1}");
             sb.AppendLine($" CIVILIAN HARM:   {confrontation.civilianHarmTotal,6:F1}");
+
+            // The human cost of the war, which was counted every single operation
+            // and displayed nowhere. `initiatorCasualties` and `defenderCasualties`
+            // had zero readers in the entire UI — a game that takes the cost of
+            // force seriously everywhere else was silent about the one number that
+            // measures it, so a war that killed two hundred thousand of our people
+            // read exactly like one that killed five thousand.
+            //
+            // Ours is true because they are ours. Theirs is an estimate, like
+            // every other foreign figure: we count our own dead and guess at the
+            // enemy's, which is both correct fog discipline and the honest
+            // description of what a government actually knows.
+            bool weInitiated = confrontation.initiatorId == state.playerCountryId;
+            float ourDead = weInitiated ? confrontation.initiatorCasualties
+                                        : confrontation.defenderCasualties;
+            float theirDead = weInitiated ? confrontation.defenderCasualties
+                                          : confrontation.initiatorCasualties;
+
+            sb.AppendLine($" OUR LOSSES:      {IntelReadout.OwnCasualties(ourDead),-10}"
+                          + $"THEIR LOSSES (EST): {IntelReadout.ForeignCasualties(state, opponent?.id, theirDead)}");
             sb.AppendLine($" OPPONENT POSTURE:{(ConfrontationSystem.OpponentWouldAccept(state, confrontation) ? " OPEN TO TERMS" : " RESISTING")}");
             header.text = sb.ToString();
 

@@ -113,15 +113,14 @@ namespace Brink.Tests
         {
             var state = WorldFactory.CreateDebugWorld(9);
             var turns = new TurnManager(state);
-            turns.ResolveMonth += CabinetSystem.MonthlyAct;
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
+
+            // Must use the real pipeline. This claims twenty years of *the game*
+            // cannot produce an unloadable save, and the systems a hand-wired
+            // list omitted were exactly the ones that can invalidate a world:
+            // `SecessionSystem` creates whole countries, `TerritorySystem` moves
+            // ownership between them, and `CabinetLifecycle` replaces officials.
+            // Validating a world those never touched proves nothing.
+            SimulationPipeline.Wire(turns, state);
 
             for (int i = 0; i < 240; i++)
             {

@@ -48,46 +48,24 @@ namespace Brink.Tests
         /// <summary>
         /// Files that hand-wire and have not yet been reviewed.
         ///
-        /// This list is **technical debt, written down**. It is not a permission
-        /// list to grow: a file only belongs here because it predates the rule,
-        /// and the correct response to seeing one is to check whether its claims
-        /// actually survive the systems it omits, then either convert it to
-        /// `SimulationPipeline.Wire` or give it a `NARROW PIPELINE:` line saying
-        /// why its scope is deliberate.
+        /// **Deliberately empty, and it must stay that way.** This began as 26
+        /// entries of written-down debt. All 26 were then audited: eight were
+        /// making long-run claims about emergent behaviour on a partial world and
+        /// were converted to `SimulationPipeline.Wire`; the rest set their own
+        /// preconditions and assert one system's arithmetic, and now carry a
+        /// `NARROW PIPELINE:` line saying which systems they omit and why their
+        /// assertions survive the omission.
         ///
-        /// Nothing may be added. A new file that hand-wires fails this test, and
-        /// that is the entire point — the bug is not that these 26 exist, it is
-        /// that number 27 could be written without anybody noticing.
+        /// With the debt paid, the marker is the only mechanism left — which is
+        /// the point. A grandfather list that outlives its debt stops being a
+        /// record of what needs fixing and quietly becomes a list of permitted
+        /// exceptions, and the next person to add an entry will be doing it to
+        /// silence this test rather than to note a problem.
+        ///
+        /// If you are here because the build failed: do not add your file. Either
+        /// call `SimulationPipeline.Wire`, or write the marker and say why.
         /// </summary>
-        static readonly HashSet<string> Grandfathered = new HashSet<string>
-        {
-            "AIDomesticTests.cs",
-            "AISystemTests.cs",
-            "AllianceSystemTests.cs",
-            "AsciiWorldMapTests.cs",
-            "AssessmentSystemTests.cs",
-            "BugRegressionTests.cs",
-            "CabinetSystemTests.cs",
-            "ChronicleTests.cs",
-            "CrisisSystemTests.cs",
-            "DiplomacySystemTests.cs",
-            "EconomySystemTests.cs",
-            "EventCatalogTests.cs",
-            "ExerciseSystemTests.cs",
-            "GovernmentSystemTests.cs",
-            "IntelligenceSystemTests.cs",
-            "MilitarySystemTests.cs",
-            "MilitaryVerbsTests.cs",
-            "PeaceSystemTests.cs",
-            "ProgressionSystemTests.cs",
-            "RegimeSystemTests.cs",
-            "ReportingSystemTests.cs",
-            "SaveMigrationTests.cs",
-            "TechnologySystemTests.cs",
-            "TerritorySystemTests.cs",
-            "TurnManagerTests.cs",
-            "WorldInvariantTests.cs"
-        };
+        static readonly HashSet<string> Grandfathered = new HashSet<string>();
 
         static string SourceDirectory
             => Path.Combine(Directory.GetCurrentDirectory(), TestSourceDirectory);

@@ -437,7 +437,13 @@ namespace Brink.Core
             foreach (var asset in AssetCatalog.All)
             {
                 var force = player.military.Get(asset.branch);
-                float target = asset.baselineAt100 * (force.strength / 100f);
+
+                // Measured against establishment, like every other stock
+                // comparison — see AcquisitionSystem.EstablishmentFor. Against
+                // the branch's own strength every ratio is 1.0 by construction,
+                // so "what do we have most of" had no answer either.
+                float target = asset.baselineAt100
+                               * (AcquisitionSystem.EstablishmentFor(player, asset.branch) / 100f);
                 if (target <= 0.01f) continue;
 
                 float ratio = force.inventory.CountOf(asset.kind) / target;

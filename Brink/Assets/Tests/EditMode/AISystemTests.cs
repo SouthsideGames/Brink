@@ -21,16 +21,11 @@ namespace Brink.Tests
         static TurnManager FullSimulation(GameState state)
         {
             var turns = new TurnManager(state);
-            turns.ResolveMonth += CabinetSystem.MonthlyAct;
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += EconomySystem.AgeSanctions;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
+            // MUST use the real pipeline. These tests run decades and assert what
+            // the AI decides; a hand-copied subset measures a different world (a
+            // missing IntelligenceSystem alone pins estimate confidence at its
+            // floor, so no rivalry can form and the AI cannot reason at all).
+            SimulationPipeline.Wire(turns, state);
             return turns;
         }
 
@@ -282,6 +277,19 @@ namespace Brink.Tests
                 while (state.HasOpenCrisis) CrisisSystem.Resolve(state, state.activeCrises[0], 0);
                 turns.EndMonth();
             }
+
+            // The assertion below is a negative, so it passes silently if the
+            // collapse was never in place when the AI reasoned. Both figures are
+            // re-pinned each month above, but `GovernmentSystem.MonthlyUpdate`
+            // runs ahead of `AISystem.MonthlyThink` in the pipeline and pulls
+            // stability toward its target and war exhaustion down every tick, so
+            // what the AI actually reads is the post-drift value, not 5 and 95.
+            Assert.Less(chn.stability, 30f,
+                $"Stability recovered to {chn.stability:F1} within the month, so the AI was not "
+                + "looking at a collapsing state when it decided.");
+            Assert.Greater(chn.warExhaustion, 50f,
+                $"War exhaustion fell to {chn.warExhaustion:F1}, so the second half of the "
+                + "collapse was not in place either.");
 
             foreach (var confrontation in state.confrontations)
                 Assert.AreNotEqual("CHN", confrontation.initiatorId,

@@ -21,6 +21,28 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1212);
             turns = new TurnManager(state);
+            // NARROW PIPELINE: deliberately three systems — territory plus the two
+            // it feeds. Every test here is a controlled before/after on ownership
+            // the test sets itself (`SeizeAll`), so the omitted `AISystem`,
+            // `ConfrontationSystem`, `CrisisSystem`, `SecessionSystem` and
+            // `RegimeSystem` are precisely the things that would take the ground
+            // back, hand over more of it, or invent a country to own it, and the
+            // measurement would stop attributing anything to territory. The
+            // assertions survive because nothing outside these three reads or
+            // writes the resource/readiness terms being compared.
+            //
+            // !! DO NOT ADD GovernmentSystem.MonthlyUpdate HERE. !!
+            //
+            // Three tests in this file would then pass *without territory doing
+            // anything at all*, because their injected starting values drift the
+            // direction the assertion looks for:
+            //   OccupationIsNotFreeIncome         stability   90 -> target ~65 (falls)
+            //   ACountryUnderOccupation_Hardens   warSupport  40 -> target ~50 (rises)
+            //   (occupation is corrosive)         unity       80 -> target ~78 (falls)
+            // A false pass is worse than a failure, and this one is a single line
+            // away. If this fixture ever does need the government tick, convert
+            // these three to A/B comparisons against an unoccupied control first,
+            // so the drift cancels and the difference is still attributable.
             turns.ResolveMonth += EconomySystem.MonthlyUpdate;
             turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             turns.ResolveMonth += TerritorySystem.MonthlyUpdate;

@@ -17,6 +17,7 @@ namespace Brink.UI
         readonly Label body;
         readonly Label instruction;
         readonly Button acknowledge;
+        readonly ScrollView reader;
         readonly System.Action onChanged;
 
         public TutorialPanel(System.Action onChanged)
@@ -30,17 +31,41 @@ namespace Brink.UI
             title.AddToClassList("tutorial-title");
             Root.Add(title);
 
+            // **The prose scrolls; the controls never do.**
+            //
+            // This panel used to be a plain column with `flex-shrink: 0`, so on a
+            // landscape phone a long step pushed ACKNOWLEDGED and DISMISS
+            // ORIENTATION below the bottom of the screen with no way to reach
+            // them — the tutorial could be started and not finished, and could not
+            // be dismissed either. Height is the scarce resource on this device,
+            // and an overlay has to bound itself against the *screen* rather than
+            // against its own content.
+            //
+            // Scrolling the whole panel would have been the easy fix and the wrong
+            // one: the buttons would still have been off-screen until the operator
+            // discovered they could scroll a box that gives no sign of being
+            // scrollable. Only the text moves.
+            var reader = new ScrollView(ScrollViewMode.Vertical)
+            {
+                verticalScrollerVisibility = ScrollerVisibility.Hidden,
+                horizontalScrollerVisibility = ScrollerVisibility.Hidden
+            };
+            reader.AddToClassList("tutorial-reader");
+            Root.Add(reader);
+
             body = new Label();
             body.AddToClassList("tutorial-body");
-            Root.Add(body);
+            reader.Add(body);
 
             instruction = new Label();
             instruction.AddToClassList("tutorial-instruction");
-            Root.Add(instruction);
+            reader.Add(instruction);
 
             var row = new VisualElement();
             row.AddToClassList("button-row");
             Root.Add(row);
+
+            this.reader = reader;
 
             acknowledge = new Button(() =>
             {
@@ -81,6 +106,14 @@ namespace Brink.UI
             }
 
             Root.style.display = DisplayStyle.Flex;
+
+            // Bound the readable area against the panel, not the content. A third
+            // of the screen is enough for six lines of orientation and leaves the
+            // terminal it is describing actually visible underneath — the panel
+            // exists to teach the screen behind it, so covering that screen
+            // defeats it. Tighter still where height is already scarce.
+            reader.style.maxHeight =
+                TerminalMetrics.PanelHeight * (TerminalMetrics.ShortScreen ? 0.22f : 0.33f);
 
             int number = gc.State.tutorial.stepIndex + 1;
             title.text = $"ORIENTATION {number}/{TutorialSystem.Steps.Count} — {step.title}";

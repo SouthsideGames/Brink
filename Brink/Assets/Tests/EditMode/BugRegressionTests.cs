@@ -51,6 +51,9 @@ namespace Brink.Tests
 
             player.resources.manpower = baseline * 0.5f;
             var economy = new TurnManager(state);
+            // NARROW PIPELINE: only the economy tick is wired because the assertion is
+            // EconomySystem's own manpower restoring force against a directly-set 50%
+            // baseline; a live AI or confrontation could spend manpower again and mask it.
             economy.ResolveMonth += EconomySystem.MonthlyUpdate;
             for (int i = 0; i < 60; i++) { state.commandPoints.current = 6; economy.EndMonth(); }
 
@@ -64,6 +67,9 @@ namespace Brink.Tests
             var player = state.PlayerCountry;
             player.warExhaustion = 70f;
 
+            // NARROW PIPELINE: AISystem and ConfrontationSystem are deliberately omitted —
+            // the assertion is that GovernmentSystem's own decay reaches a level *in
+            // peacetime*, and a live world would start a war and refill exhaustion.
             var manager = new TurnManager(state);
             manager.ResolveMonth += GovernmentSystem.MonthlyUpdate;
             for (int i = 0; i < 60; i++) { state.commandPoints.current = 6; manager.EndMonth(); }
@@ -79,6 +85,9 @@ namespace Brink.Tests
             var player = state.PlayerCountry;
             player.warSupport = 5f;
 
+            // NARROW PIPELINE: AISystem and ConfrontationSystem are deliberately omitted —
+            // the assertion is GovernmentSystem's own recovery toward a peacetime level,
+            // and an actual war would suppress war support and hide the restoring force.
             var manager = new TurnManager(state);
             manager.ResolveMonth += GovernmentSystem.MonthlyUpdate;
             for (int i = 0; i < 60; i++) { state.commandPoints.current = 6; manager.EndMonth(); }
@@ -95,6 +104,9 @@ namespace Brink.Tests
             player.economy.growthRate = 5f;
             player.economy.inflation = 2f;
 
+            // NARROW PIPELINE: EconomySystem is deliberately omitted so the pinned
+            // growth/inflation figures above stay pinned; the assertion is only that
+            // GovernmentSystem's approval term approaches a level instead of integrating.
             var manager = new TurnManager(state);
             manager.ResolveMonth += GovernmentSystem.MonthlyUpdate;
             for (int i = 0; i < 240; i++) { state.commandPoints.current = 6; manager.EndMonth(); }
@@ -267,6 +279,9 @@ namespace Brink.Tests
                 focus = IntelDomain.Military,
                 penetration = 60f
             });
+            // NARROW PIPELINE: collection alone, with no AI or decay, so the honest
+            // estimate is measured against a world that is holding still; the
+            // deception values below are set by hand, so nothing else needs to run.
             var manager = new TurnManager(state);
             manager.ResolveMonth += IntelligenceSystem.MonthlyCollection;
             state.commandPoints.current = 6;
@@ -312,9 +327,11 @@ namespace Brink.Tests
         {
             var world = WorldFactory.CreateDebugWorld(seed: 5150);
             var manager = new TurnManager(world);
-            manager.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            manager.ResolveMonth += IntelligenceSystem.MonthlyDecay;
-            manager.ResolveMonth += AISystem.MonthlyThink;
+            // MUST use the real pipeline. This runs a decade and asserts that some
+            // AI government *eventually* chooses to deceive us — an emergent
+            // decision, not arithmetic. An AI reasoning inside a partial world is
+            // not the AI that ships.
+            SimulationPipeline.Wire(manager, world);
 
             // We are watching them closely, and they are hostile to us.
             foreach (var country in world.countries)
@@ -387,6 +404,9 @@ namespace Brink.Tests
         public void ARecession_ReachesTheHistoricalRecord()
         {
             var player = state.PlayerCountry;
+            // NARROW PIPELINE: only the economy tick — everything else is omitted so the
+            // six-month window contains no competing chronicle traffic and the forced
+            // contraction below is not repaired by a cabinet or an AI mid-test.
             var manager = new TurnManager(state);
             manager.ResolveMonth += EconomySystem.MonthlyUpdate;
 
@@ -559,6 +579,9 @@ namespace Brink.Tests
             china.military.ground.strength = 20f;
             float before = china.military.ground.strength;
 
+            // NARROW PIPELINE: the AI's decision plus the upkeep tick that advances the
+            // programme it authorizes is the entire mechanism under test. Confrontations
+            // are omitted on purpose — a war would attrit the force being rebuilt.
             var manager = new TurnManager(state);
             manager.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             manager.ResolveMonth += AISystem.MonthlyThink;
@@ -577,6 +600,9 @@ namespace Brink.Tests
             china.resources.treasury = 20000f;
             china.military.logistics = 20f;
 
+            // NARROW PIPELINE: as above — the AI choosing to invest and the upkeep tick
+            // that applies it are the whole mechanism. Omitting the economy keeps the
+            // hand-set 20000 treasury available so the test measures reachability, not funding.
             var manager = new TurnManager(state);
             manager.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             manager.ResolveMonth += AISystem.MonthlyThink;
@@ -597,6 +623,9 @@ namespace Brink.Tests
             relationship.relations = 70f;
             relationship.SetThreatPerceivedBy("CHN", 10f);
 
+            // NARROW PIPELINE: only the sanction ageing tick, because the reconciled
+            // relations set just above must stay reconciled for the review to lift them;
+            // a live DiplomacySystem or AI would move them back under the threshold.
             var manager = new TurnManager(state);
             manager.ResolveMonth += EconomySystem.AgeSanctions;
             for (int i = 0; i < EconomySystem.SanctionReviewMonths + 4; i++)

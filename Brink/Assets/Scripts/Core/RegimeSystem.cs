@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Brink.Data;
 
 namespace Brink.Core
@@ -31,7 +32,25 @@ namespace Brink.Core
         {
             int monthIndex = state.date.MonthsSince(state.startDate);
 
-            foreach (var country in state.countries)
+            // **Iterate this month's roster, not the live list.** Three calls down
+            // — UpdateCivilConflict -> SecessionSystem.Fracture -> MakeSuccessor —
+            // a breakaway state is appended to `state.countries`, and the
+            // enumerator here then throws on its next step. Latent since
+            // SecessionSystem landed, because reaching it needs a successful coup
+            // followed by an eight-month collapse that neither national unity nor
+            // military loyalty recovers from; a thirty-year stochastic harness was
+            // the first thing to walk that path.
+            //
+            // A snapshot is also the correct *semantics*, not merely a way to stop
+            // the exception: a state that secedes this month should not then be
+            // processed for its own coups and conspiracies in the same tick.
+            //
+            // `state.countries` is now genuinely mutable at runtime — secession is
+            // the only thing in the game that creates a country — so any monthly
+            // loop over it that can reach Fracture needs this treatment.
+            var roster = state.countries.ToArray();
+
+            foreach (var country in roster)
             {
                 var rng = new Random(unchecked(
                     state.rngSeed * 179424673 + monthIndex * 5011 + Hash.Of(country.id)));

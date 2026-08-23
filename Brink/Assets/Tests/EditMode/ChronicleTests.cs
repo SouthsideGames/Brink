@@ -23,17 +23,12 @@ namespace Brink.Tests
         static TurnManager FullSimulation(GameState state)
         {
             var turns = new TurnManager(state);
-            turns.ResolveMonth += CabinetSystem.MonthlyAct;
-            turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
-            turns.ResolveMonth += EconomySystem.MonthlyUpdate;
-            turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
-            turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
-            turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
-            turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
-            turns.ResolveMonth += TechnologySystem.MonthlyUpdate;
-            turns.ResolveMonth += AISystem.MonthlyThink;
-            turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
-            turns.ResolveMonth += CrisisSystem.SystemicCheck;
+            // MUST use the real pipeline. The chronicle is the record of what the
+            // world actually did over one to two decades; a hand-copied subset
+            // silently drops whole categories of history (secession, territory,
+            // acquisition, cabinet lifecycle) and the test then certifies a
+            // "readable history" of a game nobody ships.
+            SimulationPipeline.Wire(turns, state);
             return turns;
         }
 

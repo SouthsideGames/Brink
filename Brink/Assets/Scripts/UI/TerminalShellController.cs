@@ -180,6 +180,21 @@ namespace Brink.UI
             assessmentScreen.Root.style.display = awaiting ? DisplayStyle.Flex : DisplayStyle.None;
             navRail.style.display = awaiting ? DisplayStyle.None : DisplayStyle.Flex;
 
+            // **Orientation has nothing to say during the assessment.**
+            //
+            // `RefreshAll` returns early while awaiting it, so `TutorialPanel.Refresh`
+            // never ran — and the panel, created visible and never populated, sat
+            // on top of the questionnaire as an empty green box with two buttons
+            // and no text, eating a third of a landscape phone's height.
+            //
+            // Hiding it here rather than relying on Refresh is deliberate: the
+            // panel is only *hidden* by a call this path skips, so leaving it to
+            // Refresh is what produced the bug. The assessment is itself the
+            // onboarding — orientation begins once there is a terminal to orient
+            // somebody around.
+            if (tutorialPanel != null)
+                tutorialPanel.Root.style.display = awaiting ? DisplayStyle.None : DisplayStyle.Flex;
+
             var endMonth = root.Q<Button>("end-month-button");
             if (endMonth != null) endMonth.style.display = awaiting ? DisplayStyle.None : DisplayStyle.Flex;
             dateLabel.style.display = awaiting ? DisplayStyle.None : DisplayStyle.Flex;

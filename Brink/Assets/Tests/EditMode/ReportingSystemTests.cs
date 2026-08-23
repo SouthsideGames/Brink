@@ -281,13 +281,14 @@ namespace Brink.Tests
             }
 
             var simulation = new TurnManager(state);
-            simulation.ResolveMonth += s =>
-            {
-                CabinetSystem.MonthlyAct(s);
-                EconomySystem.MonthlyUpdate(s);
-                MilitarySystem.MonthlyUpkeep(s);
-                GovernmentSystem.MonthlyUpdate(s);
-            };
+
+            // Must use the real pipeline. The claim is about the shipping game —
+            // that the worst possible cabinet still leaves a playable one — so it
+            // has to run against every system that files traffic, not the four a
+            // hand-wired list happened to name. `TurnManager.EndMonth` calls
+            // `ReportingSystem.FilterMonth` itself, so the filter under test runs
+            // either way; what the narrow list removed was the world it filters.
+            SimulationPipeline.Wire(simulation, state);
 
             for (int i = 0; i < 24; i++) simulation.EndMonth();
 

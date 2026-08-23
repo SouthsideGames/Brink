@@ -214,6 +214,9 @@ namespace Brink.Core
                 case Labels.MissileDefence:
                     return "Their shield is blunting what we send through the air. A ground or "
                            + "naval approach avoids it entirely.";
+                case Labels.Experience:
+                    return "The force sent has not done this before. Experience is bought by fighting "
+                           + "or by joint exercises, and replacements dilute what the survivors know.";
                 case Labels.Insurgency:
                     return "The population is the obstacle, not a garrison. Pacification is slow "
                            + "and there is no fast version of it.";
@@ -243,6 +246,7 @@ namespace Brink.Core
             public const string Isr = "Our reconnaissance";
             public const string MissileDefence = "Their missile shield";
             public const string Familiarity = "Knowing how they fight";
+            public const string Experience = "What our force has learned";
             public const string Speed = "Tempo of the order";
             public const string Depleted = "Their force is spent";
         }

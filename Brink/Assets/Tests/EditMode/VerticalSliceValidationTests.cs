@@ -69,6 +69,26 @@ namespace Brink.Tests
         /// <summary>Play a decade with a given monthly decision routine.</summary>
         static PlaythroughResult Play(string playstyle, int seed,
             Action<GameState, TurnManager, PlaythroughResult> monthlyDecisions)
+            => Play(playstyle, seed, monthlyDecisions, answerCrises: true);
+
+        /// <summary>
+        /// Play a decade, optionally as an operator who never answers a crisis.
+        ///
+        /// **Why the option exists.** Every bot resolved every crisis, so
+        /// `crisesResolvedThisYear / crisesFacedThisYear` was 1.0 in every run and
+        /// the evaluation's crisis component came out at 70.1 for all six
+        /// playstyles, identical to the decimal. That is 11% of the grade behaving
+        /// as a constant in every balance measurement this project has ever taken
+        /// — the component was not wrong, it was simply never varied, so the
+        /// harness could not say whether it was tuned.
+        ///
+        /// A drifting operator is also the cheapest way to check that ignoring a
+        /// crisis is genuinely worse than answering one badly, which is the whole
+        /// design intent of `CrisisSystem.LapseUnanswered` (GDD §23).
+        /// </summary>
+        static PlaythroughResult Play(string playstyle, int seed,
+            Action<GameState, TurnManager, PlaythroughResult> monthlyDecisions,
+            bool answerCrises)
         {
             var state = WorldFactory.CreateDebugWorld(seed);
             state.difficulty = Difficulty.Challenging;
@@ -77,8 +97,10 @@ namespace Brink.Tests
 
             for (int month = 0; month < Months; month++)
             {
-                // A crisis always demands an answer before the month can end.
-                while (state.HasOpenCrisis)
+                // A crisis always demands an answer before the month can end —
+                // unless this operator is one who lets them go, in which case
+                // TurnManager.EndMonth lapses them and charges for the silence.
+                while (answerCrises && state.HasOpenCrisis)
                 {
                     var crisis = state.activeCrises[0];
                     CrisisSystem.Resolve(state, crisis, ChooseCrisisOption(state, crisis));
@@ -537,7 +559,13 @@ namespace Brink.Tests
         [Test]
         public void Report_VerticalSliceBalance()
         {
-            GameLog.MirrorToUnityConsole = true;
+            // **Do not mirror during the playthroughs.** Every GameLog call that
+            // reaches the Unity console carries a ~40-line stack trace, and these
+            // reports simulate seventy country-decades. With mirroring on for the
+            // whole run the batch-mode log reached **577 MB** and the suite was
+            // killed part-way — which then reported the previous run's totals as
+            // green, because a killed run leaves a complete-looking results file.
+            // Mirroring is turned on just before the report is printed.
             const int seed = 20260820;
 
             var passive = Play("PASSIVE", seed, PassivePlay);
@@ -578,6 +606,7 @@ namespace Brink.Tests
             report.AppendLine($"  military playthrough: {runs[0].state.exercises.Count} joint exercises, " +
                               $"{runs[0].state.confrontations.Count} confrontations");
 
+            GameLog.MirrorToUnityConsole = true;   // only now — see the note above
             GameLog.Info("VALIDATION", report.ToString());
             Assert.Pass(report.ToString());
         }
@@ -589,10 +618,11 @@ namespace Brink.Tests
         [Test]
         public void Report_MultiSeedBalance()
         {
-            GameLog.MirrorToUnityConsole = true;
+            // Mirroring stays OFF for the runs themselves — see the note on
+            // Report_VerticalSliceBalance. Turned on only to print the report.
             int[] seeds = { 11117, 22229, 33331, 44449, 55557 };
 
-            var names = new List<string> { "PASSIVE", "MILITARY", "ECONOMY", "INTELLIGENCE", "DIPLOMACY", "GOVERNMENT" };
+            var names = new List<string> { "PASSIVE", "DRIFTER", "MILITARY", "ECONOMY", "INTELLIGENCE", "DIPLOMACY", "GOVERNMENT" };
             var gradeTotals = new Dictionary<string, float>();
             var xpTotals = new Dictionary<string, float>();
             var decisionTotals = new Dictionary<string, float>();
@@ -607,7 +637,15 @@ namespace Brink.Tests
 
             foreach (int seed in seeds)
             {
-                var runs = new List<PlaythroughResult> { Play("PASSIVE", seed, PassivePlay) };
+                var runs = new List<PlaythroughResult>
+                {
+                    Play("PASSIVE", seed, PassivePlay),
+
+                    // An engaged operator who never answers a crisis. Without
+                    // this row the CRIS column is a constant and the harness
+                    // cannot say whether that 11% of the grade is tuned.
+                    Play("DRIFTER", seed, DiplomaticPlay, answerCrises: false)
+                };
                 runs.AddRange(RunAllPlaystyles(seed));
 
                 foreach (var run in runs)
@@ -657,6 +695,7 @@ namespace Brink.Tests
 
             report.Append(WarOutcomeReport(seeds));
 
+            GameLog.MirrorToUnityConsole = true;   // only now — see the note above
             GameLog.Info("VALIDATION", report.ToString());
             Assert.Pass(report.ToString());
         }
@@ -840,6 +879,61 @@ namespace Brink.Tests
                 "Active play averaged materially worse than passivity.");
             Assert.GreaterOrEqual(passive.averageGrade, (int)EvaluationGrade.C,
                 "A delegated, uneventful decade should still pass — delegation is legitimate.");
+        }
+
+        /// <summary>
+        /// Ignoring a crisis has to be worse than answering one badly (GDD §23).
+        ///
+        /// Nothing measured this. Every harness bot resolved every crisis, so the
+        /// evaluation's crisis component read 70.1 for all six playstyles — 11% of
+        /// the grade behaving as a constant in every balance figure this project
+        /// has taken. The component was never wrong; it was never *varied*, so it
+        /// could not be checked.
+        ///
+        /// The two operators here are identical in every other respect — same
+        /// seed, same decision routine, same world — and differ only in whether
+        /// they answer the door. That isolates the cost of drifting from the cost
+        /// of choosing badly, which is the distinction the design rests on: the
+        /// crisis turn is meant to be a decision the operator cannot dodge for
+        /// free, not a tax on being present.
+        /// </summary>
+        [Test]
+        public void DriftingThroughCrisesCostsMoreThanAnsweringThemBadly()
+        {
+            const int seed = 8712;
+            var engaged = Play("DIPLOMACY", seed, DiplomaticPlay);
+            var drifter = Play("DRIFTER", seed, DiplomaticPlay, answerCrises: false);
+
+            // A decade that faced nothing would compare two identical runs and
+            // pass without testing anything — the vacuity guard this codebase has
+            // been caught needing before.
+            int crisesSeen = 0;
+            foreach (var record in drifter.state.evaluations) crisesSeen++;
+            Assert.Greater(crisesSeen, 0, "No years were evaluated, so nothing was measured.");
+
+            float engagedCrisisScore = 0f, drifterCrisisScore = 0f;
+            foreach (var record in engaged.state.evaluations) engagedCrisisScore += record.crisisScore;
+            foreach (var record in drifter.state.evaluations) drifterCrisisScore += record.crisisScore;
+            engagedCrisisScore /= Math.Max(1, engaged.state.evaluations.Count);
+            drifterCrisisScore /= Math.Max(1, drifter.state.evaluations.Count);
+
+            Assert.Less(drifterCrisisScore, engagedCrisisScore,
+                $"An operator who never answered a crisis scored {drifterCrisisScore:F1} on the " +
+                $"crisis component against {engagedCrisisScore:F1} for one who always did. If those " +
+                "match, the component is inert and 11% of the grade is a constant.");
+
+            Assert.Less(drifter.averageGrade, engaged.averageGrade,
+                $"Drifting through a decade of crises graded {drifter.averageGrade:F2} against " +
+                $"{engaged.averageGrade:F2} for answering them. Ignoring a decision has to cost " +
+                "something, or the crisis turn is optional.");
+
+            // And the standing damage in LapseUnanswered has to actually land —
+            // otherwise the grade difference is bookkeeping rather than a world
+            // that responded to being ignored.
+            Assert.Less(drifter.state.PlayerCountry.stability,
+                engaged.state.PlayerCountry.stability,
+                "A government that ignored every crisis for ten years was no less stable " +
+                "than one that handled them all.");
         }
 
         [Test]

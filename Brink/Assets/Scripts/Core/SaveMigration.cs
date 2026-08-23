@@ -145,6 +145,41 @@ namespace Brink.Core
                     }
                 }
             },
+            new Step
+            {
+                fromVersion = 5,
+                description = "Branch experience (veterancy)",
+                apply = state =>
+                {
+                    // Zero is wrong rather than empty, again. `EffectivePower`
+                    // multiplies by an experience factor that bottoms out at 0.88,
+                    // so a save loaded with no experience would quietly weaken
+                    // every army in the world by ~9% and move balance for reasons
+                    // nobody could see.
+                    //
+                    // Backfilled from readiness and doctrine investment, which is
+                    // the same thing the peacetime training ceiling is computed
+                    // from — so a migrated world lands where an equivalent live
+                    // world would have settled, rather than at an arbitrary
+                    // constant. A country at war keeps a little more: it has been
+                    // doing the thing that teaches.
+                    foreach (var country in state.countries)
+                    {
+                        bool atWar = state.IsAtWar(country.id);
+
+                        foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
+                        {
+                            var force = country.military.Get(branch);
+                            if (force.experience > 0.01f) continue;   // already set
+
+                            force.experience = Clamp(
+                                18f + force.readiness * 0.22f
+                                + country.military.logistics * 0.08f
+                                + (atWar ? 12f : 0f));
+                        }
+                    }
+                }
+            },
         };
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

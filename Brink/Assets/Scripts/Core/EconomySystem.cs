@@ -152,6 +152,28 @@ namespace Brink.Core
             eco.growthRate = Approach(eco.growthRate, targetGrowth, 0.35f);
             TrackContraction(state, country, eco);
 
+            // ---- distress: the crisis regime ----
+            //
+            // Everything above is a gentle linear nudge calibrated for ordinary
+            // times, and until this was added there was nothing else. A country
+            // whose market index had fallen from 100 to **7.6** — sectors gutted,
+            // confidence at 12, energy at 7 — was still reporting 9% unemployment
+            // and 9% inflation. That is a mild recession, and it was the worst
+            // outcome the model could produce.
+            //
+            // Two things followed from that, both bad. Economic warfare could
+            // never actually reach a population, so sanctions, blockades and
+            // strategic bombing moved numbers nobody feels. And the entire social
+            // layer was unreachable: unrest is driven by inflation, unemployment
+            // and living standards, so if none of those can reach crisis levels,
+            // neither can unrest, and every event gated on it (GENERAL_STRIKE at
+            // 58, SEPARATIST_MOVEMENT at 42, PORT_STRIKE at 40) is dead content.
+            //
+            // Zero in normal play by construction — a healthy index sits near 100
+            // and this term does not exist above 55 — so it adds a crisis regime
+            // without retuning the ordinary one.
+            float distress = Math.Max(0f, 55f - eco.marketIndex) / 55f;
+
             // ---- inflation ----
             // Coercion is a supply shock: scarcity raises prices even as demand
             // cools, so a sanctioned economy stagflates rather than disinflates.
@@ -160,12 +182,21 @@ namespace Brink.Core
                                     + sanctionPressure * 1.2f                        // import scarcity
                                     + blowback * 1.0f                                // self-inflicted scarcity
                                     + energyDrag * 1.2f
+                                    + distress * 9f                                  // a broken economy prices badly
                                     + (atWar ? 1.6f : 0f)
                                     - Math.Max(0f, 60f - country.resources.industrialCapacity) * 0.008f;
             eco.inflation = Math.Max(-3f, Approach(eco.inflation, targetInflation, 0.3f));
 
             // ---- employment ----
-            float targetUnemployment = 6.5f - eco.growthRate * 0.9f + sanctionPressure * 0.5f + (atWar ? -0.8f : 0f);
+            //
+            // The distress term is what gives this a crisis range at all. Driven
+            // only by growth and sanctions, unemployment was structurally
+            // incapable of passing ~12 however comprehensively the economy failed,
+            // because growth itself is bounded — so "mass unemployment" was not a
+            // state this simulation could represent.
+            float targetUnemployment = 6.5f - eco.growthRate * 0.9f + sanctionPressure * 0.5f
+                                       + distress * 22f
+                                       + (atWar ? -0.8f : 0f);
             eco.unemployment = Clamp(Approach(eco.unemployment, targetUnemployment, 0.25f), 1.5f, 35f);
 
             // ---- debt & treasury ----
