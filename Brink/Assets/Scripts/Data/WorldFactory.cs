@@ -725,8 +725,31 @@ namespace Brink.Data
         /// Appoint a cabinet for one country. Public so `SaveMigration` can fill
         /// in the foreign cabinets that saves written before v2 do not have.
         /// </summary>
-        public static void AppointCabinet(Random rng, CountryState country)
-            => MakeCabinetFor(rng, country, FindProfile(country.id));
+        /// <summary>
+        /// Staff a cabinet for a country created after world generation.
+        ///
+        /// `nameSourceId` supplies the name pool and office titles for a state
+        /// that has no authored profile of its own — a secession successor is
+        /// staffed by the parent's people, because that is who lives there. It
+        /// used to fall through the `profile == null` guard below and be handed an
+        /// empty cabinet: a sovereign state with nobody governing it, which no
+        /// caller checked and nothing reported.
+        /// </summary>
+        public static void AppointCabinet(Random rng, CountryState country, string nameSourceId = null)
+        {
+            var profile = FindProfile(country.id)
+                          ?? (nameSourceId != null ? FindProfile(nameSourceId) : null);
+
+            if (profile == null)
+            {
+                // Loud, because the silent return is exactly how a state ended up
+                // ungoverned. A cabinet is not optional furniture.
+                Brink.Core.GameLog.Warn("WORLD", $"No name source for {country.id}'s cabinet — it will be unstaffed.");
+                return;
+            }
+
+            MakeCabinetFor(rng, country, profile);
+        }
 
         static void MakeCabinetFor(Random rng, CountryState country, CountryProfile profile)
         {

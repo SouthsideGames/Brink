@@ -5,6 +5,26 @@ using Brink.Data;
 namespace Brink.Core
 {
     /// <summary>
+    /// What kind of situation an event is. Not flavour: it decides what a calm
+    /// world is allowed to produce.
+    ///
+    /// A stable, prosperous, scientifically capable country should still make a
+    /// discovery or find a mineral deposit — those arrive *because* things are
+    /// going well, not despite it. Adversity is the thing a settled world must
+    /// not manufacture, and conflating the two meant the invariant guarding
+    /// against invented crises could only be satisfied by a world where nothing
+    /// good ever happened either.
+    /// </summary>
+    public enum EventNature
+    {
+        /// <summary>Something has gone wrong. Requires a troubled world.</summary>
+        Adversity = 0,
+
+        /// <summary>Something has gone right. A calm world may produce these.</summary>
+        Opportunity = 1
+    }
+
+    /// <summary>
     /// One authored situation with systemic eligibility (GDD §23).
     /// Simulation conditions decide *whether* it can happen and how likely;
     /// the authored content decides how good it is when it does.
@@ -13,6 +33,9 @@ namespace Brink.Core
     {
         public string id;
         public string title;
+
+        /// <summary>Adversity unless stated otherwise — the safe default.</summary>
+        public EventNature nature = EventNature.Adversity;
 
         /// <summary>Situation text. Receives the state so it can name real countries.</summary>
         public Func<GameState, string> body;
@@ -883,6 +906,7 @@ namespace Brink.Core
             {
                 id = "RESOURCE_WINDFALL",
                 title = "MAJOR RESOURCE FIND",
+                nature = EventNature.Opportunity,
                 cooldownMonths = 34,
                 isEligible = s => HasLocationType(s, s.playerCountryId, LocationType.MaterialsRegion)
                                   || HasLocationType(s, s.playerCountryId, LocationType.EnergyRegion),
@@ -908,6 +932,7 @@ namespace Brink.Core
             {
                 id = "TECHNICAL_BREAKTHROUGH",
                 title = "LABORATORY BREAKTHROUGH",
+                nature = EventNature.Opportunity,
                 cooldownMonths = 28,
                 isEligible = s => s.PlayerCountry.pillars.intelligence > 55f
                                   || s.PlayerCountry.pillars.economy > 65f,

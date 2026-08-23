@@ -236,7 +236,9 @@ namespace Brink.Core
 
             // A cabinet, so the successor is governed by people rather than by a
             // number — and so a coup or an election there means something.
-            WorldFactory.AppointCabinet(rng, successor);
+            // Named from the parent's pool: a breakaway has no authored profile,
+            // and the people in it are the parent's people.
+            WorldFactory.AppointCabinet(rng, successor, parent.id);
 
             // Relationships with everyone, including its parent. Without these
             // the new state cannot be talked to, sanctioned, allied with or

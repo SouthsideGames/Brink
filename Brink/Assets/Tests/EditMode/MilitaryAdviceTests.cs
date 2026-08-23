@@ -26,6 +26,12 @@ namespace Brink.Tests
             state = WorldFactory.CreateDebugWorld(seed: 8642);
             state.commandPoints.current = 40;
 
+            // An official advises where the operator decides, and acts where they
+            // do not. These tests are all about the counsel, so the operator has
+            // the pillar. The gate itself is covered by
+            // CabinetAdviceTests.MilitaryFollowsTheSameRule.
+            state.PlayerCountry.FindOfficial(Pillar.Military).mode = ControlMode.DirectControl;
+
             confrontation = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
                 ConfrontationObjective.TerritorialConcession, null, PrimaryStrategy.Military);
             ConfrontationSystem.SetEscalationBy(state, confrontation,
@@ -268,27 +274,46 @@ namespace Brink.Tests
         [Test]
         public void DrawingDownSellsEquipmentBackAtALoss()
         {
-            var player = state.PlayerCountry;
-            player.resources.treasury = 1000f;
-
-            float tanksBefore = player.military.ground.inventory.CountOf(AssetKind.Tanks);
-            float fullValue = AssetCatalog.CostOf(AssetKind.Tanks, tanksBefore);
-
-            var minister = player.FindOfficial(Pillar.Military);
-            minister.competence = 80f;
-
-            var turns = new TurnManager(state);
-            SimulationPipeline.Wire(turns, state);
-            for (int month = 0; month < 18; month++)
+            // Measured against a control run of the same world rather than
+            // against the starting treasury. Eighteen months of upkeep, income
+            // and acquisition all move the balance too, and an earlier version of
+            // this test read their combined drag as "the sale returned nothing".
+            // What is actually being asserted is the *difference* the directive
+            // makes, so that is what has to be measured.
+            float Run(bool drawDown, out float soldValue)
             {
-                minister.mode = ControlMode.Directed;
-                minister.directiveId = MilitaryAdvice.DrawDown;
-                turns.EndMonth();
+                var world = WorldFactory.CreateDebugWorld(seed: 8642);
+                var player = world.PlayerCountry;
+                player.resources.treasury = 1000f;
+
+                var minister = player.FindOfficial(Pillar.Military);
+                minister.competence = 80f;
+
+                float tanksBefore = player.military.ground.inventory.CountOf(AssetKind.Tanks);
+
+                var turns = new TurnManager(world);
+                SimulationPipeline.Wire(turns, world);
+                for (int month = 0; month < 18; month++)
+                {
+                    minister.mode = drawDown ? ControlMode.Directed : ControlMode.Autonomous;
+                    minister.directiveId = drawDown ? MilitaryAdvice.DrawDown : "";
+                    turns.EndMonth();
+                }
+
+                float sold = tanksBefore - player.military.ground.inventory.CountOf(AssetKind.Tanks);
+                soldValue = AssetCatalog.CostOf(AssetKind.Tanks, Math.Max(0f, sold));
+                return player.resources.treasury;
             }
 
-            Assert.Greater(player.resources.treasury, 1000f,
-                "Drawing down returned no money at all.");
-            Assert.Less(player.resources.treasury, 1000f + fullValue,
+            float withDrawDown = Run(true, out float valueOfWhatWeSold);
+            float control = Run(false, out _);
+
+            Assert.Greater(withDrawDown, control,
+                "Eighteen months of drawing the force down left the treasury no better off " +
+                "than leaving the minister alone, so the directive returns nothing.");
+
+            Assert.Greater(valueOfWhatWeSold, 0f, "Nothing was actually sold.");
+            Assert.Less(withDrawDown - control, valueOfWhatWeSold,
                 "Equipment sold back at full value would make oscillating between build-up " +
                 "and sell-off a free way to park money.");
         }

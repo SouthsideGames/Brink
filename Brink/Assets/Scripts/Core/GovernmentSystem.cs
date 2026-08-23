@@ -211,8 +211,19 @@ namespace Brink.Core
                 + Math.Max(0f, eco.inflation - 8f) * 1.6f
                 + Math.Max(0f, eco.unemployment - 10f) * 1.4f
                 + country.warExhaustion * 0.22f
-                + country.publicGrievance * 0.18f
-                - country.nationalUnity * 0.25f;
+                + country.publicGrievance * 0.18f;
+
+            // National unity *damps* hardship; it does not cancel it.
+            //
+            // This was `- nationalUnity * 0.25f` on the pressure sum, which gave
+            // every country an absolute immunity budget — at an ordinary unity of
+            // 60 the first 15 points of hardship registered as nothing at all, and
+            // four years of severe deprivation produced literally zero organised
+            // anger. A subtraction is the wrong shape for a resilience term: a
+            // cohesive society under real hardship still ends up in the street, it
+            // simply takes more to put it there. 0 -> x1.25, 50 -> x0.85,
+            // 100 -> x0.45.
+            unrestPressure *= 1.25f - country.nationalUnity / 125f;
 
             // Some states argue about everything. Hardship organises faster there.
             float unrestTarget = Clamp(unrestPressure * NationalTraitCatalog.UnrestVolatility(country));

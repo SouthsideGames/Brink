@@ -186,8 +186,19 @@ namespace Brink.Tests
             {
                 SettleTheWorld(); // hold the calm against drift
                 turns.EndMonth();
-                Assert.IsFalse(state.HasOpenCrisis,
-                    "A genuinely stable world should not manufacture crises.");
+
+                // Opportunities are allowed — a settled, prosperous, capable
+                // country still makes discoveries, and it makes them *because*
+                // things are going well. What a calm world must not do is invent
+                // adversity, which is the thing this invariant exists to catch.
+                if (!state.HasOpenCrisis) continue;
+
+                var open = state.activeCrises[0];
+                var definition = EventCatalog.Find(open.defId);
+                Assert.AreEqual(EventNature.Opportunity, definition?.nature ?? EventNature.Adversity,
+                    $"A genuinely stable world manufactured '{open.title}'.");
+
+                CrisisSystem.Resolve(state, open, 0);   // clear it and keep measuring
             }
         }
 

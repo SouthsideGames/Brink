@@ -171,7 +171,7 @@ namespace Brink.Core
                 return false;
 
             var player = state.PlayerCountry;
-            ApplyPillarEffect(player, pillar, directiveId: "", amount: 1.4f);
+            ApplyPillarEffect(state, player, pillar, directiveId: "", amount: 1.4f);
             if (pillar == Pillar.Military) player.resources.treasury -= 40f;
             if (pillar == Pillar.Economy) player.resources.treasury -= 60f;
 
@@ -254,7 +254,23 @@ namespace Brink.Core
                 // Influence does not buy a way around the administration.
                 amount *= GovernmentSystem.PriorityMultiplierFor(country.government.leader.priority, official.office);
 
-                ApplyPillarEffect(country, official.office, official.directiveId, amount);
+                ApplyPillarEffect(state, country, official.office, official.directiveId, amount);
+
+                // The military desk replaces losses as routine business, in every
+                // country. This is the *only* path by which a foreign government
+                // restocks: it used to live four gates deep inside AISystem behind
+                // a Security-priority check, and across thirty measured years no
+                // foreign state ordered a single piece of equipment while the
+                // player could replace anything. It costs treasury on both sides
+                // and does nothing to a force already at establishment.
+                //
+                // Skipped when the operator has given a force-structure
+                // instruction, which has already been carried out above and would
+                // otherwise be paid for twice in the same month.
+                if (official.office == Pillar.Military
+                    && official.directiveId != MilitaryAdvice.PrepareForWar
+                    && official.directiveId != MilitaryAdvice.DrawDown)
+                    AcquisitionSystem.RestockRoutine(state, country.id, (float)performance);
 
                 // What they did, in the operator's own cabinet only. Delegation
                 // used to be silent: an official applied their effect and the
@@ -287,13 +303,13 @@ namespace Brink.Core
                     bool success = rng.NextDouble() < performance * 0.7 + 0.15;
                     if (success)
                     {
-                        ApplyPillarEffect(country, official.office, official.directiveId, amount * 3f);
+                        ApplyPillarEffect(state, country, official.office, official.directiveId, amount * 3f);
                         official.trust = Clamp(official.trust + 1f);
                         ReportCabinetOutcome(state, country, official, true);
                     }
                     else
                     {
-                        ApplyPillarEffect(country, official.office, official.directiveId, -amount * 2f);
+                        ApplyPillarEffect(state, country, official.office, official.directiveId, -amount * 2f);
                         official.trust = Clamp(official.trust - 1f);
                         ReportCabinetOutcome(state, country, official, false);
                     }
@@ -386,35 +402,22 @@ namespace Brink.Core
         /// catalogue baseline, so a fleet that lost its carriers replaces
         /// carriers rather than buying more missiles.
         /// </summary>
-        static void ProcureShortfall(CountryState player, float amount)
+        static void ProcureShortfall(GameState state, CountryState country, float amount)
         {
-            AssetProfile worst = null;
-            float worstRatio = float.MaxValue;
+            // PREPARE FOR WAR buys deliberately, against a looser definition of
+            // "short" than routine replacement — that is what the operator is
+            // paying Influence for. The shortfall itself is defined once, in
+            // AcquisitionSystem, so this cannot drift away from what the AI and
+            // the routine restock consider a gap.
+            var worst = AcquisitionSystem.WorstShortfall(country, out float ratio);
+            if (worst == null || ratio > 1.05f) return;
 
-            foreach (var asset in AssetCatalog.All)
-            {
-                var force = player.military.Get(asset.branch);
-                float target = asset.baselineAt100 * (force.strength / 100f);
-                if (target <= 0.01f) continue;
-
-                float have = force.inventory.CountOf(asset.kind) + force.inventory.OnOrderOf(asset.kind);
-                float ratio = have / target;
-                if (ratio >= worstRatio) continue;
-
-                worstRatio = ratio;
-                worst = asset;
-            }
-            if (worst == null) return;
-
-            // A month of ministerial effort buys a proportionate order, not an
-            // unlimited one — and never more than the treasury can carry.
             float wanted = worst.orderIncrement * Math.Max(0.5f, amount / 3f);
-            float affordable = player.resources.treasury * 0.25f;
-            float count = Math.Min(wanted, affordable / Math.Max(0.0001f, worst.unitCost));
-            if (count < 1f) return;
+            float affordable = country.resources.treasury * 0.25f
+                               / Math.Max(0.0001f, worst.unitCost);
 
-            player.resources.treasury -= AssetCatalog.CostOf(worst.kind, count);
-            player.military.Get(worst.branch).inventory.Ensure(worst.kind).onOrder += count;
+            float count = Math.Min(wanted, affordable);
+            if (count >= 1f) AcquisitionSystem.OrderBy(state, country.id, worst.kind, count);
         }
 
         /// <summary>
@@ -455,7 +458,7 @@ namespace Brink.Core
             player.resources.treasury += AssetCatalog.CostOf(richest.kind, sold) * ResaleValue;
         }
 
-        static void ApplyPillarEffect(CountryState player, Pillar pillar, string directiveId, float amount)
+        static void ApplyPillarEffect(GameState state, CountryState player, Pillar pillar, string directiveId, float amount)
         {
             var p = player.pillars;
             var r = player.resources;
@@ -480,7 +483,7 @@ namespace Brink.Core
                     // Both are the operator steering a delegated pillar rather
                     // than watching outcomes appear, which is the whole point of
                     // delegation being a decision.
-                    else if (directiveId == MilitaryAdvice.PrepareForWar) ProcureShortfall(player, amount);
+                    else if (directiveId == MilitaryAdvice.PrepareForWar) ProcureShortfall(state, player, amount);
                     else if (directiveId == MilitaryAdvice.DrawDown) SellDown(player, amount);
 
                     else p.military = Growth.Apply(p.military, amount);

@@ -20,6 +20,14 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 1500);
             turns = new TurnManager(state);
+
+            // NARROW PIPELINE: EndgameSystem only. Every test using this fixture
+            // sets its own preconditions directly (capability, maturity, pillar,
+            // rivalry months) and asserts the endgame rules themselves — gating,
+            // pricing, progress, consequences. It makes no claim about whether
+            // the rest of the world would ever reach those preconditions on its
+            // own, which is a separate question and belongs to
+            // OverALongGame_SomeGovernmentBuildsAnInstrument, wired in full.
             turns.ResolveMonth += EndgameSystem.MonthlyUpdate;
             state.commandPoints.current = 90;
             state.PlayerCountry.resources.treasury = 9000f;
@@ -511,18 +519,30 @@ namespace Brink.Tests
         public void OverALongGame_SomeGovernmentBuildsAnInstrument()
         {
             // The player must not be the only actor who can reach these.
+            //
+            // **Wired through SimulationPipeline, and it has to be.** This test
+            // used to hand-register three systems, and every gate on the way to
+            // PrepareBy is fed by one of the systems it left out:
+            //
+            //   no IntelligenceSystem -> EstimateConfidence is pinned at its 0.35
+            //     floor forever, so the caution penalty on threat perception is
+            //     permanently maximal and CounterRival never forms. No rivalry
+            //     forms, so nothing ever reaches the 24-month standing the
+            //     instruments require.
+            //   no CabinetSystem/GovernmentSystem -> no AI pillar can move, so the
+            //     >= 65 pillar gate is frozen at world-creation values, and AI
+            //     political capital is never credited so the whole ConsolidateHome
+            //     branch silently no-ops.
+            //   no EconomySystem -> no treasury income, which is why this test was
+            //     injecting 30,000 to paper over it.
+            //
+            // It was measuring a world in which the AI could not think, and
+            // reporting the result as a fact about the AI. Exactly the failure
+            // that put the monthly system list in one place to begin with.
             var world = WorldFactory.CreateDebugWorld(seed: 90210);
             world.difficulty = Difficulty.Ruthless;
             var manager = new TurnManager(world);
-            manager.ResolveMonth += TechnologySystem.MonthlyUpdate;
-            manager.ResolveMonth += EndgameSystem.MonthlyUpdate;
-            manager.ResolveMonth += AISystem.MonthlyThink;
-
-            foreach (var country in world.countries)
-            {
-                if (country.isPlayer) continue;
-                country.resources.treasury = 30000f;
-            }
+            SimulationPipeline.Wire(manager, world);
 
             bool anyPrepared = false;
             for (int month = 0; month < 240 && !anyPrepared; month++)

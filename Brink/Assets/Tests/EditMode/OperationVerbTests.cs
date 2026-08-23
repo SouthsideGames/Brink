@@ -1,3 +1,4 @@
+using System;
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
@@ -53,12 +54,18 @@ namespace Brink.Tests
         }
 
         /// <summary>Success rate over many independent draws.</summary>
-        float SuccessRate(OperationType type, int trials = 200)
+        float SuccessRate(OperationType type, int trials = 200,
+            Action<BranchForce> prepare = null)
         {
             int wins = 0;
             for (int i = 0; i < trials; i++)
             {
                 var world = WorldFactory.CreateDebugWorld(seed: 4646);
+
+                if (prepare != null)
+                    foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+                        prepare(world.PlayerCountry.military.Get(branch));
+
                 var confrontation = ConfrontationSystem.BeginBy(world, world.playerCountryId, "MEX",
                     ConfrontationObjective.TerritorialConcession, null, PrimaryStrategy.Military);
                 ConfrontationSystem.SetEscalationBy(world, confrontation,
@@ -83,13 +90,40 @@ namespace Brink.Tests
         public void AStrongPowerCanActuallyWinAnAssault()
         {
             // The reported symptom. At the old scale a typical assault sat at
-            // roughly 8% odds no matter what the attacker had built.
-            float rate = SuccessRate(OperationType.Assault);
+            // roughly 8% odds *no matter what the attacker had built* — TotalPower
+            // is 0..3 and garrison is 0..100, and the two were added directly.
+            //
+            // What is asserted here is the thing that was actually broken: that
+            // what a country builds reaches the battlefield. A cold assault is
+            // deliberately not a good plan — the army goes in at its authored
+            // readiness (~65) with no suppression, no air preparation, no doctrine
+            // and no partners, and the whole point of the other verbs is that this
+            // is the expensive way to do it. So the floor here is the *scale*, and
+            // the ceiling is checked where it belongs: on a force that prepared.
+            float cold = SuccessRate(OperationType.Assault);
 
-            Assert.Greater(rate, 0.35f,
-                $"A major power assaulting a weaker neighbour won {rate:P0} of the time. " +
-                "The army has to be the dominant term in its own battle.");
-            Assert.Less(rate, 0.95f, "Attacking must not be a formality either.");
+            Assert.Greater(cold, 0.25f,
+                $"A major power assaulting a weaker neighbour won {cold:P0} of the time. " +
+                "At three times the broken 8% this is still the army failing to be the " +
+                "dominant term in its own battle.");
+            Assert.Less(cold, 0.60f,
+                $"A cold frontal assault succeeded {cold:P0} of the time. If going in " +
+                "unprepared is this good, SUPPRESS DEFENSES and the air verbs are decoration.");
+
+            // The other half, and the half that was never asserted: a force that
+            // is ready and supplied has to be able to win outright. A game where
+            // preparation moves the number from 32% to 38% has priced the whole
+            // military pillar as a rounding error.
+            float ready = SuccessRate(OperationType.Assault, prepare: force =>
+            {
+                force.readiness = 90f;
+                force.supply = 90f;
+            });
+
+            Assert.Greater(ready, 0.55f,
+                $"A fully ready, fully supplied army won only {ready:P0} of the time. " +
+                "Readiness and supply are the two things a player spends years on.");
+            Assert.Less(ready, 0.95f, "Attacking must not be a formality either.");
         }
 
         [Test]

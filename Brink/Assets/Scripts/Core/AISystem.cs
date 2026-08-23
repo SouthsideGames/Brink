@@ -813,29 +813,12 @@ namespace Brink.Core
         /// </summary>
         static bool OrderWhatIsShort(GameState state, CountryState country, Random rng)
         {
-            AssetProfile worst = null;
-            float worstRatio = float.MaxValue;
-
-            foreach (var asset in AssetCatalog.All)
-            {
-                var force = country.military.Get(asset.branch);
-
-                // Nothing to restock in a branch this country cannot field.
-                if (asset.branch == ForceBranch.Naval
-                    && GeographySystem.AccessOf(country.id) == NavalAccess.Landlocked) continue;
-
-                float target = asset.baselineAt100 * (force.strength / 100f);
-                if (target <= 0.01f) continue;
-
-                float have = force.inventory.CountOf(asset.kind) + force.inventory.OnOrderOf(asset.kind);
-                float ratio = have / target;
-                if (ratio >= worstRatio) continue;
-
-                worstRatio = ratio;
-                worst = asset;
-            }
-
-            // Only worth an order if there is a real gap.
+            // Shared definition — see AcquisitionSystem.WorstShortfall. This is a
+            // *deliberate* purchase on top of the military desk's routine
+            // restocking, so it holds to a tighter definition of "short": a
+            // government reaching for procurement as a strategic act is
+            // responding to a gap its ministry has already failed to close.
+            var worst = AcquisitionSystem.WorstShortfall(country, out float worstRatio);
             if (worst == null || worstRatio > 0.82f) return false;
 
             float count = worst.orderIncrement * (rng.NextDouble() < 0.4 ? 2f : 1f);

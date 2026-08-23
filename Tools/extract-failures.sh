@@ -42,12 +42,11 @@ if [ -f "$log" ] && [ "$(grep -ac '' "$log")" -lt 200 ]; then
   stale=1
 fi
 
-# The results file must be newer than the log, or it was not written by this run.
-if [ "$stale" = "0" ] && [ -f "$log" ] && [ -f "$f" ] && [ "$log" -nt "$f" ]; then
-  echo "!!! RESULTS FILE IS OLDER THAN THE LOG — it was not written by this run."
-  echo
-  stale=1
-fi
+# NOTE: do not compare the timestamps of the log and the results file. Unity
+# writes the results when the tests finish and keeps appending to the log until
+# it exits, so the log is *always* newer on a healthy run. An earlier version of
+# this check fired on every successful run — and a guard that cries wolf gets
+# ignored, which is worse than not having one.
 
 if [ "$stale" = "1" ]; then
   echo "    Close the Unity editor and re-run, or run the suite in-editor:"

@@ -972,3 +972,101 @@ foreign official: no recruitment, no compromise, no discrediting, no
 assassination. `CovertOperation` acts on networks and national statistics, never
 on a person. Now that the people exist and are visible, that is the obvious next
 thing for the intelligence pillar to be able to do.
+
+---
+
+## 12. Counsel and the monthly report (GDD §7.2, §8, §28.1)
+
+`Official.competence` decided how well a minister performed when delegated, and
+how much of their pillar's traffic reached the terminal. Both of those are
+invisible at the moment of decision. A player running a pillar personally — which
+is the mode the game charges the most for — had a named, titled expert sitting in
+the office who never said anything. Appointing well changed outcomes you did not
+watch and none you were making.
+
+### 12.1 The rule is symmetrical
+
+**An official is either running their pillar or advising on it, never both.**
+
+| Mode | What the official does | What the operator gets |
+|---|---|---|
+| `Autonomous` | Acts on their own judgement | A line in the monthly briefing |
+| `Directed` | Acts on the operator's instruction | A line in the monthly briefing |
+| `DirectControl` | Nothing — they are sidelined | **Counsel on every decision** |
+
+`CabinetAdvice.ShouldAdvise(state, pillar)` is the single gate and returns
+`official.mode == ControlMode.DirectControl`. `MilitaryAdvice.Recommend` is held
+to the same gate.
+
+Both halves matter. Recommending an action to an operator who has already
+delegated it is noise at best, and at worst a standing invitation to interfere
+with somebody who is doing the job. And Direct Control previously cost Command
+Points and the official's trust in exchange for nothing but control; the expert's
+opinion is what it buys.
+
+Where a pillar is delegated, its view says so explicitly rather than showing
+nothing — an absent panel reads as a missing feature, not as a consequence of a
+choice the operator made.
+
+### 12.2 The advice is worth exactly what the official is worth
+
+`reliability = competence / 100`, stated outright in the header
+(`"Their record is mixed (competence 54)."`). The operator can always tell a
+confident desk from a competent one, which is what keeps a bad recommendation
+fair rather than a trap.
+
+A poor desk does not emit noise. It has real opinions that are simply not the
+ones the situation calls for — `CabinetAdvice.Fallback` reaches for a plausible
+instrument on a deterministic `(seed & 0x3) == 0`, so a weak minister
+occasionally recommends the wrong tool with total confidence, which is what a
+weak minister actually does.
+
+Determinism: every draw mixes `Hash.Of(official.id)` with the month, so the same
+question asked twice in the same month gets the same answer. A recommendation
+that changed on every screen refresh would be unusable.
+
+### 12.3 Delegation reports itself
+
+`GameState.cabinetReport` is a `List<CabinetReportLine>` **cleared at the start of
+every `CabinetSystem.MonthlyAct`**. It describes the month just resolved; the
+permanent record is `chronicle`. It is not an archive and must not accumulate.
+
+One line per delegated **player** official, carrying `ownJudgement` so the
+briefing can distinguish two genuinely different things: the operator's own
+instruction being carried out, and somebody else's decision being made on their
+behalf. Foreign cabinets never file into it.
+
+Rendered as a `YOUR CABINET` section in the monthly briefing. This closes the
+oldest gap in delegation: an official used to apply their effect silently and the
+player saw some numbers move, which makes handing over a pillar feel like
+switching it off rather than like employing somebody.
+
+### 12.4 Force structure is a thing the operator can ask for
+
+Two military directives let the operator steer a delegated minister's spending
+without taking the pillar back:
+
+- `MIL_PREPARE` — order against the shortfall. Expensive, and it arrives in years.
+- `MIL_DRAWDOWN` — sell hulls and airframes back at **55%**. Oscillating between
+  the two is a loss, not a way to park money.
+
+### 12.5 Routine restocking belongs to the desk, in every country
+
+Replacing losses is maintenance, not strategy, so the military desk does it every
+month for **every** country as part of `MonthlyActFor` — scaled by the official's
+performance, paid for out of treasury, and skipped entirely for a force already
+at establishment.
+
+It used to live four gates deep inside `AISystem.RebuildForces`, behind a check
+that the government held a `Security` national priority. Across thirty measured
+years **no foreign government ordered a single piece of equipment**, while the
+player could replace anything. This is the codebase's most-repeated bug — an AI
+state locked out of a player verb — arriving by a new route: not a missing API,
+but an API placed somewhere unreachable.
+
+`AcquisitionSystem.WorstShortfall` is the one definition of "what are we short
+of", shared by the routine restock, the player's `MIL_PREPARE` minister and the
+AI's deliberate `OrderWhatIsShort`. The three had already drifted: only the AI's
+copy knew that a landlocked state should not be ordering carriers.
+
+Tests: `CabinetAdviceTests` (16), `MilitaryAdviceTests`.

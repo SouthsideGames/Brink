@@ -833,6 +833,81 @@ re-running it:
         money). `DescribeStanding` makes a delegated pillar visible instead of
         silent.
 
+- [x] **Every pillar's official advises, and every delegated official reports**
+      (`CabinetAdvice`, spec 15 §12). The rule is symmetrical and it is the whole
+      feature: **an official is either running their pillar or advising on it,
+      never both.** `CabinetAdvice.ShouldAdvise` is the single gate
+      (`mode == DirectControl`) and `MilitaryAdvice.Recommend` is held to it too.
+      - Advising a pillar the operator has *delegated* is noise at best and a
+        standing invitation to interfere with somebody doing their job at worst.
+      - Direct Control cost CP and the official's trust in exchange for nothing
+        but control. The expert's opinion is what it now buys.
+      - A delegated view says so in words. An absent panel reads as a missing
+        feature rather than as a consequence of a choice the operator made.
+      Reliability is `competence/100` and is **printed** ("Their record is mixed
+      (competence 54)"), so a bad recommendation is fair rather than a trap. A
+      poor desk does not emit noise — it reaches for a plausible *wrong*
+      instrument, which is what a weak minister actually does.
+      `GameState.cabinetReport` is **cleared every month** (it describes the month
+      just resolved; `chronicle` is the permanent record) and carries
+      `ownJudgement`, so the briefing's YOUR CABINET section distinguishes the
+      operator's instruction being carried out from somebody else's decision being
+      made for them.
+- [x] **Routine restocking belongs to the military desk, in every country.**
+      Replacing losses is maintenance, not strategy. It used to sit four gates
+      deep in `AISystem.RebuildForces` behind a `Security`-priority check, so
+      across thirty measured years **no foreign government ordered a single piece
+      of equipment** while the player could replace anything. Same most-repeated
+      bug — an AI state locked out of a player verb — by a new route: not a
+      missing API, but an API placed somewhere unreachable. **When you add a verb,
+      ask not only whether the AI *can* call it but whether it ever *will*.**
+      `AcquisitionSystem.WorstShortfall` is now the one definition of "what are we
+      short of"; the three copies had already drifted, and only the AI's knew a
+      landlocked state should not order carriers.
+- [x] **`EventNature.Opportunity`** — the invariant "a stable world manufactures
+      no crises" could previously only be satisfied by a world where nothing
+      *good* ever happened either. A prosperous, capable country should still make
+      a discovery; adversity is the thing calm must not invent. Events default to
+      `Adversity`, so marking one an opportunity is always deliberate.
+- [x] **National unity damps hardship; it does not cancel it.** `unrestPressure`
+      subtracted `nationalUnity × 0.25`, giving every country an absolute immunity
+      budget — at an ordinary unity of 60 the first 15 points of hardship
+      registered as nothing, and four years of severe deprivation produced
+      literally zero organised anger. A subtraction is the wrong shape for a
+      resilience term. Now a multiplier (`1.25 − unity/125`).
+- [x] **The hand-wired-pipeline sweep — `SimulationPipeline` was only half-fixed**
+      (`PipelineWiringTests`). The earlier fix repaired
+      `VerticalSliceValidationTests` and stopped there. **Twenty-seven other test
+      files hand-wire their own monthly system list**, and the bug class had
+      already struck a second time undetected:
+      `OverALongGame_SomeGovernmentBuildsAnInstrument` registered three systems,
+      so `EstimateConfidence` stayed pinned at its 0.35 floor (making the caution
+      penalty on threat perception permanently maximal, so **no AI rivalry could
+      ever form**, so nothing reached the 24-month standing an instrument needs),
+      no AI pillar could move past the ≥65 gate, AI political capital was never
+      credited — the whole `ConsolidateHome` branch silently no-opped — and there
+      was no treasury income, which is why the test injected 30,000 to paper over
+      it. It concluded that no government builds a strategic instrument in twenty
+      years. **What it had actually built was a world where the AI could not
+      think**, and it reported the result as a fact about the AI.
+      **A narrow pipeline is still legitimate** — a test asserting one month of
+      economic arithmetic should not pay for sixteen AI governments to deliberate.
+      What is not legitimate is doing it *by accident*, or while making a claim
+      about how the world behaves over decades. So the rule is **hand-wire on
+      purpose, in writing**: a `NARROW PIPELINE: <reason>` comment naming which
+      systems are omitted and why the assertions survive without them. The 26
+      unreviewed files are listed in `PipelineWiringTests.Grandfathered` as
+      **written-down debt — the list may only shrink**, and a new file that
+      hand-wires fails the build. The bug was never that 26 exist; it is that
+      number 27 could be written without anybody noticing.
+      **Any test that runs more than a year and asserts emergent behaviour should
+      be assumed wrong until it is checked against this list.**
+- [x] **A secession successor gets a real cabinet.** `WorldFactory.AppointCabinet`
+      silently returned when a country had no authored profile, which every
+      breakaway state is by definition — so a sovereign state existed with nobody
+      governing it. It now falls back to the parent's name pool and **warns**
+      instead of returning quietly.
+
 Recommended next:
 - **ECONOMY is now the high outlier at +0.92 over passive** (next is MILITARY at
   +0.62). Worth a look, but check it is not simply that 344 decisions a decade is

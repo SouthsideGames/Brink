@@ -89,6 +89,78 @@ namespace Brink.Core
             return true;
         }
 
+        /// <summary>
+        /// The asset this country is furthest short of, and how short.
+        ///
+        /// **One definition, used by everyone.** The player's minister
+        /// (`CabinetSystem.ProcureShortfall`), the routine restock every military
+        /// desk performs, and the AI's `OrderWhatIsShort` were each computing
+        /// this themselves, and they had already drifted — only the AI's copy
+        /// knew that a landlocked state should not be ordering carriers.
+        /// </summary>
+        public static AssetProfile WorstShortfall(CountryState country, out float ratio)
+        {
+            AssetProfile worst = null;
+            ratio = float.MaxValue;
+            if (country == null) return null;
+
+            bool landlocked = GeographySystem.AccessOf(country.id) == NavalAccess.Landlocked;
+
+            foreach (var asset in AssetCatalog.All)
+            {
+                // Nothing to restock in a branch this country cannot field. A
+                // landlocked state would otherwise sink its whole treasury into
+                // hulls it has nowhere to float.
+                if (asset.branch == ForceBranch.Naval && landlocked) continue;
+
+                var force = country.military.Get(asset.branch);
+                float target = asset.baselineAt100 * (force.strength / 100f);
+                if (target <= 0.01f) continue;
+
+                float have = force.inventory.CountOf(asset.kind) + force.inventory.OnOrderOf(asset.kind);
+                float have_ratio = have / target;
+                if (have_ratio >= ratio) continue;
+
+                ratio = have_ratio;
+                worst = asset;
+            }
+
+            if (worst == null) ratio = 1f;
+            return worst;
+        }
+
+        /// <summary>
+        /// Routine replacement of losses, performed by whoever runs the military
+        /// desk — in every country, ours and theirs.
+        ///
+        /// This is maintenance, not strategy. It used to be reachable only down a
+        /// four-gate chain inside `AISystem` that required the government to hold
+        /// a Security priority, so across thirty measured years **no foreign
+        /// government ordered a single piece of equipment** and only the player
+        /// could ever replace a loss. Restocking a depleted squadron is what a
+        /// defence ministry does by existing; it should not have to win an
+        /// argument about grand strategy first.
+        ///
+        /// Spends treasury, so it is not free for either side. Fires only against
+        /// a real gap, so a force at establishment costs nothing.
+        /// </summary>
+        public static bool RestockRoutine(GameState state, string actorId, float effort)
+        {
+            var country = state.FindCountry(actorId);
+            if (country == null) return false;
+
+            var worst = WorstShortfall(country, out float ratio);
+            if (worst == null || ratio > 0.90f) return false;
+
+            // Never more than a quarter of the treasury: a ministry replacing
+            // losses does not bankrupt the state doing it.
+            float wanted = worst.orderIncrement * Math.Max(0.4f, effort);
+            float affordable = country.resources.treasury * 0.25f / Math.Max(0.0001f, worst.unitCost);
+
+            float count = Math.Min(wanted, affordable);
+            return count >= 1f && OrderBy(state, actorId, worst.kind, count);
+        }
+
         /// <summary>Player order: spends CP as well, and earns the initiative for it.</summary>
         public static bool Order(GameState state, TurnManager turns, AssetKind kind, float count)
         {
