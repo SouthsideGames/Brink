@@ -1,0 +1,39 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <Style src="TerminalShell.uss" />
+    <ui:VisualElement name="terminal-root" class="terminal-root bp-large">
+        <ui:VisualElement name="status-bar" class="status-bar">
+            <ui:Label name="classification-label" text="UNKNOWN GAME // CLASSIFIED█" class="classification" />
+            <ui:VisualElement class="status-right">
+                <ui:Label name="date-label" text="--- ----" class="status-stat" />
+                <ui:Label name="cp-label" text="CP -" class="status-stat" />
+                <ui:Button name="end-month-button" text="END MONTH" class="cmd-button primary" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="main-row" class="main-row">
+            <ui:ScrollView name="nav-rail" class="nav-rail" mode="VerticalAndHorizontal" vertical-scroller-visibility="Hidden" horizontal-scroller-visibility="Hidden" />
+            <ui:VisualElement name="content-host" class="content-host" />
+        </ui:VisualElement>
+
+        <!-- The monthly briefing. Presented after a month resolves: what the
+             world saw, what is waiting on this desk, and what the Cabinet
+             thinks is worth doing. Always dismissable, and switchable off
+             entirely in display settings. -->
+        <ui:VisualElement name="rollover-overlay" class="crisis-overlay" style="display: none;">
+            <ui:VisualElement name="rollover-panel" class="crisis-panel">
+                <ui:Label name="rollover-title" text="MONTHLY BRIEFING" class="crisis-title" />
+                <ui:ScrollView name="rollover-body" class="rollover-body" vertical-scroller-visibility="Hidden" horizontal-scroller-visibility="Hidden" />
+                <ui:VisualElement name="rollover-actions" class="crisis-options" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="crisis-overlay" class="crisis-overlay" style="display: none;">
+            <ui:VisualElement name="crisis-panel" class="crisis-panel">
+                <ui:Label name="crisis-flash" text="■ FLASH ■ CRISIS TURN ■ IMMEDIATE DECISION REQUIRED" class="crisis-flash" />
+                <ui:Label name="crisis-title" text="CRISIS" class="crisis-title" />
+                <ui:Label name="crisis-body" text="" class="crisis-body" />
+                <ui:VisualElement name="crisis-options" class="crisis-options" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

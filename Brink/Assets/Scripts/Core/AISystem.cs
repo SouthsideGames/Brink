@@ -1,0 +1,1494 @@
+using System;
+using System.Collections.Generic;
+using Brink.Data;
+
+namespace Brink.Core
+{
+    /// <summary>
+    /// Goal-driven government AI (GDD Phase 9, §24).
+    ///
+    /// Every AI government evaluates its interests, threats and opportunities,
+    /// generates strategic objectives, and pursues them through the same five
+    /// pillars the player uses. Crucially it reasons from *estimates*, not truth:
+    /// it reads the same imperfect intelligence layer and can be deceived. Leader
+    /// personality produces understandable mistakes, and the spread of profiles
+    /// keeps the world from converging into one optimal strategy.
+    /// </summary>
+    public static class AISystem
+    {
+        /// <summary>Seed AI reasoning state for every non-player country.</summary>
+        public static void SeedAI(GameState state, Random rng)
+        {
+            foreach (var country in state.countries)
+            {
+                if (country.isPlayer) continue;
+
+                // Authored temperament, jittered — not rolled from nothing.
+                //
+                // Personality used to be drawn uniformly in [20,80], so a country
+                // was a different country in every save. That quietly defeated
+                // the anti-memorisation design (spec 06 §7b): the world is meant
+                // to *answer* a player who repeats an opening, and it cannot do
+                // that if the player has no stable read on who they are
+                // answering. Learning that this state is patient and cautious has
+                // to still be true next time.
+                //
+                // The jitter is deliberately small — enough that two saves are
+                // not identical, not enough to make a nation unrecognisable.
+                var profile = WorldFactory.FindProfile(country.id);
+                float Vary(float authored) => (float)Math.Round(
+                    Clamp(authored + (float)(rng.NextDouble() * 2.0 - 1.0) * 8f), 1);
+
+                state.aiStates.Add(new AIState
+                {
+                    countryId = country.id,
+                    profile = new AIProfile
+                    {
+                        aggression = Vary(profile?.aggression ?? 50f),
+                        caution = Vary(profile?.caution ?? 50f),
+                        opportunism = Vary(profile?.opportunism ?? 50f),
+                        patience = Vary(profile?.patience ?? 50f)
+                    }
+                });
+            }
+        }
+
+        /// <summary>Actions an AI may take per month — a reasoning-quality budget.</summary>
+        public static int ActionBudget(Difficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case Difficulty.Ruthless: return 3;
+                case Difficulty.Challenging: return 2;
+                default: return 1;
+            }
+        }
+
+        /// <summary>
+        /// How much weight the AI gives to long-horizon reasoning. Higher
+        /// difficulty plans further ahead and coordinates across pillars better.
+        /// </summary>
+        public static float PlanningHorizon(Difficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case Difficulty.Ruthless: return 1f;
+                case Difficulty.Challenging: return 0.7f;
+                default: return 0.45f;
+            }
+        }
+
+        // ---------- monthly reasoning ----------
+
+        public static void MonthlyThink(GameState state)
+        {
+            int monthIndex = state.date.MonthsSince(state.startDate);
+
+            foreach (var ai in state.aiStates)
+            {
+                var country = state.FindCountry(ai.countryId);
+                if (country == null) continue;
+
+                var rng = new Random(unchecked(state.rngSeed * 6700417 + monthIndex * 733 + Hash.Of(ai.countryId)));
+
+                // Observe, then decide what winning looks like, then plan. In that
+                // order: a government's read of the world has to be current before
+                // it revisits its strategy, or it re-plans on last month's picture.
+                UpdatePlayerAssessment(state, ai);
+                AIPrediction.Observe(state, ai);
+                AIStrategy.ReviewPath(state, ai, country, rng);
+
+                FormObjectives(state, ai, country, rng);
+                TrackRivalries(ai);
+                Act(state, ai, country, rng);
+                ManageOngoingConfrontation(state, ai, country, rng);
+                ConsiderStrategicInstruments(state, ai, country, rng);
+            }
+        }
+
+        /// <summary>
+        /// Systemic pattern recognition (GDD §24.2): the AI reads what the player
+        /// has actually been seen doing, not hidden player state.
+        /// </summary>
+        static void UpdatePlayerAssessment(GameState state, AIState ai)
+        {
+            var assessment = ai.playerAssessment;
+            string playerId = state.playerCountryId;
+
+            int aggressive = 0, coercion = 0, cooperative = 0;
+
+            // Governments judge a pattern, not a permanent record. Counting every
+            // confrontation ever opened meant nine wars over thirty years pinned
+            // the player at maximum perceived aggression for the rest of the save,
+            // however they behaved afterwards — which removes the whole point of
+            // GDD §24.2, that a reputation can be established and then broken.
+            const int MemoryWindowMonths = 120;
+            foreach (var confrontation in state.confrontations)
+            {
+                if (confrontation.initiatorId != playerId) continue;
+                if (state.date.MonthsSince(confrontation.startDate) > MemoryWindowMonths) continue;
+                aggressive++;
+            }
+
+            foreach (var sanction in state.sanctions)
+                if (sanction.senderId == playerId) coercion++;
+
+            foreach (var treaty in state.treaties)
+            {
+                if (!treaty.Involves(playerId)) continue;
+                if (treaty.broken && treaty.brokenBy == playerId) aggressive++;
+                else if (!treaty.broken) cooperative++;
+            }
+
+            // Exposed covert action is observable; unexposed action is not.
+            int covert = 0;
+            foreach (var network in state.networks)
+                if (network.ownerId == playerId && network.compromised) covert++;
+
+            assessment.observedAggressiveActs = aggressive;
+            assessment.observedEconomicCoercion = coercion;
+            assessment.observedCovertActs = covert;
+            assessment.observedCooperativeActs = cooperative;
+
+            float pattern = aggressive * 12f + coercion * 8f + covert * 10f - cooperative * 6f;
+            assessment.perceivedAggression = Clamp(pattern);
+
+            // A player who looks dangerous raises threat perception over time.
+            var relationship = state.FindRelationship(ai.countryId, playerId);
+            if (relationship != null && assessment.perceivedAggression > 40f)
+            {
+                bool playerIsA = relationship.countryA == playerId;
+                float current = playerIsA ? relationship.threatPerceptionOfA : relationship.threatPerceptionOfB;
+                float raised = Approach(current, assessment.perceivedAggression, 0.05f);
+                if (playerIsA) relationship.threatPerceptionOfA = raised;
+                else relationship.threatPerceptionOfB = raised;
+            }
+        }
+
+        /// <summary>Score candidate objectives and keep the best one or two.</summary>
+        static void FormObjectives(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            foreach (var objective in ai.objectives) objective.monthsPursued++;
+
+            // Patient governments stay the course; impatient ones churn.
+            int reviewInterval = 3 + (int)(ai.profile.patience / 20f);
+            if (ai.objectives.Count > 0 && ai.objectives[0].monthsPursued % reviewInterval != 0)
+                return;
+
+            var candidates = new List<AIObjective>();
+            float horizon = PlanningHorizon(state.difficulty);
+
+            // --- domestic pressure ---
+            //
+            // Losing your own chamber or inner circle is a domestic crisis even
+            // when the public is content, and it was not one of the tests here.
+            // Since stability and approval now have a restoring force, a
+            // government that governs adequately keeps both comfortably above
+            // these thresholds — so without the backing term this objective, and
+            // every instrument that hangs off it, went almost unreached.
+            var government = country.government;
+            float backing = government.IsElective
+                ? government.legislativeSupport
+                : government.eliteCohesion;
+
+            if (country.stability < 50f || country.governmentApproval < 40f || backing < 60f)
+                candidates.Add(new AIObjective
+                {
+                    type = AIObjectiveType.ConsolidateHome,
+                    // Each term floored at zero. Unfloored, a government with
+                    // healthy stability scored *negative* on it and subtracted
+                    // from the case for shoring up a chamber that had genuinely
+                    // turned on it — so once stability gained a restoring force
+                    // and stopped sitting low, this objective became unreachable
+                    // and every instrument hanging off it went with it.
+                    priority = Math.Max(0f, 60f - country.stability)
+                               + Math.Max(0f, 50f - country.governmentApproval) * 0.6f
+                               + Math.Max(0f, 60f - backing) * 3f
+                });
+
+            // --- resource vulnerability ---
+            if (country.resources.energy < 50f || country.resources.strategicMaterials < 45f)
+                candidates.Add(new AIObjective
+                {
+                    type = AIObjectiveType.SecureResources,
+                    priority = (55f - Math.Min(country.resources.energy, country.resources.strategicMaterials)) * 1.1f
+                });
+
+            // --- rivals, judged from estimates rather than truth ---
+            foreach (var other in state.countries)
+            {
+                if (other.id == country.id) continue;
+
+                var relationship = state.FindRelationship(country.id, other.id);
+                if (relationship == null) continue;
+
+                float perceivedStrength = PerceivedStrength(state, ai.countryId, other, IntelDomain.Military);
+                float confidenceFactor = EstimateConfidence(state, ai.countryId, other.id, IntelDomain.Military);
+
+                // A state that expects encirclement reads the same evidence as
+                // more dangerous. Sensitivity, not paranoia: it still reasons
+                // from what it can actually see.
+                float threat = NationalTraitCatalog.ThreatSensitivity(country)
+                               * relationship.ThreatPerceivedBy(country.id)
+                               + Math.Max(0f, perceivedStrength - country.pillars.military) * 0.6f
+                               + (50f - relationship.relations) * 0.4f;
+
+                // Cautious governments discount conclusions drawn from thin reporting.
+                float cautionPenalty = (1f - confidenceFactor) * ai.profile.caution * 0.5f;
+
+                // Knowing that someone is close to being able to destroy you is
+                // not one input among many — it reorders everything (GDD §21).
+                float programme = DetectedProgramme(state, country.id, other.id);
+                threat += programme;
+
+                // Knowing a rival is close to an instrument that ends you is not
+                // a reason to be *more worried* — it is a reason to do something
+                // specific about it (spec 14 §8). Until this existed, detection
+                // raised threat and produced no distinguishable behaviour, so the
+                // most consequential thing intelligence can tell a government
+                // changed nothing about what that government did.
+                //
+                // Deliberately not gated on caution: this is the one conclusion
+                // a cautious government is *more* moved by, not less.
+                if (programme > 15f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.PreemptProgramme,
+                        targetId = other.id,
+                        priority = 60f + programme * 1.6f
+                    });
+
+                if (threat - cautionPenalty > 35f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.CounterRival,
+                        targetId = other.id,
+                        priority = (threat - cautionPenalty) * (0.7f + ai.profile.aggression / 200f)
+                    });
+
+                // Opportunity: a weakened rival invites pressure. Poor reporting
+                // makes a government hesitant, but does not paralyze it.
+                // A power visibly tied down elsewhere is weak *here*, whatever
+                // its headline strength (GDD §16). This is the other half of
+                // theatres: a war on one side of the world becomes somebody
+                // else's opening on the other, which is the thing that makes the
+                // map structural rather than a picture.
+                float perceivedWeakness = Math.Max(0f, country.pillars.military - perceivedStrength);
+                if (TheatreSystem.IsOverstretched(state, other.id))
+                    perceivedWeakness += TheatreSystem.TotalCommitment(state, other.id) * 9f;
+
+                if (perceivedWeakness > 8f && relationship.relations < 50f)
+                {
+                    // Ambition is bounded by reach (GDD §16). A government does
+                    // not press a claim it has no way to prosecute, so a weak
+                    // neighbour is a far more attractive target than an equally
+                    // weak state on the other side of the world. Without this,
+                    // regional powers picked fights across the planet and
+                    // geography was invisible in how the world behaved.
+                    //
+                    // Applied to AssertClaim only. CounterRival stays unweighted:
+                    // a distant threat is still a threat, and the answer to one
+                    // you cannot reach is sanctions, alignment and collection —
+                    // all of which that objective can already choose.
+                    float reach = GeographySystem.ReachFactorTo(state, country.id, other.id);
+
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.AssertClaim,
+                        targetId = other.id,
+                        priority = (perceivedWeakness * 1.5f * (ai.profile.opportunism / 100f)
+                                    * (0.6f + horizon * 0.8f)
+                                    * (0.5f + 0.5f * confidenceFactor)
+                                    + (40f - relationship.relations) * 0.35f) // hostility invites pressure
+                                   * reach
+                    });
+                }
+
+                // Partnership with the friendly and the useful.
+                if (relationship.relations > 55f && state.FindTreaty(country.id, other.id) == null)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.ExpandInfluence,
+                        targetId = other.id,
+                        priority = relationship.relations * 0.5f * (0.6f + horizon * 0.6f)
+                    });
+            }
+
+            // --- counter-play: prepare for what we expect them to do (GDD §24.2) ---
+            AddCounterObjectives(state, ai, country, candidates);
+
+            // --- always a fallback ---
+            candidates.Add(new AIObjective
+            {
+                type = AIObjectiveType.BuildCapability,
+                priority = 30f + (float)rng.NextDouble() * 12f
+            });
+
+            // A government pursues what its strategy actually wants. This is what
+            // makes a path more than a label: a state on Economic Primacy will
+            // decline a war it could win, because a claim scores below the things
+            // that compound.
+            foreach (var candidate in candidates)
+                candidate.priority += AIStrategy.ObjectiveBias(ai.path, candidate.type);
+
+            // Personality noise: governments are not identical optimizers.
+            foreach (var candidate in candidates)
+                candidate.priority += (float)(rng.NextDouble() * 2.0 - 1.0) * 12f;
+
+            candidates.Sort((a, b) => b.priority.CompareTo(a.priority));
+
+            // Reasoning quality is how many things a government can hold in mind at
+            // once, so this has to be the action budget itself. It used to cap at
+            // two while Ruthless was given three actions, which meant the hardest
+            // difficulty's extra action point was unreachable through this path.
+            int keep = ActionBudget(state.difficulty);
+            var kept = new List<AIObjective>();
+            for (int i = 0; i < Math.Min(keep, candidates.Count); i++)
+                kept.Add(candidates[i]);
+            ai.objectives = kept;
+        }
+
+        /// <summary>
+        /// Objectives raised by what we expect others to do, rather than by what
+        /// they have already done (GDD §24.2).
+        ///
+        /// This is the whole point of building an opponent model. Without it the
+        /// world only ever reacts, so a player can run the same opening in every
+        /// playthrough and meet the same undefended world. With it, an operator
+        /// who always reaches for covert action finds hardened security services
+        /// waiting by the third year, and one who always rushes militarily finds
+        /// fortified neighbours with friends. The counter is a function of what
+        /// the player *does*, which is why resetting does not escape it.
+        /// </summary>
+        static void AddCounterObjectives(GameState state, AIState ai, CountryState country,
+            List<AIObjective> candidates)
+        {
+            foreach (var other in state.countries)
+            {
+                if (other.id == country.id) continue;
+
+                float attack = AIPrediction.Expectation(ai, other.id, PredictedMove.Attack);
+                float coerce = AIPrediction.Expectation(ai, other.id, PredictedMove.Coerce);
+                float subvert = AIPrediction.Expectation(ai, other.id, PredictedMove.Subvert);
+                float court = AIPrediction.Expectation(ai, other.id, PredictedMove.Court);
+
+                // A cautious government hesitates to act on an expectation, the
+                // same way it hesitates to act on thin reporting elsewhere. It
+                // does not refuse — it just needs more before it moves.
+                float hesitation = ai.profile.caution * 0.18f;
+
+                if (attack - hesitation > 25f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.HardenDefenses,
+                        targetId = other.id,
+                        priority = (attack - hesitation) * 0.95f
+                    });
+
+                if (coerce - hesitation > 25f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.InsulateEconomy,
+                        targetId = other.id,
+                        priority = (coerce - hesitation) * 0.8f
+                    });
+
+                if (subvert - hesitation > 20f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.HardenSecurity,
+                        targetId = other.id,
+                        priority = (subvert - hesitation) * 0.9f
+                    });
+
+                // Someone building a bloc is answered by building one back, which
+                // is why this raises an existing objective rather than a new verb.
+                if (court - hesitation > 30f)
+                    candidates.Add(new AIObjective
+                    {
+                        type = AIObjectiveType.ExpandInfluence,
+                        targetId = other.id,
+                        priority = (court - hesitation) * 0.55f
+                    });
+            }
+        }
+
+        /// <summary>
+        /// Prepare for an attack we expect (GDD §24.2). Costs treasury and
+        /// political capital, like everything else a government does — a state
+        /// cannot armour itself for free any more than the player can.
+        /// </summary>
+        static bool HardenDefenses(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (country.resources.treasury < 160f) return false;
+            if (ai.politicalCapital < 1.2f) return false;
+
+            country.resources.treasury -= 160f;
+            ai.politicalCapital -= 1.2f;
+
+            // Readiness moves toward its target rather than jumping, so this is a
+            // posture decision rather than a number written into the force.
+            if (country.military.posture == MilitaryPosture.Peacetime)
+                country.military.posture = MilitaryPosture.Alert;
+
+            country.military.missileDefense = Clamp(country.military.missileDefense + 3.5f);
+            country.military.logistics = Clamp(country.military.logistics + 1.5f);
+
+            // Fortify the most exposed thing we hold.
+            StrategicLocation weakest = null;
+            foreach (var location in state.locations)
+            {
+                if (location.ownerId != country.id) continue;
+                if (weakest == null || location.defenseValue < weakest.defenseValue) weakest = location;
+            }
+            if (weakest != null) weakest.defenseValue = Clamp(weakest.defenseValue + 4f);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reduce our exposure to economic pressure we expect (GDD §24.2).
+        /// Diversification is slow and expensive, which is why states so often
+        /// leave it until the squeeze has started.
+        /// </summary>
+        static bool InsulateEconomy(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (country.resources.treasury < 200f) return false;
+            country.resources.treasury -= 200f;
+
+            // Spread trade rather than deepen it: a thinner link to the state we
+            // fear, thicker links to everyone else.
+            foreach (var link in state.trade)
+            {
+                if (!link.Involves(country.id)) continue;
+                link.volume = Clamp(link.volume + 1.5f);
+            }
+
+            country.economy.confidence = Clamp(country.economy.confidence + 1.5f);
+            country.resources.energy = Math.Min(
+                EconomySystem.EnergyCeilingFor(state, country), country.resources.energy + 1.5f);
+            return true;
+        }
+
+        /// <summary>
+        /// Raise counterintelligence against subversion we expect (GDD §24.2).
+        ///
+        /// This is the one an operator notices most directly: run enough exposed
+        /// covert operations and the world becomes measurably harder to run them
+        /// against.
+        /// </summary>
+        static bool HardenSecurity(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (country.resources.treasury < 90f) return false;
+            if (ai.politicalCapital < 0.8f) return false;
+
+            country.resources.treasury -= 90f;
+            ai.politicalCapital -= 0.8f;
+            country.counterIntel.counterIntelligence =
+                Clamp(country.counterIntel.counterIntelligence + 3.5f);
+            return true;
+        }
+
+        /// <summary>Execute actions serving the current objectives.</summary>
+        static void Act(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            ai.actionsThisMonth = 0;
+            int budget = ActionBudget(state.difficulty);
+
+            foreach (var objective in ai.objectives)
+            {
+                if (ai.actionsThisMonth >= budget) break;
+
+                int before = ai.actionsThisMonth;
+
+                // Recorded so a live session can answer "is the world actually
+                // doing anything, and is it doing more than one thing" — which is
+                // the question the harness answers least well, because the
+                // harness only ever watches the aggregate outcome.
+                Telemetry.Record(state, TelemetryKind.AiAction, country.id,
+                    objective.type.ToString().ToUpperInvariant(),
+                    string.IsNullOrEmpty(objective.targetId) ? ai.path.ToString() : objective.targetId);
+
+                switch (objective.type)
+                {
+                    case AIObjectiveType.BuildCapability:
+                        InvestInPillars(state, country, rng);
+                        ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.ConsolidateHome:
+                        if (ConsolidateHome(state, ai, country)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.SecureResources:
+                        if (SecureResources(state, country)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.PreemptProgramme:
+                        if (PreemptProgramme(state, ai, country, objective.targetId, rng)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.CounterRival:
+                        if (CounterRival(state, ai, country, objective.targetId, rng)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.ExpandInfluence:
+                        if (SeekTreaty(state, country, objective.targetId)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.AssertClaim:
+                        if (AssertClaim(state, ai, country, objective.targetId, rng)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.HardenDefenses:
+                        if (HardenDefenses(state, ai, country, rng)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.InsulateEconomy:
+                        if (InsulateEconomy(state, ai, country, rng)) ai.actionsThisMonth++;
+                        break;
+
+                    case AIObjectiveType.HardenSecurity:
+                        if (HardenSecurity(state, ai, country, rng)) ai.actionsThisMonth++;
+                        break;
+                }
+
+                // An objective the government formed and then could not act on is
+                // worth seeing: it usually means it cannot afford its own plan.
+                if (ai.actionsThisMonth == before)
+                    Telemetry.Record(state, TelemetryKind.AiAction, country.id,
+                        objective.type.ToString().ToUpperInvariant(),
+                        "could not act", success: false);
+            }
+        }
+
+        /// <summary>
+        /// Direct the state's own effort (GDD §24.1).
+        ///
+        /// This used to *be* the AI's capability growth — a bespoke routine that
+        /// raised pillars along the national priority with no people behind it.
+        /// Foreign governments have cabinets now, and `CabinetSystem.MonthlyAct`
+        /// runs them for every state, so that growth already happens through the
+        /// same officials the player has. Doing it here as well would pay a
+        /// government twice for one month's work.
+        ///
+        /// What is left is the part a cabinet does not cover: force structure.
+        /// Ministers raise the *pillar*; only procurement writes strength, which
+        /// is why `RebuildForces` still has to be reached from somewhere.
+        /// </summary>
+        static void InvestInPillars(GameState state, CountryState country, Random rng)
+        {
+            if (country.government.leader.priority == NationalPriority.Security)
+                RebuildForces(state, country, rng);
+        }
+
+        /// <summary>
+        /// Rebuild the force itself, not just the headline pillar. Procurement
+        /// and sustainment were player-only verbs, so an AI army could be worn
+        /// down by war and by monthly logistics decay and never recover — the
+        /// world quietly disarmed itself over a long save while its intelligence
+        /// estimates, which read the pillar rather than the force, kept reporting
+        /// everyone strong.
+        /// </summary>
+        static void RebuildForces(GameState state, CountryState country, Random rng)
+        {
+            var mil = country.military;
+
+            // Sustainment first: it decays every month for everyone, and a force
+            // without it is hollow whatever its nominal strength.
+            if (mil.logistics < 55f && rng.NextDouble() < 0.5)
+            {
+                MilitarySystem.InvestInLogisticsBy(state, country.id);
+                return;
+            }
+
+            // A state at war moves money to the military, if its politics will
+            // carry it. Actor-generic, so the world is not locked out of a verb
+            // the player has — this codebase's most-repeated bug.
+            if (!mil.warFooting && AcquisitionSystem.CanDeclareWarFooting(state, country.id, out _)
+                && rng.NextDouble() < 0.35)
+            {
+                if (AcquisitionSystem.SetWarFootingBy(state, country.id, true)) return;
+            }
+
+            // Replace the specific thing that is missing. A branch rebuilt only
+            // through aggregate strength would refill evenly, which is not how a
+            // government that just lost its carriers actually spends.
+            if (rng.NextDouble() < 0.5 && OrderWhatIsShort(state, country, rng)) return;
+
+            if (mil.programs.Count >= MilitarySystem.MaxPrograms) return;
+
+            // Re-equip whichever branch has fallen furthest behind.
+            var weakest = ForceBranch.Ground;
+            float worst = float.MaxValue;
+            foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
+            {
+                float strength = mil.Get(branch).strength;
+                if (strength >= worst) continue;
+                worst = strength;
+                weakest = branch;
+            }
+
+            // Only worth a programme if there is real ground to make up.
+            if (worst > 75f) return;
+
+            var scale = worst < 45f ? MilitarySystem.ProgramScale.Major : MilitarySystem.ProgramScale.Modest;
+            MilitarySystem.BeginProcurementBy(state, country.id, weakest, scale);
+        }
+
+        /// <summary>
+        /// A rival is close to an instrument that ends us (GDD §21, spec 14 §8).
+        ///
+        /// Three responses, in the order a government would actually reach for
+        /// them, and all of them are things the player can do too:
+        ///
+        /// 1. **Get out of the war.** If we are the one they would use it on,
+        ///    the cheapest counter is to stop being their problem. A government
+        ///    staring at an existential programme will accept terms it would
+        ///    have refused a year earlier.
+        /// 2. **Build our own.** Deterrence is the classic answer, and it is
+        ///    slow, which is exactly why detection has to happen early.
+        /// 3. **Reach for the fallback.** If neither is open, do what a
+        ///    threatened state does — collect, coerce and align against them.
+        /// </summary>
+        static bool PreemptProgramme(GameState state, AIState ai, CountryState country,
+            string targetId, Random rng)
+        {
+            var confrontation = state.ActiveConfrontationFor(country.id);
+            bool againstThem = confrontation != null
+                               && !confrontation.resolved
+                               && confrontation.Involves(targetId);
+
+            // 1. Stop being their target.
+            if (againstThem && ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
+            {
+                // Suing for terms is public; *why* is not. The original text
+                // named the foreign programme that prompted it, which is exactly
+                // what `KnownPreparation` exists to keep behind collection — so
+                // the entry had to stay secret and the visible half of the event
+                // was lost with it. Reworded, the public fact can be public.
+                state.AddChronicle(ChronicleCategory.Diplomatic, country.id,
+                    $"{country.displayName} has sought terms.", Publicity.Public);
+                return true;
+            }
+
+            // 2. Build a deterrent of our own.
+            //
+            // This is a second route into strategic preparation, and it
+            // deliberately bypasses `ConsiderStrategicInstruments`' requirement
+            // of a rivalry 24 months old. That gate exists so states do not
+            // reach for the highest instruments over a passing quarrel; a rival
+            // who is visibly close to one is not a passing quarrel, and waiting
+            // two years to begin answering it defeats the entire point of
+            // detecting it early. Every other gate still applies —
+            // `CanPrepare` checks the capability, its maturity, the pillar and
+            // the treasury, and `PrepareBy` charges per authorization.
+            foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+            {
+                if (type == EndgameType.TotalMobilization) continue;
+                if (country.endgames.ProgressFor(type) >= 100f) continue;
+                if (!EndgameSystem.CanPrepare(state, country, type, out _)) continue;
+                if (EndgameSystem.PrepareBy(state, country.id, type)) return true;
+            }
+
+            // 3. Otherwise, the ordinary tools of a threatened state.
+            return CounterRival(state, ai, country, targetId, rng);
+        }
+
+        /// <summary>
+        /// Attend to the home front (GDD §13).
+        ///
+        /// This used to write `stability += 1.2`, `approval += 0.8` and
+        /// `government += 0.15` directly, every month, for nothing — a verb the
+        /// player has no access to at a price the player cannot match. A rival
+        /// could therefore ride out any amount of domestic damage the player
+        /// inflicted, because repairing it cost the rival exactly zero.
+        ///
+        /// It now goes through the same two verbs the player uses and pays the
+        /// same Political Capital for them, which means a government that has
+        /// spent its authority genuinely cannot buy its way out of trouble until
+        /// it has rebuilt some.
+        /// </summary>
+        static bool ConsolidateHome(GameState state, AIState ai, CountryState country)
+        {
+            // Reform is the deeper fix and the more expensive one; a government
+            // reaches for it when the machinery itself is the problem, or when
+            // the state is coming apart.
+            //
+            // Low stability belongs in this test even though reform also raises
+            // the Government pillar: `InstitutionalReformBy` is the **only** one
+            // of the two verbs that moves stability at all, and this objective is
+            // scored on `(60 − stability)`. Narrowing the test to the pillar
+            // alone leaves a government reaching for messaging to fix unrest that
+            // messaging cannot touch.
+            var gov = country.government;
+            float backing = gov.IsElective ? gov.legislativeSupport : gov.eliteCohesion;
+
+            // Pick the instrument that matches what is actually wrong rather than
+            // walking a fixed ladder. Reform used to be unconditionally first,
+            // and since most states sit below the pillar threshold for most of a
+            // save, nothing after it was ever reached — every verb added below it
+            // was unreachable by any foreign government, which is this codebase's
+            // most-repeated bug wearing a new hat.
+            //
+            // The two problems are genuinely different. Reform raises the
+            // machinery, which lifts the support *target* at only ×0.45 of a
+            // ×0.3 term; bargaining addresses the chamber directly. A government
+            // that has lost its own legislature does not fix that by
+            // reorganising a ministry.
+            // Every instrument is scored by how badly it is needed, and the
+            // government reaches for the worst problem it can currently afford.
+            //
+            // A ladder was tried twice and failed the same way twice: whatever
+            // sits at the top is the only thing that ever runs. Institutional
+            // reform crowded out five verbs below it; demoting reform simply let
+            // *bargaining* crowd out four more, because bargaining costs 2 PC and
+            // almost always succeeds. Scoring is the only shape that lets a rare
+            // problem win when it is genuinely the pressing one.
+            var options = new List<(float score, Func<bool> act)>
+            {
+                // The chamber or the inner circle has turned on us.
+                (Math.Max(0f, 55f - backing),
+                    () => GovernmentSystem.BuildPoliticalSupportBy(state, country.id)
+                          || GovernmentSystem.DistributePatronageBy(state, country.id)),
+
+                // The machinery itself is the problem. Reform is the only one of
+                // these that moves stability at all, so unrest belongs in its
+                // score rather than messaging's.
+                (Math.Max(0f, 55f - country.pillars.government)
+                 + Math.Max(0f, 40f - country.stability),
+                    () => GovernmentSystem.InstitutionalReformBy(state, country.id)),
+
+                // A weak minister is a permanent tax on everything the state does
+                // — and on what its own leadership gets told (spec 15).
+                (Math.Max(0f, 50f - WeakestCompetence(country)),
+                    () => GovernmentSystem.LaunchInquiryBy(state, country.id)),
+
+                // An ageing leader with nobody prepared behind them is how an
+                // orderly state becomes a contested one.
+                (gov.successorReadiness < 50f ? Math.Max(0f, gov.leader.age - 58f) * 2.5f : 0f,
+                    () => GovernmentSystem.GroomSuccessorBy(state, country.id)),
+
+                // Plots are organising faster than the state can govern them away.
+                (gov.civicPosture != CivicPosture.Restrictive
+                    ? Math.Max(0f, gov.conspiracyLevel - 28f) * 1.8f : 0f,
+                    () => GovernmentSystem.SetCivicPostureBy(
+                        state, country.id, CivicPosture.Restrictive)),
+
+                // And relaxed again once the danger has passed, or the country
+                // pays for an apparatus it no longer needs for the rest of the save.
+                (gov.civicPosture == CivicPosture.Restrictive && gov.conspiracyLevel < 12f
+                    ? 30f : 0f,
+                    () => GovernmentSystem.SetCivicPostureBy(
+                        state, country.id, CivicPosture.Standard)),
+
+                // The public has turned. Messaging is the cheap instrument and
+                // the one that fixes mood rather than machinery.
+                (Math.Max(0f, 55f - country.governmentApproval),
+                    () => GovernmentSystem.PublicMessagingBy(state, country.id))
+            };
+
+            options.Sort((a, b) => b.score.CompareTo(a.score));
+
+            // Take the worst problem we can actually pay to address. Falling
+            // through on a failed attempt matters: a government that cannot
+            // afford reform this month should still send its minister out to
+            // speak rather than doing nothing at all.
+            foreach (var (score, act) in options)
+            {
+                if (score <= 0f) continue;
+                if (act()) return true;
+            }
+
+            return GovernmentSystem.PublicMessagingBy(state, country.id);
+        }
+
+        /// <summary>
+        /// Order whatever this force is shortest of, relative to what a force of
+        /// its size should hold.
+        ///
+        /// Measured against the catalogue baseline rather than against a flat
+        /// number, so a small state restocks to its own scale instead of trying
+        /// to buy a superpower's carrier fleet.
+        /// </summary>
+        static bool OrderWhatIsShort(GameState state, CountryState country, Random rng)
+        {
+            AssetProfile worst = null;
+            float worstRatio = float.MaxValue;
+
+            foreach (var asset in AssetCatalog.All)
+            {
+                var force = country.military.Get(asset.branch);
+
+                // Nothing to restock in a branch this country cannot field.
+                if (asset.branch == ForceBranch.Naval
+                    && GeographySystem.AccessOf(country.id) == NavalAccess.Landlocked) continue;
+
+                float target = asset.baselineAt100 * (force.strength / 100f);
+                if (target <= 0.01f) continue;
+
+                float have = force.inventory.CountOf(asset.kind) + force.inventory.OnOrderOf(asset.kind);
+                float ratio = have / target;
+                if (ratio >= worstRatio) continue;
+
+                worstRatio = ratio;
+                worst = asset;
+            }
+
+            // Only worth an order if there is a real gap.
+            if (worst == null || worstRatio > 0.82f) return false;
+
+            float count = worst.orderIncrement * (rng.NextDouble() < 0.4 ? 2f : 1f);
+            return AcquisitionSystem.OrderBy(state, country.id, worst.kind, count);
+        }
+
+        static float WeakestCompetence(CountryState country)
+        {
+            float worst = 100f;
+            foreach (var official in country.cabinet)
+                if (official.competence < worst) worst = official.competence;
+            return worst;
+        }
+
+        /// <summary>
+        /// Address a resource vulnerability (GDD §20).
+        ///
+        /// This used to add energy and materials from nowhere, uncapped — which
+        /// quietly undid the endowment model in `EconomySystem`, whose whole
+        /// point is that "a country can invest past its endowment only through
+        /// capability". An energy-poor archetype could simply stop being
+        /// energy-poor by wanting to, and `energyDrag` stopped biting for anyone.
+        ///
+        /// Investment now costs treasury and can only close the gap toward what
+        /// the country actually has — the authored endowment plus whatever
+        /// territory and capability have added to it. Genuinely exceeding it
+        /// still requires a research programme or taking ground, exactly as it
+        /// does for the player.
+        /// </summary>
+        static bool SecureResources(GameState state, CountryState country)
+        {
+            const float InvestmentCost = 45f;
+            if (country.resources.treasury < InvestmentCost) return false;
+
+            float energyCeiling = EconomySystem.EnergyCeilingFor(state, country);
+            float materialsCeiling = EconomySystem.MaterialsCeilingFor(state, country);
+
+            float energyRoom = energyCeiling - country.resources.energy;
+            float materialsRoom = materialsCeiling - country.resources.strategicMaterials;
+
+            // Nothing to buy: the shortfall is structural, and the answer is a
+            // programme or a trade partner, not money.
+            if (energyRoom <= 0.5f && materialsRoom <= 0.5f) return false;
+
+            country.resources.treasury -= InvestmentCost;
+
+            if (energyRoom > 0.5f)
+                country.resources.energy = Clamp(country.resources.energy + Math.Min(0.7f, energyRoom));
+            if (materialsRoom > 0.5f)
+                country.resources.strategicMaterials =
+                    Clamp(country.resources.strategicMaterials + Math.Min(0.6f, materialsRoom));
+
+            return true;
+        }
+
+        /// <summary>Counter a rival across whichever pillar is currently available.</summary>
+        static bool CounterRival(GameState state, AIState ai, CountryState country, string targetId, Random rng)
+        {
+            if (string.IsNullOrEmpty(targetId)) return false;
+
+            // 1. Collect first — you cannot counter what you cannot see.
+            var network = state.FindNetwork(country.id, targetId);
+            if (network == null)
+            {
+                state.networks.Add(new IntelNetwork
+                {
+                    ownerId = country.id,
+                    targetId = targetId,
+                    focus = IntelDomain.Military,
+                    penetration = 15f
+                });
+                return true;
+            }
+
+            // 2. Harden at home.
+            if (country.counterIntel.counterIntelligence < 45f)
+            {
+                country.counterIntel.counterIntelligence = Clamp(country.counterIntel.counterIntelligence + 3f);
+                return true;
+            }
+
+            // 3. Mislead them about what we are.
+            //
+            // Deception was a player-only verb, so the fog ran one way: the AI
+            // could be deceived and the player never could. A government that
+            // knows it is being watched, and has a service capable of building
+            // legends, mounts a programme of its own (GDD §14).
+            if (MountDeception(state, ai, country, targetId, rng)) return true;
+
+            // 4. Economic coercion, when the exposure is bearable.
+            if (state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f)
+            {
+                var link = state.FindTrade(country.id, targetId);
+                float exposure = link != null ? link.volume : 0f;
+                bool worthIt = exposure < 55f || ai.profile.aggression > 70f;
+                if (worthIt && rng.NextDouble() < 0.35)
+                {
+                    var severity = ai.profile.aggression > 70f ? SanctionSeverity.Coercive : SanctionSeverity.Pressure;
+                    return EconomySystem.ImposeSanctionsBy(state, country.id, targetId, severity);
+                }
+            }
+
+            // 5. Otherwise deepen collection.
+            network.penetration = Clamp(network.penetration + 4f);
+            return true;
+        }
+
+        /// <summary>
+        /// Run a deception programme against a state that is collecting on us.
+        ///
+        /// Which way a government lies follows from its position: the weak
+        /// overstate to deter, the strong understate to invite a miscalculation
+        /// they can punish. Both read as reasonable from the inside, and both are
+        /// exactly the kind of understandable mistake the player should be able
+        /// to make about them.
+        /// </summary>
+        static bool MountDeception(GameState state, AIState ai, CountryState country,
+            string targetId, Random rng)
+        {
+            // Building legends takes a real service.
+            if (country.pillars.intelligence < 45f) return false;
+            if (country.counterIntel.deceptionStrength > 40f) return false;
+
+            // No point deceiving someone who is not looking at us.
+            var theirNetwork = state.FindNetwork(targetId, country.id);
+            if (theirNetwork == null || theirNetwork.penetration < 20f) return false;
+
+            // Difficulty is reasoning quality, never a stat cheat (GDD §24.3):
+            // a sharper government notices the opportunity to mislead more often
+            // and picks the domain that actually matters, rather than always
+            // reaching for Military.
+            if (rng.NextDouble() >= DeceptionAppetite(state.difficulty)) return false;
+
+            float perceivedTheirs = PerceivedStrength(state, country.id,
+                state.FindCountry(targetId), IntelDomain.Military);
+            bool weakerThanThem = country.pillars.military < perceivedTheirs;
+
+            country.counterIntel.deceptionDomain = DeceptionDomainFor(state, country, targetId);
+            country.counterIntel.deceptionBias = weakerThanThem ? 1f : -1f;
+            country.counterIntel.deceptionStrength =
+                Clamp(country.counterIntel.deceptionStrength + 25f + ai.profile.opportunism * 0.15f);
+            return true;
+        }
+
+        /// <summary>
+        /// What to put on the table. Standard difficulty always offers the same
+        /// pair; a sharper government reads what this partner actually needs —
+        /// security if they feel threatened, trade if they are short.
+        /// </summary>
+        static List<TreatyCommitment> TreatyOfferFor(GameState state, CountryState country, string targetId)
+        {
+            var commitments = new List<TreatyCommitment>
+            {
+                TreatyCommitment.NonAggression, TreatyCommitment.TradePreference
+            };
+
+            if (state.difficulty == Difficulty.Standard) return commitments;
+
+            var relationship = state.FindRelationship(country.id, targetId);
+            var target = state.FindCountry(targetId);
+            if (relationship == null || target == null) return commitments;
+
+            // Someone who feels surrounded wants a guarantee more than a tariff.
+            if (relationship.ThreatPerceivedBy(targetId) > 45f || target.pillars.military < 45f)
+                commitments.Add(TreatyCommitment.MutualDefense);
+
+            // Someone blind wants to see.
+            if (target.pillars.intelligence < 50f)
+                commitments.Add(TreatyCommitment.IntelligenceSharing);
+
+            return commitments;
+        }
+
+        /// <summary>How readily a government reaches for deception (GDD §24.3).</summary>
+        static double DeceptionAppetite(Difficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case Difficulty.Ruthless: return 0.55;
+                case Difficulty.Challenging: return 0.38;
+                default: return 0.25;
+            }
+        }
+
+        /// <summary>
+        /// Which domain to lie about.
+        ///
+        /// A less capable government always misrepresents its army, because that
+        /// is the obvious thing to lie about. A sharper one lies about whatever
+        /// the other side is actually looking at — which is far harder to catch
+        /// and far more useful, and costs it nothing extra.
+        /// </summary>
+        static IntelDomain DeceptionDomainFor(GameState state, CountryState country, string targetId)
+        {
+            if (state.difficulty == Difficulty.Standard) return IntelDomain.Military;
+
+            var theirNetwork = state.FindNetwork(targetId, country.id);
+            return theirNetwork != null ? theirNetwork.focus : IntelDomain.Military;
+        }
+
+        static bool SeekTreaty(GameState state, CountryState country, string targetId)
+        {
+            if (string.IsNullOrEmpty(targetId)) return false;
+            if (state.FindTreaty(country.id, targetId) != null) return false;
+
+            // A more capable diplomacy tailors the offer instead of always
+            // tabling the same two commitments (GDD §24.3). Reasoning quality,
+            // not a bonus: the terms it picks are ones the other side is more
+            // likely to want, which anyone could have chosen.
+            var commitments = TreatyOfferFor(state, country, targetId);
+            if (DiplomacySystem.ProposeTreatyBy(state, country.id, targetId, commitments)) return true;
+
+            // Refused: warm the relationship instead and try again later.
+            var relationship = state.FindRelationship(country.id, targetId);
+            if (relationship != null)
+            {
+                relationship.relations = Clamp(relationship.relations + 1.5f);
+                relationship.trust = Clamp(relationship.trust + 0.5f);
+            }
+            return true;
+        }
+
+        /// <summary>Press a claim — opening a confrontation when conditions justify it.</summary>
+        static bool AssertClaim(GameState state, AIState ai, CountryState country, string targetId, Random rng)
+        {
+            if (string.IsNullOrEmpty(targetId)) return false;
+            if (state.ActiveConfrontationFor(country.id) != null) return false;
+            if (state.ActiveConfrontationFor(targetId) != null) return false;
+
+            // Domestic weakness argues against foreign adventures.
+            if (country.stability < 40f || country.warExhaustion > 55f) return false;
+
+            float commitChance = 0.09f + ai.profile.aggression / 300f + ai.profile.opportunism / 400f;
+            if (state.difficulty == Difficulty.Ruthless) commitChance += 0.05f;
+            if (rng.NextDouble() >= commitChance) return false;
+
+            // Prefer a concrete objective the AI can actually hold.
+            string locationId = null;
+            foreach (var location in state.locations)
+            {
+                if (location.ownerId != targetId) continue;
+                if (location.type == LocationType.Capital) continue; // never a realistic demand
+                locationId = location.id;
+                break;
+            }
+
+            var objective = locationId != null
+                ? ConfrontationObjective.TerritorialConcession
+                : ConfrontationObjective.Deterrence;
+
+            var confrontation = ConfrontationSystem.BeginBy(state, country.id, targetId,
+                objective, locationId, PrimaryStrategy.Military);
+            return confrontation != null;
+        }
+
+        /// <summary>
+        /// Run an ongoing confrontation: escalate, act, or seek terms. The AI
+        /// weighs its own exhaustion and momentum exactly as the player must.
+        /// </summary>
+        static void ManageOngoingConfrontation(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            var confrontation = state.ActiveConfrontationFor(country.id);
+            if (confrontation == null || confrontation.resolved) return;
+
+            bool isInitiator = confrontation.initiatorId == country.id;
+            float ourExhaustion = isInitiator ? confrontation.initiatorWarExhaustion : confrontation.defenderWarExhaustion;
+            float ourMomentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
+
+            // Seek terms when the war has stopped paying for itself.
+            bool wantsOut = ourExhaustion > 45f + ai.profile.patience * 0.3f
+                            || country.warSupport < 20f
+                            || (ourMomentum < -25f && ai.profile.caution > 50f);
+
+            if (wantsOut && confrontation.monthsActive >= 2)
+            {
+                if (ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
+                    return;
+
+                // Terms refused; a tired or cautious state may simply concede.
+                if (ourExhaustion > 70f && rng.NextDouble() < 0.25)
+                {
+                    ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id, concedeInstead: true);
+                    return;
+                }
+            }
+
+            // Escalate when confident and aggressive.
+            if (confrontation.escalation < EscalationState.LimitedConflict)
+            {
+                float escalateChance = 0.08f + ai.profile.aggression / 500f + Math.Max(0f, ourMomentum) / 400f;
+                if (country.warSupport > 35f && rng.NextDouble() < escalateChance)
+                {
+                    var next = (EscalationState)((int)confrontation.escalation + 1);
+                    ConfrontationSystem.SetEscalationBy(state, confrontation, next, country.id);
+                }
+                return;
+            }
+
+            // At war: prosecute operations against a reachable objective.
+            if (rng.NextDouble() < 0.45)
+            {
+                string targetLocationId = confrontation.objectiveLocationId;
+                if (string.IsNullOrEmpty(targetLocationId) || state.FindLocation(targetLocationId)?.ownerId == country.id)
+                {
+                    string opponentId = confrontation.OpponentOf(country.id);
+                    foreach (var location in state.locations)
+                    {
+                        if (location.ownerId != opponentId || location.type == LocationType.Capital) continue;
+                        targetLocationId = location.id;
+                        break;
+                    }
+                }
+                if (string.IsNullOrEmpty(targetLocationId)) return;
+
+                var directive = new OperationDirective
+                {
+                    speedPriority = 40f + ai.profile.aggression * 0.4f,
+                    casualtyTolerance = 30f + ai.profile.aggression * 0.5f,
+                    // Restraint varies by government; caution restrains collateral risk.
+                    civilianRiskLimit = Math.Max(10f, 60f - ai.profile.caution * 0.5f)
+                };
+
+                var operationType = ChooseOperation(state, country, ai,
+                    state.FindLocation(targetLocationId), confrontation, ourMomentum, rng);
+                ConfrontationSystem.LaunchOperationBy(state, confrontation, country.id,
+                    targetLocationId, operationType, directive);
+            }
+        }
+
+        /// <summary>
+        /// Which operation a government orders, from its own force structure and
+        /// the situation in front of it (GDD §19).
+        ///
+        /// The AI previously chose between `Siege` and `Assault` and nothing
+        /// else, so every verb added for the player was one the world could not
+        /// use — the same "AI locked out of player verbs" failure that made every
+        /// AI army decay monotonically before procurement was made actor-generic.
+        /// A naval power should blockade, an air power should strike, and a
+        /// government facing dug-in works should break them first.
+        ///
+        /// Ordered by what a competent staff would reach for, and every branch
+        /// still falls through to `Assault`, because it is the only operation
+        /// that takes ground and an AI that never assaults never wins.
+        /// </summary>
+        static OperationType ChooseOperation(GameState state, CountryState country, AIState ai,
+            StrategicLocation target, Confrontation confrontation, float ourMomentum, Random rng)
+        {
+            if (target == null) return OperationType.Assault;
+
+            // Never consider an order the world would refuse. Preference has to
+            // be expressed inside what is actually possible, or a maritime
+            // doctrine spends every month proposing blockades of a landlocked
+            // neighbour and achieving nothing.
+            var possible = OperationCatalog.AvailableAgainst(state, country.id, target);
+            if (possible.Count == 0) return OperationType.Assault;
+
+            bool Can(OperationType type) => possible.Contains(type);
+
+            var mil = country.military;
+
+            // Dug-in works are worth breaking before spending an army on them,
+            // and the effect is permanent, so it stays worth doing once.
+            if (Can(OperationType.SuppressDefenses) && target.defenseValue > 50f
+                && rng.NextDouble() < 0.55)
+                return OperationType.SuppressDefenses;
+
+            // Air power is worth fighting for on its own terms — a government that
+            // never contests the sky can be bombed indefinitely for free.
+            if (Can(OperationType.CounterAirCampaign) && rng.NextDouble() < 0.3)
+                return OperationType.CounterAirCampaign;
+
+            // A maritime power squeezes the country rather than the position.
+            // Only worth ordering against someone who actually trades by sea.
+            if (mil.naval.EffectivePower > mil.ground.EffectivePower * 0.8f)
+            {
+                string opponentId = confrontation.OpponentOf(country.id);
+                bool tradesAtSea = false;
+                foreach (var link in state.trade)
+                    if (link.Involves(opponentId) && link.volume > 20f) { tradesAtSea = true; break; }
+
+                if (tradesAtSea)
+                {
+                    if (Can(OperationType.NavalBlockade) && rng.NextDouble() < 0.35)
+                        return OperationType.NavalBlockade;
+                    if (Can(OperationType.CommerceRaiding) && rng.NextDouble() < 0.3)
+                        return OperationType.CommerceRaiding;
+                }
+
+                // Beat their fleet first, then everything else at sea is cheaper.
+                if (Can(OperationType.SeaControl) && rng.NextDouble() < 0.3)
+                    return OperationType.SeaControl;
+                if (Can(OperationType.MineWarfare) && rng.NextDouble() < 0.25)
+                    return OperationType.MineWarfare;
+            }
+
+            // A government out to break the country rather than the army goes for
+            // what makes the war possible at all.
+            if (ai.path == StrategicPath.EconomicPrimacy
+                && Can(OperationType.StrategicBombing) && rng.NextDouble() < 0.4)
+                return OperationType.StrategicBombing;
+
+            // A cautious government reaches for standoff fires and deniable
+            // action before it spends its own people.
+            if (ai.profile.caution > 60f && target.garrison > 40f)
+            {
+                if (Can(OperationType.AirStrike) && rng.NextDouble() < 0.35) return OperationType.AirStrike;
+                if (Can(OperationType.CyberOperation) && rng.NextDouble() < 0.3)
+                    return OperationType.CyberOperation;
+                if (Can(OperationType.SpecialOperation) && rng.NextDouble() < 0.3)
+                    return OperationType.SpecialOperation;
+            }
+
+            // Starve it before storming it.
+            if (Can(OperationType.AirInterdiction) && target.garrison > 55f && rng.NextDouble() < 0.3)
+                return OperationType.AirInterdiction;
+
+            if (ourMomentum < -15f && Can(OperationType.Siege)) return OperationType.Siege;
+
+            // Coming from the sea is expensive and sometimes the only way in.
+            if (Can(OperationType.AmphibiousAssault) && !Can(OperationType.Assault))
+                return OperationType.AmphibiousAssault;
+            if (Can(OperationType.AmphibiousAssault)
+                && mil.naval.EffectivePower > mil.ground.EffectivePower
+                && rng.NextDouble() < 0.3)
+                return OperationType.AmphibiousAssault;
+
+            return Can(OperationType.Assault) ? OperationType.Assault : possible[0];
+        }
+
+        // ---------- strategic instruments (GDD §21) ----------
+
+        /// <summary>
+        /// Governments other than the player can also reach for decisive
+        /// instruments. They prepare quietly over years when a rival looks
+        /// permanent, and they only use one when the alternative is worse:
+        /// losing a war, or facing something existential themselves.
+        /// </summary>
+        static void ConsiderStrategicInstruments(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            var confrontation = state.ActiveConfrontationFor(country.id);
+
+            // 1. Use, when the case for it has become overwhelming.
+            if (confrontation != null && !confrontation.resolved)
+            {
+                string opponentId = confrontation.OpponentOf(country.id);
+                bool isInitiator = confrontation.initiatorId == country.id;
+                float momentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
+                float exhaustion = isInitiator
+                    ? confrontation.initiatorWarExhaustion
+                    : confrontation.defenderWarExhaustion;
+
+                // Desperation, not opportunity, is what unseals these.
+                bool losing = momentum < -30f || exhaustion > 60f || country.stability < 35f;
+                bool wasStruckExistentially = SufferedExistentialAttack(state, country.id, opponentId);
+
+                if (losing || wasStruckExistentially)
+                {
+                    // A cautious government hesitates even here; an aggressive one does not.
+                    float willingness = 0.10f
+                                        + ai.profile.aggression / 320f
+                                        - ai.profile.caution / 500f
+                                        + (wasStruckExistentially ? 0.45f : 0f);
+
+                    if (rng.NextDouble() < willingness)
+                    {
+                        foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+                        {
+                            if (type == EndgameType.TotalMobilization) continue;
+                            if (!EndgameSystem.CanExecuteBy(state, country.id, type, opponentId, out _)) continue;
+                            EndgameSystem.ExecuteBy(state, country.id, type, opponentId);
+                            return;
+                        }
+                    }
+                }
+
+                // Mobilization is the one instrument a state turns on itself.
+                if ((losing || confrontation.escalation >= EscalationState.LimitedConflict)
+                    && EndgameSystem.CanExecuteBy(state, country.id, EndgameType.TotalMobilization, null, out _)
+                    && rng.NextDouble() < 0.25)
+                {
+                    EndgameSystem.ExecuteBy(state, country.id, EndgameType.TotalMobilization, null);
+                    return;
+                }
+            }
+
+            // 2. Prepare, when a rival has come to look permanent. Preparation is
+            //    expensive and slow, so only a sustained threat justifies it.
+            if (LongStandingRival(ai) == null) return;
+            if (country.resources.treasury < 400f) return;
+
+            // Patience is what lets a government fund something for years.
+            float commitment = 0.18f + ai.profile.patience / 400f + PlanningHorizon(state.difficulty) * 0.2f;
+            if (rng.NextDouble() >= commitment) return;
+
+            var chosen = PreferredInstrument(state, country);
+            if (chosen.HasValue) EndgameSystem.PrepareBy(state, country.id, chosen.Value);
+        }
+
+        /// <summary>
+        /// Added threat from a decisive programme this government has actually
+        /// detected in another state. Routed through KnownPreparation so it
+        /// respects collection — an undetected programme frightens nobody, which
+        /// is exactly why concealment is worth something.
+        /// </summary>
+        static float DetectedProgramme(GameState state, string observerId, string targetId)
+        {
+            float worst = 0f;
+            foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+            {
+                if (type == EndgameType.TotalMobilization) continue;
+                float known = EndgameSystem.KnownPreparation(state, observerId, targetId, type);
+                if (known < 0f) continue;
+
+                float weight = EndgameSystem.SeverityOf(type) == StrategicSeverity.Existential ? 0.60f : 0.35f;
+                float alarm = known * weight;
+                if (alarm > worst) worst = alarm;
+            }
+            return worst;
+        }
+
+        /// <summary>
+        /// Objectives are re-scored every few months, so their age says nothing
+        /// about how long a rivalry has lasted. This accumulates the slower fact
+        /// underneath them, and lets it fade when the pressure comes off.
+        /// </summary>
+        static void TrackRivalries(AIState ai)
+        {
+            foreach (var rivalry in ai.rivalries) rivalry.stillRival = false;
+
+            foreach (var objective in ai.objectives)
+            {
+                // Pre-empting a state is the strongest possible way of treating
+                // it as a rival, so it has to count here. It also *displaces*
+                // CounterRival in the objective list when it scores higher —
+                // which silently stopped a rivalry being recorded at exactly the
+                // moment it became most serious.
+                if (objective.type != AIObjectiveType.CounterRival
+                    && objective.type != AIObjectiveType.PreemptProgramme) continue;
+                if (string.IsNullOrEmpty(objective.targetId)) continue;
+
+                var rivalry = FindRivalry(ai, objective.targetId);
+                if (rivalry == null)
+                {
+                    rivalry = new Rivalry { countryId = objective.targetId };
+                    ai.rivalries.Add(rivalry);
+                }
+                rivalry.stillRival = true;
+                rivalry.coolOff = 0;
+                rivalry.months++;
+            }
+
+            // Rivalries cool, but far more slowly than they form: three quiet
+            // months to forget one month of enmity.
+            for (int i = ai.rivalries.Count - 1; i >= 0; i--)
+            {
+                var rivalry = ai.rivalries[i];
+                if (rivalry.stillRival) continue;
+                if (++rivalry.coolOff < 3) continue;
+                rivalry.coolOff = 0;
+                rivalry.months--;
+                if (rivalry.months <= 0) ai.rivalries.RemoveAt(i);
+            }
+        }
+
+        static Rivalry FindRivalry(AIState ai, string countryId)
+        {
+            for (int i = 0; i < ai.rivalries.Count; i++)
+                if (ai.rivalries[i].countryId == countryId) return ai.rivalries[i];
+            return null;
+        }
+
+        /// <summary>A rival faced long enough to justify building against them.</summary>
+        static string LongStandingRival(AIState ai)
+        {
+            string longest = null;
+            int best = 0;
+            foreach (var rivalry in ai.rivalries)
+            {
+                if (rivalry.months < 24 || rivalry.months <= best) continue;
+                best = rivalry.months;
+                longest = rivalry.countryId;
+            }
+            return longest;
+        }
+
+        /// <summary>
+        /// Governments build the instrument that fits the state they already are,
+        /// preferring one already part-prepared over starting something new.
+        /// </summary>
+        static EndgameType? PreferredInstrument(GameState state, CountryState country)
+        {
+            EndgameType? best = null;
+            float bestScore = float.MinValue;
+
+            foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+            {
+                if (!EndgameSystem.CanPrepare(state, country, type, out _)) continue;
+                float progress = country.endgames.ProgressFor(type);
+                if (progress >= 100f) continue;
+
+                float score = country.pillars.Get(EndgameSystem.PillarOf(type)) + progress * 0.8f;
+                if (score <= bestScore) continue;
+                bestScore = score;
+                best = type;
+            }
+            return best;
+        }
+
+        /// <summary>Whether this state has had an existential instrument used on it by a given actor.</summary>
+        static bool SufferedExistentialAttack(GameState state, string countryId, string byId)
+        {
+            foreach (var record in state.endgameRecords)
+            {
+                if (record.targetId != countryId || record.actorId != byId) continue;
+                if (record.severity != StrategicSeverity.Existential) continue;
+                if (state.date.MonthsSince(record.date) <= 12) return true;
+            }
+            return false;
+        }
+
+        // ---------- perception helpers ----------
+
+        /// <summary>
+        /// What this observer believes about a target's strength. Falls back to a
+        /// cautious public-information guess when no collection exists — the AI
+        /// never reads true foreign state.
+        /// </summary>
+        public static float PerceivedStrength(GameState state, string observerId, CountryState target, IntelDomain domain)
+        {
+            var estimate = IntelligenceSystem.GetEstimate(state, observerId, target.id, domain);
+            if (estimate != null && estimate.confidence != ConfidenceGrade.None)
+                return estimate.reportedValue;
+
+            // No reporting: fall back to what anyone can observe publicly.
+            return 40f + target.economy.marketIndex * 0.1f;
+        }
+
+        /// <summary>0..1 confidence weight for an estimate, 0.35 when nothing is known.</summary>
+        public static float EstimateConfidence(GameState state, string observerId, string targetId, IntelDomain domain)
+        {
+            var estimate = IntelligenceSystem.GetEstimate(state, observerId, targetId, domain);
+            if (estimate == null) return 0.35f;
+            switch (estimate.confidence)
+            {
+                case ConfidenceGrade.Confirmed: return 1f;
+                case ConfidenceGrade.High: return 0.85f;
+                case ConfidenceGrade.Moderate: return 0.65f;
+                case ConfidenceGrade.Low: return 0.45f;
+                default: return 0.35f;
+            }
+        }
+
+        static float Approach(float current, float target, float rate) => current + (target - current) * rate;
+        static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);
+    }
+}

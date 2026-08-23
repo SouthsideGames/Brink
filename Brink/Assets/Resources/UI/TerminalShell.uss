@@ -1,0 +1,628 @@
+.terminal-root {
+    flex-grow: 1;
+    background-color: rgb(5, 10, 7);
+    color: rgb(72, 240, 120);
+    padding: 6px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Regular.ttf");
+}
+
+/* ---------- status bar ---------- */
+
+.status-bar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(60, 155, 88);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    flex-shrink: 0;
+}
+
+/* The banner is flavour; the readouts are the instrument. When the bar is
+   too narrow for both, this is the thing that gives way — it shrinks and
+   clips rather than pushing the date, the resources and END MONTH off the
+   right edge of the screen. The controller also shortens the text itself
+   at narrow size classes, so clipping is the last resort rather than the
+   first. */
+.classification {
+    color: rgb(120, 255, 160);
+    font-size: 14px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    flex-shrink: 1;
+    overflow: hidden;
+}
+
+/* Never squeezed. Everything here is operational: how much capacity is
+   left, what month it is, and the control that ends it. */
+.status-right {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.status-stat {
+    color: rgb(200, 255, 210);
+    font-size: 14px;
+    margin-right: 14px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+}
+
+/* ---------- main layout ---------- */
+
+.main-row {
+    flex-direction: row;
+    flex-grow: 1;
+}
+
+.content-host {
+    flex-grow: 1;
+    margin: 2px;
+}
+
+/* ---------- nav rail ---------- */
+
+.nav-rail {
+    flex-shrink: 0;
+    width: 170px;
+    margin-right: 4px;
+}
+
+.nav-button {
+    background-color: rgb(10, 22, 14);
+    color: rgb(90, 210, 130);
+    border-width: 1px;
+    border-color: rgb(30, 80, 46);
+    border-radius: 0;
+    margin: 2px 2px;
+    padding: 10px 10px;
+    min-height: 44px;
+    font-size: 13px;
+    -unity-text-align: middle-left;
+}
+
+.nav-button:hover {
+    background-color: rgb(20, 46, 28);
+}
+
+.nav-button-active {
+    background-color: rgb(26, 66, 38);
+    color: rgb(160, 255, 190);
+    border-color: rgb(120, 255, 160);
+}
+
+/* ---------- views ---------- */
+
+/* The trailing pad is a reachability floor, not decoration.
+ *
+ * Android's `Screen.safeArea` does not reliably exclude a three-button
+ * navigation bar, so the last control in a long view can sit underneath it with
+ * no way to scroll it clear. Trailing space inside the scroll content means the
+ * bottom of any view can always be brought above the system bar, whatever the
+ * platform reports — which matters most on the two longest views, where the
+ * button that actually spends something is at the end. */
+.view-scroll {
+    flex-grow: 1;
+    border-width: 1px;
+    border-color: rgb(60, 155, 88);
+    background-color: rgba(9, 20, 12, 0.9);
+    padding: 8px;
+    padding-bottom: 40px;
+}
+
+.terminal-text {
+    color: rgb(72, 240, 120);
+    font-size: 13px;
+    white-space: pre;
+
+    /* Leading. UI Toolkit has no line-height, but paragraph spacing applies
+       after every newline, which is exactly what these pre blocks are made of.
+       Dense monospace with no leading is the single most tiring thing to read
+       in a text game. Figures opt out below — a map needs its rows touching. */
+    -unity-paragraph-spacing: 4px;
+}
+
+/* ASCII figures: maps, charts and bars, where any leading between rows would
+   break the vertical strokes that make the picture. */
+.terminal-figure {
+    -unity-paragraph-spacing: 0;
+}
+
+.terminal-text-dim {
+    /* Was rgb(48,140,80) at 4.74:1 — barely WCAG AA and used for 35 of the
+       secondary readouts in the game, which on a phone in daylight is where
+       readability actually breaks down. Now 7.59:1, comfortably AAA, while
+       still reading as quieter than the body colour at 13.3:1. */
+    color: rgb(70, 180, 105);
+}
+
+.terminal-text-bright {
+    color: rgb(160, 255, 190);
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+}
+
+.log-line {
+    color: rgb(72, 240, 120);
+    font-size: 12px;
+    white-space: normal;
+    margin-bottom: 1px;
+}
+
+.log-line-warning {
+    color: rgb(255, 210, 90);
+}
+
+.log-line-error {
+    color: rgb(255, 110, 100);
+}
+
+/* ---------- buttons ---------- */
+
+/* Touch targets: min-height 44px, everywhere, no exceptions.
+ *
+ * The panel is ConstantPixelSize with a scale derived to hit a column target
+ * (TerminalScale), so panel pixels are proportional to physical size on every
+ * device and no DPI has to be trusted for this to hold. The 44pt guideline is
+ * roughly 3.4x body text; body text here is 13px, so 44 panel px is the direct
+ * analogue and lands at about 7mm on a phone.
+ *
+ * Buttons were 23-35px, which is why controls felt fiddly on a real handset.
+ * TouchTargetTests parses this stylesheet and fails the build on regression. */
+.cmd-button {
+    background-color: rgb(14, 34, 20);
+    color: rgb(120, 255, 160);
+    border-width: 1px;
+    border-color: rgb(60, 155, 88);
+    border-radius: 0;
+    padding: 10px 14px;
+    margin: 2px 3px;
+    min-height: 44px;
+    font-size: 13px;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+}
+
+.cmd-button:hover {
+    background-color: rgb(24, 60, 34);
+}
+
+.cmd-button:active {
+    background-color: rgb(38, 110, 60);
+    color: rgb(6, 12, 8);
+}
+
+.primary {
+    border-color: rgb(120, 255, 160);
+}
+
+.danger {
+    color: rgb(255, 110, 100);
+    border-color: rgb(140, 50, 45);
+}
+
+.debug {
+    color: rgb(150, 190, 255);
+    border-color: rgb(60, 80, 130);
+}
+
+.button-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-bottom: 4px;
+}
+
+/* ---------- orientation ---------- */
+
+.tutorial-panel {
+    border-width: 1px;
+    border-color: rgb(120, 255, 160);
+    background-color: rgba(12, 30, 18, 0.95);
+    padding: 8px;
+    margin: 2px 2px 4px 2px;
+    flex-shrink: 0;
+}
+
+.tutorial-title {
+    color: rgb(160, 255, 190);
+    font-size: 13px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    margin-bottom: 4px;
+}
+
+.tutorial-body {
+    color: rgb(200, 255, 210);
+    font-size: 12px;
+    white-space: normal;
+    margin-bottom: 6px;
+}
+
+.tutorial-instruction {
+    color: rgb(255, 210, 90);
+    font-size: 12px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    white-space: normal;
+}
+
+/* ---------- crisis overlay ---------- */
+
+.crisis-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(2, 4, 3, 0.88);
+    align-items: center;
+    justify-content: center;
+}
+
+.crisis-panel {
+    max-width: 620px;
+    min-width: 320px;
+    width: 80%;
+    background-color: rgb(20, 8, 6);
+    border-width: 2px;
+    border-color: rgb(255, 110, 100);
+    padding: 14px;
+}
+
+.crisis-flash {
+    color: rgb(255, 110, 100);
+    font-size: 12px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    margin-bottom: 8px;
+}
+
+.crisis-title {
+    color: rgb(255, 190, 120);
+    font-size: 17px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    margin-bottom: 6px;
+}
+
+.crisis-body {
+    color: rgb(230, 220, 200);
+    font-size: 13px;
+    white-space: normal;
+    margin-bottom: 12px;
+}
+
+.crisis-option-button {
+    background-color: rgb(38, 16, 12);
+    color: rgb(255, 190, 120);
+    border-width: 1px;
+    border-color: rgb(140, 70, 50);
+    border-radius: 0;
+    padding: 10px;
+    margin: 3px 0;
+    font-size: 13px;
+    -unity-text-align: middle-left;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    white-space: normal;
+}
+
+.crisis-option-button:hover {
+    background-color: rgb(70, 30, 20);
+    border-color: rgb(255, 110, 100);
+}
+
+.crisis-option-hint {
+    color: rgb(170, 140, 120);
+    font-size: 11px;
+    white-space: normal;
+    margin: 0 0 6px 6px;
+}
+
+.status-crisis {
+    color: rgb(255, 110, 100);
+    font-size: 14px;
+    margin-right: 14px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+}
+
+/* ---------- breakpoints ---------- */
+/* Large (tablet/desktop): full left rail. Values above are the large defaults. */
+
+.bp-medium .nav-rail {
+    width: 74px;
+}
+
+.bp-medium .nav-button {
+    -unity-text-align: middle-center;
+    padding: 10px 4px;
+}
+
+.bp-compact .main-row {
+    flex-direction: column;
+}
+
+/* Tall enough to hold a 44px button plus its margins. Sized to the target
+ * rather than the other way round: the rail exists to be tapped. */
+.bp-compact .nav-rail {
+    width: auto;
+    height: 54px;
+    margin-right: 0;
+    margin-bottom: 4px;
+}
+
+.bp-compact .nav-rail .unity-scroll-view__content-container {
+    flex-direction: row;
+}
+
+.bp-compact .nav-button {
+    -unity-text-align: middle-center;
+    padding: 8px 10px;
+}
+
+.bp-compact .classification {
+    font-size: 12px;
+}
+
+.bp-compact .status-stat {
+    font-size: 12px;
+    margin-right: 8px;
+}
+
+/* ------------------------------------------------------------------
+   Short screens — a folding phone's cover display, chiefly.
+   Wide and very short: height is the scarce resource, so the nav rail
+   goes back to a narrow vertical strip and everything tightens up.
+   These rules follow .bp-compact deliberately, so they win on ties.
+   ------------------------------------------------------------------ */
+
+.bp-short .main-row {
+    flex-direction: row;
+}
+
+.bp-short .nav-rail {
+    width: 52px;
+    height: auto;
+    margin-right: 4px;
+    margin-bottom: 0;
+}
+
+.bp-short .nav-rail .unity-scroll-view__content-container {
+    flex-direction: column;
+}
+
+.bp-short .nav-button {
+    -unity-text-align: middle-center;
+    padding: 5px 2px;
+    font-size: 11px;
+    margin: 1px 2px;
+}
+
+.bp-short .status-bar {
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+.bp-short .classification,
+.bp-short .status-stat {
+    font-size: 11px;
+}
+
+/* A short screen buys back vertical lines by shrinking text and padding — but
+ * never the touch target. `min-height` from `.cmd-button` still applies here,
+ * and deliberately is not overridden: a control you cannot reliably hit is
+ * broken whatever shape the screen is. */
+.bp-short .cmd-button {
+    padding: 5px 9px;
+    font-size: 11px;
+    margin: 1px 2px;
+}
+
+/* Sliders are dragged, so the whole control has to be a comfortable target and
+ * the handle has to be findable without looking for it. */
+.unity-base-slider {
+    min-height: 44px;
+}
+
+.unity-base-slider__dragger {
+    width: 22px;
+    height: 22px;
+    border-radius: 0;
+}
+
+.unity-base-slider__tracker {
+    height: 6px;
+}
+
+.bp-short .view-scroll {
+    padding: 0;
+    padding-bottom: 32px;
+}
+
+/* Content must never be able to scroll sideways: the grid is built to
+   the measured column count, and a horizontal scrollbar would mean that
+   measurement was wrong rather than that the user should go looking. */
+.content-host {
+    overflow: hidden;
+}
+
+/* ==================================================================
+   THEMES
+   A theme is a choice about comfort, never about legibility: every
+   text colour in every theme clears WCAG AAA (7:1) against its own
+   background, and ReadabilityTests enforces that for all three.
+   ================================================================== */
+
+/* ---- GREEN (default): phosphor on near-black ---- */
+
+.theme-green.terminal-root        { background-color: rgb(5, 10, 7); color: rgb(72, 240, 120); }
+.theme-green .terminal-text       { color: rgb(72, 240, 120); }
+.theme-green .terminal-text-dim   { color: rgb(70, 180, 105); }
+.theme-green .terminal-text-bright{ color: rgb(160, 255, 190); }
+.theme-green .classification      { color: rgb(120, 255, 160); }
+.theme-green .status-stat         { color: rgb(200, 255, 210); }
+.theme-green .view-scroll         { border-color: rgb(60, 155, 88); background-color: rgba(9, 20, 12, 0.9); }
+.theme-green .status-bar          { border-bottom-color: rgb(60, 155, 88); }
+.theme-green .nav-button          { background-color: rgb(10, 22, 14); color: rgb(90, 210, 130); border-color: rgb(60, 155, 88); }
+.theme-green .nav-button-active   { background-color: rgb(26, 66, 38); color: rgb(160, 255, 190); border-color: rgb(120, 255, 160); }
+
+/* ---- AMBER: less blue light, kinder at night ---- */
+
+.theme-amber.terminal-root        { background-color: rgb(12, 8, 2); color: rgb(255, 176, 0); }
+.theme-amber .terminal-text       { color: rgb(255, 176, 0); }
+.theme-amber .terminal-text-dim   { color: rgb(205, 142, 30); }
+.theme-amber .terminal-text-bright{ color: rgb(255, 216, 150); }
+.theme-amber .classification      { color: rgb(255, 200, 110); }
+.theme-amber .status-stat         { color: rgb(255, 224, 170); }
+.theme-amber .view-scroll         { border-color: rgb(158, 108, 24); background-color: rgba(18, 12, 4, 0.9); }
+.theme-amber .status-bar          { border-bottom-color: rgb(158, 108, 24); }
+.theme-amber .nav-button          { background-color: rgb(24, 16, 4); color: rgb(226, 158, 40); border-color: rgb(158, 108, 24); }
+.theme-amber .nav-button-active   { background-color: rgb(64, 44, 10); color: rgb(255, 216, 150); border-color: rgb(255, 176, 0); }
+
+/* ---- LOW GLARE: lifted background, softened foreground ----
+   Bright glyphs on a near-black field glow at the edges for readers
+   prone to halation, which is what makes a long session tiring. This
+   narrows the luminance gap without dropping below AAA. */
+
+.theme-soft.terminal-root         { background-color: rgb(18, 22, 19); color: rgb(178, 224, 190); }
+.theme-soft .terminal-text        { color: rgb(178, 224, 190); }
+.theme-soft .terminal-text-dim    { color: rgb(138, 182, 150); }
+.theme-soft .terminal-text-bright { color: rgb(228, 250, 234); }
+.theme-soft .classification       { color: rgb(206, 240, 214); }
+.theme-soft .status-stat          { color: rgb(222, 246, 228); }
+.theme-soft .view-scroll          { border-color: rgb(100, 144, 112); background-color: rgba(24, 30, 26, 0.9); }
+.theme-soft .status-bar           { border-bottom-color: rgb(100, 144, 112); }
+.theme-soft .nav-button           { background-color: rgb(26, 34, 28); color: rgb(168, 214, 180); border-color: rgb(100, 144, 112); }
+.theme-soft .nav-button-active    { background-color: rgb(46, 62, 50); color: rgb(228, 250, 234); border-color: rgb(178, 224, 190); }
+
+/* ---- settings panel ---- */
+
+.settings-panel {
+    border-width: 1px;
+    border-color: rgb(60, 155, 88);
+    padding: 8px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+
+.settings-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.settings-label {
+    width: 108px;
+    flex-shrink: 0;
+    font-size: 13px;
+}
+
+/* ---- SIGNAL: neutral bone base ----
+   Not pure white. White on near-black is the worst case for halation and
+   reads as a modern CLI rather than an old government terminal, which is
+   the one thing GDD §4 does insist on. A desaturated bone keeps the CRT
+   feel while leaving the entire hue wheel free to carry meaning. */
+
+.theme-signal.terminal-root        { background-color: rgb(14, 16, 18); color: rgb(208, 214, 206); }
+.theme-signal .terminal-text       { color: rgb(208, 214, 206); }
+.theme-signal .terminal-text-dim   { color: rgb(163, 170, 164); }
+.theme-signal .terminal-text-bright{ color: rgb(245, 248, 244); }
+.theme-signal .classification      { color: rgb(232, 236, 230); }
+.theme-signal .status-stat         { color: rgb(245, 248, 244); }
+.theme-signal .view-scroll         { border-color: rgb(104, 114, 108); background-color: rgba(18, 21, 23, 0.9); }
+.theme-signal .status-bar          { border-bottom-color: rgb(104, 114, 108); }
+.theme-signal .nav-button          { background-color: rgb(22, 26, 28); color: rgb(190, 198, 192); border-color: rgb(104, 114, 108); }
+.theme-signal .nav-button-active   { background-color: rgb(48, 56, 52); color: rgb(245, 248, 244); border-color: rgb(208, 214, 206); }
+
+/* ==================================================================
+   SEMANTIC COLOUR
+   Standing, not decoration. One set, deliberately chosen to clear AAA
+   against all four bases, so meaning survives whichever palette the
+   operator prefers.
+
+   Orange/blue rather than red/green: red-green deficiency affects about
+   one man in twelve, and hostile-versus-allied is exactly the pair you
+   must not encode that way. Colour is also never the ONLY channel — the
+   map keeps its ! ~ - + glyphs, so the reading holds with no colour at
+   all.
+   ================================================================== */
+
+/* Advisory yellow: what our own cabinet recommends.
+ *
+ * Deliberately its own class rather than reusing `sig-rival`, which means "a
+ * rival state" — the signal set carries *standing*, and overloading one of its
+ * colours with "your minister suggests this" would make both readings weaker.
+ * 11.9:1 at worst against the four palette backgrounds, so it clears AAA
+ * everywhere like the rest of the set. */
+.sig-advice   { color: rgb(240, 206, 90); }
+
+.sig-hostile  { color: rgb(255, 132, 124); }
+.sig-rival    { color: rgb(240, 168, 72); }
+.sig-neutral  { color: rgb(176, 182, 178); }
+.sig-friendly { color: rgb(120, 190, 255); }
+.sig-ally     { color: rgb(96, 224, 208); }
+
+/* A command the operator cannot currently pay for. Dimmed and unclickable
+   rather than silently refusing on press — an inert control reads as a broken
+   game, an obviously-unaffordable one reads as an empty account. */
+.cmd-button-unaffordable {
+    opacity: 0.4;
+}
+
+/* ---- "the month is spent" ----
+   UI Toolkit has no keyframe animations, so the pulse is a class toggled on a
+   timer with a transition smoothing it. The transition is what makes it read as
+   a slow breath rather than a flash — this is an invitation to move on, not an
+   alarm. Palette-aware, so it is legible on every base. */
+
+.end-month-spent {
+    transition-property: background-color, border-color, scale;
+    transition-duration: 0.55s;
+}
+
+.theme-green  .end-month-spent-on { background-color: rgb(26, 66, 38); border-color: rgb(120, 255, 160); }
+.theme-amber  .end-month-spent-on { background-color: rgb(64, 44, 10); border-color: rgb(255, 176, 0); }
+.theme-soft   .end-month-spent-on { background-color: rgb(46, 62, 50); border-color: rgb(178, 224, 190); }
+.theme-signal .end-month-spent-on { background-color: rgb(48, 56, 52); border-color: rgb(208, 214, 206); }
+
+.end-month-spent-on {
+    scale: 1.04 1.04;
+}
+
+/* The CP readout goes quiet when there is nothing left to spend, so the two
+   signals agree with each other. */
+.status-stat-spent {
+    opacity: 0.55;
+}
+
+/* ==================================================================
+   ATTENTION MARKERS (GDD §28.1)
+
+   A game made entirely of text lives or dies on whether the operator
+   knows a decision is waiting. Every panel that has something on it
+   carries a marker, and END MONTH says how many are still open.
+
+   None of this refuses anything. The operator is running a government
+   and is entitled to ignore a warning — the job is only to make sure
+   that when they do, it was a choice rather than an accident.
+
+   The nav marker is a GLYPH first ("!" / "."), set in code. These
+   colours reinforce it and never carry the meaning alone, so the
+   reading survives every palette and every kind of colour vision —
+   the same rule the map's ! ~ - + glyphs follow.
+   ================================================================== */
+
+.nav-attention-decision { color: rgb(255, 132, 124); }
+.nav-attention-info     { color: rgb(240, 168, 72); }
+
+/* Unanswered decisions outstanding. Deliberately a border rather than a
+   fill: END MONTH is still the ordinary way forward and must not look
+   disabled or dangerous — it looks *noted*. */
+.end-month-unanswered {
+    border-color: rgb(255, 132, 124);
+}
+
+/* The monthly briefing's scrollable body. Capped so a busy month does not
+   push CONTINUE off the bottom of a short screen — on a cover display the
+   dismiss control has to stay reachable. */
+.rollover-body {
+    max-height: 320px;
+    margin-top: 6px;
+    margin-bottom: 6px;
+}

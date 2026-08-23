@@ -104,3 +104,26 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Android/player build output. The root-anchored /[Bb]uilds/ rule above does not
+# match these, because the Unity project is a subdirectory of the repo.
+Brink/Builds/
+**/*_BurstDebugInformation_DoNotShip/
+**/*_BackUpThisFolder_ButDontShipItWithYourGame/
+
+# Keystores and signing material must never be committed.
+*.keystore
+*.jks
+
+# Unity project is inside the Brink subdirectory
+Brink/[Ll]ibrary/
+Brink/[Tt]emp/
+Brink/[Oo]bj/
+Brink/[Bb]uild/
+Brink/[Bb]uilds/
+Brink/[Ll]ogs/
+Brink/[Uu]ser[Ss]ettings/
+Brink/[Mm]emoryCaptures/
+Brink/[Rr]ecordings/
+
+Brink/.vscode/
