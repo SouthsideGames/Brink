@@ -635,3 +635,41 @@
     margin-top: 6px;
     margin-bottom: 6px;
 }
+
+/* ---------- atmosphere (DisplaySettings.Atmosphere) ---------- */
+/*
+   A comfort choice, never a legibility one — the rule the palettes are held to.
+   Every contrast guarantee in this project is a property of the text colours
+   against the panel background, and none of them may depend on this being off.
+
+   So the scanlines are drawn on an element that sits *behind* the content, at an
+   opacity low enough that the effective background barely moves. They darken; a
+   lighter overlay would raise the background luminance and eat into the AAA
+   margin on the dim text colours, which is where the headroom is thinnest.
+
+   `picking-mode: ignore` matters: this covers the whole shell, and without it
+   it would swallow every tap on the terminal underneath.
+*/
+.scanline-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.scanline-row {
+    height: 2px;
+    background-color: rgba(0, 0, 0, 0.16);
+}
+
+.scanline-gap {
+    height: 2px;
+}
+
+/* The blinking block after the classification banner. Uses the palette's own
+   foreground, so it is legible on every theme without a per-theme rule. */
+.command-prompt {
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+    font-size: 13px;
+}

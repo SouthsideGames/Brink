@@ -170,43 +170,105 @@ namespace Brink.Tests
         [Test]
         public void OccupationIsNotFreeIncome_ItCostsMoneyAndUnrest()
         {
-            var player = state.PlayerCountry;
-            player.resources.treasury = 20000f;
-            player.stability = 90f;
-            float stabilityBefore = player.stability;
+            // **A/B against an unoccupied control**, not against the starting
+            // values. Injecting `stability = 90` and asserting it falls passes for
+            // free the moment anything pulls stability toward its natural level —
+            // and this fixture is one wiring line away from that, since
+            // `GovernmentSystem` targets roughly 65 here. The test would keep
+            // passing while measuring drift instead of occupation.
+            //
+            // Comparing two runs of the same world, identical but for the seizure,
+            // makes the difference attributable whatever else is running.
+            float Occupied(bool seize, out float treasury)
+            {
+                var world = WorldFactory.CreateDebugWorld(seed: 1212);
+                var turns = new TurnManager(world);
+                turns.ResolveMonth += EconomySystem.MonthlyUpdate;
+                turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
+                turns.ResolveMonth += TerritorySystem.MonthlyUpdate;
 
-            Assume.That(SeizeAll(LocationType.IndustrialCenter), Is.GreaterThan(0));
-            float treasuryBefore = player.resources.treasury;
-            Run(24);
+                var country = world.PlayerCountry;
+                country.resources.treasury = 20000f;
+                country.stability = 90f;
 
-            Assert.Less(player.resources.treasury, treasuryBefore,
-                "Garrisoning hostile ground has to cost something.");
-            Assert.Less(player.stability, stabilityBefore,
-                "Occupied populations do not consent.");
+                if (seize)
+                {
+                    int taken = 0;
+                    foreach (var location in world.locations)
+                    {
+                        if (location.originalOwnerId == country.id) continue;
+                        if (location.type != LocationType.IndustrialCenter) continue;
+                        location.ownerId = country.id;
+                        taken++;
+                    }
+                    Assume.That(taken, Is.GreaterThan(0), "Nothing was seized, so nothing is measured.");
+                }
+
+                for (int month = 0; month < 24; month++) turns.EndMonth();
+
+                treasury = country.resources.treasury;
+                return country.stability;
+            }
+
+            float heldStability = Occupied(true, out float heldTreasury);
+            float cleanStability = Occupied(false, out float cleanTreasury);
+
+            Assert.Less(heldTreasury, cleanTreasury,
+                $"Garrisoning hostile ground left the treasury at {heldTreasury:F0} against "
+                + $"{cleanTreasury:F0} for holding none. Occupation has to cost something.");
+            Assert.Less(heldStability, cleanStability,
+                $"Stability came out at {heldStability:F1} occupied and {cleanStability:F1} not. "
+                + "Occupied populations do not consent.");
         }
 
         [Test]
         public void ACountryUnderOccupation_HardensRatherThanFolds()
         {
-            var victim = state.FindCountry("CHN");
-            victim.warSupport = 40f;
-            victim.nationalUnity = 80f;
-
-            int taken = 0;
-            foreach (var location in state.locations)
+            // A/B for the same reason as above: `warSupport` injected at 40 rises
+            // toward ~50 on its own and `nationalUnity` at 80 falls toward ~78, so
+            // both assertions would pass without occupation doing anything at all
+            // the moment the government tick is present. Two runs of one world.
+            float Victim(bool occupy, out float unity)
             {
-                if (location.originalOwnerId != "CHN") continue;
-                if (location.type == LocationType.Capital) continue;
-                location.ownerId = state.playerCountryId;
-                taken++;
-            }
-            Assume.That(taken, Is.GreaterThan(0));
+                var world = WorldFactory.CreateDebugWorld(seed: 1212);
+                var turns = new TurnManager(world);
+                turns.ResolveMonth += EconomySystem.MonthlyUpdate;
+                turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
+                turns.ResolveMonth += TerritorySystem.MonthlyUpdate;
 
-            Run(24);
-            Assert.Greater(victim.warSupport, 40f,
-                "A country with foreign troops on its soil does not lose the will to fight.");
-            Assert.Less(victim.nationalUnity, 80f,
-                "But occupation is corrosive to the state that suffers it.");
+                var subject = world.FindCountry("CHN");
+                subject.warSupport = 40f;
+                subject.nationalUnity = 80f;
+
+                if (occupy)
+                {
+                    int taken = 0;
+                    foreach (var location in world.locations)
+                    {
+                        if (location.originalOwnerId != "CHN") continue;
+                        if (location.type == LocationType.Capital) continue;
+                        location.ownerId = world.playerCountryId;
+                        taken++;
+                    }
+                    Assume.That(taken, Is.GreaterThan(0));
+                }
+
+                for (int month = 0; month < 24; month++) turns.EndMonth();
+
+                unity = subject.nationalUnity;
+                return subject.warSupport;
+            }
+
+            float occupiedSupport = Victim(true, out float occupiedUnity);
+            float freeSupport = Victim(false, out float freeUnity);
+
+            Assert.Greater(occupiedSupport, freeSupport,
+                $"War support came out at {occupiedSupport:F1} under occupation against "
+                + $"{freeSupport:F1} free. A country with foreign troops on its soil does not "
+                + "lose the will to fight — it finds it.");
+            Assert.Less(occupiedUnity, freeUnity,
+                $"National unity was {occupiedUnity:F1} occupied and {freeUnity:F1} free. "
+                + "Occupation is corrosive to the state that suffers it.");
         }
 
         [Test]

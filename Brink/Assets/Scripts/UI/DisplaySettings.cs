@@ -69,6 +69,7 @@ namespace Brink.UI
         const string DensityKey = "brink.display.density";
         const string MonthlyBriefingKey = "brink.display.monthlyBriefing";
         const string WorldWireKey = "brink.display.worldWire";
+        const string AtmosphereKey = "brink.display.atmosphere";
 
         static bool loaded;
         static TextSize textSize = TextSize.Small;
@@ -95,6 +96,7 @@ namespace Brink.UI
         /// who wants a quiet turn to also give up knowing the world exists.
         /// </summary>
         static bool worldWire = true;
+        static bool atmosphere = true;
 
         /// <summary>Raised when any preference changes, so the shell can re-apply.</summary>
         public static event Action Changed;
@@ -129,6 +131,28 @@ namespace Brink.UI
         {
             get { Load(); return worldWire; }
             set { Load(); if (worldWire == value) return; worldWire = value; Save(); }
+        }
+
+        /// <summary>
+        /// Atmosphere: scanlines, a phosphor cast, a blinking command prompt.
+        ///
+        /// **A comfort choice, never a legibility one** — the same rule the
+        /// palettes are held to. Every readability guarantee in this project is a
+        /// property of the *text* colours against the background, and none of them
+        /// may depend on this being off. The scanline overlay is therefore drawn
+        /// over the panel background and *under* the content, at an opacity chosen
+        /// so the AAA contrast ratios still hold with it on. A test asserts that.
+        ///
+        /// Defaults **on**, because it is the reason the game looks like a
+        /// classified terminal rather than a spreadsheet, and defaults **off** for
+        /// anybody who turns it off — it lives in PlayerPrefs like the rest of the
+        /// display settings, because ergonomics belong to the device and the
+        /// reader rather than to the save.
+        /// </summary>
+        public static bool Atmosphere
+        {
+            get { Load(); return atmosphere; }
+            set { Load(); if (atmosphere == value) return; atmosphere = value; Save(); }
         }
 
         /// <summary>
@@ -206,6 +230,7 @@ namespace Brink.UI
             density = (TextDensity)PlayerPrefs.GetInt(DensityKey, (int)TextDensity.Comfortable);
             monthlyBriefing = PlayerPrefs.GetInt(MonthlyBriefingKey, 1) != 0;
             worldWire = PlayerPrefs.GetInt(WorldWireKey, 1) != 0;
+            atmosphere = PlayerPrefs.GetInt(AtmosphereKey, 1) != 0;
 
             // A preference file written by a newer build must not brick the UI.
             if (!Enum.IsDefined(typeof(TextSize), textSize)) textSize = TextSize.Small;
@@ -220,6 +245,7 @@ namespace Brink.UI
             PlayerPrefs.SetInt(DensityKey, (int)density);
             PlayerPrefs.SetInt(MonthlyBriefingKey, monthlyBriefing ? 1 : 0);
             PlayerPrefs.SetInt(WorldWireKey, worldWire ? 1 : 0);
+            PlayerPrefs.SetInt(AtmosphereKey, atmosphere ? 1 : 0);
             PlayerPrefs.Save();
             Changed?.Invoke();
         }

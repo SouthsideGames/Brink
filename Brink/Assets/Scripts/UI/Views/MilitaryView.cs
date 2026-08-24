@@ -16,6 +16,9 @@ namespace Brink.UI.Views
         public override string Id => "MILITARY";
         public override string ShortCode => "MIL";
 
+        /// <summary>Orders here are Military pillar orders — see TerminalView.GateOnAuthority.</summary>
+        protected override Pillar? CommandPillar => Pillar.Military;
+
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 

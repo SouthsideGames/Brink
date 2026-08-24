@@ -259,5 +259,42 @@ namespace Brink.Tests
             Assert.IsTrue(ConfrontationSystem.ProposeSettlement(state, confrontation));
             Assert.IsTrue(confrontation.resolved);
         }
+
+        /// <summary>
+        /// Every term has to be classified as a demand or a concession.
+        ///
+        /// `IsDemand` decides which way a term points, and the war verdict reads
+        /// it to work out whether a settlement fell harder on us or on them. An
+        /// unclassified term would default to "concession", so *demanding*
+        /// something would be scored as having cost us — and nothing would fail.
+        ///
+        /// The switch is exhaustive by intent; this is what makes it exhaustive
+        /// by construction. Same guard `CrisisEffectTests` puts on the effect ids,
+        /// for the same reason: a silent default is a bug that ships.
+        /// </summary>
+        [Test]
+        public void EveryPeaceTermIsClassified()
+        {
+            GameLog.Clear();
+
+            foreach (PeaceTerm term in System.Enum.GetValues(typeof(PeaceTerm)))
+                PeaceSystem.IsDemand(term);
+
+            foreach (var entry in GameLog.Entries)
+                Assert.AreNotEqual(LogLevel.Error, entry.level,
+                    $"A peace term is not classified in PeaceSystem.IsDemand: {entry.message}");
+        }
+
+        [Test]
+        public void DemandsAndConcessionsArePointedOppositeWays()
+        {
+            // The classification has to mean something, not merely exist.
+            Assert.IsTrue(PeaceSystem.IsDemand(PeaceTerm.TerritorialCession),
+                "Taking their territory is a demand.");
+            Assert.IsTrue(PeaceSystem.IsDemand(PeaceTerm.Reparations));
+            Assert.IsFalse(PeaceSystem.IsDemand(PeaceTerm.Withdrawal),
+                "Handing back what we occupy is something we give up.");
+            Assert.IsFalse(PeaceSystem.IsDemand(PeaceTerm.SecurityGuarantee));
+        }
     }
 }

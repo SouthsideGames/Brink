@@ -52,6 +52,65 @@ namespace Brink.UI.Views
             Build();
             FormatText(Root);
             GateOnAffordability(Root);
+            GateOnAuthority(Root, CommandPillar);
+        }
+
+        /// <summary>
+        /// The pillar this view issues orders in, or null for a readout.
+        ///
+        /// Declared here so `Refresh` can gate on it and a view added later
+        /// cannot forget — the same reasoning that put the text policy and the
+        /// affordability gate in one place.
+        /// </summary>
+        protected virtual Pillar? CommandPillar => null;
+
+        /// <summary>
+        /// Disable commands the constitution does not put in the operator's hands
+        /// (GDD §3).
+        ///
+        /// **These buttons used to look live and do nothing.** Under a
+        /// ParliamentaryRepublic the Government pillar is `AdvisoryOnly`, so
+        /// `AuthoritySystem.EnsureAuthority` returned false and the press spent
+        /// nothing, changed nothing and reported nothing — just a `GameLog.Warn`
+        /// the player never sees. Nine of GOVERNMENT's thirteen controls behaved
+        /// that way for anyone posted to such a state, and INTELLIGENCE does the
+        /// same under a Monarchy. An entire pillar reads as a dead screen, which
+        /// is indistinguishable from the game being broken.
+        ///
+        /// `AddAuthorityBadge` explained the situation in words at the top of the
+        /// view, which is not the same thing: a paragraph does not stop a button
+        /// looking pressable.
+        ///
+        /// Only `AdvisoryOnly` is disabled. `RequiresApproval` stays live on
+        /// purpose — the operator *can* act, it costs Political Capital and the
+        /// legislature may refuse, and refusing is a real outcome rather than an
+        /// absence of one.
+        ///
+        /// Uses the same `[N CP]` cost-tag convention as the affordability gate,
+        /// so it disables the controls that *spend* and leaves selection and
+        /// navigation alone.
+        /// </summary>
+        public static void GateOnAuthority(VisualElement element, Pillar? pillar)
+        {
+            var gc = GameController.Instance;
+            if (element == null || pillar == null || !gc.IsRunning) return;
+            if (AuthoritySystem.AuthorityOver(gc.State, pillar.Value)
+                != AuthoritySystem.AuthorityLevel.AdvisoryOnly) return;
+
+            Walk(element);
+
+            void Walk(VisualElement node)
+            {
+                if (node is Button button && !string.IsNullOrEmpty(button.text)
+                    && TryReadCost(button.text, out _, out _))
+                {
+                    button.SetEnabled(false);
+                    button.AddToClassList("cmd-button-unaffordable");
+                    button.tooltip = "Not ours to command under this constitution.";
+                }
+
+                foreach (var child in node.Children()) Walk(child);
+            }
         }
 
         /// <summary>

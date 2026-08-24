@@ -127,6 +127,33 @@ namespace Brink.UI.Views
                     button.SetEnabled(!current);
                     row.Add(button);
                 }
+
+                // How far along the standing instruction is.
+                //
+                // An order used to be issued into silence: the operator told the
+                // defence minister to prepare for war and had no way of knowing
+                // when the force was ready, so they either stopped too early or
+                // kept paying for an instruction that had already finished. A bar
+                // here answers "how long?" and the briefing answers "it's done".
+                float progress = CabinetSystem.DirectiveProgress(
+                    GameController.Instance.State, official);
+
+                if (progress >= 0f)
+                {
+                    var definition = CabinetSystem.FindDirective(official.office, official.directiveId);
+                    AddFigure(progress >= 1f ? "sig-friendly" : "terminal-text-dim").text =
+                        "   " + AsciiChart.LabeledBar("PROGRESS", progress * 100f, 100, 12, 18)
+                        + (progress >= 1f ? "  COMPLETE" : "");
+
+                    if (progress >= 1f && definition != null)
+                        AddText("sig-friendly").text = "   " + definition.completion;
+                }
+                else if (!string.IsNullOrEmpty(official.directiveId))
+                {
+                    // Say so, rather than leaving a gap where a bar might belong.
+                    AddText("terminal-text-dim").text =
+                        "   A standing instruction — it has no finish line, and will run until changed.";
+                }
             }
 
             if (official.mode == ControlMode.DirectControl)

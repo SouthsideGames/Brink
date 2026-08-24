@@ -14,6 +14,9 @@ namespace Brink.UI.Views
         public override string Id => "ECONOMY";
         public override string ShortCode => "ECO";
 
+        /// <summary>Orders here are Economy pillar orders — see TerminalView.GateOnAuthority.</summary>
+        protected override Pillar? CommandPillar => Pillar.Economy;
+
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 
@@ -24,6 +27,7 @@ namespace Brink.UI.Views
         string tradePartnerId;
         TradeFocus tradeFocus = TradeFocus.Energy;
         SanctionSeverity selectedSeverity = SanctionSeverity.Pressure;
+        IndustrialScale investmentScale = IndustrialScale.Expansion;
 
         protected override void Build()
         {
@@ -118,9 +122,118 @@ namespace Brink.UI.Views
             var sb = new StringBuilder();
             sb.AppendLine(AsciiChart.BoxHeader("SECTOR LAYER", W));
             foreach (var sector in player.economy.sectors)
+            {
+                string building = "";
+                foreach (var programme in player.economy.programmes)
+                    if (programme.sector == sector.sector)
+                        building = $"  ({programme.scale.ToString().ToUpperInvariant()}, "
+                                 + $"{programme.monthsRemaining} MO)";
+
                 sb.AppendLine($"  {sector.sector.ToString().ToUpperInvariant(),-12} OUT {sector.output,5:F1}  " +
-                              AsciiChart.LabeledBar("HEALTH", sector.health, 100, 6, 16));
+                              AsciiChart.LabeledBar("HEALTH", sector.health, 100, 6, 16) + building);
+            }
             text.text = sb.ToString();
+
+            BuildInvestment(player);
+        }
+
+        /// <summary>
+        /// The economy's recurring decision, and its only treasury sink
+        /// (GDD §20 amendment).
+        ///
+        /// The pillar that earns the money could not spend it: a verb audit found
+        /// **zero treasury spends** in the economy, trade or diplomacy systems
+        /// against six in the military, and every economy control was a one-shot
+        /// or a toggle. After about year two this screen had nothing left to press
+        /// while the balance climbed every month — which is the mechanical
+        /// explanation for a player clicking END MONTH with nothing to do.
+        ///
+        /// Shaped like procurement because that shape is proven here: money now,
+        /// capacity in years, bounded to three at once so investing everywhere is
+        /// not an option and the operator has to decide what the country is for.
+        /// </summary>
+        void BuildInvestment(CountryState player)
+        {
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("INDUSTRIAL PROGRAMMES", W);
+
+            var running = player.economy.programmes;
+            AddText("terminal-text-dim").text =
+                $"  {running.Count} of {IndustrialSystem.MaxProgrammes} under way."
+                + (running.Count > 0
+                    ? $"  Committed: {TotalMonthlyCost(player):F0} a month."
+                    : "  Money spent here becomes capacity in years, not months.");
+
+            foreach (var programme in running)
+            {
+                var captured = programme;
+                var cancelRow = new VisualElement();
+                cancelRow.AddToClassList("button-row");
+                Root.Add(cancelRow);
+
+                AddButton(cancelRow,
+                    $"STOP {captured.sector.ToString().ToUpperInvariant()} WORK", "danger", () =>
+                {
+                    IndustrialSystem.Cancel(GameController.Instance.State,
+                        GameController.Instance.State.playerCountryId, captured.sector);
+                    Refresh();
+                });
+            }
+
+            if (!IndustrialSystem.CanBegin(GameController.Instance.State,
+                    GameController.Instance.State.playerCountryId, out string blocked))
+            {
+                AddText("sig-hostile").text = "  " + blocked;
+                return;
+            }
+
+            AddText("terminal-text-dim").text = "  " + IndustrialSystem.Describe(investmentScale);
+
+            var scaleRow = new VisualElement();
+            scaleRow.AddToClassList("button-row");
+            Root.Add(scaleRow);
+            foreach (IndustrialScale scale in System.Enum.GetValues(typeof(IndustrialScale)))
+            {
+                var captured = scale;
+                bool current = investmentScale == scale;
+                var button = new Button(() => { investmentScale = captured; Refresh(); })
+                {
+                    text = (current ? "► " : "") + scale.ToString().ToUpperInvariant()
+                           + $" ({IndustrialSystem.MonthsFor(scale)}MO, "
+                           + $"{IndustrialSystem.MonthlyCostFor(scale):F0}/MO)"
+                };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                button.SetEnabled(!current);
+                scaleRow.Add(button);
+            }
+
+            var sectorRow = new VisualElement();
+            sectorRow.AddToClassList("button-row");
+            Root.Add(sectorRow);
+            foreach (EconomicSector sector in System.Enum.GetValues(typeof(EconomicSector)))
+            {
+                var captured = sector;
+
+                bool alreadyBuilding = false;
+                foreach (var programme in running)
+                    if (programme.sector == sector) alreadyBuilding = true;
+                if (alreadyBuilding) continue;
+
+                AddButton(sectorRow,
+                    $"{sector.ToString().ToUpperInvariant()} [{IndustrialSystem.CpCost} CP]", null, () =>
+                {
+                    GameController.Instance.BeginIndustrialProgramme(captured, investmentScale);
+                    Refresh();
+                });
+            }
+        }
+
+        static float TotalMonthlyCost(CountryState player)
+        {
+            float total = 0f;
+            foreach (var programme in player.economy.programmes)
+                total += IndustrialSystem.MonthlyCostFor(programme.scale);
+            return total;
         }
 
         void BuildTrade(GameState state)
@@ -211,9 +324,42 @@ namespace Brink.UI.Views
                 return;
             }
 
+            // **Our reading of them, not their answer.**
+            //
+            // This printed "THEY WOULD SIGN: volume 60, tariff 10%" straight from
+            // `BestAcceptableDeal`, which is built on `WouldAccept` — ground truth
+            // about a foreign government's decision. `TradeSystem.Assess` exists
+            // specifically to fog that through `IntelligenceSystem.GetEstimate`,
+            // and had **no callers anywhere in the codebase**.
+            //
+            // Same class as the settlement screen that leaked the opponent's
+            // acceptance test, fixed once already in the audit sweep. The terms
+            // themselves are what our negotiators would put on the table, so those
+            // are ours to know; whether they would *sign* is a judgement about
+            // them, and now reads as one.
+            var outlook = TradeSystem.Assess(state, state.playerCountryId,
+                new TradeDeal
+                {
+                    partnerId = tradePartnerId,
+                    volume = offer.volume,
+                    tariff = offer.tariff,
+                    focus = tradeFocus,
+                    preferentialTerms = offer.preferentialTerms
+                });
+
+            string reading;
+            switch (outlook)
+            {
+                case TradeOutlook.Likely: reading = "OUR READING: they would likely sign"; break;
+                case TradeOutlook.Unlikely: reading = "OUR READING: they would likely refuse"; break;
+                case TradeOutlook.NoTerms: reading = "OUR READING: there are no terms to put"; break;
+                default: reading = "OUR READING: uncertain — we do not have the access to say"; break;
+            }
+
             readout.text =
-                $"  THEY WOULD SIGN: volume {offer.volume:F0}, tariff {offer.tariff:F0}%" +
+                $"  TERMS WE WOULD OFFER: volume {offer.volume:F0}, tariff {offer.tariff:F0}%" +
                 (offer.preferentialTerms ? ", on terms favourable to them" : "") + ".\n" +
+                $"  {reading}.\n" +
                 (tradeFocus == TradeFocus.General
                     ? "  A general link supports growth."
                     : $"  A {Phrase.Of(tradeFocus).ToLowerInvariant()} agreement raises our ceiling for it — " +

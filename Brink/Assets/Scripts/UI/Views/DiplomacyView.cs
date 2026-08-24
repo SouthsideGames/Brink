@@ -15,6 +15,9 @@ namespace Brink.UI.Views
         public override string Id => "DIPLOMACY";
         public override string ShortCode => "DIP";
 
+        /// <summary>Orders here are Diplomacy pillar orders — see TerminalView.GateOnAuthority.</summary>
+        protected override Pillar? CommandPillar => Pillar.Diplomacy;
+
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 

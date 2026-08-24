@@ -47,6 +47,16 @@ namespace Brink.Core
                     return false;
 
                 default:
+                    // **Loud, not `return false`.** A silent default would make a
+                    // newly added term count as a concession — so the war-verdict
+                    // logic would quietly conclude that demanding it *cost* us
+                    // something, and nothing would fail. Every other exhaustive
+                    // switch in this codebase is guarded; this one was not.
+                    // `EveryPeaceTermIsClassified` walks the enum, so this line
+                    // should be unreachable.
+                    GameLog.Error("PEACE",
+                        $"{term} has no demand/concession classification. "
+                        + "Add it to PeaceSystem.IsDemand.");
                     return false;
             }
         }

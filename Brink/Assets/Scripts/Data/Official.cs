@@ -67,6 +67,40 @@ namespace Brink.Data
 
         /// <summary>Active directive id when mode == Directed; empty otherwise.</summary>
         public string directiveId = "";
+
+        /// <summary>
+        /// Whether we have already told the operator this instruction was met.
+        ///
+        /// Without it the completion notice would fire every month the goal is
+        /// still satisfied, which turns "the force is ready" from news into
+        /// wallpaper. Cleared whenever the directive changes, so re-issuing an
+        /// instruction can genuinely complete again.
+        /// </summary>
+        public bool directiveCompletionReported;
+
+        /// <summary>
+        /// Who, if anyone, this official is quietly working for (GDD §14
+        /// amendment). Empty for the overwhelming majority.
+        ///
+        /// The foreign cabinet dossier already renders every rival minister's
+        /// name and a competence band, gated by penetration, with a comment
+        /// explaining why a rival's incompetent economy minister "is a real,
+        /// exploitable fact about them". Nothing in the game could act on it — a
+        /// surface with no verb. `IntelligenceSystem` can now reach the person.
+        ///
+        /// Kept on the official rather than in a separate roster so it travels
+        /// with them: a recruited minister who is reshuffled into another office
+        /// is still ours, and one who retires takes the access with them. That is
+        /// the whole risk of running an agent inside somebody else's cabinet.
+        /// </summary>
+        public string recruitedById = "";
+
+        /// <summary>
+        /// How far along an approach is, 0..100. Recruitment is not a dice roll
+        /// on a stranger — it is months of cultivation that can be abandoned or
+        /// discovered before it ever pays.
+        /// </summary>
+        public float cultivation;
     }
 
     /// <summary>Why a cabinet seat came open. Shapes how it reads and what it costs.</summary>

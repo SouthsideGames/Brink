@@ -38,9 +38,11 @@ namespace Brink.Core
             turns.ResolveMonth += AcquisitionSystem.MonthlyDeliveries;
             turns.ResolveMonth += AcquisitionSystem.MonthlyUpkeep;
             turns.ResolveMonth += EconomySystem.MonthlyUpdate;
+            turns.ResolveMonth += IndustrialSystem.MonthlyUpdate;
             turns.ResolveMonth += EconomySystem.AgeSanctions;
             turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
             turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
+            turns.ResolveMonth += AgentSystem.MonthlyUpdate;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             turns.ResolveMonth += AccessionSystem.MonthlyUpdate;
             turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
@@ -56,6 +58,10 @@ namespace Brink.Core
             turns.ResolveMonth += AISystem.MonthlyThink;
             turns.ResolveMonth += ProgressionSystem.MonthlyXP;
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;
+            // Foreign states face their own situations — before the player check, so
+            // a rival's bad month is already on the record when our own crisis
+            // (if any) is raised.
+            turns.ResolveMonth += ForeignCrisisSystem.MonthlyUpdate;
             turns.ResolveMonth += CrisisSystem.SystemicCheck;
 
             // Last, so the snapshot describes the month as it ended rather than

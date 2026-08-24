@@ -519,5 +519,75 @@ namespace Brink.Tests
                     + "bars stop fitting.");
             }
         }
+
+        // ---------- atmosphere may not cost legibility ----------
+
+        /// <summary>
+        /// The scanline field darkens; it never lightens.
+        ///
+        /// Every contrast guarantee in this project is a text colour measured
+        /// against the panel background. An overlay that *raises* the background
+        /// luminance eats directly into that margin — and the margin is thinnest
+        /// on `terminal-text-dim`, which is used for 35 secondary readouts and was
+        /// already lifted once from 4.74:1 for exactly this reason.
+        ///
+        /// Darkening is the safe direction: it increases the ratio for light text
+        /// on a dark field. So this asserts the overlay is black-with-alpha rather
+        /// than trusting whoever edits the stylesheet next to remember why.
+        /// </summary>
+        [Test]
+        public void TheScanlineOverlayOnlyEverDarkens()
+        {
+            string css = Stylesheet();
+            int start = css.IndexOf(".scanline-row", System.StringComparison.Ordinal);
+            Assert.Greater(start, -1, "The scanline row style is missing.");
+
+            int open = css.IndexOf('{', start);
+            int close = css.IndexOf('}', open);
+            string block = css.Substring(open, close - open);
+
+            var match = System.Text.RegularExpressions.Regex.Match(
+                block, @"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)");
+            Assert.IsTrue(match.Success,
+                "The scanline row must use an rgba colour so its alpha is checkable.");
+
+            int r = int.Parse(match.Groups[1].Value);
+            int g = int.Parse(match.Groups[2].Value);
+            int b = int.Parse(match.Groups[3].Value);
+            float alpha = float.Parse(match.Groups[4].Value,
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            Assert.LessOrEqual(r + g + b, 30,
+                $"The scanline colour is rgb({r},{g},{b}) — light enough to raise the "
+                + "background and eat the contrast margin on every dim readout.");
+            Assert.LessOrEqual(alpha, 0.30f,
+                $"Scanline alpha {alpha:F2} is heavy enough to change how the panel reads. "
+                + "Atmosphere is a comfort choice, never a legibility one.");
+        }
+
+        /// <summary>
+        /// Atmosphere defaults on, and can be turned off.
+        ///
+        /// Both halves matter. On, because it is the reason this reads as a
+        /// classified terminal rather than a spreadsheet; off, because a CRT field
+        /// is exactly the sort of effect some readers cannot tolerate, and a
+        /// visual flourish with no escape hatch is an accessibility failure
+        /// wearing a mood.
+        /// </summary>
+        [Test]
+        public void AtmosphereIsOptional()
+        {
+            bool original = Brink.UI.DisplaySettings.Atmosphere;
+            try
+            {
+                Brink.UI.DisplaySettings.Atmosphere = false;
+                Assert.IsFalse(Brink.UI.DisplaySettings.Atmosphere,
+                    "Atmosphere cannot be switched off.");
+
+                Brink.UI.DisplaySettings.Atmosphere = true;
+                Assert.IsTrue(Brink.UI.DisplaySettings.Atmosphere);
+            }
+            finally { Brink.UI.DisplaySettings.Atmosphere = original; }
+        }
     }
 }

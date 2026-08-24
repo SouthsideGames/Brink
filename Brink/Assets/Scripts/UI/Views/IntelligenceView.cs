@@ -15,11 +15,20 @@ namespace Brink.UI.Views
         public override string Id => "INTELLIGENCE";
         public override string ShortCode => "INT";
 
+        /// <summary>Orders here are Intelligence pillar orders — see TerminalView.GateOnAuthority.</summary>
+        protected override Pillar? CommandPillar => Pillar.Intelligence;
+
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 
         string selectedTargetId;
         IntelDomain selectedFocus = IntelDomain.Military;
+
+        /// <summary>Which picture a deception programme bends. See BuildOperations.</summary>
+        IntelDomain deceptionDomain = IntelDomain.Military;
+
+        /// <summary>Which foreign minister the agent controls are aimed at.</summary>
+        int selectedOfficialIndex;
 
         protected override void Build()
         {
@@ -93,16 +102,46 @@ namespace Brink.UI.Views
             if (IntelligenceSystem.CanRunCovertOperation(state, null, CovertOperation.Deception,
                     out string deceptionBlocked))
             {
-                AddButton(row, $"DECEPTION: OVERSTATE [{IntelligenceSystem.CovertOperationCost} CP]", null, () =>
+                // **What we are lying about, not just which way.**
+                //
+                // The system has supported four deception domains since it was
+                // written and `GameController.RunCovertOperation` takes one — the
+                // view simply never passed it, so every programme silently defaulted
+                // to Military and three quarters of the verb was unreachable. A
+                // government concealing an economic weakness, or hiding how thin its
+                // political support has become, could not order it.
+                AddButton(row, $"DECEPTION: OVERSTATE {deceptionDomain.ToString().ToUpperInvariant()} "
+                               + $"[{IntelligenceSystem.CovertOperationCost} CP]", null, () =>
                 {
-                    GameController.Instance.RunCovertOperation(null, CovertOperation.Deception, 1f);
+                    GameController.Instance.RunCovertOperation(
+                        null, CovertOperation.Deception, 1f, deceptionDomain);
                     Refresh();
                 });
-                AddButton(row, $"DECEPTION: UNDERSTATE [{IntelligenceSystem.CovertOperationCost} CP]", null, () =>
+                AddButton(row, $"DECEPTION: UNDERSTATE {deceptionDomain.ToString().ToUpperInvariant()} "
+                               + $"[{IntelligenceSystem.CovertOperationCost} CP]", null, () =>
                 {
-                    GameController.Instance.RunCovertOperation(null, CovertOperation.Deception, -1f);
+                    GameController.Instance.RunCovertOperation(
+                        null, CovertOperation.Deception, -1f, deceptionDomain);
                     Refresh();
                 });
+
+                var domainRow = new VisualElement();
+                domainRow.AddToClassList("button-row");
+                Root.Add(domainRow);
+                AddText("terminal-text-dim").text =
+                    "   Which picture we are bending. Overstating our military deters; "
+                    + "understating our economy invites the wrong kind of confidence.";
+                foreach (IntelDomain domain in System.Enum.GetValues(typeof(IntelDomain)))
+                {
+                    var captured = domain;
+                    bool current = deceptionDomain == domain;
+                    var button = new Button(() => { deceptionDomain = captured; Refresh(); })
+                    { text = (current ? "► " : "") + domain.ToString().ToUpperInvariant() };
+                    button.AddToClassList("cmd-button");
+                    if (current) button.AddToClassList("primary");
+                    button.SetEnabled(!current);
+                    domainRow.Add(button);
+                }
             }
             else
             {
@@ -161,6 +200,93 @@ namespace Brink.UI.Views
             if (!assessable)
                 AddText("terminal-text-dim").text =
                     "   Identities only. Judging their competence needs deeper access.";
+
+            BuildAgentOperations(state, target, network, penetration);
+        }
+
+        /// <summary>
+        /// Verbs that reach a person (GDD §14 amendment).
+        ///
+        /// The dossier above has always rendered these people and, until now, the
+        /// operator could do nothing with any of it — a surface with no verb, and
+        /// the clearest example of why intelligence felt thin next to the military:
+        /// three covert verbs that were all the same verb (pick a country, press,
+        /// one roll) against 23 operations aimed at 41 named places.
+        ///
+        /// An approach is a *state*, not a roll. Cultivation accumulates over
+        /// months, can be abandoned, and can be discovered before it ever pays —
+        /// so who you approach and when is the decision, rather than which button.
+        /// </summary>
+        void BuildAgentOperations(GameState state, CountryState target,
+            IntelNetwork network, float penetration)
+        {
+            if (penetration < AgentSystem.MinimumPenetration)
+            {
+                AddText("terminal-text-dim").text =
+                    $"   Reaching a minister needs {AgentSystem.MinimumPenetration:F0} penetration; "
+                    + $"we have {penetration:F0}.";
+                return;
+            }
+
+            if (selectedOfficialIndex >= target.cabinet.Count) selectedOfficialIndex = 0;
+
+            var officialRow = new VisualElement();
+            officialRow.AddToClassList("button-row");
+            Root.Add(officialRow);
+
+            for (int i = 0; i < target.cabinet.Count; i++)
+            {
+                int captured = i;
+                var candidate = target.cabinet[i];
+                bool current = selectedOfficialIndex == i;
+
+                var button = new Button(() => { selectedOfficialIndex = captured; Refresh(); })
+                {
+                    text = (current ? "► " : "")
+                           + candidate.office.ToString().ToUpperInvariant()
+                           + (candidate.recruitedById == state.playerCountryId ? " ★" : "")
+                };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                officialRow.Add(button);
+            }
+
+            var official = target.cabinet[selectedOfficialIndex];
+
+            // What we know about the approach itself is ours — it is our own file.
+            AddText(official.recruitedById == state.playerCountryId ? "sig-friendly" : "terminal-text-dim")
+                .text = official.recruitedById == state.playerCountryId
+                    ? $"   {official.displayName} is ours. Their desk reports to us."
+                    : $"   {official.displayName} — cultivation {official.cultivation:F0} of "
+                      + $"{AgentSystem.RecruitThreshold:F0} needed to make an approach.";
+
+            var actionRow = new VisualElement();
+            actionRow.AddToClassList("button-row");
+            Root.Add(actionRow);
+
+            foreach (AgentAction action in System.Enum.GetValues(typeof(AgentAction)))
+            {
+                var captured = action;
+                bool allowed = AgentSystem.CanAct(state, state.playerCountryId, target.id,
+                    official, action, out string blocked);
+
+                var button = new Button(() =>
+                {
+                    GameController.Instance.RunAgentOperation(target.id, official, captured);
+                    Refresh();
+                })
+                {
+                    text = $"{action.ToString().ToUpperInvariant()} [{AgentSystem.CostOf(action)} CP]"
+                };
+                button.AddToClassList("cmd-button");
+                button.SetEnabled(allowed);
+                if (!allowed) button.tooltip = blocked;
+                actionRow.Add(button);
+            }
+
+            AddText("terminal-text-dim").text =
+                "   CULTIVATE is patient and quiet. RECRUIT asks the question — refused, they "
+                + "know. DISCREDIT ruins them publicly and everyone can see it was done.";
         }
 
         /// <summary>

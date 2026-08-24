@@ -15,6 +15,30 @@ namespace Brink.Data
         Defense
     }
 
+    /// <summary>
+    /// How far an industrial programme goes (GDD §20 amendment).
+    ///
+    /// Append-only — persisted by ordinal. `Maintenance` is first so an old save
+    /// with a zeroed value lands on the cheapest, least consequential option
+    /// rather than on a three-year rebuild nobody ordered.
+    /// </summary>
+    public enum IndustrialScale
+    {
+        Maintenance = 0,
+        Expansion = 1,
+        Modernisation = 2
+    }
+
+    /// <summary>Capacity under construction. See `IndustrialSystem`.</summary>
+    [Serializable]
+    public class IndustrialProgramme
+    {
+        public EconomicSector sector;
+        public IndustrialScale scale;
+        public int monthsRemaining;
+        public GameDate started;
+    }
+
     /// <summary>One sector's condition. Output is capacity; health is current functioning.</summary>
     [Serializable]
     public class SectorState
@@ -45,6 +69,20 @@ namespace Brink.Data
         public List<float> marketHistory = new List<float>();
 
         public List<SectorState> sectors = new List<SectorState>();
+
+        /// <summary>
+        /// Capacity being built (GDD §20 amendment). See `IndustrialSystem` —
+        /// the economy pillar's recurring decision and its only treasury sink.
+        /// </summary>
+        public List<IndustrialProgramme> programmes = new List<IndustrialProgramme>();
+
+        /// <summary>One sector by kind, or null.</summary>
+        public SectorState Sector(EconomicSector kind)
+        {
+            foreach (var sector in sectors)
+                if (sector.sector == kind) return sector;
+            return null;
+        }
 
         public const int MaxHistory = 60;
 

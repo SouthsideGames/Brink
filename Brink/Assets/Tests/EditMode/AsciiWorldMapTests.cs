@@ -127,13 +127,15 @@ namespace Brink.Tests
         {
             // With no collection, a foreign country's strength is unknown.
             string cold = AsciiWorldMap.Describe(state, "CHN");
-            StringAssert.Contains("NO ASSESSMENT", cold,
+            // The label is UNTASKED/COLLECTING/BURNED depending on why — what
+            // matters is that a real figure never appears without collection.
+            StringAssert.Contains("UNTASKED", cold,
                 "Foreign capability must come through the intelligence layer (GDD §14).");
 
             // Our own nation is known exactly.
             string own = AsciiWorldMap.Describe(state, state.playerCountryId);
             StringAssert.Contains("POSTURE", own);
-            Assert.IsFalse(own.Contains("NO ASSESSMENT"), "We know our own strength.");
+            Assert.IsFalse(own.Contains("UNTASKED"), "We know our own strength.");
         }
 
         [Test]

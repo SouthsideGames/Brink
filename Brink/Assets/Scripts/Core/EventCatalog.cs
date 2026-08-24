@@ -37,6 +37,32 @@ namespace Brink.Core
         /// <summary>Adversity unless stated otherwise — the safe default.</summary>
         public EventNature nature = EventNature.Adversity;
 
+        /// <summary>
+        /// Whether this situation can befall *any* state, and under what
+        /// conditions — or null when it is about the operator's position rather
+        /// than a country's condition.
+        ///
+        /// **Not every event generalises, and forcing them all to would be
+        /// wrong.** DEFECTION is a foreign officer walking in *to us*;
+        /// CABINET_DISSENT is *our* minister; INTELLIGENCE_SCANDAL is *our*
+        /// network being rolled up. Those describe the operator's relationship to
+        /// the world and have no meaning for a state nobody is playing. A food
+        /// shortage, a general strike, an energy crisis or a contested succession
+        /// befalls whoever has the conditions for it.
+        ///
+        /// Where this is set, the player's own `isEligible` should delegate to it
+        /// rather than restate the thresholds — the same condition written twice
+        /// is the bug this codebase has shipped more than any other.
+        ///
+        /// **This is not an AI Crisis Turn.** A Crisis Turn exists to interrupt
+        /// the operator's month and force a decision at the terminal; a foreign
+        /// government simply decides, in the same tick, and the player finds out
+        /// through the chronicle and through what their collection reports. The
+        /// settled decision was about the *interface*, not about whether other
+        /// countries have problems.
+        /// </summary>
+        public Func<GameState, CountryState, bool> befalls;
+
         /// <summary>Situation text. Receives the state so it can name real countries.</summary>
         public Func<GameState, string> body;
 
@@ -268,7 +294,8 @@ namespace Brink.Core
                 id = "FOOD_SHORTAGE",
                 title = "REGIONAL FOOD SHORTAGE",
                 cooldownMonths = 24,
-                isEligible = s => s.PlayerCountry.resources.foodSecurity < 65f,
+                befalls = (s, c) => c.resources.foodSecurity < 65f,
+                isEligible = s => Find("FOOD_SHORTAGE").befalls(s, s.PlayerCountry),
                 weight = s => (70f - s.PlayerCountry.resources.foodSecurity) / 20f,
                 body = s => "Distribution failure has emptied shelves in two provinces. " +
                             "Queues are forming; local officials request direction.",
@@ -290,8 +317,8 @@ namespace Brink.Core
                 id = "INFLATION_PROTESTS",
                 title = "PROTESTS OVER LIVING COSTS",
                 cooldownMonths = 15,
-                isEligible = s => s.PlayerCountry.economy.inflation > 7f
-                                  && s.PlayerCountry.governmentApproval < 60f,
+                befalls = (s, c) => c.economy.inflation > 7f && c.governmentApproval < 60f,
+                isEligible = s => Find("INFLATION_PROTESTS").befalls(s, s.PlayerCountry),
                 weight = s => s.PlayerCountry.economy.inflation / 5f,
                 body = s => $"Crowds have gathered in the major cities over prices. Inflation stands at " +
                             $"{s.PlayerCountry.economy.inflation:F1}%. Organizers are not yet coordinated.",
@@ -314,7 +341,8 @@ namespace Brink.Core
                 id = "ENERGY_CRISIS",
                 title = "ENERGY SUPPLY CRISIS",
                 cooldownMonths = 24,
-                isEligible = s => s.PlayerCountry.resources.energy < 50f,
+                befalls = (s, c) => c.resources.energy < 50f,
+                isEligible = s => Find("ENERGY_CRISIS").befalls(s, s.PlayerCountry),
                 weight = s => (55f - s.PlayerCountry.resources.energy) / 15f,
                 body = s => "Reserves have fallen below the winter planning threshold. Industry is " +
                             "already rationing; households will notice within weeks.",
@@ -672,7 +700,8 @@ namespace Brink.Core
                 id = "COST_OF_LIVING",
                 title = "STANDARDS OF LIVING FALLING",
                 cooldownMonths = 20,
-                isEligible = s => s.PlayerCountry.livingStandards < 42f,
+                befalls = (s, c) => c.livingStandards < 42f,
+                isEligible = s => Find("COST_OF_LIVING").befalls(s, s.PlayerCountry),
                 weight = s => (48f - s.PlayerCountry.livingStandards) / 12f,
                 body = s => "Households are measurably worse off than they were three years ago. " +
                             "The figures are public and nobody is disputing them.",
@@ -698,7 +727,8 @@ namespace Brink.Core
                 id = "GENERAL_STRIKE",
                 title = "GENERAL STRIKE",
                 cooldownMonths = 18,
-                isEligible = s => s.PlayerCountry.socialUnrest > 58f,
+                befalls = (s, c) => c.socialUnrest > 58f,
+                isEligible = s => Find("GENERAL_STRIKE").befalls(s, s.PlayerCountry),
                 weight = s => s.PlayerCountry.socialUnrest / 30f,
                 body = s => "Coordinated stoppages across transport, ports and heavy industry. " +
                             "This is organised, and the organisers are not asking for a meeting.",
@@ -812,8 +842,8 @@ namespace Brink.Core
                 id = "SEPARATIST_MOVEMENT",
                 title = "SEPARATIST MOVEMENT",
                 cooldownMonths = 26,
-                isEligible = s => s.PlayerCountry.nationalUnity < 38f
-                                  && s.PlayerCountry.socialUnrest > 42f,
+                befalls = (s, c) => c.nationalUnity < 38f && c.socialUnrest > 42f,
+                isEligible = s => Find("SEPARATIST_MOVEMENT").befalls(s, s.PlayerCountry),
                 weight = s => (45f - s.PlayerCountry.nationalUnity) / 12f,
                 body = s => "A regional movement has moved from complaint to organisation. They " +
                             "are talking about a referendum. Nobody has said the other word yet.",
@@ -1011,8 +1041,8 @@ namespace Brink.Core
                 id = "SUCCESSION_QUESTION",
                 title = "THE SUCCESSION QUESTION",
                 cooldownMonths = 24,
-                isEligible = s => s.PlayerCountry.government.leader.age > 66f
-                                  && s.PlayerCountry.government.successorReadiness < 40f,
+                befalls = (s, c) => c.government.leader.age > 66f && c.government.successorReadiness < 40f,
+                isEligible = s => Find("SUCCESSION_QUESTION").befalls(s, s.PlayerCountry),
                 weight = s => (s.PlayerCountry.government.leader.age - 62f) / 5f,
                 body = s => "The leadership is visibly ageing and there is no settled answer to " +
                             "what comes after. The question is being asked in print now.",

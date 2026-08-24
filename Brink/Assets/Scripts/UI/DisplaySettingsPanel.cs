@@ -82,6 +82,12 @@ namespace Brink.UI
                 value => DisplaySettings.WorldWire == value,
                 value => { DisplaySettings.WorldWire = value; Refresh(); });
 
+            BuildRow("SCANLINES",
+                new[] { true, false },
+                value => value ? "ON" : "OFF",
+                value => DisplaySettings.Atmosphere == value,
+                value => { DisplaySettings.Atmosphere = value; Refresh(); });
+
             var hint = new Label(
                 "  Larger text means fewer characters per line — the screen does not\n" +
                 "  grow. COMPACT spacing fits more rows on a short screen at the cost\n" +

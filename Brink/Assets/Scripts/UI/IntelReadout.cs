@@ -33,8 +33,15 @@ namespace Brink.UI
         public static string ForDomain(GameState state, string targetId, IntelDomain domain)
         {
             var estimate = IntelligenceSystem.GetEstimate(state, state.playerCountryId, targetId, domain);
+
+            // One vocabulary for one situation. This said "NO ASSESSMENT" while
+            // the military readouts had been split into UNTASKED / COLLECTING /
+            // BURNED, which would have shown an operator two different words for
+            // the same state on two adjacent screens. A network covers every
+            // domain, so the reason is the same whichever one is being asked
+            // about.
             if (estimate == null || estimate.confidence == ConfidenceGrade.None)
-                return "NO ASSESSMENT";
+                return WhyNoAssessment(state, targetId, domain) ?? "UNTASKED";
 
             int monthsStale = state.date.MonthsSince(estimate.asOf);
             string staleness = monthsStale > 3 ? $"  (AS OF {estimate.asOf.DisplayString})" : "";
@@ -102,10 +109,15 @@ namespace Brink.UI
         /// The same three-way distinction the after-action reports draw: an
         /// absence should say what would change it.
         /// </summary>
-        public static string WhyNoAssessment(GameState state, string targetId)
+        public static string WhyNoAssessment(GameState state, string targetId,
+            IntelDomain domain = IntelDomain.Military)
         {
+            // Domain-aware: a network reports on every domain, but at different
+            // rates, so a state can be assessed militarily and not economically.
+            // Defaulting to Military keeps the military readouts reading the way
+            // they were written.
             var estimate = IntelligenceSystem.GetEstimate(
-                state, state.playerCountryId, targetId, IntelDomain.Military);
+                state, state.playerCountryId, targetId, domain);
             if (estimate != null && estimate.confidence != ConfidenceGrade.None) return null;
 
             var network = state.FindNetwork(state.playerCountryId, targetId);

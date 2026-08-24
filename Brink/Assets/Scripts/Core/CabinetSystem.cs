@@ -9,6 +9,27 @@ namespace Brink.Core
         public string id;
         public string label;
         public string description;
+
+        /// <summary>
+        /// How far along this instruction is, 0..1 — or **-1 when it has no
+        /// finish line**.
+        ///
+        /// Reported from play: *"I can tell the military leader to prepare for
+        /// war but I never know when we are ready."* A directive acted every
+        /// month and said nothing, so the operator issued an order into silence
+        /// and had to guess when to stop paying for it. Giving an instruction a
+        /// measurable goal is what turns delegation into something you can
+        /// actually manage.
+        ///
+        /// -1 is a real answer, not a gap. AUSTERITY and PRESSURE RIVALS are
+        /// standing policies — they are a way of running a ministry, not a task
+        /// that completes — and inventing a progress bar for them would promise
+        /// an end that never comes.
+        /// </summary>
+        public System.Func<GameState, float> progress;
+
+        /// <summary>What the briefing says the month this instruction is met.</summary>
+        public string completion = "";
     }
 
     /// <summary>One Direct Control action the operator can execute personally.</summary>
@@ -37,10 +58,43 @@ namespace Brink.Core
                 case Pillar.Military:
                     return new[]
                     {
-                        new DirectiveDef { id = "MIL_READINESS", label = "RAISE READINESS", description = "Prioritize force readiness over budget." },
-                        new DirectiveDef { id = "MIL_CONSERVE", label = "CONSERVE BUDGET", description = "Slow military growth; return savings to treasury." },
-                        new DirectiveDef { id = MilitaryAdvice.PrepareForWar, label = "PREPARE FOR WAR", description = "Order what we are short of. Expensive, and it takes years to arrive." },
-                        new DirectiveDef { id = MilitaryAdvice.DrawDown, label = "DRAW DOWN", description = "Sell hulls and airframes back. Cheaper, and we will miss them." }
+                        new DirectiveDef
+                        {
+                            id = "MIL_READINESS", label = "RAISE READINESS",
+                            description = "Prioritize force readiness over budget.",
+                            // Done when every branch is trained and manned to a
+                            // level that would actually deploy.
+                            progress = s => ReadinessProgress(s.PlayerCountry),
+                            completion = "THE FORCE IS AT READINESS. Every branch is manned and trained "
+                                       + "to deploy. Holding here costs treasury every month."
+                        },
+                        new DirectiveDef
+                        {
+                            id = "MIL_CONSERVE", label = "CONSERVE BUDGET",
+                            description = "Slow military growth; return savings to treasury."
+                            // No finish line: this is a way of running the ministry.
+                        },
+                        new DirectiveDef
+                        {
+                            id = MilitaryAdvice.PrepareForWar, label = "PREPARE FOR WAR",
+                            description = "Order what we are short of. Expensive, and it takes years to arrive.",
+                            // Done when nothing is short of establishment — the
+                            // same measure the ordering itself uses, so the bar
+                            // and the buying cannot disagree.
+                            progress = s =>
+                            {
+                                AcquisitionSystem.WorstShortfall(s.PlayerCountry, out float ratio);
+                                return ratio;
+                            },
+                            completion = "THE FORCE IS READY. Every branch is at establishment and nothing "
+                                       + "further is on order. Continuing to prepare now buys nothing."
+                        },
+                        new DirectiveDef
+                        {
+                            id = MilitaryAdvice.DrawDown, label = "DRAW DOWN",
+                            description = "Sell hulls and airframes back. Cheaper, and we will miss them."
+                            // No finish line: how far to cut is the operator's call.
+                        }
                     };
                 case Pillar.Economy:
                     return new[]
@@ -52,7 +106,14 @@ namespace Brink.Core
                     return new[]
                     {
                         new DirectiveDef { id = "INT_COLLECTION", label = "EXPAND COLLECTION", description = "Grow foreign collection capability." },
-                        new DirectiveDef { id = "INT_COUNTERINTEL", label = "COUNTERINTELLIGENCE", description = "Harden the state against penetration." }
+                        new DirectiveDef
+                        {
+                            id = "INT_COUNTERINTEL", label = "COUNTERINTELLIGENCE",
+                            description = "Harden the state against penetration.",
+                            progress = s => s.PlayerCountry.counterIntel.counterIntelligence / 75f,
+                            completion = "THE SERVICE IS HARDENED. Counterintelligence is at a level that "
+                                       + "makes a foreign network expensive to run against us."
+                        }
                     };
                 case Pillar.Diplomacy:
                     return new[]
@@ -63,8 +124,22 @@ namespace Brink.Core
                 default:
                     return new[]
                     {
-                        new DirectiveDef { id = "GOV_APPROVAL", label = "PUBLIC APPROVAL", description = "Prioritize popular support." },
-                        new DirectiveDef { id = "GOV_STABILITY", label = "INTERNAL STABILITY", description = "Prioritize order and institutions." }
+                        new DirectiveDef
+                        {
+                            id = "GOV_APPROVAL", label = "PUBLIC APPROVAL",
+                            description = "Prioritize popular support.",
+                            progress = s => s.PlayerCountry.governmentApproval / 65f,
+                            completion = "THE GOVERNMENT IS POPULAR. Approval is comfortable; the ministry "
+                                       + "can be turned to something that is not."
+                        },
+                        new DirectiveDef
+                        {
+                            id = "GOV_STABILITY", label = "INTERNAL STABILITY",
+                            description = "Prioritize order and institutions.",
+                            progress = s => s.PlayerCountry.stability / 70f,
+                            completion = "THE STATE IS STEADY. Stability is restored and the institutions "
+                                       + "are holding on their own."
+                        }
                     };
             }
         }
@@ -155,6 +230,8 @@ namespace Brink.Core
 
             state.influence--;
             official.directiveId = directiveId;
+            // A new instruction can complete on its own terms.
+            official.directiveCompletionReported = false;
             ProgressionSystem.RecordInitiative(state);
             GameLog.Info("CABINET", $"{official.displayName} directed: {directiveId}.");
             return true;
@@ -255,6 +332,11 @@ namespace Brink.Core
                 amount *= GovernmentSystem.PriorityMultiplierFor(country.government.leader.priority, official.office);
 
                 ApplyPillarEffect(state, country, official.office, official.directiveId, amount);
+
+                // Has this instruction been carried out? Reported once, on the
+                // month it happens, so an order given is an order the operator
+                // hears back about.
+                if (country.isPlayer) CheckDirectiveCompletion(state, official);
 
                 // The military desk replaces losses as routine business, in every
                 // country. This is the *only* path by which a foreign government
@@ -402,6 +484,84 @@ namespace Brink.Core
         /// catalogue baseline, so a fleet that lost its carriers replaces
         /// carriers rather than buying more missiles.
         /// </summary>
+        /// <summary>
+        /// How ready the force is to deploy, 0..1 — the average of what each
+        /// branch would actually bring. Readiness alone would call an unsupplied
+        /// army ready, which is the thing the operator most needs not to believe.
+        /// </summary>
+        static float ReadinessProgress(CountryState country)
+        {
+            if (country == null) return 0f;
+            float total = 0f;
+            int branches = 0;
+            foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+            {
+                var force = country.military.Get(branch);
+                if (force.strength <= 0.01f) continue;   // a branch we do not field
+                total += System.Math.Min(force.readiness, force.supply) / 78f;
+                branches++;
+            }
+            return branches == 0 ? 1f : total / branches;
+        }
+
+        /// <summary>
+        /// How far along a directed official's instruction is, 0..1, or -1 when
+        /// the instruction has no finish line. Public so views can draw it.
+        /// </summary>
+        public static float DirectiveProgress(GameState state, Official official)
+        {
+            if (official == null || official.mode != ControlMode.Directed) return -1f;
+
+            var definition = FindDirective(official.office, official.directiveId);
+            if (definition?.progress == null) return -1f;
+
+            float value = definition.progress(state);
+            return value < 0f ? 0f : (value > 1f ? 1f : value);
+        }
+
+        /// <summary>The definition behind an id, or null.</summary>
+        public static DirectiveDef FindDirective(Pillar pillar, string directiveId)
+        {
+            if (string.IsNullOrEmpty(directiveId)) return null;
+            foreach (var definition in GetDirectives(pillar))
+                if (definition.id == directiveId) return definition;
+            return null;
+        }
+
+        /// <summary>
+        /// Tell the operator the month an instruction is met — once.
+        ///
+        /// FLASH is deliberately not used: this is good news and requires no
+        /// decision, and §28.2 reserves FLASH for a turn the operator cannot take
+        /// without answering. It is PRIORITY, which is what puts it on the
+        /// briefing where they will actually see it.
+        /// </summary>
+        static void CheckDirectiveCompletion(GameState state, Official official)
+        {
+            var definition = FindDirective(official.office, official.directiveId);
+            if (definition?.progress == null || string.IsNullOrEmpty(definition.completion))
+            {
+                official.directiveCompletionReported = false;
+                return;
+            }
+
+            if (definition.progress(state) < 1f)
+            {
+                // Fell back below the goal — so it can be reported again when it
+                // is next reached, rather than only ever once per save.
+                official.directiveCompletionReported = false;
+                return;
+            }
+
+            if (official.directiveCompletionReported) return;
+            official.directiveCompletionReported = true;
+
+            state.AddNotification(NotificationClass.Priority,
+                $"{definition.label} — COMPLETE",
+                $"{official.title} {official.displayName}: {definition.completion}",
+                state.playerCountryId, desk: ReportingSystem.DeskFor(official.office));
+        }
+
         static void ProcureShortfall(GameState state, CountryState country, float amount)
         {
             // PREPARE FOR WAR buys deliberately, against a looser definition of

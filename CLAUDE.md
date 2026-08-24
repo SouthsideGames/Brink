@@ -1192,6 +1192,87 @@ three had passed for a long time:
       from losses, peace terms and purges. Adding a drag to silence the detector
       would have left the detector still eager; this deserves its own measurement.
 
+- [x] **Wars have verdicts, countries have records** (GDD §20 amendment).
+      `Close` took an `objectiveAchieved` bool **from its caller** — settling
+      always passed true, conceding always passed false — so "did we win" was a
+      property of *how the war ended*, not what it achieved, and it was never
+      stored, only used to pick a notification headline. `DetermineVerdict` now
+      measures it, in this priority order:
+      1. **Conquest overrides the declared objective.** A war opened to dent a
+         rival's army that ends with every one of their locations in our hands is
+         a victory whatever the paperwork said — the case an objective-only test
+         gets wrong.
+      2. The declared objective (holding what was demanded of you wins a
+         defensive war).
+      3. The balance of the terms (`PeaceSystem.IsDemand` names which way a term
+         points, so pricing and verdict cannot disagree).
+      4. Relative damage — **casualties as a share of the force that took them**,
+         or the larger power loses every war it fights.
+      5. `Stalemate`, which is the default and a real answer.
+      `CountryState.warsWon/Lost/Drawn` is kept for **every** country. Only
+      escalations that reached fighting count. Zero is correct for old saves — a
+      world that predates this has no *recorded* history and inventing verdicts
+      nobody measured would be guessing — so no migration step.
+- [x] **STANDING — ranked by what we believe, not what is true.** A global power
+      table built from real values would hand over every rival's strength for free
+      and make collection pointless. Order comes from our own estimates, uncollected
+      states are unranked, and a state running deception sits in the wrong place on
+      purpose. Being wrong about who is second is a consequence of not having looked.
+- [x] **Directives report completion** — reported from play: *"I can tell the
+      military leader to prepare for war but I never know when we are ready."*
+      Every directive was an order issued into silence. `DirectiveDef.progress`
+      (0..1, or **-1 for a standing policy with no finish line**) drives a bar in
+      CABINET; crossing 1.0 fires a **PRIORITY** briefing item once. PRIORITY not
+      FLASH — §28.2 reserves FLASH for a turn that cannot be taken without
+      deciding, and this needs no decision.
+      PREPARE FOR WAR measures the shortfall **through the same call the ordering
+      uses**, so bar and buying cannot disagree. RAISE READINESS uses
+      `min(readiness, supply)` — readiness alone would call an unsupplied army
+      ready. The flag resets if the goal is lost again *and* when the directive
+      changes, so an instruction can complete more than once per save.
+      AUSTERITY / DRAW DOWN / PRESSURE RIVALS deliberately have no bar and say so.
+
+- [x] **The END MONTH overflow — five defects, one report.** "Screens fit, then I
+      hit END MONTH and words are off screen."
+      - **`AsciiChart.LineChart` was always ten columns wider than asked.** Each
+        row prepends a `{value,8:F1} │` gutter and it plotted `width` points on top
+        of it. `marketHistory` gains an entry per resolved month, so the chart grew
+        **one column every END MONTH** — fine for three years, then creeping off a
+        phone one character at a time. Figures opt out of `ApplyTextPolicy` by
+        design, so nothing downstream catches it. `GutterColumns` names the cost;
+        `TheMarketChart_NeverExceedsTheColumnsItWasGiven` guards it, the equivalent
+        of the map guards that already existed.
+      - **The briefing wrapped to the wrong width.** `.crisis-panel` is `width: 80%`
+        and a *sibling* of the content host, but the overlay was wrapped to
+        `TerminalMetrics.Columns`. New `TerminalMetrics.OverlayColumns` derives it;
+        keep the 0.8 in step with the USS.
+      - **`Line()` added one CSS class.** A briefing line built as `sig-rival`
+        failed `IsReadout` and escaped the wrapper, while a plain line carried
+        `white-space: pre` and could not soft-wrap — *two different failure modes on
+        adjacent lines*, which is why **some** words broke.
+      - **END MONTH never refreshed the active view.** `EndMonth` does not raise
+        `StateReplaced` and the log handler only touches the status bar, so the
+        screen behind the briefing kept last month's numbers until a nav tap.
+      - BALANCE OF FORCES was built `name + 49` fixed characters — ~61 columns on a
+        49-column phone, in an unwrapped figure. **Never hardcode a column count in
+        a view**; it is now two lines per state derived from `W`.
+- [x] **Tutorial was unfinishable on a phone.** `.tutorial-panel` was
+      `flex-shrink: 0` with no cap, so a long step pushed ACKNOWLEDGED and DISMISS
+      below the fold with nothing scrollable — the tutorial could be started, not
+      finished, and not dismissed. Only the *prose* scrolls now, capped against
+      `TerminalMetrics.PanelHeight`; title and buttons are pinned outside it.
+      Scrolling the whole panel would have left the buttons off-screen until the
+      operator discovered a box with no scrollbar scrolls.
+      Also: the panel showed during the **assessment** as an empty green box —
+      `RefreshAll` returns early while awaiting assessment, so `Refresh` (the only
+      thing that hides it) never ran. Hidden explicitly on that path now.
+- [x] **"NO ASSESSMENT" was three situations wearing one label.** Reported from
+      play as a bug: an operator tasked a network against Russia, opened MILITARY,
+      and read NO ASSESSMENT. Collection covers *all* domains (focus 1.0, others
+      0.45) but **only runs at END MONTH**, so a network bought this month reports
+      next month. Now `UNTASKED` / `COLLECTING` / `BURNED` with a legend — an
+      absence should say what would change it, like the after-action reports.
+
 Recommended next:
 - **ECONOMY is now the high outlier at +0.92 over passive** (next is MILITARY at
   +0.62). Worth a look, but check it is not simply that 344 decisions a decade is

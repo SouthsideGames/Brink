@@ -274,6 +274,24 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>An operation against a named foreign official (GDD §14 amendment).</summary>
+        public bool RunAgentOperation(string targetCountryId, Data.Official official, AgentAction action)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = AgentSystem.Run(State, Turns, targetCountryId, official, action);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
+        /// <summary>Begin an industrial programme (GDD §20 amendment).</summary>
+        public bool BeginIndustrialProgramme(EconomicSector sector, IndustrialScale scale)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            bool ok = IndustrialSystem.Begin(State, Turns, sector, scale);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
         public bool RunCovertOperation(string targetId, CovertOperation operation, float deceptionBias = 1f,
             Data.IntelDomain deceptionDomain = Data.IntelDomain.Military)
         {

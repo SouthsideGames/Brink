@@ -15,6 +15,9 @@ namespace Brink.UI.Views
         public override string Id => "GOVERNMENT";
         public override string ShortCode => "GOV";
 
+        /// <summary>Orders here are Government pillar orders — see TerminalView.GateOnAuthority.</summary>
+        protected override Pillar? CommandPillar => Pillar.Government;
+
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 

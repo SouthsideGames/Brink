@@ -27,6 +27,7 @@ namespace Brink.UI
         Label crisisTitle;
         Label crisisBody;
         VisualElement crisisOptions;
+        VisualElement scanlines;
 
         /// <summary>Off-screen label used only to measure the monospace advance width.</summary>
         Label measureProbe;
@@ -97,6 +98,7 @@ namespace Brink.UI
 
             contentHost.Add(settingsPanel.Root);
 
+            BuildScanlines();
             BuildViews();
 
             root.RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
@@ -623,8 +625,51 @@ namespace Brink.UI
             foreach (var themeClass in DisplaySettings.AllThemeClasses)
                 root.EnableInClassList(themeClass, themeClass == DisplaySettings.ThemeClass);
 
+            if (scanlines != null)
+                scanlines.style.display = DisplaySettings.Atmosphere
+                    ? DisplayStyle.Flex : DisplayStyle.None;
+
             ApplyTextPolicy(root, DisplaySettings.ParagraphSpacing, TerminalMetrics.Columns);
             ApplyPanelScale(force: true);
+        }
+
+        /// <summary>
+        /// The scanline field (GDD §28 presentation).
+        ///
+        /// **Inserted at index 0, so it sits behind everything.** Contrast in this
+        /// project is a property of the text colours against the panel background,
+        /// and every AAA guarantee would be void if an overlay were drawn *over*
+        /// the glyphs. Darkening rows behind the content leaves the foreground
+        /// untouched and only deepens the background, which is the safe direction
+        /// — a lightening overlay would eat the headroom on `terminal-text-dim`,
+        /// where the margin is thinnest.
+        ///
+        /// `PickingMode.Ignore` is load-bearing rather than tidy: this covers the
+        /// whole shell, and without it every tap on the terminal would land here
+        /// instead.
+        ///
+        /// Built once at a fixed count rather than rebuilt per resize. 220 rows of
+        /// 2px line plus 2px gap covers ~880pt, taller than any handset in
+        /// landscape, and the overlay clips what it does not need. Rebuilding this
+        /// on every `GeometryChangedEvent` would mean hundreds of element
+        /// allocations during a rotation.
+        /// </summary>
+        void BuildScanlines()
+        {
+            scanlines = new VisualElement();
+            scanlines.AddToClassList("scanline-overlay");
+            scanlines.pickingMode = PickingMode.Ignore;
+            scanlines.style.overflow = Overflow.Hidden;
+
+            for (int i = 0; i < 220; i++)
+            {
+                var line = new VisualElement();
+                line.AddToClassList(i % 2 == 0 ? "scanline-row" : "scanline-gap");
+                line.pickingMode = PickingMode.Ignore;
+                scanlines.Add(line);
+            }
+
+            root.Insert(0, scanlines);
         }
 
         /// <summary>

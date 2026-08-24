@@ -115,8 +115,19 @@ namespace Brink.Tests
 
             Assert.IsFalse(readout.Contains($"{actual:F0}") && !readout.Contains("–"),
                 $"The readout printed the true count: {readout}");
-            Assert.IsTrue(readout.Contains("–") || readout.Contains("NO ASSESSMENT"),
-                $"A foreign count must be a band or nothing. Got: {readout}");
+
+            // **A band, or no figure at all** — stated as the rule rather than as
+            // a list of approved words. This used to accept `"–"` or the literal
+            // string "NO ASSESSMENT", so splitting that label into UNTASKED /
+            // COLLECTING / BURNED failed a test whose actual claim had not
+            // changed. A whitelist of strings is not an invariant; "never emit a
+            // bare number for a foreign force" is.
+            bool isBand = readout.Contains("–");
+            bool hasNoFigure = true;
+            foreach (char c in readout) if (char.IsDigit(c)) { hasNoFigure = false; break; }
+
+            Assert.IsTrue(isBand || hasNoFigure,
+                $"A foreign count must be a band or carry no number at all. Got: {readout}");
         }
 
         [Test]

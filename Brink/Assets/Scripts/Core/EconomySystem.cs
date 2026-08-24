@@ -174,6 +174,30 @@ namespace Brink.Core
             // without retuning the ordinary one.
             float distress = Math.Max(0f, 55f - eco.marketIndex) / 55f;
 
+            // ---- a long depression costs the country its capability ----
+            //
+            // **The economy pillar had no downward path in ordinary play.**
+            // Recession, sanctions, embargo, debt crisis and collapsing industrial
+            // capacity all moved `confidence`, `growthRate` and `marketIndex` and
+            // *none of them touched `pillars.economy`* — so a decade of depression
+            // left national economic capability exactly where it started, and the
+            // only recurring way it could fall was a minister having a bad month.
+            // Compare the military pillar, which erodes from losses, peace terms
+            // and purges.
+            //
+            // Consequences: economic warfare could not reach the thing the annual
+            // evaluation actually grades, and the telemetry ratchet detector was
+            // right to call the pillar one-way — it simply had no magnitude gate
+            // to say so proportionately.
+            //
+            // Driven by the same `distress` term as the crisis regime, so it is
+            // **zero by construction in normal play** and cannot quietly retune a
+            // healthy economy. Skills and capacity are lost slowly: at full
+            // collapse this is about 1.3 points a year, so a bad decade costs real
+            // ground without making recovery impossible.
+            if (distress > 0.01f)
+                country.pillars.economy = Clamp(country.pillars.economy - distress * 0.11f, 0f, 100f);
+
             // ---- inflation ----
             // Coercion is a supply shock: scarcity raises prices even as demand
             // cools, so a sanctioned economy stagflates rather than disinflates.

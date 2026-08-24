@@ -178,7 +178,8 @@ namespace Brink.Core
                     targetViewId = "INTELLIGENCE",
                     body =
                         "You will notice foreign strength is shown as a range with a confidence " +
-                        "grade, or as NO ASSESSMENT. That is not a placeholder. You never see " +
+                        "grade, or as UNTASKED when nothing is collecting on them. That is not a " +
+                        "placeholder. You never see " +
                         "another country's true figures — only what your services have managed to " +
                         "learn.\n\n" +
                         "Estimates can be wrong: through poor access, through their " +
