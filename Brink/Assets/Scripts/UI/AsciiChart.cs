@@ -196,13 +196,34 @@ namespace Brink.UI
         /// Multi-row ASCII line chart for a series (GDD §20.1 market index).
         /// Newest value last; returns `height` rows plus a scale legend.
         /// </summary>
+        /// <summary>
+        /// Columns a <see cref="LineChart"/> row spends on its scale gutter:
+        /// eight for the value, one space, one rule. Named because the plot width
+        /// and the gutter drawing have to agree, and they silently did not.
+        /// </summary>
+        public const int GutterColumns = 10;
+
         public static string LineChart(float[] values, int width, int height)
         {
             if (values == null || values.Length == 0 || width <= 0 || height <= 0)
                 return string.Empty;
 
             // Sample the tail of the series to fit the available width.
-            int count = Math.Min(width, values.Length);
+            //
+            // **`width` is the width of the whole figure, gutter included.** Each
+            // row is `"{value,8:F1} │"` — eight columns of scale, a space and a
+            // rule — so the plot area is `width - GutterColumns`, and this used to
+            // plot `width` points on top of that: every chart came out ten columns
+            // wider than it was told to be.
+            //
+            // It was invisible until it wasn't. `marketHistory` gains an entry per
+            // resolved month, so the line grew one column every END MONTH — fitting
+            // fine for the first three years, then creeping off the right edge of a
+            // phone one character at a time. Figures opt out of `ApplyTextPolicy`
+            // by design (wrapping would corrupt the vertical strokes), so nothing
+            // downstream catches it.
+            int plotWidth = Math.Max(1, width - GutterColumns);
+            int count = Math.Min(plotWidth, values.Length);
             var sampled = new float[count];
             for (int i = 0; i < count; i++)
                 sampled[i] = values[values.Length - count + i];

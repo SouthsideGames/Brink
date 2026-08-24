@@ -67,7 +67,17 @@ namespace Brink.UI
             if (endMonth != null)
                 endMonth.clicked += () =>
                 {
-                    if (GameController.Instance.EndMonth()) ShowMonthlyBriefing();
+                    if (!GameController.Instance.EndMonth()) return;
+
+                    // **Refresh before showing the briefing.** `EndMonth` does not
+                    // raise `StateReplaced`, and the log handler only touches the
+                    // status bar and the crisis overlay — so nothing called
+                    // `activeView.Refresh()` on this path. The screen behind the
+                    // briefing kept last month's numbers until the operator
+                    // happened to tap a nav button, which reads as the game not
+                    // having resolved the turn.
+                    RefreshAll();
+                    ShowMonthlyBriefing();
                 };
 
             // Display preferences ship in every build — unlike the debug console.
@@ -354,7 +364,16 @@ namespace Brink.UI
             void Line(string text, string ussClass = "terminal-text")
             {
                 var label = new Label(text);
-                label.AddToClassList(ussClass);
+
+                // **Always `terminal-text` as well as the signal class.** This
+                // added only the one class, so a line built as `sig-rival` failed
+                // `IsReadout` and escaped `ApplyTextPolicy` entirely — while a
+                // plain line carried `white-space: pre` and could not soft-wrap
+                // either. That is why *some* words ran off the edge and others did
+                // not: two different failure modes on adjacent lines of the same
+                // briefing. Every other builder in the shell adds both.
+                label.AddToClassList("terminal-text");
+                if (ussClass != "terminal-text") label.AddToClassList(ussClass);
                 body.Add(label);
             }
 
@@ -417,7 +436,11 @@ namespace Brink.UI
 
             // Built outside any shell refresh, so it wraps itself. Every wire
             // line here names a country and runs long.
-            ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.Columns);
+            //
+            // **OverlayColumns, not Columns.** This panel is 80% of the content
+            // width and is not a child of the content host, so wrapping to the
+            // full width ran a fifth of every long line off the screen.
+            ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns);
 
             overlay.style.display = DisplayStyle.Flex;
         }

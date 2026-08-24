@@ -44,6 +44,7 @@ namespace Brink.UI.Views
             AddAuthorityBadge(state, Pillar.Military);
 
             BuildForceStructure(state, player);
+            BuildStanding(state, player);
             BuildHomeExposure(state, player);
             BuildStrategicMap(state);
 
@@ -72,6 +73,66 @@ namespace Brink.UI.Views
                 AddText("sig-hostile").text =
                     "\n THE FORCE IS COMMITTED TO ITS LIMIT. Settle or wind down a front " +
                     "before opening another.";
+        }
+
+        /// <summary>
+        /// Where we stand against everyone else, and what our wars came to
+        /// (GDD §20 amendment).
+        ///
+        /// **Ranked by what we believe, not by what is true.** A global power
+        /// table built from real values would hand the operator every rival's
+        /// exact strength for free and make collecting on them pointless — the
+        /// intelligence pillar rests on views never printing a foreign true
+        /// value. So the order is our *estimate's* order: a state we have never
+        /// tasked anything against is unranked, and a rival running a deception
+        /// programme sits in the wrong place on purpose.
+        ///
+        /// That is a better table than an accurate one. Being wrong about who is
+        /// second is a consequence of not having looked.
+        /// </summary>
+        void BuildStanding(GameState state, CountryState player)
+        {
+            AddText("terminal-text-bright").text =
+                AsciiChart.BoxHeader("STANDING — OUR ASSESSMENT", W);
+
+            // Our own record is ours to know exactly.
+            AddText("terminal-text").text =
+                $" OUR RECORD  {player.WarRecordText}  (won–lost–drawn)"
+                + $"   FORCE {player.military.TotalPower * MilitarySystem.PowerScale:F0}";
+
+            var ranked = new System.Collections.Generic.List<CountryState>();
+            var unranked = new System.Collections.Generic.List<CountryState>();
+
+            foreach (var country in state.countries)
+            {
+                if (country.isPlayer) continue;
+                if (IntelReadout.WhyNoAssessment(state, country.id) == null) ranked.Add(country);
+                else unranked.Add(country);
+            }
+
+            // Sorted by the estimate, so the order carries our error too.
+            ranked.Sort((a, b) => IntelReadout.EstimatedMilitary(state, b.id)
+                .CompareTo(IntelReadout.EstimatedMilitary(state, a.id)));
+
+            var sb = new StringBuilder();
+            int nameWidth = AsciiChart.NameWidth(W, 0.34f);
+
+            int place = 1;
+            foreach (var country in ranked)
+                sb.AppendLine($" {place++,2}  {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
+                              + $" {AsciiChart.Cell(IntelReadout.ForDomain(state, country.id, IntelDomain.Military), 28)}"
+                              + $" {country.WarRecordText}");
+
+            foreach (var country in unranked)
+                sb.AppendLine($"  —  {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
+                              + $" {AsciiChart.Cell(IntelReadout.WhyNoAssessment(state, country.id), 28)}"
+                              + $" {country.WarRecordText}");
+
+            AddFigure().text = sb.ToString();
+
+            AddText("terminal-text-dim").text =
+                " Ranked by our own reporting. A state we are not collecting against cannot be "
+                + "placed, and a state running deception will not be where it looks.";
         }
 
         /// <summary>
@@ -793,19 +854,25 @@ namespace Brink.UI.Views
             var player = state.PlayerCountry;
             AddText("terminal-text-bright").text = AsciiChart.BoxHeader("BALANCE OF FORCES", W);
 
+            // **Two lines per state, widths derived from the measured grid.**
+            //
+            // The first version was a single row of `name + 49` fixed characters —
+            // about 61 columns against a phone's ~49, unwrapped because it is an
+            // `AddFigure` label. It was a fresh instance of the rule this file is
+            // supposed to enforce: never hardcode a column count in a view.
             var sb = new StringBuilder();
-            int nameWidth = AsciiChart.NameWidth(W, 0.26f);
-            sb.AppendLine($" {AsciiChart.Cell("STATE", nameWidth)} GROUND        AIR           NAVAL         REACH");
+            int nameWidth = AsciiChart.NameWidth(W, 0.42f);
+            int bandWidth = System.Math.Max(9, (W - 10) / 3 - 3);
 
             foreach (var country in state.countries)
             {
                 if (country.isPlayer) continue;
 
                 sb.AppendLine($" {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
-                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Ground), 13)}"
-                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Air), 13)}"
-                              + $" {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Naval), 13)}"
-                              + $" {ReachTo(state, country)}");
+                              + $"  REACH {ReachTo(state, country)}");
+                sb.AppendLine($"   G {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Ground), bandWidth)}"
+                              + $" A {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Air), bandWidth)}"
+                              + $" N {AsciiChart.Cell(IntelReadout.ForeignBranchStrength(state, country.id, ForceBranch.Naval), bandWidth)}");
             }
 
             var figure = AddFigure("terminal-text");
@@ -822,6 +889,7 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text =
                 " REACH is how much of our weight would arrive there. Bands widen with poor "
                 + "collection — buy intelligence before buying a war.";
+            AddText("terminal-text-dim").text = " " + IntelReadout.AssessmentLegend;
         }
 
         /// <summary>How much of our force would actually reach this country's ground.</summary>

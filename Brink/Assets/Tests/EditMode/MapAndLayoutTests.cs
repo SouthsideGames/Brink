@@ -458,6 +458,49 @@ namespace Brink.Tests
             }
         }
 
+        /// <summary>
+        /// The market chart has to honour the width it is handed, like the maps
+        /// beside it.
+        ///
+        /// **This is the guard that was missing when it mattered.** `LineChart`
+        /// plotted `width` points *and* prepended a ten-column scale gutter, so
+        /// every chart came out ten columns too wide — and because `marketHistory`
+        /// gains an entry per resolved month, the line grew one column with every
+        /// END MONTH. It fit for the first three years of a save and then crept off
+        /// the right edge of a phone one character at a time, which is precisely
+        /// the "it looked fine, then I ended the month" report from device
+        /// testing. Figures opt out of the shell's wrapper by design, so nothing
+        /// downstream would ever have caught it.
+        ///
+        /// The series is deliberately longer than every width tested: the bug only
+        /// appears once there is more history than the panel can hold.
+        /// </summary>
+        [Test]
+        public void TheMarketChart_NeverExceedsTheColumnsItWasGiven()
+        {
+            var series = new float[EconomyState.MaxHistory];
+            for (int i = 0; i < series.Length; i++)
+                series[i] = 100f + (i % 17) * 3.5f - (i % 5) * 2f;
+
+            foreach (int columns in new[] { 34, 40, 48, 64, 80, 100 })
+            {
+                string chart = AsciiChart.LineChart(series, columns, 8);
+                Assert.LessOrEqual(WidestLine(chart), columns,
+                    $"The market chart overflowed a {columns}-column panel by "
+                    + $"{WidestLine(chart) - columns} characters. A figure is never wrapped, "
+                    + "so whatever it draws is what reaches the screen.");
+            }
+        }
+
+        [Test]
+        public void TheMarketChart_StillDrawsWhenTheHistoryIsShort()
+        {
+            // The width fix must not turn a young save's chart into nothing.
+            string chart = AsciiChart.LineChart(new[] { 100f, 104f, 98f, 111f }, 48, 6);
+            Assert.IsNotEmpty(chart);
+            Assert.LessOrEqual(WidestLine(chart), 48);
+        }
+
         [Test]
         public void TheWorldMap_HonoursItsRowBudget()
         {

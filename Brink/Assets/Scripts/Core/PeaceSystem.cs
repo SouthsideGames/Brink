@@ -16,6 +16,42 @@ namespace Brink.Core
     public static class PeaceSystem
     {
         /// <summary>
+        /// Is this term something the proposer *extracted*, or something they
+        /// gave up?
+        ///
+        /// The enum is already ordered demands-then-concessions, but that is a
+        /// convention a reader has to notice rather than a rule the code states.
+        /// Naming it here means the war-verdict logic and the pricing logic agree
+        /// about which way a term points, instead of each deciding for itself.
+        ///
+        /// Exhaustive by design — a term added without a row here will not
+        /// compile past the switch, which is the same guard `CrisisEffects` uses.
+        /// </summary>
+        public static bool IsDemand(PeaceTerm term)
+        {
+            switch (term)
+            {
+                case PeaceTerm.TerritorialCession:
+                case PeaceTerm.Reparations:
+                case PeaceTerm.Demilitarization:
+                case PeaceTerm.ResourceAccess:
+                case PeaceTerm.Recognition:
+                case PeaceTerm.TreatyRevision:
+                case PeaceTerm.PoliticalConcessions:
+                    return true;
+
+                case PeaceTerm.Withdrawal:
+                case PeaceTerm.SanctionsRelief:
+                case PeaceTerm.PrisonerExchange:
+                case PeaceTerm.SecurityGuarantee:
+                    return false;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// What a term costs the side being asked to accept it. Negative values
         /// are concessions — things that make a settlement *more* attractive.
         /// </summary>

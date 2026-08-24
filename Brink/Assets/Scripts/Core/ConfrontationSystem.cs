@@ -820,11 +820,186 @@ namespace Brink.Core
             return true;
         }
 
+        /// <summary>
+        /// Who won, and why — measured from the world at the moment the war ends.
+        ///
+        /// The rules are checked in priority order, and the order *is* the design:
+        ///
+        /// 1. **Conquest overrides the stated objective.** A war opened to reduce
+        ///    a rival's army that finishes with every one of their locations in
+        ///    our hands is a victory, whatever the paperwork said. This is the
+        ///    case an objective-only test gets wrong.
+        /// 2. **The declared objective.** What the operator said they wanted
+        ///    before anyone fired, which is the honest test for most wars.
+        /// 3. **The balance of the terms.** A settlement where one side gave up
+        ///    materially more than it got is a defeat even if nothing was taken.
+        /// 4. **The balance of damage.** When nothing else separates them, the
+        ///    side that was hurt far worse relative to its size lost.
+        /// 5. **Stalemate.** The default, and a real answer.
+        ///
+        /// Casualties are compared *relative to the force that took them*, or a
+        /// large power would be judged the loser of every war it fought simply for
+        /// having more people to lose.
+        /// </summary>
+        public static WarVerdict DetermineVerdict(GameState state, Confrontation confrontation,
+            out string reason)
+        {
+            var initiator = state.FindCountry(confrontation.initiatorId);
+            var defender = state.FindCountry(confrontation.defenderId);
+
+            // ---- 1. total conquest overrides everything ----
+            if (HoldsAllGroundOf(state, confrontation.initiatorId, confrontation.defenderId))
+            {
+                reason = $"Every location {defender?.displayName} held is in our hands.";
+                return WarVerdict.InitiatorVictory;
+            }
+            if (HoldsAllGroundOf(state, confrontation.defenderId, confrontation.initiatorId))
+            {
+                reason = $"{defender?.displayName} holds every location we had.";
+                return WarVerdict.DefenderVictory;
+            }
+
+            // ---- 2. the objective that was declared ----
+            if (confrontation.objective == ConfrontationObjective.TerritorialConcession
+                && !string.IsNullOrEmpty(confrontation.objectiveLocationId))
+            {
+                var prize = state.FindLocation(confrontation.objectiveLocationId);
+                if (prize != null)
+                {
+                    if (prize.ownerId == confrontation.initiatorId)
+                    {
+                        reason = $"{prize.displayName} was the objective, and we hold it.";
+                        return WarVerdict.InitiatorVictory;
+                    }
+                    // Holding what was demanded of you is winning a defensive war.
+                    if (prize.ownerId == confrontation.defenderId)
+                    {
+                        reason = $"{prize.displayName} was demanded of us and we still hold it.";
+                        return WarVerdict.DefenderVictory;
+                    }
+                }
+            }
+
+            // ---- 3. what the terms cost each side ----
+            float termBalance = SettlementBalanceFor(state, confrontation);
+            if (Math.Abs(termBalance) >= 2f)
+            {
+                reason = termBalance > 0f
+                    ? "The settlement took more from them than it cost us."
+                    : "The settlement cost us more than it took from them.";
+                return termBalance > 0f ? WarVerdict.InitiatorVictory : WarVerdict.DefenderVictory;
+            }
+
+            // ---- 4. who was hurt worse, relative to their size ----
+            float initiatorHurt = RelativeHarm(initiator, confrontation.initiatorCasualties,
+                confrontation.initiatorWarExhaustion);
+            float defenderHurt = RelativeHarm(defender, confrontation.defenderCasualties,
+                confrontation.defenderWarExhaustion);
+
+            if (Math.Abs(initiatorHurt - defenderHurt) >= 0.35f)
+            {
+                bool weFaredBetter = initiatorHurt < defenderHurt;
+                reason = weFaredBetter
+                    ? "Neither objective was met, but they were hurt far worse than we were."
+                    : "Neither objective was met, and we were hurt far worse than they were.";
+                return weFaredBetter ? WarVerdict.InitiatorVictory : WarVerdict.DefenderVictory;
+            }
+
+            reason = "Nobody achieved what they set out to. The war settled nothing.";
+            return WarVerdict.Stalemate;
+        }
+
+        /// <summary>
+        /// Post the result to both countries' records.
+        ///
+        /// Only escalations that actually became fighting count. A standoff that
+        /// stayed at Tension and was talked down is not a war anybody won, and
+        /// counting it would make the record a tally of diplomatic incidents.
+        /// </summary>
+        static void RecordWarResult(GameState state, Confrontation confrontation)
+        {
+            if (confrontation.escalation < EscalationState.LimitedConflict) return;
+
+            var initiator = state.FindCountry(confrontation.initiatorId);
+            var defender = state.FindCountry(confrontation.defenderId);
+
+            switch (confrontation.verdict)
+            {
+                case WarVerdict.InitiatorVictory:
+                    if (initiator != null) initiator.warsWon++;
+                    if (defender != null) defender.warsLost++;
+                    break;
+                case WarVerdict.DefenderVictory:
+                    if (defender != null) defender.warsWon++;
+                    if (initiator != null) initiator.warsLost++;
+                    break;
+                default:
+                    if (initiator != null) initiator.warsDrawn++;
+                    if (defender != null) defender.warsDrawn++;
+                    break;
+            }
+        }
+
+        /// <summary>Does <paramref name="holderId"/> control every location that is originally <paramref name="ownerId"/>'s?</summary>
+        static bool HoldsAllGroundOf(GameState state, string holderId, string ownerId)
+        {
+            bool any = false;
+            foreach (var location in state.locations)
+            {
+                if (location.originalOwnerId != ownerId) continue;
+                any = true;
+                if (location.ownerId != holderId) return false;
+            }
+            return any;
+        }
+
+        /// <summary>
+        /// How much of what was agreed fell on each side. Positive favours the
+        /// initiator. Zero when the war ended without terms.
+        /// </summary>
+        static float SettlementBalanceFor(GameState state, Confrontation confrontation)
+        {
+            float balance = 0f;
+            foreach (var settlement in state.settlements)
+            {
+                if (settlement.confrontationId != confrontation.id) continue;
+
+                // A term is either something the proposer extracted or something
+                // they gave up — the enum already draws that line, so the balance
+                // is just the difference, oriented to the initiator.
+                float forProposer = 0f;
+                foreach (var term in settlement.terms)
+                    forProposer += PeaceSystem.IsDemand(term) ? 1f : -1f;
+
+                balance += settlement.proposerId == confrontation.initiatorId
+                    ? forProposer
+                    : -forProposer;
+            }
+            return balance;
+        }
+
+        /// <summary>
+        /// Damage taken as a share of what the country could absorb. Relative,
+        /// because an absolute casualty comparison declares the larger power the
+        /// loser of every war it fights.
+        /// </summary>
+        static float RelativeHarm(CountryState country, float casualties, float exhaustion)
+        {
+            if (country == null) return 0f;
+            float force = Math.Max(1f, country.military.TotalPower * MilitarySystem.PowerScale);
+            return casualties / force + exhaustion / 100f;
+        }
+
         static void Close(GameState state, Confrontation confrontation, string proposerId,
             bool objectiveAchieved, string summary)
         {
             confrontation.resolved = true;
             confrontation.outcomeSummary = summary;
+
+            // Judged from the world, not from which path closed the war.
+            confrontation.verdict = DetermineVerdict(state, confrontation, out string reason);
+            confrontation.verdictReason = reason;
+            RecordWarResult(state, confrontation);
 
             // Both parties stand down.
             foreach (var id in new[] { confrontation.initiatorId, confrontation.defenderId })

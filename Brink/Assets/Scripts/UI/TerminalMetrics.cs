@@ -46,6 +46,43 @@ namespace Brink.UI
         /// </summary>
         public static float PanelHeight { get; private set; } = 640f;
 
+        /// <summary>Measured width of one character, in points.</summary>
+        public static float CharWidth { get; private set; } = 8f;
+
+        /// <summary>Measured width of the content area, in points.</summary>
+        public static float ContentWidth { get; private set; } = 512f;
+
+        /// <summary>
+        /// Columns available *inside a modal overlay* — the monthly briefing and
+        /// the crisis panel.
+        ///
+        /// **These are not `Columns`.** `.crisis-panel` is `width: 80%` with 14px
+        /// of padding and a 2px border on each side, and it is a sibling of the
+        /// content host rather than a child, so a line wrapped to the full content
+        /// width overflows it by roughly a fifth. That was the END MONTH bug: the
+        /// briefing is the one thing that appears on that path, its wire lines
+        /// name countries and run long, and a quiet month's lines happened to fit
+        /// while a busy month's did not — which is exactly the reported
+        /// "sometimes it looks fine".
+        ///
+        /// Derived rather than guessed, so it stays correct if the panel's width
+        /// rule changes: keep the 0.8 in step with `.crisis-panel` in the USS.
+        /// </summary>
+        public static int OverlayColumns
+        {
+            get
+            {
+                if (CharWidth <= 0.01f) return MinColumns;
+
+                const float PanelWidthFraction = 0.8f;   // must match .crisis-panel
+                const float PaddingAndBorderPt = 32f;    // 14px padding + 2px border, both sides
+
+                float usable = ContentWidth * PanelWidthFraction - PaddingAndBorderPt;
+                int columns = (int)Math.Floor(usable / CharWidth) - 1;
+                return Math.Max(MinColumns, Math.Min(MaxColumns, columns));
+            }
+        }
+
         public static SizeClass Size { get; private set; } = SizeClass.Compact;
 
         /// <summary>Raised when the usable grid changes, so open views can rebuild.</summary>
@@ -68,6 +105,8 @@ namespace Brink.UI
 
             bool shortScreen = heightPt > 0f && heightPt < ShortScreenHeight;
             if (heightPt > 0f) PanelHeight = heightPt;
+            if (charWidthPt > 0.01f) CharWidth = charWidthPt;
+            if (contentWidthPt > 0f) ContentWidth = contentWidthPt;
 
             if (columns == Columns && shortScreen == ShortScreen && size == Size) return false;
 

@@ -26,6 +26,20 @@ namespace Brink.Data
     }
 
     /// <summary>The concession actually being sought (GDD §18.2).</summary>
+    /// <summary>
+    /// How a confrontation was judged when it closed (GDD §20 amendment).
+    ///
+    /// Append-only: persisted by ordinal, and `Stalemate` is first so an old save
+    /// with no verdict recorded lands on "undecided" rather than on somebody
+    /// having won.
+    /// </summary>
+    public enum WarVerdict
+    {
+        Stalemate = 0,
+        InitiatorVictory = 1,
+        DefenderVictory = 2
+    }
+
     public enum ConfrontationObjective
     {
         TerritorialConcession, // seize/keep a strategic location
@@ -158,6 +172,26 @@ namespace Brink.Data
 
         public bool resolved;
         public string outcomeSummary = "";
+
+        /// <summary>
+        /// Who won, decided by measuring the world rather than by which code path
+        /// happened to close the war (GDD §20 amendment).
+        ///
+        /// `Close` used to take an `objectiveAchieved` bool from its caller —
+        /// `CloseWithSettlement` always passed true and conceding always passed
+        /// false — so "did we win" was a property of *how the war ended*, not of
+        /// *what it achieved*. It was never stored either, only used to pick a
+        /// notification headline, so nothing could ever look back and say what a
+        /// decade of fighting had come to.
+        ///
+        /// Stalemate is deliberately a real outcome and the default. Most wars
+        /// end without a victor, and a scale with no draw on it turns every
+        /// inconclusive peace into a defeat for somebody.
+        /// </summary>
+        public WarVerdict verdict = WarVerdict.Stalemate;
+
+        /// <summary>Why it was judged that way, in the operator's language.</summary>
+        public string verdictReason = "";
 
         /// <summary>Set once defense commitments have been called upon (GDD §15.2).</summary>
         public bool obligationsInvoked;

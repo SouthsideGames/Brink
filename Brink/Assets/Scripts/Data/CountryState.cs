@@ -72,6 +72,26 @@ namespace Brink.Data
         public float warExhaustion;
 
         /// <summary>
+        /// What this country's wars came to (GDD §20 amendment).
+        ///
+        /// Zero is genuinely correct for a save that predates this — such a world
+        /// has no *recorded* history, and inventing one from the archived
+        /// confrontations would be guessing at verdicts nobody measured. The
+        /// record starts now, which is why this needs no migration step.
+        ///
+        /// Kept per country rather than only for the player: a rival with four
+        /// wars won is a different proposition from one that has lost three, and
+        /// that is exactly the sort of thing an operator should be able to learn
+        /// about the world.
+        /// </summary>
+        public int warsWon;
+        public int warsLost;
+        public int warsDrawn;
+
+        /// <summary>Plain record, e.g. "3–1–2". Reads the same for us and for them.</summary>
+        public string WarRecordText => $"{warsWon}–{warsLost}–{warsDrawn}";
+
+        /// <summary>
         /// 0..100 how well the public actually lives (GDD §12).
         ///
         /// The missing link between the economy and the politics. Approval was

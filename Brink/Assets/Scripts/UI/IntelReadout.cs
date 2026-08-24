@@ -57,14 +57,14 @@ namespace Brink.UI
         /// </summary>
         public static string ForeignAssetCount(GameState state, string targetId, AssetKind kind)
         {
+            string absence = WhyNoAssessment(state, targetId);
+            if (absence != null) return absence;
+
             var estimate = IntelligenceSystem.GetEstimate(
                 state, state.playerCountryId, targetId, IntelDomain.Military);
-            if (estimate == null || estimate.confidence == ConfidenceGrade.None)
-                return "NO ASSESSMENT";
-
             var target = state.FindCountry(targetId);
             var profile = AssetCatalog.For(kind);
-            if (target == null || profile == null) return "NO ASSESSMENT";
+            if (estimate == null || target == null || profile == null) return "UNTASKED";
 
             float actual = target.military.Get(profile.branch).inventory.CountOf(kind);
 
@@ -88,6 +88,66 @@ namespace Brink.UI
         }
 
         /// <summary>
+        /// Why we have no figure for this state — in words the operator can act on.
+        ///
+        /// Returns null when an assessment does exist.
+        ///
+        /// **"NO ASSESSMENT" was three different situations wearing one label.**
+        /// Reported from play: an operator established a network against a rival,
+        /// opened MILITARY, and read NO ASSESSMENT — which looks exactly like a
+        /// broken feature. It was not: collection runs on END MONTH, so a network
+        /// bought this month reports next month. Saying so is the difference
+        /// between "this is broken" and "this is coming".
+        ///
+        /// The same three-way distinction the after-action reports draw: an
+        /// absence should say what would change it.
+        /// </summary>
+        public static string WhyNoAssessment(GameState state, string targetId)
+        {
+            var estimate = IntelligenceSystem.GetEstimate(
+                state, state.playerCountryId, targetId, IntelDomain.Military);
+            if (estimate != null && estimate.confidence != ConfidenceGrade.None) return null;
+
+            var network = state.FindNetwork(state.playerCountryId, targetId);
+
+            if (network == null)
+                return "UNTASKED";              // nothing has ever been tasked here
+
+            if (network.compromised)
+                return "BURNED";                // rolled up; it will recover slowly
+
+            // A network exists and has simply not reported yet. Collection is a
+            // monthly tick, so this clears itself.
+            return "COLLECTING";
+        }
+
+        /// <summary>
+        /// The military figure our reporting believes, for ordering a ranking.
+        ///
+        /// Deliberately the *reported* value rather than the truth, so a state
+        /// running a deception programme is ranked where it has persuaded us it
+        /// belongs. Returns -1 when we have nothing, so unassessed states sort
+        /// below everything rather than to the top.
+        /// </summary>
+        public static float EstimatedMilitary(GameState state, string targetId)
+        {
+            var estimate = IntelligenceSystem.GetEstimate(
+                state, state.playerCountryId, targetId, IntelDomain.Military);
+            return estimate == null || estimate.confidence == ConfidenceGrade.None
+                ? -1f
+                : estimate.reportedValue;
+        }
+
+        /// <summary>
+        /// One line explaining the labels above, for the foot of a readout that
+        /// contains any of them.
+        /// </summary>
+        public static string AssessmentLegend
+            => "UNTASKED — nothing collecting against them.  "
+             + "COLLECTING — tasked; first report arrives at END MONTH.  "
+             + "BURNED — network rolled up; rebuild it or wait.";
+
+        /// <summary>
         /// A foreign branch's fighting weight, as a band.
         ///
         /// Reports `EffectivePower` rather than raw strength, because that is the
@@ -103,11 +163,13 @@ namespace Brink.UI
         {
             var estimate = IntelligenceSystem.GetEstimate(
                 state, state.playerCountryId, targetId, IntelDomain.Military);
-            if (estimate == null || estimate.confidence == ConfidenceGrade.None)
-                return "NO ASSESSMENT";
+
+            // Say which kind of nothing this is — see WhyNoAssessment.
+            string absence = WhyNoAssessment(state, targetId);
+            if (absence != null) return absence;
 
             var target = state.FindCountry(targetId);
-            if (target == null) return "NO ASSESSMENT";
+            if (target == null) return "UNTASKED";
 
             float actual = target.military.Get(branch).EffectivePower;
             if (actual <= 0.01f) return "NONE";
