@@ -25,6 +25,12 @@ namespace Brink.Core
             // recorded rather than the second.
             TelemetryFile.Initialize();
 
+            // Audio boots the same way everything else here does: from code, with
+            // no scene wiring, so any scene still starts a complete game. It
+            // guards itself against batch mode exactly as this method does — the
+            // edit-mode suite must not start instantiating AudioSources.
+            Brink.Audio.AudioDirector.EnsureExists();
+
             var theme = Resources.Load<ThemeStyleSheet>("UI/BrinkTheme");
             var layout = Resources.Load<VisualTreeAsset>("UI/TerminalShell");
 

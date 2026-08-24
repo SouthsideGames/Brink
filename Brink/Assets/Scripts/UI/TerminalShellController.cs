@@ -156,7 +156,13 @@ namespace Brink.UI
             // player exactly the "reload the turn I disliked" loop GDD §30
             // forbids, so it exists only in the editor and development builds.
             if (Debug.isDebugBuild || Application.isEditor)
+            {
                 views.Add(new SystemView());
+
+                // Temporary bench for the audio foundation. Ships beside SYSTEM
+                // and disappears with it in a player build.
+                views.Add(new AudioDebugView());
+            }
 
             foreach (var view in views)
             {
