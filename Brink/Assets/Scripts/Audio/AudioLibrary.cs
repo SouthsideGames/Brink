@@ -53,7 +53,7 @@ namespace Brink.Audio
     {
         [Header("Mixer")]
         [Tooltip("Optional. Without it the system still works, controlling volume " +
-                 "on the AudioSources directly — see AudioSettings.Apply.")]
+                 "on the AudioSources directly — see AudioPreferences.Apply.")]
         public AudioMixer mixer;
 
         public AudioMixerGroup musicGroup;

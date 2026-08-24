@@ -17,7 +17,7 @@ namespace Brink.Audio
     /// one: they cover genuinely separate concerns and share a pattern, so the
     /// settings panel can host both without special-casing either.
     /// </summary>
-    public static class AudioSettings
+    public static class AudioPreferences
     {
         const string MasterKey = "brink.audio.master";
         const string MusicKey = "brink.audio.music";

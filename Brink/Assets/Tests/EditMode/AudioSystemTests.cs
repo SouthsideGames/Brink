@@ -18,7 +18,7 @@ namespace Brink.Tests
     public class AudioSystemTests
     {
         [TearDown]
-        public void TearDown() => AudioSettings.ResetToDefaults();
+        public void TearDown() => AudioPreferences.ResetToDefaults();
 
         // ---------- decibels ----------
 
@@ -31,14 +31,14 @@ namespace Brink.Tests
         [Test]
         public void FullVolumeIsUnityGainAndSilenceIsFloored()
         {
-            Assert.AreEqual(0f, AudioSettings.ToDecibels(1f), 0.01f,
+            Assert.AreEqual(0f, AudioPreferences.ToDecibels(1f), 0.01f,
                 "Full volume must be 0 dB — unity gain, not +1.");
 
-            Assert.LessOrEqual(AudioSettings.ToDecibels(0f), -80f,
+            Assert.LessOrEqual(AudioPreferences.ToDecibels(0f), -80f,
                 "Zero must map to the silence floor. log10(0) is negative infinity, "
                 + "so this has to be handled rather than computed.");
 
-            Assert.LessOrEqual(AudioSettings.ToDecibels(AudioSettings.Silence * 0.5f), -80f,
+            Assert.LessOrEqual(AudioPreferences.ToDecibels(AudioPreferences.Silence * 0.5f), -80f,
                 "Anything below the silence threshold is off, not very quiet.");
         }
 
@@ -47,7 +47,7 @@ namespace Brink.Tests
         {
             // The whole point of the conversion. A linear slider at 0.5 is about
             // −6 dB, not −40 and not −0.5.
-            float half = AudioSettings.ToDecibels(0.5f);
+            float half = AudioPreferences.ToDecibels(0.5f);
 
             Assert.Less(half, 0f);
             Assert.Greater(half, -12f,
@@ -61,7 +61,7 @@ namespace Brink.Tests
             float previous = float.MaxValue;
             for (float v = 1f; v >= 0f; v -= 0.05f)
             {
-                float db = AudioSettings.ToDecibels(v);
+                float db = AudioPreferences.ToDecibels(v);
                 Assert.LessOrEqual(db, previous + 0.0001f,
                     $"Volume {v:F2} was louder than the step above it. The curve must be monotonic.");
                 previous = db;
@@ -75,54 +75,54 @@ namespace Brink.Tests
         {
             // Mute implemented by writing zeros loses the player's settings, which
             // is exactly what someone muting for a phone call does not expect.
-            AudioSettings.Master = 0.62f;
-            AudioSettings.Music = 0.33f;
+            AudioPreferences.Master = 0.62f;
+            AudioPreferences.Music = 0.33f;
 
-            AudioSettings.Muted = true;
-            Assert.AreEqual(0f, AudioSettings.EffectiveLevel(AudioSettings.Music), 0.0001f,
+            AudioPreferences.Muted = true;
+            Assert.AreEqual(0f, AudioPreferences.EffectiveLevel(AudioPreferences.Music), 0.0001f,
                 "Muted, nothing should be audible.");
-            Assert.AreEqual(0.33f, AudioSettings.Music, 0.001f,
+            Assert.AreEqual(0.33f, AudioPreferences.Music, 0.001f,
                 "Mute overwrote the stored value instead of gating it.");
 
-            AudioSettings.Muted = false;
-            Assert.AreEqual(0.62f, AudioSettings.Master, 0.001f);
-            Assert.AreEqual(0.33f, AudioSettings.Music, 0.001f,
+            AudioPreferences.Muted = false;
+            Assert.AreEqual(0.62f, AudioPreferences.Master, 0.001f);
+            Assert.AreEqual(0.33f, AudioPreferences.Music, 0.001f,
                 "Unmuting did not restore what the player had.");
         }
 
         [Test]
         public void MasterScalesEveryChannel()
         {
-            AudioSettings.Muted = false;
-            AudioSettings.Master = 0.5f;
-            AudioSettings.Music = 1f;
-            AudioSettings.Sfx = 1f;
+            AudioPreferences.Muted = false;
+            AudioPreferences.Master = 0.5f;
+            AudioPreferences.Music = 1f;
+            AudioPreferences.Sfx = 1f;
 
-            Assert.AreEqual(0.5f, AudioSettings.EffectiveLevel(AudioSettings.Music), 0.001f);
-            Assert.AreEqual(0.5f, AudioSettings.EffectiveLevel(AudioSettings.Sfx), 0.001f);
+            Assert.AreEqual(0.5f, AudioPreferences.EffectiveLevel(AudioPreferences.Music), 0.001f);
+            Assert.AreEqual(0.5f, AudioPreferences.EffectiveLevel(AudioPreferences.Sfx), 0.001f);
         }
 
         [Test]
         public void ChannelsAreIndependent()
         {
-            AudioSettings.Muted = false;
-            AudioSettings.Master = 1f;
-            AudioSettings.Music = 0f;
-            AudioSettings.Sfx = 0.9f;
+            AudioPreferences.Muted = false;
+            AudioPreferences.Master = 1f;
+            AudioPreferences.Music = 0f;
+            AudioPreferences.Sfx = 0.9f;
 
-            Assert.AreEqual(0f, AudioSettings.EffectiveLevel(AudioSettings.Music), 0.001f);
-            Assert.Greater(AudioSettings.EffectiveLevel(AudioSettings.Sfx), 0.8f,
+            Assert.AreEqual(0f, AudioPreferences.EffectiveLevel(AudioPreferences.Music), 0.001f);
+            Assert.Greater(AudioPreferences.EffectiveLevel(AudioPreferences.Sfx), 0.8f,
                 "Silencing the music silenced the sound effects too.");
         }
 
         [Test]
         public void LevelsAreClampedToTheAudibleRange()
         {
-            AudioSettings.Music = 5f;
-            Assert.LessOrEqual(AudioSettings.Music, 1f, "A level above 1 would clip.");
+            AudioPreferences.Music = 5f;
+            Assert.LessOrEqual(AudioPreferences.Music, 1f, "A level above 1 would clip.");
 
-            AudioSettings.Music = -3f;
-            Assert.GreaterOrEqual(AudioSettings.Music, 0f);
+            AudioPreferences.Music = -3f;
+            Assert.GreaterOrEqual(AudioPreferences.Music, 0f);
         }
 
         // ---------- the structural rules ----------

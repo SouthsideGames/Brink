@@ -75,7 +75,7 @@ namespace Brink.Audio
 
             ambience = CreateAmbience();
 
-            AudioSettings.Changed += ApplySettings;
+            AudioPreferences.Changed += ApplySettings;
             ApplySettings();
 
             if (library.terminalAmbience != null) StartAmbience();
@@ -83,7 +83,7 @@ namespace Brink.Audio
 
         void OnDestroy()
         {
-            AudioSettings.Changed -= ApplySettings;
+            AudioPreferences.Changed -= ApplySettings;
             if (instance == this) instance = null;
         }
 
@@ -119,13 +119,13 @@ namespace Brink.Audio
         {
             if (library.mixer != null)
             {
-                AudioSettings.Apply(library.mixer);
+                AudioPreferences.Apply(library.mixer);
                 return;
             }
 
             if (ambience != null)
                 ambience.volume = library.ambienceVolume
-                                  * AudioSettings.EffectiveLevel(AudioSettings.Ambience);
+                                  * AudioPreferences.EffectiveLevel(AudioPreferences.Ambience);
         }
 
         // ---------- what gameplay calls ----------
@@ -183,7 +183,7 @@ namespace Brink.Audio
             if (ambience == null) return;
 
             if (paused) ambience.Pause();
-            else if (library.terminalAmbience != null && !AudioSettings.Muted) ambience.UnPause();
+            else if (library.terminalAmbience != null && !AudioPreferences.Muted) ambience.UnPause();
         }
     }
 }

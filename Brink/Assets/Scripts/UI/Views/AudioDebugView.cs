@@ -58,9 +58,9 @@ namespace Brink.UI.Views
             sb.AppendLine($"  CONTEXT ....... {director.Context.ToString().ToUpperInvariant()}");
             sb.AppendLine($"  CROSSFADING ... {(director.IsCrossfading ? "YES" : "no")}");
             sb.AppendLine();
-            sb.AppendLine($"  MASTER {AudioSettings.Master:F2}   MUSIC {AudioSettings.Music:F2}   "
-                          + $"SFX {AudioSettings.Sfx:F2}   AMBIENCE {AudioSettings.Ambience:F2}");
-            sb.AppendLine($"  MUTED ......... {(AudioSettings.Muted ? "YES" : "no")}");
+            sb.AppendLine($"  MASTER {AudioPreferences.Master:F2}   MUSIC {AudioPreferences.Music:F2}   "
+                          + $"SFX {AudioPreferences.Sfx:F2}   AMBIENCE {AudioPreferences.Ambience:F2}");
+            sb.AppendLine($"  MUTED ......... {(AudioPreferences.Muted ? "YES" : "no")}");
             sb.AppendLine($"  MIXER ......... {(director.Library != null && director.Library.mixer != null ? "assigned" : "none (levels applied to sources)")}");
 
             AddFigure().text = sb.ToString();
@@ -117,19 +117,19 @@ namespace Brink.UI.Views
         {
             AddText("terminal-text-bright").text = AsciiChart.BoxHeader("LEVELS", W);
 
-            Step("MASTER", () => AudioSettings.Master, v => AudioSettings.Master = v);
-            Step("MUSIC", () => AudioSettings.Music, v => AudioSettings.Music = v);
-            Step("SFX + UI", () => AudioSettings.Sfx, v => AudioSettings.Sfx = v);
-            Step("AMBIENCE", () => AudioSettings.Ambience, v => AudioSettings.Ambience = v);
+            Step("MASTER", () => AudioPreferences.Master, v => AudioPreferences.Master = v);
+            Step("MUSIC", () => AudioPreferences.Music, v => AudioPreferences.Music = v);
+            Step("SFX + UI", () => AudioPreferences.Sfx, v => AudioPreferences.Sfx = v);
+            Step("AMBIENCE", () => AudioPreferences.Ambience, v => AudioPreferences.Ambience = v);
 
             var row = MakeRow();
-            AddButton(row, AudioSettings.Muted ? "UNMUTE ALL" : "MUTE ALL",
-                AudioSettings.Muted ? "primary" : "danger", () =>
+            AddButton(row, AudioPreferences.Muted ? "UNMUTE ALL" : "MUTE ALL",
+                AudioPreferences.Muted ? "primary" : "danger", () =>
                 {
-                    AudioSettings.Muted = !AudioSettings.Muted;
+                    AudioPreferences.Muted = !AudioPreferences.Muted;
                     Refresh();
                 });
-            AddButton(row, "RESET LEVELS", null, () => { AudioSettings.ResetToDefaults(); Refresh(); });
+            AddButton(row, "RESET LEVELS", null, () => { AudioPreferences.ResetToDefaults(); Refresh(); });
 
             AddText("terminal-text-dim").text =
                 "  Mute does not zero the sliders — unmuting restores exactly these values.";
