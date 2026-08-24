@@ -1,0 +1,114 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e69c02fe239104c42823600ca15d27ff, type: 3}
+  m_Name: BrinkAudioLibrary
+  m_EditorClassIdentifier: Brink.Runtime::Brink.Audio.AudioLibrary
+  mixer: {fileID: 24100000, guid: e2bffe008dc13ca4cbe2fa6d4696ef7b, type: 2}
+  musicGroup: {fileID: 4454283436564981498, guid: e2bffe008dc13ca4cbe2fa6d4696ef7b, type: 2}
+  ambienceGroup: {fileID: -6920601402867114646, guid: e2bffe008dc13ca4cbe2fa6d4696ef7b, type: 2}
+  sfxGroup: {fileID: -8601703648685283427, guid: e2bffe008dc13ca4cbe2fa6d4696ef7b, type: 2}
+  uiGroup: {fileID: -7529098962015326794, guid: e2bffe008dc13ca4cbe2fa6d4696ef7b, type: 2}
+  music:
+  - state: 0
+    clip: {fileID: 8300000, guid: 69f9ee3a7710076488030566815c49c2, type: 3}
+    loop: 1
+    volume: 0.85
+  - state: 1
+    clip: {fileID: 8300000, guid: dc4a3d5e27cd97c49a28f36f485c122f, type: 3}
+    loop: 1
+    volume: 0.8
+  - state: 2
+    clip: {fileID: 8300000, guid: 197bf0f7617d8994aa3774051335bcfb, type: 3}
+    loop: 1
+    volume: 0.85
+  - state: 3
+    clip: {fileID: 8300000, guid: bf2d2ab8e51bb88418e04bf82ba98d01, type: 3}
+    loop: 1
+    volume: 0.85
+  - state: 4
+    clip: {fileID: 8300000, guid: 5bd4d21aef28e0f4b86955c3a05ab3a9, type: 3}
+    loop: 1
+    volume: 0.85
+  crossfadeSeconds: 2.5
+  terminalAmbience: {fileID: 8300000, guid: a133bed6fde1c924aa359a2bff85fea0, type: 3}
+  ambienceVolume: 0.15
+  sfx:
+  - id: 2
+    clip: {fileID: 8300000, guid: a436b2a7e0e75eb4db1434f5232e1905, type: 3}
+    volume: 0.45
+    isUi: 1
+    maxDuration: 0
+  - id: 3
+    clip: {fileID: 8300000, guid: 51128105138b7f34d964c7f36ff31f60, type: 3}
+    volume: 0.4
+    isUi: 1
+    maxDuration: 0
+  - id: 4
+    clip: {fileID: 8300000, guid: 4e7cf1c139d280b489447c88e425cca3, type: 3}
+    volume: 0.45
+    isUi: 1
+    maxDuration: 0
+  - id: 10
+    clip: {fileID: 8300000, guid: a973edc8e2cd4b843abaf4ad8d42f2aa, type: 3}
+    volume: 0.55
+    isUi: 0
+    maxDuration: 0
+  - id: 11
+    clip: {fileID: 8300000, guid: ade47b7189a3bff4596aeee14284a861, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 0
+  - id: 30
+    clip: {fileID: 8300000, guid: b2ac7d91cdc673049826a7e974bb4e34, type: 3}
+    volume: 0.45
+    isUi: 0
+    maxDuration: 0
+  - id: 31
+    clip: {fileID: 8300000, guid: a9f1ba6b4d34911468f6e59726814360, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 0
+  - id: 32
+    clip: {fileID: 8300000, guid: 0e4d9b8f12e0f524d8092a2a8bea834a, type: 3}
+    volume: 0.6
+    isUi: 0
+    maxDuration: 0
+  - id: 33
+    clip: {fileID: 8300000, guid: c16f1331f9288024bb129085b025f946, type: 3}
+    volume: 0.65
+    isUi: 0
+    maxDuration: 1.4
+  - id: 50
+    clip: {fileID: 8300000, guid: c5dbb7666dedb6f42ad2889384d7fbff, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 2.5
+  - id: 90
+    clip: {fileID: 0}
+    volume: 0.35
+    isUi: 0
+    maxDuration: 0
+  - id: 41
+    clip: {fileID: 0}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 0
+  - id: 70
+    clip: {fileID: 8300000, guid: 3e4e258f1fc48e14fb8d811f11b46753, type: 3}
+    volume: 0.7
+    isUi: 0
+    maxDuration: 0
+  - id: 1
+    clip: {fileID: 8300000, guid: 38b54b0d98a05d240aee76ffd07c1f24, type: 3}
+    volume: 0.2
+    isUi: 1
+    maxDuration: 0
