@@ -88,6 +88,26 @@ namespace Brink.Data
         public int warsLost;
         public int warsDrawn;
 
+        /// <summary>
+        /// A reputation for dealing fairly, 0..100 (GDD §15.1 amendment).
+        ///
+        /// **This is what a one-sided treaty actually costs.** Diplomacy graded a
+        /// full point above passive with the best economic *and* positional
+        /// components in the game, because treaties and trade compounded without
+        /// ever charging anything. Extracting more than you give is supposed to be
+        /// available — but it is supposed to be *known*.
+        ///
+        /// Every government reads this before signing with you. Exploit a weak
+        /// neighbour and the strong ones price it in: they demand more, or they
+        /// decline. So the operator faces a real choice rather than a free one —
+        /// take advantage of a state that cannot refuse and find the door closing
+        /// elsewhere, or deal evenly and get less of what you need.
+        ///
+        /// Starts at 60: a working assumption of good faith that has to be earned
+        /// upward and can be spent downward.
+        /// </summary>
+        public float reciprocity = 60f;
+
         /// <summary>Plain record, e.g. "3–1–2". Reads the same for us and for them.</summary>
         public string WarRecordText => $"{warsWon}–{warsLost}–{warsDrawn}";
 

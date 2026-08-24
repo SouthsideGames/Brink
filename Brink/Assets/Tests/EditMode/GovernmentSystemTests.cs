@@ -564,5 +564,98 @@ namespace Brink.Tests
                 Assert.Greater(country.economy.gdp, 0f);
             }
         }
+
+        // ---------- how much room the operator has to govern ----------
+
+        /// <summary>
+        /// Governing well buys room to govern.
+        ///
+        /// The pillar had thirteen controls and played as one forced move a month:
+        /// Political Capital income ran 1.8–3.6 against verbs costing 1 to 6, so
+        /// whatever the operator did they could afford about one thing. **The
+        /// narrowness was the fault rather than the level** — a range of barely 2×
+        /// means the difference between a popular, cohesive government and a
+        /// despised, fractured one is a third of an action a month, which is
+        /// nothing to build toward and no reason to spend on the pillar's own
+        /// condition.
+        ///
+        /// Asserted as a ratio rather than absolute figures, so retuning the level
+        /// later does not silently flatten the curve again.
+        /// </summary>
+        [Test]
+        public void GoverningWellBuysMeaningfullyMoreRoomThanGoverningBadly()
+        {
+            float IncomeAt(float approval, float pillar, float backing)
+            {
+                var country = WorldFactory.CreateDebugWorld(seed: 606).PlayerCountry;
+                country.governmentApproval = approval;
+                country.pillars.government = pillar;
+                country.government.legislativeSupport = backing;
+                country.government.eliteCohesion = backing;
+                return GovernmentSystem.PoliticalCapitalIncomeFor(country);
+            }
+
+            float thriving = IncomeAt(88f, 85f, 82f);
+            float failing = IncomeAt(25f, 35f, 28f);
+
+            Assert.Greater(thriving / failing, 1.7f,
+                $"A thriving government earns {thriving:F2} a month and a failing one "
+                + $"{failing:F2} — a ratio of {thriving / failing:F2}. If the curve is this "
+                + "flat there is no reason to spend on the pillar's own condition.");
+
+            Assert.Greater(thriving, 4f,
+                $"A well-governed state earns {thriving:F2} a month against verbs costing 1–6. "
+                + "It should be able to take two or three actions, not one.");
+        }
+
+        [Test]
+        public void AFailingGovernmentIsSlowedNotParalysed()
+        {
+            // A government unable to act at all is a death spiral with no recovery
+            // path — the bug class this project has shipped more than any other.
+            // It has to be able to claw its way back, slowly.
+            var country = WorldFactory.CreateDebugWorld(seed: 606).PlayerCountry;
+            country.governmentApproval = 0f;
+            country.pillars.government = 0f;
+            country.government.legislativeSupport = 0f;
+            country.government.eliteCohesion = 0f;
+
+            float income = GovernmentSystem.PoliticalCapitalIncomeFor(country);
+
+            Assert.Greater(income, 0.5f,
+                $"A collapsing government earns {income:F2} a month. At that rate it can never "
+                + "buy its way out of the condition it is in.");
+        }
+
+        [Test]
+        public void TheIncomeRuleIsTheSameForEveryone()
+        {
+            // Symmetry of consequence: a foreign government's room to act is
+            // earned the same way ours is. `AccruePoliticalCapital` calls this one
+            // function for the player and every AI, and operator skills are added
+            // on top rather than baked in.
+            // Tested by *changing who the player is* rather than by equalising two
+            // countries. The first version set approval, pillar and backing equal
+            // and asserted the incomes matched — but the formula also reads
+            // `CAP_CIVADMIN`, so two states with different research legitimately
+            // differ. It was asserting "these two countries are identical", which
+            // was never the claim.
+            //
+            // The claim is that being the operator's country is not itself worth
+            // anything. Flipping the flag isolates exactly that.
+            var world = WorldFactory.CreateDebugWorld(seed: 606);
+            var them = world.FindCountry("CHN");
+
+            float asForeign = GovernmentSystem.PoliticalCapitalIncomeFor(them);
+
+            world.PlayerCountry.isPlayer = false;
+            them.isPlayer = true;
+            float asOurs = GovernmentSystem.PoliticalCapitalIncomeFor(them);
+
+            Assert.AreEqual(asForeign, asOurs, 0.0001f,
+                "A government's room to act changed when it became the operator's. "
+                + "Operator skills are added on top in AccruePoliticalCapital; nothing "
+                + "player-only may be baked into the shared rule.");
+        }
     }
 }

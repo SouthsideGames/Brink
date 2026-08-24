@@ -274,6 +274,17 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>Propose a treaty whose clauses say who carries what (GDD §15.1 amendment).</summary>
+        public bool ProposeNegotiatedTreaty(string targetId, System.Collections.Generic.List<Data.TreatyClause> clauses)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!Turns.SpendCommandPoints(DiplomacySystem.TreatyProposalCost, "Treaty proposal")) return false;
+            bool ok = DiplomacySystem.ProposeNegotiatedTreatyBy(State, State.playerCountryId, targetId, clauses);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         /// <summary>An operation against a named foreign official (GDD §14 amendment).</summary>
         public bool RunAgentOperation(string targetCountryId, Data.Official official, AgentAction action)
         {

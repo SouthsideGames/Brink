@@ -185,8 +185,287 @@ namespace Brink.Core
         }
 
         /// <summary>How willing a state is to sign commitments proposed by the player.</summary>
+        /// <summary>
+        /// What a commitment is worth to whoever receives it.
+        ///
+        /// A guarantee to fight for someone is the heaviest thing a state can
+        /// promise; agreeing not to attack them is close to free. These weights
+        /// are what make a treaty a *negotiation* — without them every clause is
+        /// interchangeable and "balance" has no meaning.
+        /// </summary>
+        public static float ValueOf(TreatyCommitment commitment)
+        {
+            switch (commitment)
+            {
+                case TreatyCommitment.MutualDefense: return 5f;   // we will die for you
+                case TreatyCommitment.Transit: return 3.5f;       // our ground, your forces
+                case TreatyCommitment.IntelligenceSharing: return 3f;
+                case TreatyCommitment.TradePreference: return 2.5f;
+                case TreatyCommitment.JointPlanning: return 2f;
+                default: return 1.5f;                             // NonAggression
+            }
+        }
+
+        /// <summary>
+        /// How lopsided a set of clauses is, from the proposer's side. Positive
+        /// means we are receiving more than we give.
+        ///
+        /// Mutual clauses net to zero — both sides carry and both sides receive —
+        /// which is why an even treaty of five mutual commitments is balanced no
+        /// matter how substantial it is. Scale and fairness are different axes.
+        /// </summary>
+        public static float BalanceOf(List<TreatyClause> clauses)
+        {
+            float balance = 0f;
+            if (clauses == null) return 0f;
+
+            foreach (var clause in clauses)
+            {
+                if (clause.side == ClauseSide.TheyProvide) balance += ValueOf(clause.commitment);
+                else if (clause.side == ClauseSide.WeProvide) balance -= ValueOf(clause.commitment);
+            }
+            return balance;
+        }
+
+        /// <summary>
+        /// Propose a treaty whose clauses say who carries what — the negotiated
+        /// form (GDD §15.1 amendment).
+        ///
+        /// Signing a lopsided agreement is deliberately *allowed*. A state that
+        /// depends on us will accept terms a self-sufficient one would laugh at,
+        /// and taking that deal is a legitimate move. What it costs is our
+        /// standing as a partner, which everyone else prices in the next time they
+        /// are asked to sign something.
+        /// </summary>
+        public static bool ProposeNegotiatedTreatyBy(GameState state, string proposerId,
+            string targetId, List<TreatyClause> clauses)
+        {
+            if (clauses == null || clauses.Count == 0) return false;
+
+            var commitments = new List<TreatyCommitment>();
+            foreach (var clause in clauses) commitments.Add(clause.commitment);
+
+            float willingness = TreatyWillingness(state, proposerId, targetId, clauses);
+            var target = state.FindCountry(targetId);
+            var proposer = state.FindCountry(proposerId);
+            var relationship = state.FindRelationship(proposerId, targetId);
+            if (target == null || proposer == null || relationship == null) return false;
+
+            if (willingness < 50f)
+            {
+                relationship.AddMemory(state.date, "Rejected treaty proposal", -0.5f);
+                if (proposerId == state.playerCountryId)
+                    state.AddNotification(NotificationClass.Advisory, "TREATY REJECTED",
+                        $"{target.displayName} declines these terms. "
+                        + $"{(BalanceOf(clauses) > 2.5f ? "They can see what is being asked of them." : "The relationship is not there yet.")}",
+                        targetId, desk: ReportingDesk.Diplomacy);
+                return false;
+            }
+
+            if (!ProposeTreatyBy(state, proposerId, targetId, commitments)) return false;
+
+            // Record who carries what, relative to countryA.
+            var treaty = state.FindTreaty(proposerId, targetId);
+            if (treaty != null)
+            {
+                foreach (var clause in clauses)
+                    treaty.clauses.Add(new TreatyClause
+                    {
+                        commitment = clause.commitment,
+                        side = treaty.countryA == proposerId
+                            ? clause.side
+                            : Flip(clause.side)
+                    });
+            }
+
+            ApplyReciprocity(state, proposer, target, BalanceOf(clauses));
+            return true;
+        }
+
+        static ClauseSide Flip(ClauseSide side)
+            => side == ClauseSide.TheyProvide ? ClauseSide.WeProvide
+             : side == ClauseSide.WeProvide ? ClauseSide.TheyProvide
+             : ClauseSide.Mutual;
+
+        /// <summary>
+        /// What signing this did to our name.
+        ///
+        /// Extraction is public — the terms of an agreement are not a secret — so
+        /// third parties adjust their view of us directly. A generous or even deal
+        /// slowly rebuilds the assumption of good faith, which is why a reputation
+        /// is recoverable but slow: cheap to spend, expensive to earn back.
+        /// </summary>
+        static void ApplyReciprocity(GameState state, CountryState proposer,
+            CountryState target, float balance)
+        {
+            if (balance > 2.5f)
+            {
+                float severity = Math.Min(3f, (balance - 2.5f) / 3f);
+                proposer.reciprocity = Clamp(proposer.reciprocity - 4f * severity);
+
+                // Everyone who can see it thinks a little less of us. Smaller than
+                // the direct cost, because it happened to somebody else — but it
+                // is the mechanism that makes a habit of extraction expensive
+                // rather than one deal.
+                foreach (var other in state.relationships)
+                {
+                    if (!other.Involves(proposer.id)) continue;
+                    if (other.Involves(target.id)) continue;
+                    other.trust = Clamp(other.trust - 1.2f * severity);
+                }
+
+                state.AddChronicle(ChronicleCategory.Diplomatic, proposer.id,
+                    $"{proposer.displayName} concludes markedly one-sided terms with "
+                    + $"{target.displayName}.", Publicity.Public);
+
+                if (proposer.isPlayer)
+                    state.AddNotification(NotificationClass.Advisory, "TERMS NOTED ABROAD",
+                        "The imbalance of that agreement has not gone unremarked. Governments "
+                        + "that were minded to deal with us will ask for more next time.",
+                        target.id, desk: ReportingDesk.Diplomacy);
+            }
+            else if (balance > -2.5f)
+            {
+                // An even bargain, honestly struck.
+                proposer.reciprocity = Clamp(proposer.reciprocity + 1.2f);
+            }
+            else
+            {
+                // We gave more than we got, and it is noticed.
+                proposer.reciprocity = Clamp(proposer.reciprocity + 2.2f);
+            }
+        }
+
+        /// <summary>
+        /// What the foreign ministry thinks we should be asking for, and of whom.
+        ///
+        /// The diplomat is the one official whose job is knowing where the country
+        /// is exposed and who might close the gap — and they had nothing to say
+        /// about it. An operator opening the treaty screen faced six commitment
+        /// types and fifteen countries with no indication of which mattered.
+        ///
+        /// Reads our own condition, which is ours to know exactly, and picks the
+        /// commitment that answers our worst gap. Deliberately does *not* pick the
+        /// partner by their true statistics — who can actually supply it is a
+        /// question about them, and that runs through what our reporting says.
+        /// </summary>
+        public static TreatyCommitment SuggestedCommitmentFor(CountryState us)
+        {
+            if (us == null) return TreatyCommitment.NonAggression;
+
+            // Ranked by how badly each gap hurts, worst first.
+            if (us.resources.energy < 45f || us.resources.strategicMaterials < 40f)
+                return TreatyCommitment.TradePreference;
+            if (us.pillars.military < 55f)
+                return TreatyCommitment.MutualDefense;
+            if (us.pillars.intelligence < 55f)
+                return TreatyCommitment.IntelligenceSharing;
+            if (us.pillars.diplomacy < 55f)
+                return TreatyCommitment.NonAggression;
+
+            return TreatyCommitment.Transit;   // comfortable: buy reach
+        }
+
+        /// <summary>One line on why, for the negotiation screen.</summary>
+        public static string SuggestionReason(CountryState us, TreatyCommitment commitment)
+        {
+            switch (commitment)
+            {
+                case TreatyCommitment.TradePreference:
+                    return $"We are short — energy {us.resources.energy:F0}, materials "
+                         + $"{us.resources.strategicMaterials:F0}. Preferential terms would ease it.";
+                case TreatyCommitment.MutualDefense:
+                    return "Our own forces will not deter what is out there. A guarantee would.";
+                case TreatyCommitment.IntelligenceSharing:
+                    return "We are reading the world poorly. Somebody else's reporting would help.";
+                case TreatyCommitment.NonAggression:
+                    return "Our standing is thin. Fewer people wanting to fight us is worth having.";
+                default:
+                    return "We want for nothing pressing. Reach is what money buys when it is not needed elsewhere.";
+            }
+        }
+
+        /// <summary>Plain reading of a balance figure, for the negotiation screen.</summary>
+        public static string DescribeBalance(float balance)
+        {
+            if (balance >= 6f) return "HEAVILY IN OUR FAVOUR — this is extraction, and it will be seen as such";
+            if (balance >= 2.5f) return "IN OUR FAVOUR — we receive more than we give";
+            if (balance > -2.5f) return "EVEN — both sides carry it";
+            if (balance > -6f) return "IN THEIR FAVOUR — we are paying for something";
+            return "HEAVILY IN THEIR FAVOUR — we are buying this relationship";
+        }
+
         public static float TreatyWillingness(GameState state, string targetId, List<TreatyCommitment> commitments)
             => TreatyWillingness(state, state.playerCountryId, targetId, commitments);
+
+        /// <summary>
+        /// What a commitment costs the side that carries it.
+        ///
+        /// Extracted from the willingness calculation so the clause overload can
+        /// *redistribute* this burden rather than adding a second charge on top of
+        /// it. Measured play caught that: a heavy three-clause demand was already
+        /// costing 40 points of willingness for weight, and an imbalance penalty
+        /// took another 26 — so a state 90% dependent on us refused terms it
+        /// should have had no way to refuse, and the first version of the test
+        /// reported that as a finding about the game.
+        ///
+        /// Non-aggression is negative because promising not to attack someone is a
+        /// thing they *want*.
+        /// </summary>
+        public static float BurdenOf(TreatyCommitment commitment)
+        {
+            switch (commitment)
+            {
+                case TreatyCommitment.MutualDefense: return 22f;
+                case TreatyCommitment.JointPlanning: return 12f;
+                case TreatyCommitment.IntelligenceSharing: return 10f;
+                case TreatyCommitment.Transit: return 8f;
+                case TreatyCommitment.TradePreference: return 2f;
+                default: return -4f;   // NonAggression
+            }
+        }
+
+        /// <summary>
+        /// Willingness against a clause list, which is what a negotiation actually
+        /// produces.
+        ///
+        /// The base figure charges every commitment's full burden, which assumes
+        /// both sides carry it. Sides then adjust that assumption: a clause *they*
+        /// carry alone is heavier than a shared one, and a clause *we* carry is
+        /// something they receive rather than pay for. This is a redistribution of
+        /// the burden already priced, not a second penalty — charging both was the
+        /// bug that made even a desperate state refuse.
+        /// </summary>
+        public static float TreatyWillingness(GameState state, string proposerId, string targetId,
+            List<TreatyClause> clauses)
+        {
+            var commitments = new List<TreatyCommitment>();
+            foreach (var clause in clauses) commitments.Add(clause.commitment);
+
+            float willingness = TreatyWillingness(state, proposerId, targetId, commitments);
+
+            var relationship = state.FindRelationship(proposerId, targetId);
+            if (relationship == null) return 0f;
+
+            // **How much they can afford to refuse.** A state that depends on us
+            // will swallow terms a self-sufficient one would not — which is what
+            // makes exploiting a weak partner possible, and what makes the
+            // reputation cost the only thing standing between the operator and
+            // doing it every time.
+            float leverage = relationship.DependenceOf(targetId) / 100f;
+
+            foreach (var clause in clauses)
+            {
+                float burden = BurdenOf(clause.commitment);
+
+                if (clause.side == ClauseSide.TheyProvide)
+                    willingness -= burden * 0.6f * (1f - leverage * 0.6f);
+                else if (clause.side == ClauseSide.WeProvide)
+                    willingness += burden * 1.4f;
+            }
+
+            return willingness;
+        }
 
         /// <summary>How willing <paramref name="targetId"/> is to sign with <paramref name="proposerId"/> (0..100).</summary>
         public static float TreatyWillingness(GameState state, string proposerId, string targetId,
@@ -208,6 +487,15 @@ namespace Brink.Core
             // A state that already fears us wants fewer entanglements, not more.
             willingness -= relationship.ThreatPerceivedBy(targetId) * 0.25f;
 
+            // **What kind of partner we have been to everyone else.**
+            //
+            // A government about to sign with us looks at how we have treated the
+            // states that could not refuse us. A record of even dealing opens
+            // doors; a record of extraction closes them — which is the whole cost
+            // of taking advantage of a weak neighbour, and the reason doing so is
+            // a decision rather than free profit.
+            willingness += (player.reciprocity - 55f) * 0.30f;
+
             // Operator negotiating craft (player proposals only).
             if (proposerId == state.playerCountryId)
                 willingness += ProgressionSystem.EffectValue(state, SkillEffect.TreatyPersuasion);
@@ -217,17 +505,7 @@ namespace Brink.Core
 
             // Heavier commitments demand a warmer relationship.
             foreach (var commitment in commitments)
-            {
-                switch (commitment)
-                {
-                    case TreatyCommitment.MutualDefense: willingness -= 22f; break;
-                    case TreatyCommitment.JointPlanning: willingness -= 12f; break;
-                    case TreatyCommitment.IntelligenceSharing: willingness -= 10f; break;
-                    case TreatyCommitment.Transit: willingness -= 8f; break;
-                    case TreatyCommitment.TradePreference: willingness -= 2f; break;
-                    case TreatyCommitment.NonAggression: willingness += 4f; break;
-                }
-            }
+                willingness -= BurdenOf(commitment);
 
             // Nobody allies with a state that is currently fighting their partner.
             foreach (var confrontation in state.confrontations)

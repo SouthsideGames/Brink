@@ -466,10 +466,32 @@ namespace Brink.Core
         public static float PoliticalCapitalIncomeFor(CountryState country)
         {
             var gov = country.government;
-            float income = 0.6f
-                           + country.governmentApproval / 60f
-                           + country.pillars.government / 90f
-                           + (gov.IsElective ? gov.legislativeSupport / 120f : gov.eliteCohesion / 120f);
+
+            // **Governing well has to buy room to govern.**
+            //
+            // This used to run 1.8–3.6 a month against verbs costing 1 to 6, so
+            // an operator could afford roughly *one* government action a month
+            // whatever they did. The pillar looked well stocked — thirteen
+            // controls — and played as a single forced move, which is why adding
+            // more verbs to it would have changed nothing.
+            //
+            // The narrowness was the real fault rather than the level. A range of
+            // barely 2× means the difference between a popular, cohesive
+            // government and a despised, fractured one is a third of an action a
+            // month: nothing to build toward, and no reason to spend on the
+            // pillar's own condition. Now roughly 2.2 when failing and 4.4 when
+            // governing well, so a good administration gets two or three moves and
+            // a bad one is genuinely constrained.
+            //
+            // The floor is deliberate. A failing government must not be *unable*
+            // to act — that is a death spiral with no recovery path, the bug class
+            // this project has shipped more than any other. It is slow, not stuck.
+            float backing = gov.IsElective ? gov.legislativeSupport : gov.eliteCohesion;
+
+            float income = 0.8f
+                           + country.governmentApproval / 50f
+                           + country.pillars.government / 80f
+                           + backing / 100f;
 
             if (gov.emergencyPowers) income += 0.5f;
 

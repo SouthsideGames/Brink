@@ -103,7 +103,23 @@ namespace Brink.UI.Views
                 sb.AppendLine($"  POWER SEIZED BY FORCE: {gov.coupsExperienced} TIME(S) IN THIS SAVE");
 
             sb.AppendLine();
-            sb.AppendLine($"  POLITICAL CAPITAL: {state.politicalCapital:F1} / {GameState.PoliticalCapitalCap:F0}");
+            // **Show the income, not just the balance.**
+            //
+            // Political Capital is earned by approval, institutional quality and
+            // the backing of whichever body actually sustains this government —
+            // so how much room the operator has to act next month is a direct
+            // consequence of how they have governed. That loop is the whole
+            // argument for spending on the pillar's own condition, and it was
+            // invisible: the screen showed a number that went up by an unexplained
+            // amount.
+            float income = GovernmentSystem.PoliticalCapitalIncomeFor(player)
+                           + ProgressionSystem.EffectValue(state, SkillEffect.PoliticalOperator);
+
+            sb.AppendLine($"  POLITICAL CAPITAL: {state.politicalCapital:F1} / {GameState.PoliticalCapitalCap:F0}"
+                          + $"   (+{income:F1} A MONTH)");
+            sb.AppendLine($"    Earned by approval, institutions and "
+                          + $"{(player.government.IsElective ? "the chamber" : "elite")} backing. "
+                          + "Govern well and there is more of it.");
             text.text = sb.ToString();
         }
 

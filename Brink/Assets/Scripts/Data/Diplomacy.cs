@@ -100,12 +100,56 @@ namespace Brink.Data
     /// is possible but damages trustworthiness and future diplomacy (GDD §15.2).
     /// </summary>
     [Serializable]
+    /// <summary>
+    /// Who carries a commitment (GDD §15.1 amendment).
+    ///
+    /// A treaty used to be a flat list that both sides implicitly received, so
+    /// every agreement was symmetrical by construction and there was nothing to
+    /// negotiate — pick a partner, pick commitments, signed. Real agreements are
+    /// a back-and-forth in which each side is trying to receive more than it
+    /// gives, and only genuinely friendly states settle for even.
+    ///
+    /// Append-only: persisted by ordinal, `Mutual` first so an old save's clauses
+    /// read as reciprocal, which is what they were.
+    /// </summary>
+    public enum ClauseSide
+    {
+        /// <summary>Both sides carry it. The even bargain.</summary>
+        Mutual = 0,
+
+        /// <summary>They carry it for us. We receive.</summary>
+        TheyProvide = 1,
+
+        /// <summary>We carry it for them. We give.</summary>
+        WeProvide = 2
+    }
+
+    /// <summary>One commitment in a treaty, and which side actually bears it.</summary>
+    [Serializable]
+    public class TreatyClause
+    {
+        public TreatyCommitment commitment;
+        public ClauseSide side = ClauseSide.Mutual;
+    }
+
+    [Serializable]
     public class Treaty
     {
         public string id;
         public string countryA;
         public string countryB;
         public List<TreatyCommitment> commitments = new List<TreatyCommitment>();
+
+        /// <summary>
+        /// The same commitments with their side recorded. Kept alongside the flat
+        /// list rather than replacing it: ~20 call sites ask `Has(commitment)` and
+        /// do not care who carries it, and rewriting them all to satisfy a data
+        /// model change would be a large diff for no behaviour.
+        ///
+        /// Sides are always written relative to <see cref="countryA"/>.
+        /// </summary>
+        public List<TreatyClause> clauses = new List<TreatyClause>();
+
         public GameDate signedDate;
         public bool broken;
         public string brokenBy = "";
@@ -113,6 +157,19 @@ namespace Brink.Data
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
         public bool Has(TreatyCommitment commitment) => commitments.Contains(commitment);
+
+        /// <summary>Which side carries a commitment, as seen by <paramref name="viewerId"/>.</summary>
+        public ClauseSide SideFor(string viewerId, TreatyCommitment commitment)
+        {
+            foreach (var clause in clauses)
+            {
+                if (clause.commitment != commitment) continue;
+                if (clause.side == ClauseSide.Mutual || viewerId == countryA) return clause.side;
+                return clause.side == ClauseSide.TheyProvide
+                    ? ClauseSide.WeProvide : ClauseSide.TheyProvide;
+            }
+            return ClauseSide.Mutual;
+        }
     }
 
     /// <summary>

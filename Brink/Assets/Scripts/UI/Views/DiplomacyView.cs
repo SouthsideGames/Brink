@@ -24,6 +24,9 @@ namespace Brink.UI.Views
         string selectedTargetId;
         readonly HashSet<TreatyCommitment> draftCommitments = new HashSet<TreatyCommitment>();
 
+        /// <summary>The treaty being negotiated: what each side would carry.</summary>
+        readonly List<TreatyClause> draftClauses = new List<TreatyClause>();
+
         protected override void Build()
         {
             var gc = GameController.Instance;
@@ -198,23 +201,44 @@ namespace Brink.UI.Views
         {
             if (state.FindTreaty(state.playerCountryId, selectedTargetId) != null) return;
 
+            var player = state.PlayerCountry;
+
             AddText().text = "\n DRAFT COMMITMENTS";
+
+            // What the foreign ministry thinks we should be asking for. The
+            // diplomat is the one official whose job is knowing where the country
+            // is exposed, and until now they had nothing to say about it.
+            var suggested = DiplomacySystem.SuggestedCommitmentFor(player);
+            AddText("sig-advice").text =
+                $" ★ THE MINISTRY RECOMMENDS: {Phrase.Caps(suggested)}. "
+                + DiplomacySystem.SuggestionReason(player, suggested);
 
             var row = new VisualElement();
             row.AddToClassList("button-row");
             Root.Add(row);
+
+            // **Each clause says who carries it.** A treaty used to be a flat list
+            // both sides implicitly received, so every agreement was symmetrical by
+            // construction and there was nothing to negotiate. Cycling a clause
+            // through MUTUAL → THEY → WE → off is the whole back-and-forth: what
+            // are we asking them to bear, and what are we prepared to bear.
             foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
             {
                 var captured = commitment;
-                bool selected = draftCommitments.Contains(commitment);
-                var button = new Button(() =>
+                var existing = FindClause(captured);
+
+                string marker = existing == null ? "[ ]"
+                    : existing.side == ClauseSide.Mutual ? "[BOTH]"
+                    : existing.side == ClauseSide.TheyProvide ? "[THEY]"
+                    : "[WE]";
+
+                var button = new Button(() => { CycleClause(captured); Refresh(); })
                 {
-                    if (!draftCommitments.Remove(captured)) draftCommitments.Add(captured);
-                    Refresh();
-                })
-                { text = (selected ? "[X] " : "[ ] ") + Phrase.Caps(commitment) };
+                    text = $"{marker} {Phrase.Caps(captured)}"
+                           + (captured == suggested ? " ★" : "")
+                };
                 button.AddToClassList("cmd-button");
-                if (selected) button.AddToClassList("primary");
+                if (existing != null) button.AddToClassList("primary");
                 row.Add(button);
             }
 
@@ -222,28 +246,72 @@ namespace Brink.UI.Views
             proposeRow.AddToClassList("button-row");
             Root.Add(proposeRow);
 
-            var draft = new List<TreatyCommitment>(draftCommitments);
-            float willingness = draft.Count > 0
-                ? DiplomacySystem.TreatyWillingness(state, selectedTargetId, draft)
+            float willingness = draftClauses.Count > 0
+                ? DiplomacySystem.TreatyWillingness(state, state.playerCountryId,
+                    selectedTargetId, draftClauses)
                 : 0f;
+            float balance = DiplomacySystem.BalanceOf(draftClauses);
 
             var propose = new Button(() =>
             {
-                GameController.Instance.ProposeTreaty(selectedTargetId, new List<TreatyCommitment>(draftCommitments));
+                GameController.Instance.ProposeNegotiatedTreaty(
+                    selectedTargetId, new List<TreatyClause>(draftClauses));
                 Refresh();
             })
             { text = $"PROPOSE TREATY [{DiplomacySystem.TreatyProposalCost} CP]" };
             propose.AddToClassList("cmd-button");
             propose.AddToClassList("primary");
-            propose.SetEnabled(draft.Count > 0);
+            propose.SetEnabled(draftClauses.Count > 0);
             proposeRow.Add(propose);
 
-            var assessment = AddText("terminal-text-dim");
-            assessment.text = draft.Count == 0
-                ? "  Select commitments to draft a proposal."
-                : $"  ESTIMATED RECEPTION: {ReceptionText(willingness)}\n" +
-                  "  Heavier commitments require a warmer relationship. A state that\n" +
-                  "  fears you, or that is close to your opponent, will refuse.";
+            if (draftClauses.Count == 0)
+            {
+                AddText("terminal-text-dim").text =
+                    "  Cycle a commitment through BOTH / THEY / WE to draft terms.";
+                return;
+            }
+
+            AddText(balance >= 6f ? "sig-hostile" : "terminal-text-dim").text =
+                $"  BALANCE: {DiplomacySystem.DescribeBalance(balance)}.";
+            AddText("terminal-text-dim").text =
+                $"  ESTIMATED RECEPTION: {ReceptionText(willingness)}";
+
+            // The trade-off, stated where the decision is made.
+            AddText("terminal-text-dim").text =
+                $"  OUR NAME AS A PARTNER: {player.reciprocity:F0}. A state that needs us will "
+                + "sign terms a self-sufficient one would refuse — and everyone else will price "
+                + "that in the next time we ask them for something.";
+        }
+
+        /// <summary>The clause for a commitment in the current draft, or null.</summary>
+        TreatyClause FindClause(TreatyCommitment commitment)
+        {
+            foreach (var clause in draftClauses)
+                if (clause.commitment == commitment) return clause;
+            return null;
+        }
+
+        /// <summary>
+        /// Cycle a commitment: off → both carry it → they carry it → we carry it
+        /// → off. Four states on one control, because a negotiation screen with
+        /// six commitments and three separate toggles each is unreadable on a
+        /// phone.
+        /// </summary>
+        void CycleClause(TreatyCommitment commitment)
+        {
+            var existing = FindClause(commitment);
+            if (existing == null)
+            {
+                draftClauses.Add(new TreatyClause { commitment = commitment, side = ClauseSide.Mutual });
+                return;
+            }
+
+            switch (existing.side)
+            {
+                case ClauseSide.Mutual: existing.side = ClauseSide.TheyProvide; break;
+                case ClauseSide.TheyProvide: existing.side = ClauseSide.WeProvide; break;
+                default: draftClauses.Remove(existing); break;
+            }
         }
 
         void BuildCoalitionControls(GameState state)

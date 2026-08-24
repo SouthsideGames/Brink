@@ -125,6 +125,67 @@ namespace Brink.Core
                      + TerritorySystem.MaterialsSwing(state, country.id)
                      + NationalTraitCatalog.ResourceCeilingBonus(country), 0f, 100f);
 
+        /// <summary>
+        /// How much domestic capacity a sector is losing to imports.
+        ///
+        /// Only the sector that competes with what is being imported. A country
+        /// buying its energy abroad lets its own energy industry wither; one
+        /// buying strategic materials lets the industry that processed them go.
+        /// General trade presses on consumer manufacturing, which is where broad
+        /// import competition actually lands.
+        ///
+        /// Scaled to volume and softened by tariffs — which is what tariffs are
+        /// *for*, and gives that binary 25%/0% toggle a reason to exist beyond
+        /// annoying a partner. An embargoed link displaces nothing: nothing is
+        /// arriving.
+        /// </summary>
+        /// <summary>
+        /// What this economy's industries are actually managing, 0..100.
+        ///
+        /// Capacity and functioning multiplied rather than averaged: a sector with
+        /// plant it cannot run is not half-productive, it is idle. That is what
+        /// makes sabotage and blockade meaningful against an otherwise large
+        /// economy — you do not have to destroy the factories, only stop them.
+        /// </summary>
+        public static float SectorStrength(EconomyState eco)
+        {
+            if (eco == null || eco.sectors.Count == 0) return 55f;
+
+            float total = 0f;
+            foreach (var sector in eco.sectors)
+                total += sector.output * (sector.health / 100f);
+
+            return total / eco.sectors.Count;
+        }
+
+        public static float ImportDisplacement(GameState state, CountryState country,
+            EconomicSector sector)
+        {
+            TradeFocus competing;
+            switch (sector)
+            {
+                case EconomicSector.Energy: competing = TradeFocus.Energy; break;
+                case EconomicSector.Industry: competing = TradeFocus.Materials; break;
+                case EconomicSector.Consumer: competing = TradeFocus.General; break;
+                default: return 0f;   // nothing imported competes with these
+            }
+
+            float pressure = 0f;
+            foreach (var link in state.trade)
+            {
+                if (!link.Involves(country.id) || link.embargoed) continue;
+                if (link.focus != competing) continue;
+
+                // A tariff is protection. At 25% it removes most of the pressure,
+                // which is the historical bargain: a shielded industry survives and
+                // everyone pays more for what it makes.
+                float shielded = 1f - Math.Min(0.8f, link.tariff / 32f);
+                pressure += link.volume * 0.006f * shielded;
+            }
+
+            return pressure;
+        }
+
         static void UpdateCountry(GameState state, CountryState country)
         {
             var eco = country.economy;
@@ -142,7 +203,39 @@ namespace Brink.Core
             float confidencePull = (eco.confidence - 50f) * 0.02f;
             float energyDrag = country.resources.energy < 40f ? (40f - country.resources.energy) * 0.05f : 0f;
 
-            float targetGrowth = 1.6f + structural + industryPull + confidencePull
+            // **The sector layer has to reach the economy.**
+            //
+            // `output` and `health` were written by four systems — the monthly
+            // drift, the assessment, industrial programmes, the strategic endgame
+            // — and **read by none of them**. Not by growth, not by the market
+            // index, not by anything. Seven entries per country across sixteen
+            // countries, modelled in detail and consumed nowhere: the largest
+            // instance of this codebase's most-repeated bug.
+            //
+            // Everything aimed at it was therefore inert. `CovertOperation.Sabotage`
+            // is documented as damaging "industry/sector health" and did nothing.
+            // The endgame's −25 health did nothing. Import displacement, added an
+            // hour ago to give trade a domestic cost, did nothing — which is why
+            // the diplomatic playstyle's economic component did not move a single
+            // point after it landed.
+            //
+            // Weighted to sit alongside the pillar term rather than dominate it:
+            // what a country's industries are actually doing should matter about
+            // as much as its institutional capability, not more.
+            // Pivoted just below where a healthy economy actually rests (~53:
+            // output around 60 against health drifting to 88), so this is close to
+            // neutral for a country doing fine, clearly negative for one whose
+            // industries have been wrecked, and clearly positive for one that has
+            // built them up.
+            //
+            // The first attempt pivoted at 55 — above the resting point — which
+            // made it a universal tax rather than a differentiator: every GDP in
+            // the world fell, including passive play's, and the whole scale simply
+            // shifted down. A term meant to distinguish states must sit at the
+            // level they actually occupy.
+            float sectorPull = (SectorStrength(eco) - 50f) * 0.030f;
+
+            float targetGrowth = 1.6f + structural + industryPull + confidencePull + sectorPull
                                  + (tradeHealth - 50f) * 0.014f
                                  - sanctionPressure * 0.55f
                                  - blowback * 0.2f
@@ -246,7 +339,31 @@ namespace Brink.Core
                 if (sector.sector == EconomicSector.Finance) healthTarget -= Math.Max(0f, eco.debtToGdp - 90f) * 0.15f;
                 sector.health = Clamp(Approach(sector.health, healthTarget, 0.2f), 0f, 100f);
 
-                float outputTarget = sector.output + eco.growthRate * 0.08f - sanctionPressure * 0.35f;
+                // **What you import, you stop making.**
+                //
+                // Trade was pure gain: cheaper inputs, a higher resource ceiling,
+                // better relations, and no cost anywhere. That is most of why the
+                // diplomatic playstyle grades a full point above passive with the
+                // best ECON *and* POS components in the game — it compounds
+                // without ever paying.
+                //
+                // The real cost of trade is concentrated and domestic: imports
+                // outcompete the industry that used to supply the same thing, the
+                // losses land on identifiable sectors while the gains are diffuse,
+                // and the capability to restart erodes long before anyone decides
+                // to. So a heavy energy link hollows out domestic energy, and a
+                // heavy materials link hollows out industry.
+                //
+                // It is a *trade-off*, not a penalty: the resource ceiling that
+                // link buys is usually worth more than the sector it costs. But it
+                // is now a decision with two sides, and an industrial programme is
+                // the answer to it — which is exactly the sort of coupling this
+                // pillar was missing.
+                float displacement = ImportDisplacement(state, country, sector.sector);
+
+                float outputTarget = sector.output + eco.growthRate * 0.08f
+                                     - sanctionPressure * 0.35f
+                                     - displacement;
                 if (sector.sector == EconomicSector.Defense && atWar) outputTarget += 0.5f;
                 sector.output = Clamp(Approach(sector.output, outputTarget, 0.5f), 0f, 100f);
             }

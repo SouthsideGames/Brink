@@ -106,6 +106,72 @@ namespace Brink.Tests
                 + "build things, so where the money goes does not matter.");
         }
 
+        // ---------- the layer has to reach the economy ----------
+
+        /// <summary>
+        /// A damaged sector layer has to show up in the economy.
+        ///
+        /// **`output` and `health` were written by four systems and read by
+        /// none** — not by growth, not by the market index, not by anything. Seven
+        /// entries per country, modelled in detail and consumed nowhere, which
+        /// made every instrument aimed at them inert: `CovertOperation.Sabotage`
+        /// is documented as damaging sector health and did nothing, the strategic
+        /// endgame's −25 health did nothing, and import displacement did nothing.
+        ///
+        /// This is the test whose absence let an entire layer sit decorative. It
+        /// asserts consequence, not a formula, so it survives retuning.
+        /// </summary>
+        [Test]
+        public void GuttingTheSectorsHurtsGrowth()
+        {
+            float GrowthAfter(float sectorHealth, float sectorOutput)
+            {
+                var world = WorldFactory.CreateDebugWorld(seed: 2244);
+                var localTurns = new TurnManager(world);
+                SimulationPipeline.Wire(localTurns, world);
+                var player = world.PlayerCountry;
+
+                for (int month = 0; month < 24; month++)
+                {
+                    foreach (var sector in player.economy.sectors)
+                    {
+                        sector.health = sectorHealth;
+                        sector.output = sectorOutput;
+                    }
+                    localTurns.EndMonth();
+                }
+                return player.economy.growthRate;
+            }
+
+            float healthy = GrowthAfter(90f, 80f);
+            float gutted = GrowthAfter(20f, 25f);
+
+            Assert.Greater(healthy, gutted,
+                $"An economy whose industries are running at 90/80 grew at {healthy:F2} and one "
+                + $"at 20/25 grew at {gutted:F2}. If the sector layer does not reach growth, "
+                + "everything aimed at it — sabotage, blockade, industrial programmes, import "
+                + "competition — is decoration.");
+        }
+
+        [Test]
+        public void CapacityWithoutFunctioningIsIdle()
+        {
+            // Multiplied rather than averaged: a sector with plant it cannot run
+            // is not half-productive. That is what makes stopping an economy a
+            // real alternative to destroying it.
+            var eco = state.PlayerCountry.economy;
+
+            foreach (var sector in eco.sectors) { sector.output = 90f; sector.health = 10f; }
+            float paralysed = EconomySystem.SectorStrength(eco);
+
+            foreach (var sector in eco.sectors) { sector.output = 90f; sector.health = 90f; }
+            float running = EconomySystem.SectorStrength(eco);
+
+            Assert.Less(paralysed, running * 0.4f,
+                $"Plant at 90 capacity and 10 functioning scored {paralysed:F1} against "
+                + $"{running:F1} when running. Idle capacity is not most of a working economy.");
+        }
+
         // ---------- and it is bounded ----------
 
         [Test]
