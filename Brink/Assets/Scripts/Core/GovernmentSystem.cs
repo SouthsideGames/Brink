@@ -44,6 +44,22 @@ namespace Brink.Core
         /// <summary>How much bought support survives into next month.</summary>
         public const float BrokeredSupportDecay = 0.94f;
 
+        /// <summary>
+        /// How much of a messaging campaign survives into next month. Deliberately
+        /// quicker than <see cref="BrokeredSupportDecay"/> — about a nine-month
+        /// half-life against fourteen — because a favour owed outlasts a speech.
+        /// </summary>
+        public const float MessagingDecay = 0.92f;
+
+        /// <summary>
+        /// Where the messaging reservoir saturates. Below `brokeredSupport`'s 60:
+        /// there is a limit to what a government can talk its way into, and past
+        /// it further campaigning is a government that has run out of other ideas.
+        /// At the ceiling this is worth ~+19 approval on the target, which is real
+        /// without being the whole pillar.
+        /// </summary>
+        public const float MessagingCeiling = 45f;
+
         /// <summary>Monthly political bill for holding a restrictive civic posture.</summary>
         public const float RestrictiveUpkeep = 0.45f;
 
@@ -331,7 +347,8 @@ namespace Brink.Core
             // ConsolidateHome on (50 − approval) — stopped every AI government
             // from ever attending to its own domestic condition again.
             float approvalTarget = Clamp(50f + approvalPull * 6f + ApprovalShiftFor(gov)
-                                         - country.socialUnrest * 0.25f);
+                                         - country.socialUnrest * 0.25f
+                                         + gov.publicMessaging * 0.42f);
             country.governmentApproval = Approach(country.governmentApproval, approvalTarget, 0.06f);
 
             // Stability and unity had **no restoring force at all** — the only
@@ -360,7 +377,12 @@ namespace Brink.Core
                 + country.pillars.government * 0.20f
                 + country.stability * 0.25f
                 - country.warExhaustion * 0.20f
-                + UnityShiftFor(gov));
+                + UnityShiftFor(gov)
+                // Weighted well below approval on purpose. Talking to the country
+                // can make a government liked; it cannot by itself make a divided
+                // country whole, and unity has the slowest drift in the file, so a
+                // large term here would be the strongest lever in the pillar.
+                + gov.publicMessaging * 0.16f);
             country.nationalUnity = Approach(country.nationalUnity, unityTarget, 0.04f);
 
             // Bought support fades. It moves the *target* below rather than the
@@ -368,6 +390,11 @@ namespace Brink.Core
             // is something a government maintains rather than something it
             // purchases once and keeps forever.
             gov.brokeredSupport = Math.Max(0f, gov.brokeredSupport * BrokeredSupportDecay);
+
+            // So does a message. Faster than patronage: a favour owed outlasts a
+            // speech given, and this is the difference between a campaign a
+            // government sustains and one it can stop paying for.
+            gov.publicMessaging = Math.Max(0f, gov.publicMessaging * MessagingDecay);
 
             // A restrictive apparatus is not free to hold. Charged against the
             // same pool everything else is bought from, so it competes with
@@ -788,9 +815,20 @@ namespace Brink.Core
             var country = state.FindCountry(countryId);
             if (country == null) return false;
 
+            // **Moves the target, not the value.** See Government.publicMessaging:
+            // writing approval and unity directly meant the monthly drift erased
+            // the campaign, so the most repeatable verb in the pillar could not
+            // hold either stat anywhere the model did not already want it.
+            //
+            // Headroom shape borrowed from BuildPoliticalSupport: the first
+            // campaign lands hard and a government already saturating the airwaves
+            // gets progressively less for the same 2 PC, so messaging is worth
+            // starting and not worth spamming.
+            var gov = country.government;
             float effectiveness = 1f + country.pillars.government / 120f;
-            country.governmentApproval = Clamp(country.governmentApproval + 4f * effectiveness);
-            country.nationalUnity = Clamp(country.nationalUnity + 1.5f * effectiveness);
+            float headroom = Math.Max(0f, MessagingCeiling - gov.publicMessaging);
+            gov.publicMessaging = Clamp(
+                gov.publicMessaging + (2.5f + headroom * 0.13f) * effectiveness);
 
             state.AddChronicle(ChronicleCategory.Political, country.id,
                 "Public messaging campaign conducted.", Publicity.Public);
