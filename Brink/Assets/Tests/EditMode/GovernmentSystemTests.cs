@@ -82,7 +82,73 @@ namespace Brink.Tests
 
             Assert.IsTrue(GovernmentSystem.PublicMessaging(state));
             Assert.AreEqual(10f - GovernmentSystem.PublicMessagingCost, state.politicalCapital, 0.001f);
-            Assert.Greater(player.governmentApproval, 50f);
+            Assert.Greater(player.government.publicMessaging, 0f,
+                "The campaign has to be recorded somewhere the monthly target can read it.");
+        }
+
+        /// <summary>
+        /// **The test the old one should have been.** Its predecessor asserted
+        /// approval rose *on the same line as the call*, which is the one moment a
+        /// doomed write looks correct — the campaign wrote `governmentApproval`
+        /// directly, and `UpdatePoliticalCondition` then pulled it 6% back toward a
+        /// target containing no messaging term at all, every month, forever.
+        ///
+        /// Reported from play as "is there any way I can boost these things?".
+        /// Measuring the effect a month later, against a control that did nothing,
+        /// is the only shape that can tell a real lever from a cosmetic one.
+        /// </summary>
+        [Test]
+        public void PublicMessaging_StillHoldsApprovalUpAYearLater()
+        {
+            var control = WorldFactory.CreateDebugWorld(seed: 8080);
+            var controlTurns = new TurnManager(control);
+            controlTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
+            controlTurns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+
+            state.politicalCapital = 200f;
+            control.politicalCapital = 200f;
+
+            for (int month = 0; month < 12; month++)
+            {
+                GovernmentSystem.PublicMessaging(state);   // the campaigner
+                turns.EndMonth();                      // the control does nothing
+                controlTurns.EndMonth();
+            }
+
+            float campaigned = state.PlayerCountry.governmentApproval;
+            float idle = control.PlayerCountry.governmentApproval;
+
+            Assert.Greater(campaigned, idle + 4f,
+                $"After a year of monthly campaigning approval was {campaigned:F1} against "
+                + $"{idle:F1} for a government that did nothing. A verb the player can afford "
+                + "to use every month must leave a mark the drift cannot erase.");
+
+            // And it must not be a free ride to the ceiling either — the headroom
+            // shape exists so that saturating the airwaves stops paying.
+            Assert.Less(state.PlayerCountry.government.publicMessaging,
+                GovernmentSystem.MessagingCeiling + 0.01f,
+                "The reservoir ran past its ceiling; repeated campaigning is unbounded.");
+        }
+
+        /// <summary>
+        /// The other half of the same rule: stop paying and it goes away. Support
+        /// that is bought once and kept forever is not a decision the player has
+        /// to keep making.
+        /// </summary>
+        [Test]
+        public void PublicMessaging_FadesWhenTheCampaignStops()
+        {
+            state.politicalCapital = 200f;
+            for (int i = 0; i < 6; i++) GovernmentSystem.PublicMessaging(state);
+
+            float peak = state.PlayerCountry.government.publicMessaging;
+            Assert.Greater(peak, 0f);
+
+            for (int month = 0; month < 12; month++) turns.EndMonth();
+
+            Assert.Less(state.PlayerCountry.government.publicMessaging, peak * 0.6f,
+                "A year of silence left the campaign nearly intact. Messaging must be "
+                + "something a government sustains, not something it buys once.");
         }
 
         [Test]

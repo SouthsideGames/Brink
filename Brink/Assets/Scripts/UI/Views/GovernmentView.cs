@@ -90,6 +90,27 @@ namespace Brink.UI.Views
                 : "  " + AsciiChart.LabeledBar("ELITE COHESION", gov.eliteCohesion, 100, 14, 20));
             sb.AppendLine();
             sb.AppendLine("  " + AsciiChart.LabeledBar("CMD LOYALTY", gov.militaryLoyalty, 100, 14, 20));
+            sb.AppendLine();
+
+            // **Which lever moves which bar.** Reported from play as "is there any
+            // way I can boost these things?" — asked in front of a screen that had
+            // nine verbs on it. The bars and the buttons were both present and
+            // nothing connected them, so the pillar read as a readout.
+            //
+            // The last two lines are the honest part: living standards and public
+            // memory are consequences, not dials, and saying so is better than
+            // leaving the operator hunting for a button that does not exist.
+            sb.AppendLine(AsciiChart.BoxHeader("WHAT MOVES THESE", W));
+            Lever(sb, "APPROVAL", "messaging, posture, standards", "public messaging, civic posture, living standards");
+            Lever(sb, "STABILITY", "posture, reform, approval", "civic posture, institutional reform, approval");
+            Lever(sb, "UNITY", "posture, stability, messaging", "civic posture, stability, public messaging");
+            Lever(sb, gov.IsElective ? "LEGISLATURE" : "ELITE COHESION",
+                "support, patronage — fade", "build support, patronage — both fade if not renewed");
+            Lever(sb, "SOCIAL UNREST", "civic posture", "civic posture; falls as unity and standards rise");
+            Lever(sb, "CMD LOYALTY", "secure loyalty, spending", "secure command loyalty, military spending");
+            sb.AppendLine();
+            Lever(sb, "LIVING STANDARDS", "no lever — ECONOMY", "no direct lever — earned in the ECONOMY pillar");
+            Lever(sb, "PUBLIC MEMORY", "no lever — conditions", "no direct lever — decays as conditions improve");
 
             // Our own services report on domestic plots — if they are competent.
             bool detected = player.counterIntel.counterIntelligence >= 35f && gov.conspiracyLevel >= 55f;
@@ -309,6 +330,24 @@ namespace Brink.UI.Views
                 sb.AppendLine($"   STABILITY (EST) {IntelReadout.ForDomain(state, country.id, IntelDomain.Political)}");
             }
             text.text = sb.ToString();
+        }
+
+        /// <summary>
+        /// One "stat — what moves it" row, sized to the panel.
+        ///
+        /// Written as a helper rather than as literal strings because a fixed
+        /// 76-column line is the exact thing that runs off a phone: the shell
+        /// hard-wraps `terminal-text`, and a wrapped line in a two-column block
+        /// puts the continuation under the label and the alignment is gone.
+        /// The short form is chosen to fit the narrowest panel the game supports.
+        /// </summary>
+        static void Lever(StringBuilder sb, string stat, string shortForm, string longForm)
+        {
+            int labelWidth = AsciiChart.NameWidth(W, 0.30f);
+            string detail = W >= Breakpoints.MediumMinColumns ? longForm : shortForm;
+
+            sb.Append("  ").Append(AsciiChart.Cell(stat, labelWidth)).Append("  ");
+            sb.AppendLine(AsciiChart.Cell(detail, System.Math.Max(8, W - labelWidth - 5)));
         }
 
         VisualElement MakeRow()

@@ -38,6 +38,7 @@ namespace Brink.Core
                 case PeaceTerm.Recognition:
                 case PeaceTerm.TreatyRevision:
                 case PeaceTerm.PoliticalConcessions:
+                case PeaceTerm.SanctionsLifted:
                     return true;
 
                 case PeaceTerm.Withdrawal:
@@ -111,6 +112,22 @@ namespace Brink.Core
                     return 16f + opponent.governmentApproval * 0.22f
                                + (100f - opponent.stability) * 0.12f;
 
+                case PeaceTerm.SanctionsLifted:
+                {
+                    // The mirror of SanctionsRelief, priced the same way: worth
+                    // nothing if they have not sanctioned us, so the screen cannot
+                    // offer a demand that would buy us nothing.
+                    var theirs = state.FindSanction(opponent.id, proposerId);
+                    if (theirs == null) return 0f;
+
+                    // Priced on what they invested in it, not on what it costs us.
+                    // An Existential embargo is a decade of foreign policy and the
+                    // instrument they have been counting on; standing it down is
+                    // conceding the campaign, and they price it accordingly.
+                    // A routine measure is a gesture and goes cheaply.
+                    return 10f + theirs.Weight * 11f + Math.Min(14f, theirs.monthsActive * 0.25f);
+                }
+
                 // ---- concessions ----
                 case PeaceTerm.Withdrawal:
                 {
@@ -134,6 +151,87 @@ namespace Brink.Core
 
                 default:
                     return 0f;
+            }
+        }
+
+        /// <summary>
+        /// The operator-facing label for a term, phrased from *our* side of the
+        /// table so "WE LIFT SANCTIONS" and "THEY LIFT SANCTIONS" cannot be
+        /// confused for each other.
+        ///
+        /// **Lives here, next to `IsDemand`, because the version that lived
+        /// privately in the view could not be tested.** Its `default:` branch
+        /// caught both `SecurityGuarantee` and `PoliticalConcessions`, so the
+        /// tenth term shipped as a second button reading "WE GUARANTEE THEM" —
+        /// two different demands wearing one label, found by a player rather
+        /// than by the suite. `EveryPeaceTermHasItsOwnLabel` walks the enum now.
+        /// </summary>
+        public static string Describe(PeaceTerm term)
+        {
+            switch (term)
+            {
+                // ---- demands ----
+                case PeaceTerm.TerritorialCession: return "CEDE OBJECTIVE";
+                case PeaceTerm.Reparations: return "REPARATIONS";
+                case PeaceTerm.Demilitarization: return "DEMILITARIZE";
+                case PeaceTerm.ResourceAccess: return "RESOURCE ACCESS";
+                case PeaceTerm.Recognition: return "RECOGNITION";
+                case PeaceTerm.TreatyRevision: return "REVISE TREATIES";
+                case PeaceTerm.PoliticalConcessions: return "THEY CHANGE COURSE";
+                case PeaceTerm.SanctionsLifted: return "THEY LIFT SANCTIONS";
+
+                // ---- concessions ----
+                case PeaceTerm.Withdrawal: return "WE WITHDRAW";
+                case PeaceTerm.SanctionsRelief: return "WE LIFT SANCTIONS";
+                case PeaceTerm.PrisonerExchange: return "PRISONER EXCHANGE";
+                case PeaceTerm.SecurityGuarantee: return "WE GUARANTEE THEM";
+
+                default:
+                    GameLog.Error("PEACE",
+                        $"{term} has no label. Add it to PeaceSystem.Describe.");
+                    return Phrase.Caps(term);
+            }
+        }
+
+        /// <summary>
+        /// Why a term would achieve nothing if signed, or null if it is live.
+        ///
+        /// Three terms are conditional on world state: you cannot lift sanctions
+        /// you never imposed, demand they lift sanctions they never imposed, or
+        /// withdraw from ground you do not hold. All three price to exactly zero,
+        /// which the settlement screen used to render as an ordinary button —
+        /// costing nothing, buying nothing, and looking identical to a free
+        /// concession. Following `OperationCatalog.CanOrder`: shown, disabled,
+        /// and given a reason.
+        /// </summary>
+        public static string WhyInert(GameState state, Confrontation confrontation,
+            string proposerId, PeaceTerm term)
+        {
+            var opponent = state.FindCountry(confrontation.OpponentOf(proposerId));
+            if (opponent == null) return null;
+
+            switch (term)
+            {
+                case PeaceTerm.SanctionsRelief:
+                    return state.FindSanction(proposerId, opponent.id) == null
+                        ? "WE HAVE NO SANCTIONS ON THEM" : null;
+
+                case PeaceTerm.SanctionsLifted:
+                    return state.FindSanction(opponent.id, proposerId) == null
+                        ? "THEY HAVE NO SANCTIONS ON US" : null;
+
+                case PeaceTerm.Withdrawal:
+                    foreach (var location in state.locations)
+                        if (location.ownerId == proposerId && location.originalOwnerId == opponent.id)
+                            return null;
+                    return "WE HOLD NO GROUND OF THEIRS";
+
+                case PeaceTerm.TerritorialCession:
+                    return state.FindLocation(confrontation.objectiveLocationId) == null
+                        ? "THIS WAR HAS NO TERRITORIAL OBJECTIVE" : null;
+
+                default:
+                    return null;
             }
         }
 
@@ -334,6 +432,22 @@ namespace Brink.Core
                             var link = state.FindTrade(proposerId, opponent.id);
                             if (link != null) link.embargoed = false;
                             summary.Add("sanctions lifted");
+                        }
+                        break;
+                    }
+
+                    case PeaceTerm.SanctionsLifted:
+                    {
+                        // Symmetric with SanctionsRelief above, and deliberately
+                        // so: signing both stands the whole economic war down,
+                        // which is what a mutual de-escalation actually looks like.
+                        var theirs = state.FindSanction(opponent.id, proposerId);
+                        if (theirs != null)
+                        {
+                            state.sanctions.Remove(theirs);
+                            var link = state.FindTrade(opponent.id, proposerId);
+                            if (link != null) link.embargoed = false;
+                            summary.Add($"{opponent.displayName} lifted sanctions");
                         }
                         break;
                     }

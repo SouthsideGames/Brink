@@ -285,6 +285,104 @@ namespace Brink.Tests
                     $"A peace term is not classified in PeaceSystem.IsDemand: {entry.message}");
         }
 
+        /// <summary>
+        /// **The bug this test exists for shipped and was found by a player.**
+        /// `Humanize` lived privately in MilitaryView and ended in a bare
+        /// `default: return "WE GUARANTEE THEM"`, so `PoliticalConcessions` —
+        /// appended after that switch was written — rendered as a second button
+        /// with an identical label. Two different demands, one name, no failure.
+        ///
+        /// A distinctness check rather than a spelling check: what matters is
+        /// that no two terms collide, not what any one of them says.
+        /// </summary>
+        [Test]
+        public void EveryPeaceTermHasItsOwnLabel()
+        {
+            GameLog.Clear();
+            var seen = new System.Collections.Generic.Dictionary<string, PeaceTerm>();
+
+            foreach (PeaceTerm term in System.Enum.GetValues(typeof(PeaceTerm)))
+            {
+                string label = PeaceSystem.Describe(term);
+
+                Assert.IsFalse(string.IsNullOrWhiteSpace(label), $"{term} has a blank label.");
+                Assert.IsFalse(seen.ContainsKey(label),
+                    $"{term} and {(seen.ContainsKey(label) ? seen[label].ToString() : "")} both "
+                    + $"render as \"{label}\". The settlement screen would show two identical "
+                    + "buttons doing different things.");
+                seen[label] = term;
+            }
+
+            foreach (var entry in GameLog.Entries)
+                Assert.AreNotEqual(LogLevel.Error, entry.level,
+                    $"A peace term fell through PeaceSystem.Describe: {entry.message}");
+        }
+
+        /// <summary>
+        /// Asked for from play: a war fought while under embargo could be won and
+        /// leave the embargo standing, because the only sanctions term in the game
+        /// lifted *ours*.
+        /// </summary>
+        [Test]
+        public void TheirSanctionsCanBeNegotiatedAway()
+        {
+            EconomySystem.ImposeSanctionsBy(state, "CHN", state.playerCountryId, SanctionSeverity.Coercive);
+            Assert.IsNotNull(state.FindSanction("CHN", state.playerCountryId),
+                "Fixture failed to place their sanction on us.");
+
+            Assert.IsTrue(PeaceSystem.IsDemand(PeaceTerm.SanctionsLifted),
+                "Asking them to stand down their embargo is something we extract, not something we give.");
+
+            float cost = PeaceSystem.TermCost(state, confrontation,
+                state.playerCountryId, PeaceTerm.SanctionsLifted);
+            Assert.Greater(cost, 0f,
+                "A coercive embargo is an instrument they are counting on; giving it up must cost them something.");
+
+            // Make them desperate enough to sign, then check it actually happened.
+            ExhaustTheOpponent();
+            confrontation.defenderWarExhaustion = 95f;
+            confrontation.momentum = 80f;   // positive favours the initiator, which is us
+
+            var proposal = PeaceProposal.Of(PeaceTerm.SanctionsLifted);
+            Assert.IsTrue(PeaceSystem.WouldAccept(state, confrontation, state.playerCountryId, proposal),
+                "A collapsing opponent refused to lift sanctions to end the war.");
+
+            Assert.IsTrue(PeaceSystem.ProposeTerms(state, confrontation, state.playerCountryId, proposal),
+                "The terms were acceptable but the proposal was refused.");
+
+            Assert.IsNull(state.FindSanction("CHN", state.playerCountryId),
+                "The settlement was signed and their sanctions were still in force — "
+                + "the term resolved and changed nothing.");
+        }
+
+        /// <summary>
+        /// A term whose condition is unmet prices to zero, which the settlement
+        /// screen used to render as an ordinary free concession. It must instead
+        /// say why it is unavailable.
+        /// </summary>
+        [Test]
+        public void ATermThatCouldAchieveNothingSaysSo()
+        {
+            // Nobody has sanctioned anybody in the fixture.
+            Assert.IsNotNull(PeaceSystem.WhyInert(state, confrontation,
+                state.playerCountryId, PeaceTerm.SanctionsLifted),
+                "Demanding they lift sanctions they never imposed read as a live term.");
+
+            Assert.IsNotNull(PeaceSystem.WhyInert(state, confrontation,
+                state.playerCountryId, PeaceTerm.SanctionsRelief),
+                "Offering to lift sanctions we never imposed read as a live concession.");
+
+            EconomySystem.ImposeSanctionsBy(state, "CHN", state.playerCountryId, SanctionSeverity.Pressure);
+            Assert.IsNull(PeaceSystem.WhyInert(state, confrontation,
+                state.playerCountryId, PeaceTerm.SanctionsLifted),
+                "Their sanction exists, so the term is live and must not be greyed out.");
+
+            // Reparations are always askable — the guard must not over-reach and
+            // disable ordinary terms.
+            Assert.IsNull(PeaceSystem.WhyInert(state, confrontation,
+                state.playerCountryId, PeaceTerm.Reparations));
+        }
+
         [Test]
         public void DemandsAndConcessionsArePointedOppositeWays()
         {

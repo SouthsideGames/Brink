@@ -45,7 +45,22 @@ namespace Brink.Data
         /// changing its policy, which costs it standing at home. The last of
         /// GDD §26's ten terms to be built — the other nine matched exactly.
         /// </summary>
-        PoliticalConcessions
+        PoliticalConcessions,
+
+        /// <summary>
+        /// **They** lift the economic measures they have imposed on us.
+        ///
+        /// Reported from play: the settlement screen could offer to lift *our*
+        /// sanctions as a concession, but there was no way to demand relief from
+        /// theirs — so a war fought while under embargo could be won and leave the
+        /// embargo in place. Ending the coercion aimed at you is one of the most
+        /// ordinary things a state actually negotiates for.
+        ///
+        /// The mirror of <see cref="SanctionsRelief"/>, and the pair is the point:
+        /// a settlement where both sides stand their measures down is a real,
+        /// balanced bargain the game previously could not express.
+        /// </summary>
+        SanctionsLifted
     }
 
     /// <summary>A settlement offer: what we demand, and what we are prepared to give.</summary>

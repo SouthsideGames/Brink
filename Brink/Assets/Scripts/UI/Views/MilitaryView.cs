@@ -1042,6 +1042,19 @@ namespace Brink.UI.Views
             if (!string.IsNullOrEmpty(standing))
                 AddText("terminal-text-dim").text = $"   {standing}";
 
+            // **A target list must say whose ground each place is.** Reported from
+            // play as "hard to tell what is my places and what is theirs": the
+            // list mixed our own locations in with the opponent's and printed
+            // nothing but a name, so ordering PREPARED DEFENCE on Norfolk and
+            // ordering an assault on Ankara looked like the same kind of decision.
+            //
+            // Glyph first, colour second — the same rule the map follows, so the
+            // reading survives any palette and any colour vision. The type code
+            // is the other half: whether a place is a port or an airbase decides
+            // which of the twenty-three verbs can even point at it.
+            AddText("terminal-text-dim").text =
+                "   + OURS    ! THEIRS    - THIRD PARTY";
+
             var targetRow = new VisualElement();
             targetRow.AddToClassList("button-row");
             Root.Add(targetRow);
@@ -1051,10 +1064,22 @@ namespace Brink.UI.Views
                 bool current = selectedLocationId == loc.id;
                 bool advised = advice != null && advice.targetLocationId == loc.id;
 
+                bool ours = loc.ownerId == state.playerCountryId;
+                bool theirs = loc.ownerId == confrontation?.OpponentOf(state.playerCountryId);
+                string glyph = ours ? "+" : theirs ? "!" : "-";
+
                 var button = new Button(() => { selectedLocationId = captured.id; Refresh(); })
                 {
-                    text = (current ? "► " : "") + loc.displayName.ToUpperInvariant()
-                           + (advised ? "  ★" : "")
+                    // Kept deliberately tight. MILITARY is the densest screen in
+                    // the game and every button grew ~30% taller when touch
+                    // targets went to 44px, so the marker is four characters —
+                    // glyph, type, space — not a sentence. The type code earns
+                    // its place: it decides which of the twenty-three verbs can
+                    // point at the target at all.
+                    text = (current ? "► " : "  ")
+                           + glyph + " " + loc.TypeCode + " "
+                           + loc.displayName.ToUpperInvariant()
+                           + (advised ? " ★" : "")
                 };
                 button.AddToClassList("cmd-button");
                 if (current) button.AddToClassList("primary");
@@ -1062,7 +1087,14 @@ namespace Brink.UI.Views
                 // The star carries the meaning and the colour reinforces it, so
                 // the recommendation survives any palette and any colour vision —
                 // the same rule the map's standing glyphs follow.
+                //
+                // Advice wins the colour slot when both apply: `sig-advice` is a
+                // recommendation about *this* order, while ownership is already
+                // carried by the glyph, so nothing is lost by yielding it.
                 if (advised) button.AddToClassList("sig-advice");
+                else if (ours) button.AddToClassList("sig-friendly");
+                else if (theirs) button.AddToClassList("sig-hostile");
+
                 targetRow.Add(button);
             }
 
@@ -1072,6 +1104,26 @@ namespace Brink.UI.Views
             var selectedTarget = state.FindLocation(selectedLocationId);
             if (selectedTarget != null)
             {
+                // The button row has to stay terse, so the identity of whatever
+                // is actually selected is spelled out here in full — including
+                // the case the glyph cannot express, where ground physically in
+                // their country is currently held by us or by a third party.
+                var owner = state.FindCountry(selectedTarget.ownerId);
+                var origin = state.FindCountry(selectedTarget.originalOwnerId);
+                var identity = new StringBuilder();
+                identity.Append("   TARGET: ")
+                        .Append(selectedTarget.displayName.ToUpperInvariant())
+                        .Append(" — ").Append(Phrase.Of(selectedTarget.type).ToLowerInvariant())
+                        .Append(", held by ")
+                        .Append(selectedTarget.ownerId == state.playerCountryId
+                            ? "us" : owner?.displayName ?? "no one");
+
+                if (origin != null && origin.id != selectedTarget.ownerId)
+                    identity.Append(" (").Append(origin.displayName).Append("'s ground)");
+
+                AddText(selectedTarget.ownerId == state.playerCountryId
+                    ? "sig-friendly" : "terminal-text-bright").text = identity.ToString();
+
                 float reach = GeographySystem.ReachFactorFor(state, state.playerCountryId, selectedTarget);
                 var reachLine = AddText(reach >= 0.999f ? "terminal-text-dim" : "terminal-text-bright");
                 reachLine.text = reach >= 0.999f
@@ -1278,7 +1330,7 @@ namespace Brink.UI.Views
                 var summary = new StringBuilder();
                 summary.AppendLine("  THEY WOULD SIGN THIS TODAY:");
                 foreach (var term in readyDeal.terms)
-                    summary.AppendLine($"    · {Humanize(term)}");
+                    summary.AppendLine($"    · {PeaceSystem.Describe(term)}");
                 AddText("terminal-text-bright").text = summary.ToString().TrimEnd();
 
                 var acceptRow = MakeRow();
@@ -1304,17 +1356,29 @@ namespace Brink.UI.Views
             {
                 var captured = term;
                 bool selected = draftTerms.Contains(term);
-                float cost = PeaceSystem.TermCost(state, confrontation, state.playerCountryId, term);
+                string inert = PeaceSystem.WhyInert(state, confrontation, state.playerCountryId, term);
 
                 var button = new Button(() =>
                 {
                     if (!draftTerms.Remove(captured)) draftTerms.Add(captured);
                     Refresh();
                 })
-                { text = (selected ? "[X] " : "[ ] ") + Humanize(term) };
+                {
+                    text = inert != null
+                        ? "[-] " + PeaceSystem.Describe(term) + " — " + inert
+                        : (selected ? "[X] " : "[ ] ") + PeaceSystem.Describe(term)
+                };
                 button.AddToClassList("cmd-button");
-                if (selected) button.AddToClassList("primary");
-                if (cost > 0f) demandRow.Add(button); else concessionRow.Add(button);
+                if (selected && inert == null) button.AddToClassList("primary");
+                if (inert != null) button.SetEnabled(false);
+
+                // **Route by what the term *is*, not by what it currently prices
+                // at.** Sorting on `cost > 0` filed every conditional demand under
+                // concessions the moment its condition was unmet — so a demand
+                // appeared beneath a header promising concessions, which is the
+                // one thing this two-row layout exists to communicate.
+                if (PeaceSystem.IsDemand(term)) demandRow.Add(button);
+                else concessionRow.Add(button);
             }
 
             var proposal = new PeaceProposal();
@@ -1353,22 +1417,6 @@ namespace Brink.UI.Views
             });
         }
 
-        static string Humanize(PeaceTerm term)
-        {
-            switch (term)
-            {
-                case PeaceTerm.TerritorialCession: return "CEDE OBJECTIVE";
-                case PeaceTerm.Reparations: return "REPARATIONS";
-                case PeaceTerm.Demilitarization: return "DEMILITARIZE";
-                case PeaceTerm.ResourceAccess: return "RESOURCE ACCESS";
-                case PeaceTerm.Recognition: return "RECOGNITION";
-                case PeaceTerm.TreatyRevision: return "REVISE TREATIES";
-                case PeaceTerm.Withdrawal: return "WE WITHDRAW";
-                case PeaceTerm.SanctionsRelief: return "WE LIFT SANCTIONS";
-                case PeaceTerm.PrisonerExchange: return "PRISONER EXCHANGE";
-                default: return "WE GUARANTEE THEM";
-            }
-        }
 
         void BuildAfterAction(Confrontation confrontation)
         {

@@ -127,6 +127,43 @@ namespace Brink.Data
         public float brokeredSupport;
 
         /// <summary>
+        /// Standing built by addressing the public directly, 0..100.
+        ///
+        /// **The sixth instance of this codebase's most persistent bug family**,
+        /// and the most damaging one, because it sat on the pillar's cheapest and
+        /// most repeatable verb. `PublicMessagingBy` wrote `+4` straight into
+        /// `governmentApproval` and `+1.5` into `nationalUnity` — both of which
+        /// `Approach` a computed target every month, and neither target contained
+        /// any messaging term.
+        ///
+        /// **It failed in both directions at once, which is why it survived so
+        /// long.** `Approach` pulls back a fixed *fraction of the gap*, so what
+        /// the verb did depended entirely on how often it was used:
+        /// - Used occasionally — the intended way — a campaign half-lifed in about
+        ///   eleven months and left nothing behind. Reported from play as "is
+        ///   there any way I can boost these things?", which was a fair reading,
+        ///   because functionally there was not.
+        /// - Used every month, a gain of ~5.6 against a 6% pull-back reaches
+        ///   equilibrium ninety-odd points above target — i.e. **clamped at 100**.
+        ///   Spamming the cheapest verb in the pillar pinned approval at maximum
+        ///   permanently.
+        ///
+        /// A lever that is worthless used sensibly and degenerate when spammed is
+        /// the exact opposite of a decision, and both halves have the same cause.
+        /// A saturating reservoir removes both: frequency now changes how quickly
+        /// you approach a bounded benefit rather than how far past it you can go.
+        ///
+        /// Same shape as <see cref="brokeredSupport"/>: a decaying reservoir that
+        /// is a *term in the target*. Decays faster than brokered support does —
+        /// rhetoric fades quicker than patronage, so this is a campaign a
+        /// government keeps running rather than a speech it gives once.
+        ///
+        /// Defaults to zero, which is correct rather than merely empty: a state
+        /// that has run no campaign carries no residue. No save migration needed.
+        /// </summary>
+        public float publicMessaging;
+
+        /// <summary>
         /// 0..100 how ready a successor is to take over (GDD §13).
         ///
         /// Administrations come and go while the operator persists, and until now

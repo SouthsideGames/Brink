@@ -758,6 +758,36 @@ namespace Brink.UI
             if (!float.IsNaN(padLeft)) contentWidth -= padLeft;
             if (!float.IsNaN(padRight)) contentWidth -= padRight;
 
+            // **Text does not render in the content host — it renders inside the
+            // active view's ScrollView**, which adds its own 1px border and 8px
+            // padding on each side. Measuring the host and ignoring that made
+            // every view roughly two and a half columns wider than it could show,
+            // so the tail of a wrapped line was clipped rather than wrapped:
+            // "Take DIRECT CONTROL in CABIN" with the ET beyond the edge.
+            //
+            // Read from the real element rather than hardcoding 18px, for the same
+            // reason the character width is measured from a real probe: a USS edit
+            // must not silently reintroduce this.
+            // The fallback matches `.view-scroll` in the stylesheet. It is used
+            // only before the first view exists or is laid out — but it must be
+            // the *conservative* number rather than zero: measuring too narrow
+            // wraps a line early and looks fine, measuring too wide runs it off
+            // the right edge, which is the bug being fixed.
+            const float ViewChromeFallback = 18f;
+
+            var viewRoot = activeView?.Root;
+            float chrome = ViewChromeFallback;
+            if (viewRoot != null)
+            {
+                float border = viewRoot.resolvedStyle.borderLeftWidth
+                               + viewRoot.resolvedStyle.borderRightWidth;
+                float padding = viewRoot.resolvedStyle.paddingLeft
+                                + viewRoot.resolvedStyle.paddingRight;
+                if (!float.IsNaN(border) && !float.IsNaN(padding))
+                    chrome = border + padding;
+            }
+            contentWidth -= chrome;
+
             const int sample = 40;
             var measured = measureProbe.MeasureTextSize(
                 new string('M', sample), 0, VisualElement.MeasureMode.Undefined, 0, VisualElement.MeasureMode.Undefined);
