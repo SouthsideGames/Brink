@@ -25,6 +25,7 @@ namespace Brink.UI.Views
         readonly OperationDirective directive = new OperationDirective();
         string selectedLocationId;
         string defensiveLocationId;
+        OperationRecord lastDefensiveProgramme;
         string inventorySubjectId;
         AssetKind selectedAsset = AssetKind.Fighters;
         OperationType selectedOperation = OperationType.Assault;
@@ -310,25 +311,83 @@ namespace Brink.UI.Views
                     state, state.playerCountryId, site, captured, out string blocked);
 
                 int cost = ConfrontationSystem.OperationCostFor(state, null, captured);
+
+                // **The assessed odds, before the order.** A defensive programme
+                // used to be a button with no forecast attached, so an operator
+                // working on ground they had just taken — where a low garrison and
+                // an unpacified population make the work genuinely hard — met a
+                // run of failures with nothing to reason from. Read through
+                // `EstimateOdds`, which is the same function that resolves it, so
+                // the forecast and the outcome cannot disagree.
+                //
+                // Forecast with **exactly what the order will pass**:
+                // `LaunchDefensiveProgramme` sends a default directive and the
+                // active confrontation, so the preview must too. The order
+                // screen's `directive` is the operator's *offensive* settings
+                // and is not what this path uses.
+                float odds = possible
+                    ? MilitarySystem.EstimateOdds(
+                        state, state.playerCountryId, site, captured, new OperationDirective(),
+                        ConfrontationSystem.CoalitionSupportFor(
+                            state, state.ActiveConfrontation, state.playerCountryId, captured))
+                    : 0f;
+
                 var button = new Button(() =>
                 {
-                    GameController.Instance.LaunchDefensiveProgramme(defensiveLocationId, captured);
+                    var launched = GameController.Instance
+                        .LaunchDefensiveProgramme(defensiveLocationId, captured);
+                    if (launched != null) lastDefensiveProgramme = launched;
                     Refresh();
                 })
-                { text = $"{profile.displayName} [{cost} CP]" };
+                { text = $"{profile.displayName} [{cost} CP]" + (possible ? $"  {odds * 100f:F0}%" : "") };
                 button.AddToClassList("cmd-button");
-                if (!possible)
-                {
-                    button.AddToClassList("terminal-text-dim");
-                    button.tooltip = blocked;
-                }
-                button.SetEnabled(possible);
+                if (!possible) Block(button, blocked);
                 row.Add(button);
             }
 
             AddText("terminal-text-dim").text =
-                "   Peacetime work. None of it escalates a standoff, and none of it is " +
-                "surcharged as an act of war.";
+                "   Percentages are our own staff's assessment of the work succeeding. Peacetime "
+                + "work: none of it escalates a standoff, and none of it is surcharged as an act "
+                + "of war.";
+
+            // Ground we hold but do not own is harder to work on, and saying so
+            // is the difference between a run of failures reading as the map and
+            // reading as the dice.
+            if (site.IsOccupied)
+                AddText("sig-rival").text =
+                    "   THIS IS OCCUPIED GROUND. Until it is pacified the population is part of "
+                    + "the defence, and every programme here is contested. COUNTER-INSURGENCY "
+                    + "raises pacification; everything else gets easier as it rises.";
+
+            BuildLastDefensiveProgramme(state);
+        }
+
+        /// <summary>
+        /// What the last defensive programme came to, and why (GDD §19, §28.1).
+        ///
+        /// A peacetime programme's after-action report went to a single ADVISORY
+        /// notification and nowhere else — it is not part of any war, so it has
+        /// no confrontation diary to live in. The operator pressed a button on
+        /// this screen, the screen said nothing, and the explanation was in the
+        /// briefing behind a dozen unread items. Held in the view rather than in
+        /// `GameState`: it is a note about what just happened on this screen, not
+        /// a fact about the world, and the world's copy is in CHRONICLE.
+        /// </summary>
+        void BuildLastDefensiveProgramme(GameState state)
+        {
+            if (lastDefensiveProgramme == null) return;
+
+            var record = lastDefensiveProgramme;
+            var location = state.FindLocation(record.locationId);
+
+            AddText(record.success ? "sig-ally" : "sig-hostile").text =
+                $"   LAST PROGRAMME — {record.operationType} AT "
+                + $"{(location?.displayName ?? "UNKNOWN").ToUpperInvariant()}: "
+                + (record.success ? "COMPLETE" : "FELL SHORT");
+
+            AddText("terminal-text-dim").text = "   " + record.summary;
+            if (!string.IsNullOrEmpty(record.explanation))
+                AddText("terminal-text-dim").text = record.explanation;
         }
 
         void BuildForceStructure(GameState state, CountryState player)
@@ -451,11 +510,10 @@ namespace Brink.UI.Views
                 { text = $"DECLARE WAR FOOTING [{AcquisitionSystem.WarFootingCost:F0} PC]" };
                 button.AddToClassList("cmd-button");
                 button.AddToClassList("danger");
-                button.SetEnabled(allowed);
+                if (!allowed) Block(button, blocked.ToUpperInvariant() + ".");
                 footingRow.Add(button);
 
-                if (!allowed) AddText("terminal-text-dim").text = $"   {blocked}.";
-                else AddText("terminal-text-dim").text =
+                if (allowed) AddText("terminal-text-dim").text =
                     "   Moves money to the military. Roughly doubles delivery tempo, and the " +
                     "chamber will want it back.";
             }
@@ -495,7 +553,8 @@ namespace Brink.UI.Views
             { text = $"ORDER {AssetCatalog.Format(order)} {chosen.label} [{AcquisitionSystem.OrderCost} CP]" };
             place.AddToClassList("cmd-button");
             place.AddToClassList("primary");
-            place.SetEnabled(player.resources.treasury >= cost);
+            if (player.resources.treasury < cost)
+                Block(place, $"TREASURY {player.resources.treasury:F0} — THIS ORDER COSTS {cost:F0}.");
             orderRow.Add(place);
 
             var bulk = new Button(() =>
@@ -505,7 +564,8 @@ namespace Brink.UI.Views
             })
             { text = $"ORDER {AssetCatalog.Format(order * 4f)} [{AcquisitionSystem.OrderCost} CP]" };
             bulk.AddToClassList("cmd-button");
-            bulk.SetEnabled(player.resources.treasury >= cost * 4f);
+            if (player.resources.treasury < cost * 4f)
+                Block(bulk, $"TREASURY {player.resources.treasury:F0} — FOUR ORDERS COST {cost * 4f:F0}.");
             orderRow.Add(bulk);
         }
 
@@ -532,12 +592,9 @@ namespace Brink.UI.Views
                 button.AddToClassList("cmd-button");
                 if (current) button.AddToClassList("primary");
                 if (posture == MilitaryPosture.Forward && !current) button.AddToClassList("danger");
-                button.SetEnabled(!current && allowed);
+                if (current) button.SetEnabled(false);
+                else if (!allowed) Block(button, blocked.ToUpperInvariant());
                 postureRow.Add(button);
-
-                // Say why it is locked rather than presenting a dead control.
-                if (!current && !allowed)
-                    AddText("terminal-text-dim").text = $"   {blocked}";
             }
 
             AddText().text = " DOCTRINE — how the force fights, not how strong it is";
@@ -585,33 +642,46 @@ namespace Brink.UI.Views
                 { text = (current ? "► " : "") + scale.ToString().ToUpperInvariant() };
                 button.AddToClassList("cmd-button");
                 if (current) button.AddToClassList("primary");
-                button.SetEnabled(!locked);
-                scaleRow.Add(button);
-
                 if (locked)
-                    AddText("terminal-text-dim").text =
-                        "   TRANSFORMATIVE: no yard or line can absorb a programme that size " +
-                        "— requires Strategic Industry.";
+                    Block(button, "NO YARD OR LINE CAN ABSORB A PROGRAMME THAT SIZE — "
+                                  + "REQUIRES STRATEGIC INDUSTRY.");
+                scaleRow.Add(button);
             }
+
+            // Money and industrial slots refuse a programme just as firmly as
+            // Command Points do, and the operator can see neither from this
+            // screen. Read through the same gate the order itself uses, so what
+            // is offered and what is accepted cannot disagree.
+            bool canProcure = MilitarySystem.CanBeginProcurement(
+                state, selectedProgramScale, out string procurementBlocked);
+            bool canSustain = MilitarySystem.CanInvestInLogistics(state, out string logisticsBlocked);
 
             var programRow = MakeRow();
             foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
             {
                 var captured = branch;
                 var scale = selectedProgramScale;
-                AddButton(programRow,
+                var button = AddButton(programRow,
                     $"{branch.ToString().ToUpperInvariant()} PROGRAM [{MilitarySystem.ProgramCpCost(scale)} CP]",
                     null, () =>
                 {
                     GameController.Instance.BeginProcurement(captured, scale);
                     Refresh();
                 });
+                if (!canProcure) Block(button, procurementBlocked);
             }
-            AddButton(programRow, $"LOGISTICS [{MilitarySystem.LogisticsInvestmentCost} CP]", null, () =>
+
+            var logistics = AddButton(programRow,
+                $"LOGISTICS [{MilitarySystem.LogisticsInvestmentCost} CP]", null, () =>
             {
                 GameController.Instance.InvestInLogistics();
                 Refresh();
             });
+            if (!canSustain) Block(logistics, logisticsBlocked);
+
+            AddText("terminal-text-dim").text =
+                $"   TREASURY {player.resources.treasury:F0}. A programme is paid for every month it runs, "
+                + "not when it is authorized.";
         }
 
         static string DoctrineDescription(MilitaryDoctrine doctrine)
@@ -628,14 +698,6 @@ namespace Brink.UI.Views
                 default:
                     return "  No pronounced emphasis. Competent everywhere, decisive nowhere.";
             }
-        }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
         }
 
         static void AppendBranch(StringBuilder sb, string label, BranchForce force)
@@ -777,7 +839,11 @@ namespace Brink.UI.Views
             { text = $"CONDUCT EXERCISE [{ExerciseSystem.CostFor(selectedScale)} CP]" };
             run.AddToClassList("cmd-button");
             run.AddToClassList("primary");
-            run.SetEnabled(canRun);
+            if (!canRun)
+            {
+                ExerciseSystem.CanExerciseWith(state, selectedPartnerId, out string blocked);
+                Block(run, blocked.ToUpperInvariant());
+            }
             runRow.Add(run);
 
             var hint = AddText("terminal-text-dim");
@@ -1193,8 +1259,12 @@ namespace Brink.UI.Views
                 // operator should be able to see that a blockade exists and that
                 // we cannot run one, which is a fact about our fleet and their
                 // coastline — hiding it just looks like the feature is missing.
-                if (!possible) button.AddToClassList("terminal-text-dim");
-                button.SetEnabled(possible);
+                if (!possible)
+                {
+                    OperationCatalog.CanOrder(
+                        state, state.playerCountryId, selectedTarget, captured, out string blocked);
+                    Block(button, blocked);
+                }
                 typeRow.Add(button);
             }
 
@@ -1370,7 +1440,7 @@ namespace Brink.UI.Views
                 };
                 button.AddToClassList("cmd-button");
                 if (selected && inert == null) button.AddToClassList("primary");
-                if (inert != null) button.SetEnabled(false);
+                if (inert != null) Block(button, inert.ToUpperInvariant());
 
                 // **Route by what the term *is*, not by what it currently prices
                 // at.** Sorting on `cost > 0` filed every conditional demand under
@@ -1407,7 +1477,8 @@ namespace Brink.UI.Views
             { text = "PUT TERMS TO THEM" };
             propose.AddToClassList("cmd-button");
             propose.AddToClassList("primary");
-            propose.SetEnabled(draftTerms.Count > 0);
+            if (draftTerms.Count == 0)
+                Block(propose, "NO TERMS ON THE TABLE.");
             actionRow.Add(propose);
 
             AddButton(actionRow, "CONCEDE OBJECTIVE", "danger", () =>
@@ -1416,7 +1487,6 @@ namespace Brink.UI.Views
                 Refresh();
             });
         }
-
 
         void BuildAfterAction(Confrontation confrontation)
         {
@@ -1460,14 +1530,6 @@ namespace Brink.UI.Views
                 sb.Append(i == (int)state ? $"[{names[i]}]" : names[i]);
             }
             return sb.ToString();
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            row.Add(button);
         }
     }
 }

@@ -94,8 +94,18 @@ three times over:
 
 **Transformative is a strategic verb** gated on `SkillEffect.StrategicIndustry`
 (node `ECO_STRATEGIC`) — yards, lines and skills that take a decade to build.
-Note that `MilitaryView` currently only ever requests `Major`, so this scale is
-reachable from code and tests but has **no button in the UI** (§8).
+`MilitaryView` offers all three scales as a selector row, with Transformative
+refused (and the reason printed) until the skill is held.
+
+**`CanBeginProcurement(state, scale, out reason)` / `CanInvestInLogistics(state,
+out reason)` are one gate shared by the order screen and the order** — the same
+rule `OperationCatalog.CanOrder` follows. All three procurement refusals
+(programme slots, the Transformative lock, three months' treasury) previously
+lived only inside `BeginProcurement`, where the operator met them as a bright
+button that spent **no Command Points and reported nothing**. Reported from play
+as "sometimes I press a button to use CP and it does not go down". Money and
+industrial slots are not things a player can infer from a screen that does not
+mention them, so the panel now prints the treasury figure beside the buttons.
 
 **`BeginProcurementBy` is actor-generic and must stay that way.** Strength being
 writable in exactly one place, once reachable only by the player, meant every AI
@@ -563,6 +573,50 @@ Offensive verbs still require a confrontation
 (`OperationCatalogTests.OffensiveVerbsStillNeedOne`): shooting at another state
 *is* a confrontation by definition, and peacetime reachability must not become a
 way to conduct a war nobody declared.
+
+#### 4-1a. On our own ground there is no opponent
+
+Reported from play: *"I am trying to improve the defence of a territory I took
+over but I keep failing with no direction on why."* Four separate defects, all
+from one root — `defender` is `state.FindCountry(target.ownerId)`, which for an
+`OwnGround` verb is **us**.
+
+1. **Every "and now bill the other side" line billed us a second time.**
+   Manpower twice over, war exhaustion twice over, and `AwardExperience` called
+   for both winning and losing the same engagement. Fortifying a position we
+   held cost more than attacking one we did not. `ApplyOperationCosts` now nulls
+   `defender` when `defender.id == attacker.id`; every downstream site was
+   already `defender != null`-guarded, so nothing else had to change.
+2. **Falling short was reported as a lost battle.** The failure branch was
+   shared with offensive operations, so it charged −5 war support, wrote
+   *"Operation against \<a place we own\> failed"*, and chronicled
+   `Publicity.Public` — which put **"Failed operation at …"** out on the world
+   wire. `OwnGround` now has its own branch: no war-support cost, wording that
+   describes unfinished work, and a `Publicity.Secret` entry (ours to read in
+   CHRONICLE, never on the wire).
+3. **Depletion ran backwards.** `DepletionFactor` reads the *target's* garrison
+   and works as "the position is collapsing", which on our own ground meant a
+   thinly held occupation was scored as *easier* to pacify. It is skipped
+   entirely for `OwnGround`; the opposition there is the insurgency, or nobody.
+4. **The report could not say why.** `RecordDefence` deliberately skipped
+   `DefenseModel.Unopposed`, so a failed programme produced an analysis with
+   **no defence factor in it** — nothing to rank, nothing for `Advice` to switch
+   on, and therefore no `WHAT WOULD CHANGE IT` line. The one class whose entire
+   job is to explain an outcome could not. `Labels.Undertaking` ("The scale of
+   the work") now records it, with advice naming ground strength, readiness,
+   supply and logistics as what decides an unopposed programme.
+
+Also `Labels.Speed` had no advice case and fell through to the generic line.
+`ForceInventoryTests.EveryFactorLabelHasAdviceBehindIt` now **reflects over the
+`Labels` constants** instead of a hand-copied list beside them, with an explicit
+exempt set for the four labels that can only ever help the attacker (`Coalition`,
+`Isr`, `Familiarity`, `Depleted`). That list may only shrink.
+
+**The panel says it too.** `BuildDefensiveProgrammes` prints each verb's assessed
+odds on its own button (through `MilitarySystem.EstimateOdds`, the same function
+that resolves it), flags occupied ground explicitly, and shows the last
+programme's after-action report — which previously existed only as one ADVISORY
+notification, since a peacetime programme has no confrontation diary to live in.
 
 ### 4a. Scale — `PowerScale`
 

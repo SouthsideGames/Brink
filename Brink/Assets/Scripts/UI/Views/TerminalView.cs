@@ -53,6 +53,56 @@ namespace Brink.UI.Views
             FormatText(Root);
             GateOnAffordability(Root);
             GateOnAuthority(Root, CommandPillar);
+            ExplainBlockedCommands(Root);
+        }
+
+        /// <summary>
+        /// Print, under each row of commands, why any of them are refused.
+        ///
+        /// The refusal itself is carried on the button by <see cref="Block"/>,
+        /// but a greyed button on a phone says only "no" — there is no hover, so
+        /// the tooltip explaining it may as well not exist. An absence has to say
+        /// what would change it, the same rule that turned a bare "NO ASSESSMENT"
+        /// into UNTASKED / COLLECTING / BURNED.
+        ///
+        /// Done here rather than in each panel so a view added later cannot
+        /// forget, and after both gates so it reports the reason that actually
+        /// stuck.
+        /// </summary>
+        public static void ExplainBlockedCommands(VisualElement element)
+        {
+            if (element == null) return;
+
+            // Snapshot: we insert siblings while walking.
+            var rows = new System.Collections.Generic.List<VisualElement>();
+            Collect(element);
+
+            foreach (var row in rows)
+            {
+                var reasons = new System.Collections.Generic.List<string>();
+                foreach (var child in row.Children())
+                {
+                    string reason = BlockedReason(child as Button);
+                    if (reason != null && !reasons.Contains(reason)) reasons.Add(reason);
+                }
+                if (reasons.Count == 0) continue;
+
+                var parent = row.parent;
+                if (parent == null) continue;
+
+                var note = new Label();
+                note.AddToClassList("terminal-text");
+                note.AddToClassList("terminal-text-dim");
+                note.text = AsciiChart.WrapBlock(
+                    "   UNAVAILABLE: " + string.Join("  ", reasons), TerminalMetrics.Columns);
+                parent.Insert(parent.IndexOf(row) + 1, note);
+            }
+
+            void Collect(VisualElement node)
+            {
+                if (node.ClassListContains("button-row")) rows.Add(node);
+                foreach (var child in node.Children()) Collect(child);
+            }
         }
 
         /// <summary>
@@ -91,10 +141,14 @@ namespace Brink.UI.Views
         /// navigation alone.
         /// </summary>
         public static void GateOnAuthority(VisualElement element, Pillar? pillar)
+            => GateOnAuthority(element, pillar,
+                GameController.Instance.IsRunning ? GameController.Instance.State : null);
+
+        /// <summary>The authority gate against an explicit state. See the overload above.</summary>
+        public static void GateOnAuthority(VisualElement element, Pillar? pillar, GameState state)
         {
-            var gc = GameController.Instance;
-            if (element == null || pillar == null || !gc.IsRunning) return;
-            if (AuthoritySystem.AuthorityOver(gc.State, pillar.Value)
+            if (element == null || pillar == null || state == null) return;
+            if (AuthoritySystem.AuthorityOver(state, pillar.Value)
                 != AuthoritySystem.AuthorityLevel.AdvisoryOnly) return;
 
             Walk(element);
@@ -103,11 +157,7 @@ namespace Brink.UI.Views
             {
                 if (node is Button button && !string.IsNullOrEmpty(button.text)
                     && TryReadCost(button.text, out _, out _))
-                {
-                    button.SetEnabled(false);
-                    button.AddToClassList("cmd-button-unaffordable");
-                    button.tooltip = "Not ours to command under this constitution.";
-                }
+                    Block(button, "Not ours to command under this constitution.");
 
                 foreach (var child in node.Children()) Walk(child);
             }
@@ -127,9 +177,17 @@ namespace Brink.UI.Views
         /// nothing, which reads as a broken control rather than an empty account.
         /// </summary>
         public static void GateOnAffordability(VisualElement element)
+            => GateOnAffordability(element,
+                GameController.Instance.IsRunning ? GameController.Instance.State : null);
+
+        /// <summary>
+        /// The gate against an explicit state, so it can be exercised without a
+        /// running session. Taking the state as an argument is also the honest
+        /// signature: nothing here needs the controller, only the three balances.
+        /// </summary>
+        public static void GateOnAffordability(VisualElement element, GameState state)
         {
-            var gc = GameController.Instance;
-            if (element == null || !gc.IsRunning) return;
+            if (element == null || state == null) return;
 
             if (element is Button button && !string.IsNullOrEmpty(button.text))
             {
@@ -138,21 +196,72 @@ namespace Brink.UI.Views
                     bool affordable;
                     switch (resource)
                     {
-                        case "CP": affordable = gc.State.commandPoints.current >= amount; break;
-                        case "INF": affordable = gc.State.influence >= amount; break;
-                        case "PC": affordable = gc.State.politicalCapital >= amount; break;
+                        case "CP": affordable = state.commandPoints.current >= amount; break;
+                        case "INF": affordable = state.influence >= amount; break;
+                        case "PC": affordable = state.politicalCapital >= amount; break;
                         default: affordable = true; break;
                     }
 
-                    button.SetEnabled(affordable);
-                    button.EnableInClassList("cmd-button-unaffordable", !affordable);
-                    if (!affordable) button.tooltip = $"Requires {amount} {resource}.";
+                    // Only ever *disables*. `SetEnabled(affordable)` here used to
+                    // re-enable everything a view had already blocked for its own
+                    // reasons, because this gate runs after `Build`. That is why
+                    // CONDUCT EXERCISE stayed bright during its cooldown, why a
+                    // patronage button the treasury could not fund stayed
+                    // pressable, and why pressing either spent nothing and said
+                    // nothing. A view rebuilds its buttons from scratch every
+                    // refresh, so there is never anything legitimate to re-enable.
+                    if (!affordable) Block(button, $"Requires {amount} {resource}.");
                 }
             }
 
             foreach (var child in element.Children())
-                GateOnAffordability(child);
+                GateOnAffordability(child, state);
         }
+
+        /// <summary>
+        /// Refuse a command, and say why — the one way a control is taken away.
+        ///
+        /// **Three rules, and they are the whole point of routing every refusal
+        /// through here.**
+        ///
+        /// 1. **A blocked button stays blocked.** The reason is recorded on the
+        ///    button itself, so a later gate cannot quietly hand it back. Both
+        ///    gates run after `Build`, and the affordability one used to call
+        ///    `SetEnabled(affordable)` — undoing every precondition a view had
+        ///    applied for its own reasons. The operator was then offered a
+        ///    control that spent nothing and reported nothing when pressed,
+        ///    which is indistinguishable from the game being broken.
+        /// 2. **The first reason is the one shown.** Whichever gate refuses
+        ///    first has the most specific answer; "requires 2 CP" is a worse
+        ///    thing to be told than "we exercised with them last month".
+        /// 3. **The reason is legible without hovering.** A tooltip is dead
+        ///    weight on a phone, so the reason is also readable back through
+        ///    <see cref="BlockedReason"/> and printed by the panels that offer
+        ///    the command.
+        /// </summary>
+        public static void Block(Button button, string reason)
+        {
+            if (button == null) return;
+
+            // Already refused for a more specific reason — leave it standing.
+            if (button.userData is BlockedCommand) return;
+
+            // A gate that refuses without saying why is the thing this replaced.
+            // Never leave the operator with a dead control and a blank line.
+            if (string.IsNullOrWhiteSpace(reason)) reason = "NOT AVAILABLE.";
+
+            button.userData = new BlockedCommand { reason = reason };
+            button.SetEnabled(false);
+            button.AddToClassList("cmd-button-unaffordable");
+            button.tooltip = reason;
+        }
+
+        /// <summary>Why this command is refused, or null if it is available.</summary>
+        public static string BlockedReason(Button button)
+            => button?.userData is BlockedCommand blocked ? blocked.reason : null;
+
+        /// <summary>Marker carried by a refused command. See <see cref="Block"/>.</summary>
+        sealed class BlockedCommand { public string reason; }
 
         /// <summary>
         /// Parse a trailing `[N CP]` / `[N INF]` / `[N PC]` cost tag.
@@ -263,6 +372,37 @@ namespace Brink.UI.Views
                         "Direct the official instead, or declare emergency powers.";
                     return;
             }
+        }
+
+        /// <summary>
+        /// A row of command buttons. `button-row` is what
+        /// <see cref="ExplainBlockedCommands"/> looks for, so a row built any
+        /// other way will not get its refusals explained.
+        /// </summary>
+        protected VisualElement MakeRow()
+        {
+            var row = new VisualElement();
+            row.AddToClassList("button-row");
+            Root.Add(row);
+            return row;
+        }
+
+        /// <summary>
+        /// A command button in a row.
+        ///
+        /// **Returns the button** so the caller can refuse it with
+        /// <see cref="Block"/>. Six views carried a byte-identical private copy
+        /// of this that returned void, which is why a precondition the caller
+        /// knew about had nowhere to go.
+        /// </summary>
+        protected static Button AddButton(VisualElement row, string text, string extraClass,
+            System.Action onClick)
+        {
+            var button = new Button(onClick) { text = text };
+            button.AddToClassList("cmd-button");
+            if (extraClass != null) button.AddToClassList(extraClass);
+            row.Add(button);
+            return button;
         }
 
         protected Label AddText(string ussClass = "terminal-text")

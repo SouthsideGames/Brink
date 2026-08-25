@@ -12,8 +12,12 @@ namespace Brink.UI.Views
     /// </summary>
     public class EndgameView : TerminalView
     {
-        public override string Id => "STRATEGIC";
-        public override string ShortCode => "STG";
+        // Named for what the panel holds, not for how important it is.
+        // "STRATEGIC/STG" sat next to "STRATEGIST/STR" in the nav rail and the
+        // two were indistinguishable at a glance — reported from play as a
+        // straight question about which was which.
+        public override string Id => "ENDGAME";
+        public override string ShortCode => "EGM";
 
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
@@ -33,6 +37,7 @@ namespace Brink.UI.Views
             var header = AddText("terminal-text-bright");
             header.text =
                 AsciiChart.BoxHeader("STRATEGIC INSTRUMENTS", W) + "\n" +
+                " The state's decisive options — not your record, which is in OPERATOR.\n" +
                 " Each pillar can reach an effect capable of breaking an opponent.\n" +
                 " None of them is a button. Each needs a capability we command, years\n" +
                 " of preparation, and conditions that permit it — and each leaves a\n" +
@@ -153,22 +158,6 @@ namespace Brink.UI.Views
                 sb.AppendLine($"  {record.date.SortKey}  {record.summary}");
             sb.AppendLine("  These are remembered. They do not fade from the record.");
             text.text = sb.ToString();
-        }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            row.Add(button);
         }
     }
 }

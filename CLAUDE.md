@@ -1273,6 +1273,78 @@ three had passed for a long time:
       next month. Now `UNTASKED` / `COLLECTING` / `BURNED` with a legend — an
       absence should say what would change it, like the after-action reports.
 
+- [x] **Four things reported from a play session, and the bug class under two of
+      them.** All four were "the game is broken" reports about mechanics that
+      were working — which is its own kind of broken.
+      - **"Sometimes I press a button to use CP and it doesn't go down."**
+        `GateOnAffordability` ran *after* `Build()` and called
+        `SetEnabled(affordable)` — so it **re-enabled every button a view had
+        already refused for its own reasons**. CONDUCT EXERCISE stayed bright
+        through its cooldown, patronage stayed pressable with no treasury, an
+        inapplicable peace term stayed selectable. Pressing any of them spent
+        nothing and said nothing. **Both gates now only ever disable**; a view
+        rebuilds its buttons every refresh, so there is nothing legitimate to
+        re-enable. Every refusal goes through `TerminalView.Block(button,
+        reason)`, first reason wins, and `ExplainBlockedCommands` prints one
+        wrapped `UNAVAILABLE:` line under any row holding a refused command —
+        **a tooltip is dead weight on a phone**. Procurement and logistics got
+        the gates they never had (`CanBeginProcurement` / `CanInvestInLogistics`,
+        one gate shared with the order, per the `OperationCatalog.CanOrder`
+        precedent): treasury and programme slots refuse just as firmly as CP and
+        nothing on that screen mentioned either. `AddButton`/`MakeRow` were lifted
+        to `TerminalView` — six byte-identical copies returned `void`, which is
+        precisely why a precondition the caller knew about had nowhere to go.
+      - **"What is the difference between STG and STR?"** STRATEGIC/STG
+        (the state's decisive instruments) sat next to STRATEGIST/STR (the
+        operator's own record) in a rail three characters wide. Now ENDGAME/EGM
+        and OPERATOR/OPR, each opening with a line saying what it is *not*.
+        View ids are plain strings addressed by `AttentionSystem`, `ActionCatalog`
+        and `TutorialSystem` with nothing binding them to a panel that exists, so
+        `BuildPanels` is now public and static and three tests walk the **real**
+        rail. A fourth fails the build when two short codes are within
+        Levenshtein distance 1. The old test compared against a list hand-copied
+        into the test file — it would have kept passing against panels that no
+        longer existed.
+      - **"I'm improving the defence of a territory I took over and I keep
+        failing with no direction on why."** Four defects from one root:
+        `defender` is whoever owns the target, which for an `OwnGround` verb is
+        **us**. Every "bill the other side" line billed us twice (manpower, war
+        exhaustion, experience for both winning and losing the same engagement),
+        so fortifying a position we held cost more than attacking one we did not.
+        Falling short shared the offensive failure branch, so it cost war
+        support, read *"Operation against \<our own port\> failed"*, and went out
+        on the **world wire** as a public failure. `DepletionFactor` ran
+        backwards, scoring a thinly held occupation as *easier* to pacify. And
+        the report could not explain itself: `RecordDefence` skipped
+        `DefenseModel.Unopposed`, so a failed programme produced an analysis with
+        **no defence factor at all** — nothing to rank, nothing for `Advice` to
+        switch on, and therefore no `WHAT WOULD CHANGE IT` line. The one class
+        whose whole job is to say why, silent. `Labels.Undertaking` fixes it, and
+        `EveryFactorLabelHasAdviceBehindIt` now reflects over the constants
+        instead of a hand-copied list (which is how the gap survived; `Speed` was
+        missing too). The panel now prints each verb's assessed odds on its
+        button, flags occupied ground, and shows the last programme's
+        after-action — which previously existed only as one ADVISORY notification,
+        since a peacetime programme has no confrontation diary to live in.
+      - **"Someone else was elected and I still control the country."** Not a
+        bug — it is GDD §13, and the design is right. But the game said so in a
+        **trailing clause of a filterable notification**: NEW ADMINISTRATION
+        carried the Government desk, so a poor minister could drop the only
+        explanation of the event most likely to read as broken, while the same
+        event silently revoked every granted authority. Now `ReportingDesk.Command`
+        (the operator's own standing is not the government's to forward at its
+        discretion), one item per handover instead of two on the term-limit path,
+        an ADMINISTRATION block that opens `THIS OFFICE: PERMANENT STRATEGIC
+        OPERATOR` and relabels the leader `HEAD OF GOVERNMENT`, and a new **first**
+        tutorial step. A player who thinks they are the head of state reads the
+        next election as the end of their game.
+      **The lesson common to the first and third:** a refusal the operator cannot
+      see is indistinguishable from a broken control, and an outcome the game
+      cannot explain is indistinguishable from unfair dice. Both were *correct
+      simulation* reported as bugs.
+      **Not yet verified by a test run** — no Unity available in the environment
+      these were written in. Run EditMode → Run All before trusting any of it.
+
 Recommended next:
 - **ECONOMY is now the high outlier at +0.92 over passive** (next is MILITARY at
   +0.62). Worth a look, but check it is not simply that 344 decisions a decade is

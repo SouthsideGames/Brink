@@ -307,6 +307,23 @@ namespace Brink.Core
             return record;
         }
 
+        /// <summary>
+        /// The coalition weight an operation would draw, exactly as the launch
+        /// path computes it.
+        ///
+        /// Extracted so a *preview* of the odds and the resolution that follows
+        /// it cannot disagree — the same reasoning that made `ComputePowers`
+        /// one function shared by the minister's advice and the outcome. The
+        /// defensive-programme panel forecasts every verb before it is ordered,
+        /// and forecasting with no partners while resolving with them would make
+        /// the printed percentage quietly wrong during a war.
+        /// </summary>
+        public static float CoalitionSupportFor(GameState state, Confrontation confrontation,
+            string actorId, OperationType operationType)
+            => confrontation == null
+                ? 0f
+                : DiplomacySystem.CoalitionStrength(state, confrontation, actorId, operationType);
+
         /// <summary>Operation launched by any actor. AI states use the same resolution.</summary>
         public static OperationRecord LaunchOperationBy(GameState state, Confrontation confrontation,
             string attackerId, string targetLocationId, OperationType operationType, OperationDirective directive)
@@ -376,9 +393,7 @@ namespace Brink.Core
             // Coalition partners add real weight to the operation (GDD §15.2),
             // contributing the branches this kind of operation actually uses.
             // Nobody joins us in fortifying our own ground.
-            float coalitionSupport = confrontation == null
-                ? 0f
-                : DiplomacySystem.CoalitionStrength(state, confrontation, attackerId, operationType);
+            float coalitionSupport = CoalitionSupportFor(state, confrontation, attackerId, operationType);
 
             var record = MilitarySystem.ResolveOperation(
                 state, confrontation, attackerId, target, operationType, directive, rng, coalitionSupport);

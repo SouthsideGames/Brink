@@ -219,7 +219,17 @@ namespace Brink.Core
                            + "or by joint exercises, and replacements dilute what the survivors know.";
                 case Labels.Insurgency:
                     return "The population is the obstacle, not a garrison. Pacification is slow "
-                           + "and there is no fast version of it.";
+                           + "and there is no fast version of it. COUNTER-INSURGENCY is the only "
+                           + "verb that raises pacification, and every other programme on this "
+                           + "ground gets easier as it does.";
+                case Labels.Speed:
+                    return "The order's tempo is working against it. A slower approach trades "
+                           + "surprise for preparation; raise the speed priority only when the "
+                           + "position is weak enough to rush.";
+                case Labels.Undertaking:
+                    return "Nobody opposed this — the work was simply larger than what we put "
+                           + "into it. Ground strength, readiness, supply and logistics decide a "
+                           + "programme like this. Nothing the enemy does will change it.";
                 default:
                     return "Bring more weight: a coalition partner, a stronger branch for this "
                            + "kind of operation, or a cheaper verb that sets up the next one.";
@@ -249,6 +259,20 @@ namespace Brink.Core
             public const string Experience = "What our force has learned";
             public const string Speed = "Tempo of the order";
             public const string Depleted = "Their force is spent";
+
+            /// <summary>
+            /// The difficulty of an unopposed programme — construction, escort,
+            /// pacification's engineering half.
+            ///
+            /// **This had no label at all.** `DefenseModel.Unopposed` was the one
+            /// defence model `RecordDefence` deliberately skipped, so a failed
+            /// defensive programme produced an analysis with no defence factor in
+            /// it: nothing to rank, nothing for `Advice` to switch on, and
+            /// therefore no "WHAT WOULD CHANGE IT" line. The operator was handed
+            /// an after-action report whose entire job is to say why, and it
+            /// could not. Reported from play in exactly those words.
+            /// </summary>
+            public const string Undertaking = "The scale of the work";
         }
     }
 }

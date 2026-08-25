@@ -279,8 +279,7 @@ namespace Brink.UI.Views
                     text = $"{action.ToString().ToUpperInvariant()} [{AgentSystem.CostOf(action)} CP]"
                 };
                 button.AddToClassList("cmd-button");
-                button.SetEnabled(allowed);
-                if (!allowed) button.tooltip = blocked;
+                if (!allowed) Block(button, blocked);
                 actionRow.Add(button);
             }
 
@@ -382,14 +381,6 @@ namespace Brink.UI.Views
             hint.text =
                 "  Covert action can fail, and can be exposed even when it succeeds.\n" +
                 "  Exposure costs diplomatic standing and hardens the target's services.";
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            row.Add(button);
         }
     }
 }

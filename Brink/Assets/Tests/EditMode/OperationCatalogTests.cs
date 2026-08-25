@@ -534,6 +534,118 @@ namespace Brink.Tests
                 "chronicle is the only record it belongs in.");
         }
 
+        /// <summary>
+        /// Reported from play: "I am trying to improve the defence of a territory
+        /// I took over but I keep failing with no direction on why."
+        ///
+        /// The report was empty because `RecordDefence` skipped
+        /// `DefenseModel.Unopposed` entirely, so a failed programme produced an
+        /// analysis with no defence factor — nothing to rank, and nothing for
+        /// `Advice` to switch on. The one class in the game whose entire job is
+        /// to say why could not.
+        /// </summary>
+        [Test]
+        public void AFailedDefensiveProgrammeSaysWhatWouldChangeIt()
+        {
+            var ours = LocationIn("USA", LocationType.Port);
+
+            // Read the analysis directly rather than rolling until something
+            // fails: a test that needs a particular die is a flaky test, and the
+            // defect is in what the report contains, not in how often it appears.
+            MilitarySystem.ComputePowers(state, state.playerCountryId, ours,
+                OperationType.PreparedDefense, new OperationDirective(), 0f,
+                out _, out var analysis);
+
+            Assert.IsNotNull(analysis.WorstAgainstAttacker(),
+                "An unopposed programme recorded no factor working against it, so there is "
+                + "nothing for the report to rank or advise on.");
+
+            string report = analysis.Explain(success: false, attackerIsUs: true,
+                targetName: ours.displayName, operationType: OperationType.PreparedDefense);
+
+            StringAssert.Contains("WHAT WOULD CHANGE IT", report,
+                "A failed programme explains nothing the operator can act on.");
+        }
+
+        /// <summary>
+        /// A programme on our own ground is not a failed attack.
+        ///
+        /// The failure path was shared with offensive operations, so falling
+        /// short while digging in at one of our own positions cost war support
+        /// and was announced on the world wire as a public failure — which is
+        /// what the operator actually saw: "UNITED STATES — Failed operation at
+        /// Eastern Mediterranean Anchorage."
+        /// </summary>
+        [Test]
+        public void FallingShortOnOurOwnGroundIsNotWorldNews()
+        {
+            var ours = LocationIn("USA", LocationType.Port);
+            var player = state.PlayerCountry;
+
+            // Guarantee the failure rather than fishing for one. A hollow force
+            // cannot finish the work, which is the situation being tested.
+            player.military.ground.SetStrength(1f);
+            player.military.air.SetStrength(1f);
+            player.military.naval.SetStrength(1f);
+            player.military.ground.readiness = 1f;
+
+            float supportBefore = player.warSupport;
+
+            bool anyFailed = false;
+            for (int i = 0; i < 40; i++)
+            {
+                var record = ConfrontationSystem.LaunchOperationBy(state, null,
+                    state.playerCountryId, ours.id, OperationType.PreparedDefense,
+                    new OperationDirective());
+                if (record != null && !record.success) anyFailed = true;
+            }
+
+            Assert.IsTrue(anyFailed, "Nothing failed, so there is nothing to check.");
+            Assert.GreaterOrEqual(player.warSupport, supportBefore,
+                "Falling short on our own construction cost war support, as though we had " +
+                "attacked somebody and lost.");
+
+            foreach (var entry in state.chronicle)
+                if (entry.countryId == player.id && entry.text.Contains("Failed operation at"))
+                    Assert.Fail("A defensive programme was filed as a failed operation. It is "
+                                + "the offensive wording, and it goes out on the world wire.");
+        }
+
+        /// <summary>
+        /// On our own ground there is no opponent — so nothing may bill us twice.
+        ///
+        /// `defender` is whoever owns the target, which for a defensive
+        /// programme is us. Every "and now charge the other side" line was
+        /// charging us a second time: manpower twice over and war exhaustion
+        /// twice over, so fortifying a position we held cost more than
+        /// attacking one we did not.
+        /// </summary>
+        [Test]
+        public void ADefensiveProgrammeChargesUsOnce()
+        {
+            var ours = LocationIn("USA", LocationType.Port);
+            var player = state.PlayerCountry;
+
+            float manpowerBefore = player.resources.manpower;
+            float exhaustionBefore = player.warExhaustion;
+
+            var record = ConfrontationSystem.LaunchOperationBy(state, null,
+                state.playerCountryId, ours.id, OperationType.PreparedDefense,
+                new OperationDirective());
+            Assert.IsNotNull(record);
+
+            float manpowerSpent = manpowerBefore - player.resources.manpower;
+            float exhaustionAdded = player.warExhaustion - exhaustionBefore;
+
+            // Our own losses only. `defenderLosses` belongs to whoever was
+            // holding the ground against us, and on our own ground nobody was.
+            Assert.AreEqual(record.attackerLosses * 4f, manpowerSpent, 0.01f,
+                "The programme charged us for the defenders' losses as well as our own.");
+            Assert.AreEqual(record.attackerLosses * 0.5f * 0.5f, exhaustionAdded, 0.01f,
+                "The programme accrued war exhaustion for both sides of an engagement with " +
+                "ourselves.");
+        }
+
         [Test]
         public void PeacetimeProgrammesAreDeterministic()
         {

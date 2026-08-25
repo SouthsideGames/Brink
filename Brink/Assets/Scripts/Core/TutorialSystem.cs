@@ -119,6 +119,31 @@ namespace Brink.Core
         {
             return new List<TutorialStep>
             {
+                // First, because everything else is confusing without it. A
+                // player who thinks they are the head of state reads the next
+                // election as the end of their game, and reads surviving one as
+                // the simulation being broken — reported from play in exactly
+                // those terms.
+                new TutorialStep
+                {
+                    id = "YOUR_POST",
+                    title = "YOUR POST",
+                    targetViewId = "GOVERNMENT",
+                    body =
+                        "You are not the president, the premier or the general secretary. You hold " +
+                        "a permanent post at this terminal, and you advise and direct the "  +
+                        "government of the day.\n\n" +
+                        "Governments will be elected, appointed, removed and occasionally " +
+                        "overthrown while you are at this desk. Each new administration brings its " +
+                        "own cabinet, its own national priority, and its own view of what you may " +
+                        "order without asking. None of them can remove you.\n\n" +
+                        "So the question is never whether you survive the next transition. It is " +
+                        "what you can get done before it, and how much of your authority you can " +
+                        "carry through it.",
+                    instruction = "Open GOVERNMENT.",
+                    isSatisfied = s => true // satisfied by acknowledgement
+                },
+
                 new TutorialStep
                 {
                     id = "BRIEFING",

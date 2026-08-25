@@ -355,6 +355,87 @@ namespace Brink.Tests
                     $"'{label}' has no cost and must never be disabled for affordability.");
         }
 
+        /// <summary>
+        /// A blocked command stays blocked.
+        ///
+        /// Reported from play as "sometimes I press a button to use CP and it
+        /// does not go down" — and it is not the spend that was broken. Both
+        /// gates run after a view has built itself, and the affordability gate
+        /// called <c>SetEnabled(affordable)</c>, which handed back every button
+        /// a panel had already refused for its own reasons: an exercise inside
+        /// its cooldown, a programme the treasury cannot fund, a peace term that
+        /// does not apply. The operator was offered a control that spent nothing
+        /// and reported nothing.
+        /// </summary>
+        [Test]
+        public void TheAffordabilityGateNeverHandsBackARefusedCommand()
+        {
+            state.commandPoints.current = 9;
+
+            var row = new UnityEngine.UIElements.VisualElement();
+            row.AddToClassList("button-row");
+
+            var button = new UnityEngine.UIElements.Button { text = "CONDUCT EXERCISE [2 CP]" };
+            button.AddToClassList("cmd-button");
+            row.Add(button);
+
+            Brink.UI.Views.TerminalView.Block(button, "WE EXERCISED WITH THEM RECENTLY");
+            Brink.UI.Views.TerminalView.GateOnAffordability(row, state);
+
+            Assert.IsFalse(button.enabledSelf,
+                "The affordability gate re-enabled a command the panel had refused.");
+            Assert.AreEqual("WE EXERCISED WITH THEM RECENTLY",
+                Brink.UI.Views.TerminalView.BlockedReason(button),
+                "The specific reason was overwritten by the generic affordability one.");
+        }
+
+        [Test]
+        public void AnUnaffordableCommandIsRefusedWithItsPrice()
+        {
+            state.commandPoints.current = 1;
+
+            var row = new UnityEngine.UIElements.VisualElement();
+            row.AddToClassList("button-row");
+            var button = new UnityEngine.UIElements.Button { text = "GROUND PROGRAM [3 CP]" };
+            row.Add(button);
+
+            Brink.UI.Views.TerminalView.GateOnAffordability(row, state);
+
+            Assert.IsFalse(button.enabledSelf);
+            StringAssert.Contains("3 CP", Brink.UI.Views.TerminalView.BlockedReason(button));
+        }
+
+        /// <summary>
+        /// A refusal has to be readable without hovering. There is no hover on a
+        /// phone, so a tooltip is the same as saying nothing.
+        /// </summary>
+        [Test]
+        public void ARefusedCommandSaysWhyOnScreen()
+        {
+            var host = new UnityEngine.UIElements.VisualElement();
+            var row = new UnityEngine.UIElements.VisualElement();
+            row.AddToClassList("button-row");
+            host.Add(row);
+
+            var button = new UnityEngine.UIElements.Button { text = "LOGISTICS [1 CP]" };
+            row.Add(button);
+            Brink.UI.Views.TerminalView.Block(button, "TREASURY 12 — A LOGISTICS EXPANSION COSTS 70.");
+
+            Brink.UI.Views.TerminalView.ExplainBlockedCommands(host);
+
+            string printed = "";
+            foreach (var child in host.Children())
+                if (child is UnityEngine.UIElements.Label label) printed += label.text;
+
+            // The note is wrapped to the panel width, so compare without the
+            // line breaks the wrapper puts in.
+            printed = System.Text.RegularExpressions.Regex.Replace(printed, @"\s+", " ");
+
+            StringAssert.Contains("UNAVAILABLE", printed,
+                "A greyed button on a phone says only 'no'. The reason has to be on screen.");
+            StringAssert.Contains("LOGISTICS EXPANSION COSTS 70", printed);
+        }
+
         // ---------- "the month is spent" ----------
 
         [Test]

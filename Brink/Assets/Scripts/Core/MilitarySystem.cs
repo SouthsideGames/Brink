@@ -504,29 +504,74 @@ namespace Brink.Core
             return true;
         }
 
-        public static bool BeginProcurement(GameState state, TurnManager turns,
-            ForceBranch branch, ProgramScale scale)
+        /// <summary>
+        /// Whether a procurement programme can be authorized, and what stops it.
+        ///
+        /// **One gate, shared by the order screen and the order** — the same rule
+        /// `OperationCatalog.CanOrder` follows, and for the same reason. These
+        /// three refusals used to live only inside `BeginProcurement`, where the
+        /// operator met them as a bright button that spent no Command Points and
+        /// reported nothing. Money and industrial slots are not things a player
+        /// can be expected to infer from a screen that does not mention them.
+        /// </summary>
+        public static bool CanBeginProcurement(GameState state, ProgramScale scale, out string reason)
         {
+            reason = null;
             var player = state.PlayerCountry;
+            if (player == null) { reason = "NO STATE"; return false; }
+
             if (player.military.programs.Count >= MaxPrograms)
             {
-                GameLog.Warn("MILITARY", "The industrial base cannot carry another program.");
+                reason = $"THE INDUSTRIAL BASE IS CARRYING {MaxPrograms} PROGRAMMES ALREADY.";
                 return false;
             }
 
             if (scale == ProgramScale.Transformative
                 && ProgressionSystem.EffectValue(state, SkillEffect.StrategicIndustry) <= 0f)
             {
-                GameLog.Warn("MILITARY", "No yard or line in the country can absorb a program that size.");
+                reason = "NO YARD OR LINE CAN ABSORB A PROGRAMME THAT SIZE — REQUIRES STRATEGIC INDUSTRY.";
+                return false;
+            }
+
+            float needed = BuildProgram(ForceBranch.Ground, scale).costPerMonth * 3f;
+            if (player.resources.treasury < needed)
+            {
+                reason = $"TREASURY {player.resources.treasury:F0} — A {scale.ToString().ToUpperInvariant()} "
+                         + $"PROGRAMME NEEDS {needed:F0} IN HAND.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Whether sustainment investment can be funded, and what stops it.</summary>
+        public static bool CanInvestInLogistics(GameState state, out string reason)
+        {
+            reason = null;
+            var player = state.PlayerCountry;
+            if (player == null) { reason = "NO STATE"; return false; }
+
+            if (player.resources.treasury < LogisticsTreasuryCost)
+            {
+                reason = $"TREASURY {player.resources.treasury:F0} — A LOGISTICS EXPANSION COSTS "
+                         + $"{LogisticsTreasuryCost:F0}.";
+                return false;
+            }
+
+            return true;
+        }
+
+        public static bool BeginProcurement(GameState state, TurnManager turns,
+            ForceBranch branch, ProgramScale scale)
+        {
+            var player = state.PlayerCountry;
+            if (!CanBeginProcurement(state, scale, out string blocked))
+            {
+                GameLog.Warn("MILITARY", $"Programme refused: {blocked}");
                 return false;
             }
 
             var program = BuildProgram(branch, scale);
-            if (player.resources.treasury < program.costPerMonth * 3f)
-            {
-                GameLog.Warn("MILITARY", "Insufficient treasury to responsibly begin that program.");
-                return false;
-            }
             if (!turns.SpendCommandPoints(ProgramCpCost(scale), program.label)) return false;
 
             player.military.programs.Add(program);
@@ -551,9 +596,9 @@ namespace Brink.Core
             // Check the money before spending the attention. A negative treasury
             // cancels running procurement and suspends research, so letting this
             // through unchecked let one click strand the player.
-            if (player.resources.treasury < LogisticsTreasuryCost)
+            if (!CanInvestInLogistics(state, out string blocked))
             {
-                GameLog.Warn("MILITARY", "The treasury cannot fund a logistics expansion.");
+                GameLog.Warn("MILITARY", $"Logistics investment refused: {blocked}");
                 return false;
             }
             if (!turns.SpendCommandPoints(LogisticsInvestmentCost, "Logistics investment")) return false;
@@ -796,7 +841,16 @@ namespace Brink.Core
             defensePower = DefensePowerFor(profile, attacker, defender, target);
 
             // A position with nothing left in it should fall, not grind (GDD §19).
-            float depletion = DepletionFactor(defender, target);
+            //
+            // **Only where the position is what we are fighting.** On our own
+            // ground the opposition is the insurgency, or nobody — and reading
+            // *our* thin garrison as the defence collapsing had it exactly
+            // backwards: a lightly held occupation is harder to pacify, not
+            // easier, and a fortification programme is not opposed by the works
+            // it is building.
+            float depletion = profile?.targeting == OperationTargeting.OwnGround
+                ? 1f
+                : DepletionFactor(defender, target);
             if (depletion < 0.999f)
             {
                 defensePower *= depletion;
@@ -807,8 +861,8 @@ namespace Brink.Core
             RecordDefence(analysis, profile, defender, target, defensePower, attackPower);
 
             // Knowing how the other side fights outlives the friendship that
-            // produced it (GDD §15.3).
-            if (defender != null)
+            // produced it (GDD §15.3). There is no other side on our own ground.
+            if (defender != null && defender.id != attackerId)
             {
                 var relationship = state.FindRelationship(attacker.id, defender.id);
                 if (relationship != null && relationship.doctrineFamiliarity > 0f)
@@ -970,6 +1024,11 @@ namespace Brink.Core
                         $"pacification {target.pacification:F0}");
                     break;
                 case DefenseModel.Unopposed:
+                    // Recorded, not skipped. Nobody is holding the ground, but the
+                    // work still has a size, and a report that names no factor at
+                    // all cannot say what would change the outcome.
+                    analysis.Record(OperationAnalysis.Labels.Undertaking, multiplier, true,
+                        $"unopposed work at {target.displayName}");
                     break;
                 default:
                     analysis.Record(OperationAnalysis.Labels.Garrison, multiplier, true,
@@ -1499,6 +1558,17 @@ namespace Brink.Core
             ApplyAttackerAttrition(attacker.military, operationType, record.attackerLosses);
             attacker.military.ground.supply = Clamp(attacker.military.ground.supply - 6f);
             attacker.military.air.supply = Clamp(attacker.military.air.supply - 4f);
+
+            // **On our own ground there is no opponent.** `defender` is whoever
+            // owns the target, which for a defensive programme is us — so every
+            // "and now bill the other side" line below was billing us a second
+            // time: manpower twice over, war exhaustion twice over, and the
+            // experience of both winning and losing the same engagement.
+            // Fortifying a position we hold cost more than attacking one we did
+            // not, which is not a difficulty setting, it is an accounting error.
+            bool opposed = defender != null && defender.id != attacker.id;
+            if (!opposed) defender = null;
+
             ApplyDefenderAttrition(defender, target, operationType, record.defenderLosses);
 
             // What the branches that fought take away from it. Both sides learn —
@@ -1594,6 +1664,29 @@ namespace Brink.Core
             {
                 record.summary = ApplyNonCapturingSuccess(
                     state, attacker, defender, target, operationType);
+            }
+            else if (OperationCatalog.For(operationType)?.targeting == OperationTargeting.OwnGround)
+            {
+                // **A programme on ground we hold is not a failed attack.**
+                // This branch used to be shared with offensive operations, so
+                // digging in at one of our own positions and not finishing the
+                // work cost war support, was reported as an "operation against"
+                // a place we own, and was announced to the world wire as a
+                // public failure. Reported from play as exactly that: trying to
+                // improve the defence of captured ground, failing repeatedly,
+                // and being told nothing that could be acted on.
+                record.summary = $"{OperationCatalog.For(operationType).displayName} at "
+                                 + $"{target.displayName} did not achieve what was intended. "
+                                 + "The works are unfinished and the effort is spent.";
+
+                // Not on the wire. `Publicity.Secret` here means "ours to know" —
+                // `WorldWire.CanShow` always shows us our own record, and
+                // `ForMonth` keeps anything not Public off the wire. What our own
+                // engineers did not manage is nobody else's news, and unlike a
+                // battle the other side has no reason to have seen it.
+                state.AddChronicle(ChronicleCategory.Military, attacker.id,
+                    $"{OperationCatalog.For(operationType).displayName} at {target.displayName} "
+                    + "fell short.", Publicity.Secret);
             }
             else
             {

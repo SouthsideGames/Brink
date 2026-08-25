@@ -607,10 +607,15 @@ namespace Brink.Core
                 InstallNewLeadership(state, country, gov, rng, "term limit");
                 gov.leader.faction = factionRetainsPower ? "GOVERNING PARTY" : "OPPOSITION";
 
-                state.AddNotification(country.isPlayer ? NotificationClass.Priority : NotificationClass.Wire,
-                    "ELECTION — TERM LIMIT REACHED",
-                    $"{gov.leader.name} ({gov.leader.faction}) succeeds a term-limited leader in {country.displayName}.",
-                    country.id, desk: ReportingDesk.Government);
+                // `InstallNewLeadership` already filed the operator's own copy,
+                // and it is the one that explains what the change means for this
+                // office. A second item on the same event reads as two things
+                // having happened.
+                if (!country.isPlayer)
+                    state.AddNotification(NotificationClass.Wire,
+                        "ELECTION — TERM LIMIT REACHED",
+                        $"{gov.leader.name} ({gov.leader.faction}) succeeds a term-limited leader in {country.displayName}.",
+                        country.id, desk: ReportingDesk.Government);
                 return;
             }
 
@@ -621,10 +626,18 @@ namespace Brink.Core
                 gov.legislativeSupport = Clamp(gov.legislativeSupport + 6f);
                 country.governmentApproval = Clamp(country.governmentApproval + 4f);
 
+                // Our own election result is command traffic, not something the
+                // government of the day forwards to us at its discretion — the
+                // operator's writ is defined by who is in office.
                 state.AddNotification(country.isPlayer ? NotificationClass.Priority : NotificationClass.Wire,
                     "ELECTION — INCUMBENT RETAINED",
-                    $"{gov.leader.name} ({gov.leader.faction}) returned to office in {country.displayName}.",
-                    country.id, desk: ReportingDesk.Government);
+                    country.isPlayer
+                        ? $"{gov.leader.name} ({gov.leader.faction}) returned to office. "
+                          + "The administration you serve continues, and so does your authority "
+                          + "over each pillar as it stands."
+                        : $"{gov.leader.name} ({gov.leader.faction}) returned to office in {country.displayName}.",
+                    country.id,
+                    desk: country.isPlayer ? ReportingDesk.Command : ReportingDesk.Government);
                 state.AddChronicle(ChronicleCategory.Political, country.id,
                     $"Election: {gov.leader.name} retained office.", Publicity.Public);
             }
@@ -734,10 +747,36 @@ namespace Brink.Core
                 // may command (spec 05 §1a).
                 AuthoritySystem.ClearGrantedAuthority(state);
 
+                // **The one item that must never be buried.**
+                //
+                // Reported from play as a straight objection: "someone else was
+                // elected, and I still control the country — this makes no
+                // sense." The premise is GDD §13's, and the game had been
+                // stating it in a single trailing clause on an item the
+                // Government desk was free to strip of urgency or lose
+                // entirely — so the operator could meet a change of
+                // administration as an unexplained change of name on a readout,
+                // plus a set of authorities that had quietly reverted.
+                //
+                // `ReportingDesk.Command` is what the operator sees directly,
+                // and this qualifies by the same rule that exempts their own
+                // orders: it is news about *this office*, not about the world.
+                // Still PRIORITY rather than FLASH — §28.2 reserves FLASH for a
+                // turn that cannot be taken without deciding, and nothing here
+                // needs answering.
                 state.AddNotification(NotificationClass.Priority, "NEW ADMINISTRATION",
-                    $"{gov.leader.name} ({gov.leader.faction}) takes office. National priority shifts from " +
-                    $"{previousPriority} to {newPriority}. You remain at your post.", country.id,
-                    desk: ReportingDesk.Government);
+                    $"{gov.leader.name} ({gov.leader.faction}) takes office in "
+                    + $"{country.displayName} ({cause}).\n"
+                    + "You are not the head of government and never were. This office is a "
+                    + "permanent post: administrations are elected, appointed and removed, and "
+                    + "the operator at this terminal remains.\n"
+                    + $"WHAT CHANGES: national priority shifts from {previousPriority} to "
+                    + $"{newPriority}, which redirects every delegated official; the cabinet has "
+                    + "been reshuffled; and any pillar this office had been GRANTED authority "
+                    + "over must be granted again by the incoming administration.\n"
+                    + "WHAT DOES NOT: your post, your record, your skills, and every "
+                    + "constitutional authority the office holds in its own right.",
+                    country.id, desk: ReportingDesk.Command);
                 GameLog.Info("GOV", $"New administration: {gov.leader.name}. Priority {newPriority}.");
             }
             else

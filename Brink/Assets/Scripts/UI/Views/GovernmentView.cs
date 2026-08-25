@@ -45,10 +45,23 @@ namespace Brink.UI.Views
             var sb = new StringBuilder();
 
             sb.AppendLine(AsciiChart.BoxHeader("ADMINISTRATION", W));
+
+            // Who is who, stated before anything else on the screen.
+            //
+            // The operator is not the head of government (GDD §13, §203) and the
+            // panel used to say so in one soft sentence twelve lines down, under
+            // the election date. Read from play as a contradiction — "someone
+            // else was elected but I still run the country" — which is the
+            // premise of the whole game being mistaken for a bug.
+            sb.AppendLine(" THIS OFFICE:   PERMANENT STRATEGIC OPERATOR — not elected, not replaced");
+            sb.AppendLine($"                {state.administrationsServed} administration(s) served "
+                          + "under this post");
+            sb.AppendLine();
             sb.AppendLine($" SYSTEM:    {gov.TypeText}");
-            sb.AppendLine($" LEADER:    {gov.leader.name}  ({gov.leader.faction})");
+            sb.AppendLine($" HEAD OF GOVERNMENT: {gov.leader.name}  ({gov.leader.faction})");
             sb.AppendLine($" IN OFFICE: {gov.leader.monthsInOffice} MO");
-            sb.AppendLine($" PRIORITY:  {gov.leader.priority.ToString().ToUpperInvariant()}");
+            sb.AppendLine($" THEIR PRIORITY: {gov.leader.priority.ToString().ToUpperInvariant()}"
+                          + "  — redirects every official you have delegated to");
 
             if (gov.IsElective)
                 sb.AppendLine($" NEXT ELECTION: {gov.nextElectionDate.DisplayString} " +
@@ -59,8 +72,10 @@ namespace Brink.UI.Views
             if (gov.emergencyPowers)
                 sb.AppendLine($" ** EMERGENCY POWERS IN FORCE — {gov.emergencyPowersMonthsRemaining} MO REMAINING **");
 
-            sb.AppendLine($" ADMINISTRATIONS SERVED: {state.administrationsServed}");
-            sb.AppendLine(" You are the persistent strategic operator. Administrations change; you remain.");
+            sb.AppendLine();
+            sb.AppendLine(" A change of administration reshuffles the cabinet, resets the national");
+            sb.AppendLine(" priority and withdraws any authority this office was granted rather than");
+            sb.AppendLine(" holds in its own right. It does not end your post.");
             text.text = sb.ToString();
         }
 
@@ -160,7 +175,8 @@ namespace Brink.UI.Views
             { text = $"EMERGENCY POWERS [{emergencyCost:F0} PC]" };
             emergency.AddToClassList("cmd-button");
             emergency.AddToClassList("danger");
-            emergency.SetEnabled(!gov.emergencyPowers);
+            if (gov.emergencyPowers)
+                Block(emergency, "EMERGENCY AUTHORITY IS ALREADY IN FORCE.");
             row1.Add(emergency);
 
             if (gov.AllowsEarlyElection)
@@ -185,7 +201,9 @@ namespace Brink.UI.Views
             var patronage = new Button(() => { GameController.Instance.DistributePatronage(); Refresh(); })
             { text = $"DISTRIBUTE PATRONAGE [{GovernmentSystem.PatronageCost:F0} PC]" };
             patronage.AddToClassList("cmd-button");
-            patronage.SetEnabled(player.resources.treasury >= GovernmentSystem.PatronageTreasury);
+            if (player.resources.treasury < GovernmentSystem.PatronageTreasury)
+                Block(patronage, $"TREASURY {player.resources.treasury:F0} — PATRONAGE COSTS "
+                                 + $"{GovernmentSystem.PatronageTreasury:F0}.");
             bargainRow.Add(patronage);
 
             AddButton(bargainRow, $"PUBLIC INQUIRY [{GovernmentSystem.InquiryCost:F0} PC]", null,
@@ -194,7 +212,8 @@ namespace Brink.UI.Views
             var groom = new Button(() => { GameController.Instance.GroomSuccessor(); Refresh(); })
             { text = $"PREPARE SUCCESSOR [{GovernmentSystem.GroomSuccessorCost:F0} PC]" };
             groom.AddToClassList("cmd-button");
-            groom.SetEnabled(gov.successorReadiness < 99f);
+            if (gov.successorReadiness >= 99f)
+                Block(groom, "THE SUCCESSOR IS AS PREPARED AS WE CAN MAKE THEM.");
             bargainRow.Add(groom);
 
             AddText("terminal-text-dim").text =
@@ -310,7 +329,7 @@ namespace Brink.UI.Views
                 var button = new Button(() => { GameController.Instance.ConsolidateAuthority(captured); Refresh(); })
                 { text = captured.ToString().ToUpperInvariant() };
                 button.AddToClassList("cmd-button");
-                button.SetEnabled(!thin);
+                if (thin) Block(button, "LEGISLATIVE SUPPORT BELOW 45 — BARGAIN WITH THE CHAMBER FIRST.");
                 row.Add(button);
             }
         }
@@ -348,22 +367,6 @@ namespace Brink.UI.Views
 
             sb.Append("  ").Append(AsciiChart.Cell(stat, labelWidth)).Append("  ");
             sb.AppendLine(AsciiChart.Cell(detail, System.Math.Max(8, W - labelWidth - 5)));
-        }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            row.Add(button);
         }
     }
 }

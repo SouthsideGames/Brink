@@ -126,11 +126,11 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void UnspentSkillPointsPointAtStrategist()
+        public void UnspentSkillPointsPointAtTheOperatorPanel()
         {
             state.skillPoints = 3;
             Assert.AreEqual(AttentionLevel.Decision,
-                AttentionSystem.LevelFor(AttentionSystem.Collect(state), "STRATEGIST"));
+                AttentionSystem.LevelFor(AttentionSystem.Collect(state), "OPERATOR"));
         }
 
         [Test]
@@ -141,18 +141,30 @@ namespace Brink.Tests
                 AttentionSystem.LevelFor(AttentionSystem.Collect(state), "BRIEFING"));
         }
 
+        /// <summary>
+        /// Read from the real rail, not from a list written alongside it.
+        ///
+        /// The known-panel set used to be hand-copied here, so renaming a panel
+        /// left this test asserting against panels that no longer existed while
+        /// still passing — a check that agrees with itself rather than with the
+        /// game. Same class as a validation harness that does not run the thing
+        /// it validates.
+        /// </summary>
+        static System.Collections.Generic.List<string> PanelIds()
+        {
+            var ids = new System.Collections.Generic.List<string>();
+            foreach (var panel in Brink.UI.TerminalShellController.BuildPanels(true))
+                ids.Add(panel.Id);
+            return ids;
+        }
+
         [Test]
         public void EverySummaryNamesAPanelThatExists()
         {
             state.skillPoints = 2;
             CrisisSystem.Trigger(state, CrisisSystem.CatalogIds[0]);
 
-            var known = new System.Collections.Generic.List<string>
-            {
-                "BRIEFING", "MAP", "CABINET", "MILITARY", "ECONOMY", "INTELLIGENCE",
-                "DIPLOMACY", "GOVERNMENT", "RESEARCH", "STRATEGIC", "STRATEGIST",
-                "CHRONICLE", "SYSTEM"
-            };
+            var known = PanelIds();
 
             foreach (var item in AttentionSystem.Collect(state))
             {
@@ -160,6 +172,78 @@ namespace Brink.Tests
                     $"'{item.viewId}' is not a panel — the operator would be sent hunting.");
                 Assert.IsNotEmpty(item.summary, "A marker with no explanation is just an alarm.");
             }
+        }
+
+        [Test]
+        public void EveryActionNamesAPanelThatExists()
+        {
+            var known = PanelIds();
+
+            foreach (var action in ActionCatalog.All(state))
+                Assert.Contains(action.viewId, known,
+                    $"'{action.viewId}' is not a panel — ACTIONS would send the operator nowhere.");
+        }
+
+        [Test]
+        public void EveryTutorialStepNamesAPanelThatExists()
+        {
+            var known = PanelIds();
+
+            foreach (var step in TutorialSystem.Steps)
+            {
+                if (string.IsNullOrEmpty(step.targetViewId)) continue;   // no target is allowed
+                Assert.Contains(step.targetViewId, known,
+                    $"'{step.targetViewId}' is not a panel — the tutorial would point at nothing.");
+            }
+        }
+
+        /// <summary>
+        /// Nav codes must be tellable apart at a glance.
+        ///
+        /// Reported from play as a straight question — "what is the difference
+        /// between STG and STR?" — about two panels with nothing in common: the
+        /// state's decisive instruments and the operator's own record. On a
+        /// phone the rail is three characters wide, so two codes differing in
+        /// one letter are the same word.
+        /// </summary>
+        [Test]
+        public void NoTwoPanelsAreConfusableInTheNavRail()
+        {
+            var panels = Brink.UI.TerminalShellController.BuildPanels(true);
+
+            for (int i = 0; i < panels.Count; i++)
+                for (int j = i + 1; j < panels.Count; j++)
+                {
+                    Assert.AreNotEqual(panels[i].Id, panels[j].Id,
+                        "Two panels share a full name.");
+                    Assert.GreaterOrEqual(
+                        Distance(panels[i].ShortCode, panels[j].ShortCode), 2,
+                        $"'{panels[i].ShortCode}' ({panels[i].Id}) and "
+                        + $"'{panels[j].ShortCode}' ({panels[j].Id}) differ by one character.");
+                }
+        }
+
+        /// <summary>Levenshtein distance, for the nav-code legibility rule.</summary>
+        static int Distance(string a, string b)
+        {
+            var previous = new int[b.Length + 1];
+            var current = new int[b.Length + 1];
+            for (int j = 0; j <= b.Length; j++) previous[j] = j;
+
+            for (int i = 1; i <= a.Length; i++)
+            {
+                current[0] = i;
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    current[j] = System.Math.Min(
+                        System.Math.Min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+                }
+                var swap = previous; previous = current; current = swap;
+            }
+
+            return previous[b.Length];
         }
 
         // ---------- markers stop shouting once read ----------
