@@ -1237,8 +1237,12 @@ namespace Brink.UI.Views
             {
                 var captured = opProfile.type;
                 bool current = selectedOperation == captured;
+                // Ask once and keep the answer: the reason is needed below, and
+                // calling the gate a second time to recover it is how the two
+                // drift. Named apart from the `blocked` further down this method,
+                // which is the *selected* order's refusal rather than this one's.
                 bool possible = OperationCatalog.CanOrder(
-                    state, state.playerCountryId, selectedTarget, captured, out _);
+                    state, state.playerCountryId, selectedTarget, captured, out string whyNot);
 
                 // The price belongs on the choice, not only on the confirmation —
                 // sequencing suppression before an assault is only a decision if
@@ -1259,12 +1263,7 @@ namespace Brink.UI.Views
                 // operator should be able to see that a blockade exists and that
                 // we cannot run one, which is a fact about our fleet and their
                 // coastline — hiding it just looks like the feature is missing.
-                if (!possible)
-                {
-                    OperationCatalog.CanOrder(
-                        state, state.playerCountryId, selectedTarget, captured, out string blocked);
-                    Block(button, blocked);
-                }
+                if (!possible) Block(button, whyNot);
                 typeRow.Add(button);
             }
 
