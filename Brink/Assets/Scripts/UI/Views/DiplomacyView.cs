@@ -261,7 +261,8 @@ namespace Brink.UI.Views
             { text = $"PROPOSE TREATY [{DiplomacySystem.TreatyProposalCost} CP]" };
             propose.AddToClassList("cmd-button");
             propose.AddToClassList("primary");
-            propose.SetEnabled(draftClauses.Count > 0);
+            if (draftClauses.Count == 0)
+                Block(propose, "NO TERMS DRAFTED.");
             proposeRow.Add(propose);
 
             if (draftClauses.Count == 0)
@@ -380,22 +381,6 @@ namespace Brink.UI.Views
             if (willingness >= 35f) return "HESITANT";
             if (willingness >= 15f) return "RELUCTANT";
             return "OPPOSED";
-        }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(onClick) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            row.Add(button);
         }
     }
 }

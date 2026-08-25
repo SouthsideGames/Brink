@@ -66,7 +66,7 @@ namespace Brink.Core
                         "before the government appoints");
 
             if (state.skillPoints > 0)
-                Add("STRATEGIST", AttentionLevel.Decision,
+                Add("OPERATOR", AttentionLevel.Decision,
                     $"{state.skillPoints} skill point(s) unspent");
 
             var confrontation = state.ActiveConfrontation;
@@ -123,7 +123,7 @@ namespace Brink.Core
             foreach (EndgameType type in System.Enum.GetValues(typeof(EndgameType)))
             {
                 if (player.endgames.ProgressFor(type) < 100f) continue;
-                Add("STRATEGIC", AttentionLevel.Decision,
+                Add("ENDGAME", AttentionLevel.Decision,
                     $"{EndgameSystem.NameOf(type)} is prepared and available");
                 break;
             }

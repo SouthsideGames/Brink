@@ -519,8 +519,47 @@ government that granted it (§1a).
 not re-arm or re-industrialize the country. There is a test asserting this
 (`GovernmentSystemTests.NewAdministration_InheritsCapabilitiesUnchanged`).
 
-**The player persists.** Strategist XP, level, skill points and unlocked skills
+**The player persists.** Operator XP, level, skill points and unlocked skills
 survive every administration change; you are the operator, not the officeholder.
+
+### 7b. …and the game has to *say* so
+
+Reported from play as a straight objection: *"I am playing as the US and someone
+else was elected, however I still control the country? This makes no sense."*
+
+The premise is right — GDD §13 and line 203: *the player is the persistent
+strategic operator/advisor, not necessarily the elected leader; administrations
+come and go while the save continues.* What was wrong is that the game stated it
+in **one trailing clause of a filterable notification**. The NEW ADMINISTRATION
+item carried `desk: ReportingDesk.Government`, so a mediocre minister could strip
+its urgency and a poor one could drop it outright (spec 15) — and the same event
+silently revoked every granted authority (§1a). The operator could therefore meet
+a change of government as an unexplained change of name on a readout.
+
+Three changes, no simulation change:
+
+1. **`desk: ReportingDesk.Command`.** News about *this office* is not something
+   the government of the day forwards at its discretion — the same exemption
+   that covers the operator's own orders. Still `Priority`, not `Flash`: §28.2
+   reserves FLASH for a turn that cannot be taken without deciding, and nothing
+   here needs answering. The item now names what changes (priority, cabinet,
+   granted authority) and what does not (the post, the record, the skills, and
+   every authority the office holds in its own right). Guarded by
+   `GovernmentSystemTests.NewAdministration_IsCommandTrafficAndCannotBeBuried`.
+2. **One handover, one item.** The term-limit branch filed its own notification
+   *after* `InstallNewLeadership` had already filed one, so a term-limited
+   succession produced two items on the operator's desk for one event. The
+   foreign copy is unchanged; the player copy is now only the one that explains
+   itself. `GovernmentSystemTests.ATermLimitedHandoverIsReportedOnce`.
+   The incumbent-retained item is also Command-desk for the player's own
+   country, and says the authority position is unchanged.
+3. **The panel and the tutorial say it too.** `GovernmentView`'s ADMINISTRATION
+   block now opens with `THIS OFFICE: PERMANENT STRATEGIC OPERATOR — not
+   elected, not replaced` and relabels the leader row `HEAD OF GOVERNMENT`, and
+   the tutorial's **first** step is YOUR POST. A player who thinks they are the
+   head of state reads the next election as the end of their game and reads
+   surviving one as the simulation being broken; every other step is confusing
+   until that is settled.
 
 ## 7a. Coups and regime change (`Core/RegimeSystem.cs`, GDD §22)
 

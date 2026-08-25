@@ -144,7 +144,8 @@ namespace Brink.UI.Views
         {
             var row = MakeRow();
             AddButton(row, $"{label} −", null, () => { set(Round(get() - 0.1f)); Refresh(); });
-            AddButton(row, $"{get():F2}", "primary", null);
+            // A readout, not a control: no cost tag, so no gate touches it.
+            AddButton(row, $"{get():F2}", "primary", null).SetEnabled(false);
             AddButton(row, $"{label} +", null, () => { set(Round(get() + 0.1f)); Refresh(); });
         }
 
@@ -154,24 +155,11 @@ namespace Brink.UI.Views
             return UnityEngine.Mathf.Round(v * 100f) / 100f;
         }
 
-        // Local copies, matching DiplomacyView and ChronicleView. These helpers are
-        // duplicated across most views and belong on TerminalView — but hoisting
-        // them touches a dozen files and is not this task.
-        VisualElement MakeRow()
+        /// <summary>A debug control that is inert when nothing is mapped to it.</summary>
+        void AddOptionalButton(VisualElement row, string text, string extraClass, System.Action onClick)
         {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
-
-        void AddButton(VisualElement row, string text, string extraClass, System.Action onClick)
-        {
-            var button = new Button(() => onClick?.Invoke()) { text = text };
-            button.AddToClassList("cmd-button");
-            if (extraClass != null) button.AddToClassList(extraClass);
-            button.SetEnabled(onClick != null);
-            row.Add(button);
+            var button = AddButton(row, text, extraClass, () => onClick?.Invoke());
+            if (onClick == null) Block(button, "NOTHING MAPPED");
         }
 
         void BuildSfxControls(AudioDirector director)
@@ -193,7 +181,7 @@ namespace Brink.UI.Views
                 }
 
                 var captured = id;
-                AddButton(mapped, id.ToString().ToUpperInvariant(), null,
+                AddOptionalButton(mapped, id.ToString().ToUpperInvariant(), null,
                     () => AudioDirector.Play(captured));
             }
 

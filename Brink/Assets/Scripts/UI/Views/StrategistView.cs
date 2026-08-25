@@ -11,8 +11,12 @@ namespace Brink.UI.Views
     /// </summary>
     public class StrategistView : TerminalView
     {
-        public override string Id => "STRATEGIST";
-        public override string ShortCode => "STR";
+        // This panel is the operator's own file — their record, their
+        // evaluations, their skills — and "operator" is what the game calls
+        // them everywhere else. It was "STRATEGIST/STR", one letter away from
+        // the strategic-instruments panel next to it in the rail.
+        public override string Id => "OPERATOR";
+        public override string ShortCode => "OPR";
 
         /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
@@ -41,7 +45,9 @@ namespace Brink.UI.Views
 
             var text = AddText("terminal-text-bright");
             var sb = new StringBuilder();
-            sb.AppendLine(AsciiChart.BoxHeader("STRATEGIST RECORD", W));
+            sb.AppendLine(AsciiChart.BoxHeader("OPERATOR RECORD", W));
+            sb.AppendLine(" Your own file. What this office has learned, and what it may now do.");
+            sb.AppendLine(" Nothing here is national power — for that, see the five pillar panels.");
             sb.AppendLine($" LEVEL {state.strategistLevel}   XP {state.strategistXP}   " +
                           $"SKILL POINTS AVAILABLE: {state.skillPoints}");
             sb.AppendLine("  " + AsciiChart.LabeledBar("NEXT LEVEL", into, span, 12, 24));

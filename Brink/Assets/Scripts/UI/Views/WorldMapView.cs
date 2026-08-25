@@ -189,13 +189,5 @@ namespace Brink.UI.Views
             if (!any) sb.AppendLine("  NONE.");
             text.text = sb.ToString();
         }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
     }
 }

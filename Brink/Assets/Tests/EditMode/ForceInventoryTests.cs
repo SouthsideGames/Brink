@@ -403,14 +403,33 @@ namespace Brink.Tests
             // `Advice` switches on the label text, so a renamed label silently
             // falls through to the generic line — which is the failure this whole
             // class exists to prevent.
-            var labels = new[]
+            //
+            // **Read from the constants, not from a list beside them.** The list
+            // used to be hand-copied here, so a label added later was simply not
+            // covered: `Undertaking` — the only thing `RecordDefence` reports for
+            // an unopposed programme — went missing for exactly that reason, and
+            // the result was an after-action report with nothing to say.
+            var labels = new System.Collections.Generic.List<string>();
+            foreach (var field in typeof(OperationAnalysis.Labels)
+                         .GetFields(System.Reflection.BindingFlags.Public
+                                    | System.Reflection.BindingFlags.Static))
             {
-                OperationAnalysis.Labels.Fortifications, OperationAnalysis.Labels.Garrison,
-                OperationAnalysis.Labels.EnemyAir, OperationAnalysis.Labels.EnemyNavy,
-                OperationAnalysis.Labels.CounterIntelligence, OperationAnalysis.Labels.Reach,
-                OperationAnalysis.Labels.Commitment, OperationAnalysis.Labels.Doctrine,
-                OperationAnalysis.Labels.MissileDefence, OperationAnalysis.Labels.Insurgency
-            };
+                if (field.FieldType != typeof(string)) continue;
+                string label = (string)field.GetValue(null);
+
+                // These are recorded only with multipliers that help the
+                // attacker, so they can never be the worst factor and advising on
+                // them would be advising against an advantage. The list may only
+                // shrink.
+                if (label == OperationAnalysis.Labels.Coalition
+                    || label == OperationAnalysis.Labels.Isr
+                    || label == OperationAnalysis.Labels.Familiarity
+                    || label == OperationAnalysis.Labels.Depleted) continue;
+
+                labels.Add(label);
+            }
+
+            Assert.Greater(labels.Count, 8, "The label set did not load — the test is vacuous.");
 
             string generic = new OperationAnalysis().Advice(OperationType.Assault);
 

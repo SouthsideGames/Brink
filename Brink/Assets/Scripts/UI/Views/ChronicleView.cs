@@ -181,13 +181,5 @@ namespace Brink.UI.Views
             button.AddToClassList("cmd-button");
             row.Add(button);
         }
-
-        VisualElement MakeRow()
-        {
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-            return row;
-        }
     }
 }

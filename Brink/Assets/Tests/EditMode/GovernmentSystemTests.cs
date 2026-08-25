@@ -370,6 +370,78 @@ namespace Brink.Tests
             Assert.AreEqual(1, state.administrationsServed);
         }
 
+        /// <summary>
+        /// Reported from play: "I am playing as the US and someone else was
+        /// elected, however I still control the country? This makes no sense."
+        ///
+        /// The premise is right (GDD §13: the operator is a permanent post and
+        /// administrations come and go), but the game stated it in one trailing
+        /// clause of an item the Government desk was free to strip of urgency or
+        /// drop outright. A weak minister could therefore delete the only
+        /// explanation of the thing most likely to read as a bug — while the
+        /// change silently revoked every granted authority.
+        /// </summary>
+        [Test]
+        public void NewAdministration_IsCommandTrafficAndCannotBeBuried()
+        {
+            ReportingSystem.Disabled = false;
+            var player = state.PlayerCountry;
+            var gov = player.government;
+
+            // A hopeless Government desk: the worst case the filter can produce.
+            var minister = ReportingSystem.OfficialFor(state, ReportingDesk.Government);
+            minister.competence = 0f;
+            minister.trust = 0f;
+            minister.mode = ControlMode.Autonomous;
+
+            player.governmentApproval = 2f;
+            player.economy.growthRate = -9f;
+            player.nationalUnity = 5f;
+            gov.legislativeSupport = 5f;
+            gov.nextElectionDate = state.date;
+
+            turns.EndMonth();
+
+            Assert.AreEqual(2, state.administrationsServed, "Precondition: leadership changed.");
+
+            Notification item = null;
+            foreach (var notification in state.notifications)
+                if (notification.title == "NEW ADMINISTRATION") item = notification;
+
+            Assert.IsNotNull(item,
+                "The operator was never told their administration had changed.");
+            Assert.AreEqual(ReportingDesk.Command, item.desk,
+                "News about this office passed through a minister who could lose it.");
+            Assert.AreEqual(NotificationClass.Priority, item.priority,
+                "The item was demoted, so it arrives buried in routine traffic.");
+            StringAssert.Contains("permanent post", item.body,
+                "The item does not say why the operator is still at their desk.");
+        }
+
+        [Test]
+        public void ATermLimitedHandoverIsReportedOnce()
+        {
+            var player = state.PlayerCountry;
+            var gov = player.government;
+
+            gov.consecutiveTermLimit = 1;
+            gov.leader.termsServed = 1;
+            gov.nextElectionDate = state.date;
+
+            turns.EndMonth();
+
+            int reports = 0;
+            foreach (var notification in state.notifications)
+                if (notification.countryId == player.id
+                    && (notification.title == "NEW ADMINISTRATION"
+                        || notification.title == "ELECTION — TERM LIMIT REACHED"))
+                    reports++;
+
+            Assert.AreEqual(1, reports,
+                "One handover produced two items on the operator's desk, which reads as two "
+                + "things having happened.");
+        }
+
         [Test]
         public void NewAdministration_InheritsCapabilitiesUnchanged()
         {

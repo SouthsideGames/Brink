@@ -93,8 +93,9 @@ namespace Brink.Core
             if (newLevel > state.strategistLevel)
             {
                 state.strategistLevel = newLevel;
-                state.AddNotification(NotificationClass.Advisory, "STRATEGIST LEVEL " + newLevel,
-                    "Your operational experience has deepened.", state.playerCountryId);
+                state.AddNotification(NotificationClass.Advisory, "OPERATOR LEVEL " + newLevel,
+                    "Your operational experience has deepened. Your record and your skill "
+                    + "trees are in OPERATOR.", state.playerCountryId);
                 GameLog.Info("PROG", $"Strategist level {newLevel} reached.");
             }
 

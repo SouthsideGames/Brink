@@ -180,11 +180,11 @@ namespace Brink.Core
 
             Add(Pillar.Economy, "RESEARCH", "Authorize research", "2 CP + treasury",
                 "Multi-year programmes across all five pillars. Capabilities unlock ability, never force.");
-            Add(Pillar.Military, "STRATEGIC", "Prepare an instrument", "2 CP + treasury",
+            Add(Pillar.Military, "ENDGAME", "Prepare an instrument", "2 CP + treasury",
                 "Months of preparation toward one decisive capability. Visible to anyone collecting on us.");
-            Add(Pillar.Military, "STRATEGIC", "Execute an instrument", "4 CP",
+            Add(Pillar.Military, "ENDGAME", "Execute an instrument", "4 CP",
                 "Only when prepared, and only against a state we are confronting.");
-            Add(Pillar.Government, "STRATEGIST", "Unlock a skill", "Skill points",
+            Add(Pillar.Government, "OPERATOR", "Unlock a skill", "Skill points",
                 "Operator capability only — command capacity, action costs, precision. Never national power.",
                 state.skillPoints > 0, "No skill points available.");
 

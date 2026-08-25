@@ -132,37 +132,58 @@ namespace Brink.UI
             GameController.Instance.StateReplaced -= RefreshAll;
         }
 
-        void BuildViews()
+        /// <summary>
+        /// Every panel in the terminal, in rail order.
+        ///
+        /// **One list.** The nav rail, `AttentionSystem`'s markers and
+        /// `ActionCatalog`'s "where do I do this" column all address panels by
+        /// their `Id` string, with nothing binding those strings to a panel that
+        /// exists. Building the set here rather than inside `BuildViews` lets a
+        /// test walk the real rail and fail the build when a marker names a
+        /// panel nobody can open — which is how STRATEGIC/STG and
+        /// STRATEGIST/STR sat one letter apart for as long as they did.
+        /// </summary>
+        public static List<TerminalView> BuildPanels(bool includeDebugConsoles)
         {
-            views.Add(new BriefingView());
-            // Second in the rail deliberately: "what can I do?" is the question a
-            // new operator has after the briefing, and it should be the next
-            // thing their eye lands on.
-            views.Add(new ActionsView());
-            views.Add(new WorldMapView());
-            views.Add(new CabinetView());
-            views.Add(new MilitaryView());
-            views.Add(new EconomyView());
-            views.Add(new IntelligenceView());
-            views.Add(new DiplomacyView());
-            views.Add(new GovernmentView());
-            views.Add(new TechnologyView());
-            views.Add(new EndgameView());
-            views.Add(new StrategistView());
-            views.Add(new ChronicleView());
+            var panels = new List<TerminalView>
+            {
+                new BriefingView(),
+                // Second in the rail deliberately: "what can I do?" is the question a
+                // new operator has after the briefing, and it should be the next
+                // thing their eye lands on.
+                new ActionsView(),
+                new WorldMapView(),
+                new CabinetView(),
+                new MilitaryView(),
+                new EconomyView(),
+                new IntelligenceView(),
+                new DiplomacyView(),
+                new GovernmentView(),
+                new TechnologyView(),
+                new EndgameView(),
+                new StrategistView(),
+                new ChronicleView()
+            };
 
             // The SYSTEM console carries save/load slots, FORCE CRISIS, month
             // skipping and live difficulty toggles. Shipping it would hand the
             // player exactly the "reload the turn I disliked" loop GDD §30
             // forbids, so it exists only in the editor and development builds.
-            if (Debug.isDebugBuild || Application.isEditor)
+            if (includeDebugConsoles)
             {
-                views.Add(new SystemView());
+                panels.Add(new SystemView());
 
                 // Temporary bench for the audio foundation. Ships beside SYSTEM
                 // and disappears with it in a player build.
-                views.Add(new AudioDebugView());
+                panels.Add(new AudioDebugView());
             }
+
+            return panels;
+        }
+
+        void BuildViews()
+        {
+            views.AddRange(BuildPanels(Debug.isDebugBuild || Application.isEditor));
 
             foreach (var view in views)
             {

@@ -520,11 +520,13 @@ immediately, not on the next month.
 
 ## 8. View catalogue
 
-Registered in `TerminalShellController.BuildViews`, in nav-rail order:
+Built by `TerminalShellController.BuildPanels(includeDebugConsoles)`, in nav-rail
+order:
 
 | `Id` | `ShortCode` | Class |
 |---|---|---|
 | BRIEFING | BRF | `BriefingView` |
+| ACTIONS | ACT | `ActionsView` |
 | MAP | MAP | `WorldMapView` |
 | CABINET | CAB | `CabinetView` |
 | MILITARY | MIL | `MilitaryView` |
@@ -533,16 +535,45 @@ Registered in `TerminalShellController.BuildViews`, in nav-rail order:
 | DIPLOMACY | DIP | `DiplomacyView` |
 | GOVERNMENT | GOV | `GovernmentView` |
 | RESEARCH | RES | `TechnologyView` |
-| STRATEGIC | STG | `EndgameView` |
-| STRATEGIST | STR | `StrategistView` |
+| ENDGAME | EGM | `EndgameView` |
+| OPERATOR | OPR | `StrategistView` |
 | CHRONICLE | CHR | `ChronicleView` |
 | SYSTEM | SYS | `SystemView` — **editor / development builds only** |
+| AUDIO | AUD | `AudioDebugView` — **editor / development builds only** |
+
+### Panel names must be tellable apart
+
+`EndgameView` and `StrategistView` used to be **STRATEGIC/STG** and
+**STRATEGIST/STR**, adjacent in the rail, one letter apart, and about entirely
+different things — the state's decisive instruments and the operator's own
+record. Reported from play as a straight question: *"what is the difference
+between STG and STR?"*
+
+On a phone the rail is three characters wide, and the attention marker appends a
+fourth (`ECO.`, `RES!`), so a code is all the operator has to go on. The rule is
+now enforced:
+`AttentionSystemTests.NoTwoPanelsAreConfusableInTheNavRail` fails the build when
+two `ShortCode`s are within **Levenshtein distance 1**, or when two `Id`s match.
+
+The panels also state what they are not: OPERATOR opens with "Your own file …
+nothing here is national power", ENDGAME with "The state's decisive options —
+not your record, which is in OPERATOR."
+
+### View ids are strings, and now they are checked
+
+`AttentionSystem`, `ActionCatalog` and `TutorialSystem` all address a panel by
+its `Id` string, with nothing binding those strings to a panel that exists —
+which is why the rename had to touch five files. `BuildPanels` is public and
+static so tests can walk the **real** rail:
+`EverySummaryNamesAPanelThatExists`, `EveryActionNamesAPanelThatExists` and
+`EveryTutorialStepNamesAPanelThatExists`. The first of those used to compare
+against a list hand-copied into the test file, so it would have kept passing
+against panels that no longer existed.
 
 ### SYSTEM is gated
 
 ```csharp
-if (Debug.isDebugBuild || Application.isEditor)
-    views.Add(new SystemView());
+views.AddRange(BuildPanels(Debug.isDebugBuild || Application.isEditor));
 ```
 
 The SYSTEM console carries save/load slots, FORCE CRISIS, month skipping and live
@@ -554,7 +585,7 @@ audit and is now closed.
 ### Adding a view
 
 Subclass `Views.TerminalView`, implement `Id`, `ShortCode` (three letters) and
-`Refresh()`, then register it in `BuildViews`. The base class already gives you a
+`Refresh()`, then register it in `BuildPanels`. The base class already gives you a
 hidden vertical `ScrollView` with both scrollers hidden.
 
 - `AddText(ussClass = "terminal-text")` — a readout label. Gets leading and gets
@@ -562,9 +593,48 @@ hidden vertical `ScrollView` with both scrollers hidden.
 - `AddFigure(ussClass)` — the same, plus `terminal-figure`: no leading, no
   wrapping. Use it for anything composed on the grid — maps, charts, multi-row
   bars.
+- `MakeRow()` — a `button-row`. Build command rows this way: `button-row` is what
+  the refusal explainer looks for, and a row assembled by hand will not get its
+  refusals printed.
+- `AddButton(row, text, extraClass, onClick)` — returns the `Button`, so the
+  caller can refuse it. Six views carried a byte-identical private copy of this
+  returning `void`, which is exactly why a precondition the caller knew about had
+  nowhere to go.
 - Take the width from `TerminalMetrics.Columns`, never a literal.
 - If the view exposes a player action that spends a resource, call
   `ProgressionSystem.RecordInitiative` after the spend succeeds (spec 07).
+
+### Refusing a command — `TerminalView.Block(button, reason)`
+
+Every way a control is taken away goes through one helper, and three rules make
+it work:
+
+1. **A blocked button stays blocked.** The reason is recorded on the button
+   (`userData`), and both gates run *after* `Build()`. `GateOnAffordability` used
+   to call `SetEnabled(affordable)`, which handed back every button a panel had
+   already refused for its own reasons — an exercise inside its cooldown, a
+   programme the treasury cannot fund, a peace term that does not apply, a
+   patronage payment with no money behind it. The operator was offered a control
+   that spent nothing and reported nothing when pressed, which is what
+   *"sometimes I press a button to use CP and it does not go down"* actually was.
+   **Both gates now only ever disable.** A view rebuilds its buttons from scratch
+   every refresh, so there is never anything legitimate to re-enable.
+2. **The first reason wins.** Whichever gate refuses first has the most specific
+   answer; "requires 2 CP" is a worse thing to be told than "we exercised with
+   them last month".
+3. **The reason is on screen, not in a tooltip.** There is no hover on a phone.
+   `TerminalView.ExplainBlockedCommands` runs last in `Refresh()`, walks every
+   `button-row`, and prints one wrapped `UNAVAILABLE: …` line beneath any row
+   holding a refused command. Central, so a view added later cannot forget —
+   the same reasoning as the text policy.
+
+`GateOnAffordability` and `GateOnAuthority` each take an optional explicit
+`GameState` so they can be exercised without a running session; the
+no-argument overloads read `GameController`.
+
+Guarded by `MapAndLayoutTests.TheAffordabilityGateNeverHandsBackARefusedCommand`,
+`AnUnaffordableCommandIsRefusedWithItsPrice` and
+`ARefusedCommandSaysWhyOnScreen`.
 
 Views rebuild their entire content on refresh. With this data volume that is
 cheap and it eliminates a whole class of stale-state bugs.
