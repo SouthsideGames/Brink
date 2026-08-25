@@ -123,6 +123,7 @@ namespace Brink.Core
                     state, crisis.lapseEffectId, crisis.lapseTargetId, crisis.lapseMagnitude);
 
                 state.activeCrises.RemoveAt(i);
+                RecordOutcome(state, crisis.defId, lapsed: true);
                 Telemetry.Record(state, TelemetryKind.Crisis, state.playerCountryId, "LAPSED",
                     crisis.defId, success: false);
 
@@ -177,6 +178,7 @@ namespace Brink.Core
                 state, option.effectId, option.effectTargetId, option.effectMagnitude);
 
             state.activeCrises.Remove(crisis);
+            RecordOutcome(state, crisis.defId, lapsed: false);
             state.crisesResolvedThisYear++;
             Telemetry.Record(state, TelemetryKind.Crisis, state.playerCountryId, "RESOLVED",
                 $"{crisis.defId} → {option.label}");
@@ -210,9 +212,17 @@ namespace Brink.Core
             var weights = new List<float>();
             float total = 0f;
 
+            PruneOutcomes(state, monthIndex);
+
             foreach (var definition in EventCatalog.Definitions)
             {
                 if (OnCooldown(state, definition, monthIndex)) continue;
+
+                // A chained event exists only as its parent's consequence
+                // (spec 11 §7). Outside its window it is not merely unlikely —
+                // it is not a situation the world contains.
+                if (!string.IsNullOrEmpty(definition.followsFrom)
+                    && !ChainEligible(state, definition, monthIndex)) continue;
 
                 bool passes;
                 try { passes = definition.isEligible == null || definition.isEligible(state); }
@@ -242,6 +252,60 @@ namespace Brink.Core
                 return;
             }
             Trigger(state, eligible[eligible.Count - 1].id);
+        }
+
+        // ---------- crisis chains (spec 11 §7) ----------
+
+        /// <summary>
+        /// Whether a chained definition's parent lapsed recently enough — and long
+        /// enough ago — for the follow-up to arrive. Public so tests and the
+        /// catalog's own guards can ask directly.
+        ///
+        /// Only a **lapse** seeds a chain. Every option on a crisis is somebody
+        /// taking responsibility; the follow-up is what happens when nobody did.
+        /// A resolved parent produces no sequel however badly the choice went —
+        /// the choice's own costs are its consequence.
+        /// </summary>
+        public static bool ChainEligible(GameState state, EventDefinition definition, int monthIndex)
+        {
+            foreach (var outcome in state.crisisOutcomes)
+            {
+                if (!outcome.lapsed || outcome.defId != definition.followsFrom) continue;
+
+                int elapsed = monthIndex - outcome.monthIndex;
+                if (elapsed >= definition.followUpDelayMonths
+                    && elapsed <= definition.followUpWindowMonths) return true;
+            }
+            return false;
+        }
+
+        static void RecordOutcome(GameState state, string defId, bool lapsed)
+        {
+            state.crisisOutcomes.Add(new CrisisOutcome
+            {
+                defId = defId,
+                monthIndex = state.date.MonthsSince(state.startDate),
+                lapsed = lapsed
+            });
+        }
+
+        /// <summary>
+        /// Drop outcomes no chain could still read. The longest window any
+        /// authored chain declares bounds how long a record stays useful; a save
+        /// should not carry a decade of closed crises for a mechanic that only
+        /// looks back eighteen months.
+        /// </summary>
+        static void PruneOutcomes(GameState state, int monthIndex)
+        {
+            int longestWindow = 0;
+            foreach (var definition in EventCatalog.Definitions)
+                if (!string.IsNullOrEmpty(definition.followsFrom)
+                    && definition.followUpWindowMonths > longestWindow)
+                    longestWindow = definition.followUpWindowMonths;
+
+            for (int i = state.crisisOutcomes.Count - 1; i >= 0; i--)
+                if (monthIndex - state.crisisOutcomes[i].monthIndex > longestWindow)
+                    state.crisisOutcomes.RemoveAt(i);
         }
 
         // ---------- cooldowns ----------

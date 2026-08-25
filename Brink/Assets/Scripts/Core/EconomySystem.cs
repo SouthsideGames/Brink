@@ -40,6 +40,8 @@ namespace Brink.Core
                 resources.energyEndowment = resources.energy;
             if (resources.materialsEndowment <= 0f)
                 resources.materialsEndowment = resources.strategicMaterials;
+            if (resources.foodEndowment <= 0f)
+                resources.foodEndowment = resources.foodSecurity;
 
             if (resources.manpower < 0f) resources.manpower = 0f;
             if (resources.manpower >= resources.manpowerBaseline) return;
@@ -126,6 +128,17 @@ namespace Brink.Core
                      + NationalTraitCatalog.ResourceCeilingBonus(country), 0f, 100f);
 
         /// <summary>
+        /// The most food security this country can hold: what its own land
+        /// supports, plus what its trade actually delivers. Same shape as the
+        /// two ceilings above and for the same reason — an authored food-poor
+        /// state stays food-poor unless somebody sells to it, and the supply is
+        /// exactly as reliable as the relationship behind it.
+        /// </summary>
+        public static float FoodCeilingFor(GameState state, CountryState country)
+            => Clamp(country.resources.foodEndowment
+                     + TradeSystem.Supply(state, country.id, TradeFocus.Food), 0f, 100f);
+
+        /// <summary>
         /// How much domestic capacity a sector is losing to imports.
         ///
         /// Only the sector that competes with what is being imported. A country
@@ -167,6 +180,7 @@ namespace Brink.Core
                 case EconomicSector.Energy: competing = TradeFocus.Energy; break;
                 case EconomicSector.Industry: competing = TradeFocus.Materials; break;
                 case EconomicSector.Consumer: competing = TradeFocus.General; break;
+                case EconomicSector.Agriculture: competing = TradeFocus.Food; break;
                 default: return 0f;   // nothing imported competes with these
             }
 
@@ -404,6 +418,23 @@ namespace Brink.Core
                 : Math.Min(0.25f, (materialsCeiling - country.resources.strategicMaterials) * 0.02f);
             country.resources.strategicMaterials =
                 Clamp(country.resources.strategicMaterials + materialsDrift, 0f, 100f);
+
+            // Food security moves the same way (GDD §10.1). Written once at world
+            // creation and never touched again until this existed, so a siege,
+            // an embargo or a lost breadbasket changed a number nobody ate from.
+            // A war on your own ground disrupts harvests and distribution; severe
+            // sanctions starve the imports. Both recover by drifting back to the
+            // ceiling once the pressure lifts — the recovery-path rule, both
+            // sides of it, since this runs for every country.
+            float foodCeiling = FoodCeilingFor(state, country);
+            float foodDrift;
+            if (sanctionPressure > 1.0f) foodDrift = -0.6f;
+            else if (atWar) foodDrift = Math.Min(-0.25f,
+                (foodCeiling - country.resources.foodSecurity) * 0.02f);
+            else foodDrift = Math.Min(0.3f,
+                (foodCeiling - country.resources.foodSecurity) * 0.02f);
+            country.resources.foodSecurity =
+                Clamp(country.resources.foodSecurity + foodDrift, 0f, 100f);
 
             // ---- market index (GDD §20.1) ----
             // The index tracks fundamentals and reacts sharply to shocks, rather

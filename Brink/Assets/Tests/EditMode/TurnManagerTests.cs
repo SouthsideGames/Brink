@@ -99,7 +99,7 @@ namespace Brink.Tests
                 turns.EndMonth();
 
             Assert.AreEqual(120, state.date.MonthsSince(state.startDate));
-            Assert.AreEqual(WorldFactory.Profiles.Length, state.countries.Count);
+            Assert.AreEqual(WorldFactory.StandardRoster.Length, state.countries.Count);
             Assert.NotNull(state.PlayerCountry);
         }
     }

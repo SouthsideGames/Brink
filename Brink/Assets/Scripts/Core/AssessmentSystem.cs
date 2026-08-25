@@ -69,14 +69,25 @@ namespace Brink.Core
         /// <summary>
         /// Match the operator profile to the nation whose strategic character
         /// it best suits. The player may override this before accepting.
+        ///
+        /// Defaults to the Standard roster — the world size a new game proposes.
+        /// The assessment screen recomputes through the overload when the
+        /// operator picks a different theatre scale, so a posting can never
+        /// name a country the chosen world does not contain.
         /// </summary>
         public static string AssignPosting(DoctrineProfile doctrine)
+            => AssignPosting(doctrine, WorldFactory.RosterFor(WorldSize.Standard));
+
+        /// <summary>Best-fit posting restricted to one world's roster.</summary>
+        public static string AssignPosting(DoctrineProfile doctrine, string[] allowedIds)
         {
+            var allowed = new HashSet<string>(allowedIds);
             float best = float.MinValue;
             string bestId = WorldFactory.PlayerCountryId;
 
             foreach (var profile in WorldFactory.Profiles)
             {
+                if (!allowed.Contains(profile.id)) continue;
                 // Fit = how well the operator's instincts match the nation's
                 // existing strengths and institutional character.
                 float fit =

@@ -30,6 +30,15 @@ namespace Brink.Data
         public float energyEndowment;
         public float materialsEndowment;
 
+        /// <summary>
+        /// The food position this country naturally returns to. Seeded from
+        /// current food security on the first tick of an old save, like the two
+        /// above. Until this existed, `foodSecurity` was written once at world
+        /// creation and never moved again — the last authored stat with no
+        /// monthly behaviour at all.
+        /// </summary>
+        public float foodEndowment;
+
         public float energy;             // fuel/electricity security (0..100)
         public float industrialCapacity; // ability to produce, build, maintain (0..100)
         public float strategicMaterials; // aggregated critical materials (0..100)

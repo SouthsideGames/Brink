@@ -53,6 +53,28 @@ namespace Brink.Data
     }
 
     /// <summary>
+    /// How one of the player's crises ended (spec 11 §7 — crisis chains).
+    ///
+    /// A follow-up event months later needs to know that its parent happened and
+    /// that nobody dealt with it, and the chronicle records that only as prose.
+    /// This is the structured half: one row per closed crisis, consumed by
+    /// `CrisisSystem.ChainEligible` and pruned once no chain could still read it.
+    ///
+    /// Empty on an old save is *correct*, not merely tolerable — a world that
+    /// predates the record has no recorded outcomes, so no chain fires from
+    /// history nobody measured. Same reasoning as `warsWon`: no migration step.
+    /// </summary>
+    [Serializable]
+    public class CrisisOutcome
+    {
+        public string defId;
+        public int monthIndex;
+
+        /// <summary>True when the month ended without a decision.</summary>
+        public bool lapsed;
+    }
+
+    /// <summary>
     /// A live Crisis Turn (GDD §6, §23): interrupts the monthly loop and asks
     /// for a decision.
     ///

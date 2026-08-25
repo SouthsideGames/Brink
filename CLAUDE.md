@@ -1345,30 +1345,82 @@ three had passed for a long time:
       **Not yet verified by a test run** — no Unity available in the environment
       these were written in. Run EditMode → Run All before trusting any of it.
 
+- [x] **Crisis chains** (spec 11 §7a) — an unanswered crisis seeds a follow-up
+      months later. `CrisisSystem` records every closed crisis in
+      `GameState.crisisOutcomes`; a definition carrying `followsFrom` is eligible
+      only inside `[followUpDelayMonths, followUpWindowMonths]` after the parent
+      **lapsed**. Three rules are the design: **only a lapse chains** (every
+      option is somebody taking responsibility; the sequel belongs to nobody
+      having done so — the first mechanic that makes answering a crisis worth
+      more than its deltas); **the delay is the point** (next month reads as the
+      same event, months later reads as the world remembering, and the window
+      closes so a mistake is a consequence rather than a permanent tax); and
+      **chains are player-facing** (`ForeignCrisisSystem.PickFor` skips them — a
+      foreign government's situations resolve in the same tick and leave no
+      lapse). Each authored chain (`HUNGER_RIOTS`, `STRIKE_COMMITTEES`,
+      `REFERENDUM_DEMAND`) keeps a live `isEligible` re-checking the underlying
+      condition, so a lapse whose cause was later repaired spawns nothing.
+      Outcomes are pruned past the longest authored window; empty on an old save
+      is correct (the war-verdict reasoning). `CrisisChainTests`.
+- [x] **Food security has monthly behaviour** (spec 02 §5) — it was written at
+      world creation and never moved: the last authored stat with none. Now the
+      endowment/ceiling/drift idiom exactly as energy and materials
+      (`foodEndowment`, `FoodCeilingFor`, erosion under coercive sanctions and
+      **always during a war**, recovery by drifting home when pressure lifts —
+      both halves of the recovery rule, every country). `TradeFocus.Food`
+      (appended, ordinals preserved) makes grain negotiable; food imports press
+      on the Agriculture sector via `ImportDisplacement`. Hunger reaches the
+      social layer with zero-by-construction terms (living standards below food
+      50, unrest below 40 — the `distress` idiom). The starting world authors
+      **three food dependencies (AUS→JPN, USA→KOR, IND→SAU) — the first
+      authored focused trade links anywhere**; SAU at food 18 is the designed
+      mirror of the energy-poor archetypes. `FoodSecurityTests`.
+- [x] **Faction arithmetic** (spec 05 §2b-1) — `Leader.faction` was a display
+      string no rule read. `FactionSupportShift`: a turnover government
+      (OPPOSITION / REFORM BLOC) faces −12 on the legislative-support target
+      decaying over 30 months — a term in a target, never a ratchet, and
+      `brokeredSupport` can outbid it, giving the workhorse verb its most
+      natural customer. `FactionCohesionShift`: a MILITARY COUNCIL's cohesion
+      tracks `militaryLoyalty` (undermining the army *is* undermining the
+      junta — GDD §22's promised vulnerability), a PROVISIONAL AUTHORITY runs
+      −10 decaying over 36 months. **Confidence**: `CheckConfidence` finally
+      implements the ParliamentaryRepublic declaration "government falls with
+      confidence" — below 30 support, 15%/month the government falls to a snap
+      election; a presidential system rides the same chamber out to the
+      scheduled date, which is what makes the two elective types play
+      differently. Surfaced in GOVERNMENT (chamber line, CONFIDENCE AT RISK).
+      `FactionTests`.
+
+- [x] **Roster 16 → 24, and the player chooses the world size** (spec 08 §3a).
+      Eight expansion countries (GBR, FRA, ITA, CAN, EGY, ZAF, ARG, VNM), each
+      with a genuine vulnerability, ground (Suez Transit, two new naval ports,
+      southern-hemisphere food and minerals), trade links (two more authored
+      food dependencies: FRA→EGY, CAN→GBR) and posture. A new save picks its
+      `WorldSize` on the assessment's intervention step: REGIONAL (10) /
+      STANDARD (16, default) / FULL WORLD (24), majors always included.
+      **Two rules keep the measured world measured:** `StandardRoster` is an
+      explicit id list (growing `Profiles` cannot grow it), and everything new
+      is authored strictly at the tail while `CreateWorld` skips excluded
+      content *without consuming a random draw* — so `CreateDebugWorld` still
+      builds the exact world every balance figure was taken on, and
+      `WorldSizeTests.GrowingTheCatalogueDidNotMoveTheStandardWorld` fails the
+      build if that ever stops being true. Posting assignment respects the
+      chosen roster (`AssignPosting` overload); a posting outside the world
+      falls back to the default post. Balance on Regional/Full is
+      **unmeasured** — the coherence smoke test runs a Full decade, nothing
+      more. Save: `GameState.worldSize`, ordinal 0 = Standard, so old saves
+      deserialize to the world they were built in; no migration.
+
 Recommended next:
-- **ECONOMY is now the high outlier at +0.92 over passive** (next is MILITARY at
-  +0.62). Worth a look, but check it is not simply that 344 decisions a decade is
-  the most engagement any playstyle offers — the evaluation rewards initiative on
-  purpose.
-- `foodSecurity` is written once at world creation and never changes — the last
-  authored stat with no monthly behaviour at all.
+- **ECONOMY was the high outlier at +0.92 over passive** in the last measured
+  table. Re-measure before acting — the entries above (confidence collapses,
+  food erosion in war, crisis chains) all touch balance.
+- **Run `Report_MultiSeedBalance` on Regional and Full worlds** before tuning
+  anything against them, and consider whether the harness playstyles should run
+  on Full at all — eight new states change coalition and sanction arithmetic.
 - Diminishing returns on repeated covert ops.
-- **Crisis chains** — now unblocked. A badly-handled or ignored crisis has
-  somewhere to record itself, so a follow-up months later is the cheapest
-  remaining way to make the world feel causal. Needs a `followsFrom` on
-  `EventDefinition` (spec 11 §7).
-- **Crises only ever fire for the player.** `SystemicCheck` reads
-  `state.PlayerCountry` throughout and every eligibility helper is written from
-  the operator's viewpoint. AI states facing their own crises would create
-  instability the player could read and exploit.
-- `Leader.faction` is a display string **no rule reads**. Now that
-  `legislativeSupport` is central (spec 05 §2b), parliamentary arithmetic would
-  give it somewhere to bite.
-- **Not yet verified by a test run.** The eight structural items above compile
-  clean but the suite could not run — the Unity editor was open and batch mode
-  cannot share the project lock. Run EditMode → Run All before trusting any of
-  it, and re-check `Report_MultiSeedBalance`: theatres, simultaneous fronts and
-  the social layer all touch balance.
+- An AI verb (or trade-seeking behaviour) for a food-poor state — today only
+  authored links and the player's own deals raise a foreign food ceiling.
 - Touch targets are now 44 panel px and test-guarded, but the **layout cost has
   not been checked on a device**: every button grew ~30% taller, so MILITARY
   (domain tabs + up to 7 verbs + the new defensive panel) and GOVERNMENT (four

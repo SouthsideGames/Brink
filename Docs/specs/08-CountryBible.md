@@ -175,6 +175,48 @@ default. `CreateWorld(seed, countryId)` accepts **any** id in the table, the
 assessment can post the operator to any of them (spec 11), and a test builds a
 world for every profile in turn. Never assume the player is the United States.
 
+## 3a. The expansion roster and world sizes (GDD §31.2 amendment)
+
+The authored catalogue is **24 countries**; how many a save opens with is chosen
+at the assessment (`WorldSize`, stored on the save):
+
+- **STANDARD (16)** — `WorldFactory.StandardRoster`, the table above. **The
+  measured world**: every balance figure in the project was taken here, and
+  `CreateDebugWorld` builds it, so the harness keeps measuring the game the
+  default plays. Kept as an explicit id list so growing `Profiles` can never
+  silently grow it.
+- **REGIONAL (10)** — USA, CHN, RUS, IND, DEU, JPN, KOR, SAU, TUR, AUS.
+  Curated, not truncated: the great-power core stays (the AI rivalry systems
+  were tuned against it), every member keeps trade links inside the set, and
+  all three authored food dependencies survive.
+- **FULL WORLD (24)** — everything, including the eight below.
+
+| id | Name | Government | Term | Vulnerability | Map (x,y) | Code |
+|---|---|---|---|---|---|---|
+| GBR | United Kingdom | Parliamentary republic | 60 | materials 30 | 34, 4 | GB |
+| FRA | France | Presidential republic | 60 | materials 32, unity 48 | 35, 6 | FR |
+| ITA | Italy | Parliamentary republic | **36** | energy 24, gov 48 | 38, 7 | IT |
+| CAN | Canada | Parliamentary republic | 48 | military 38, manpower 200 | 14, 3 | CA |
+| EGY | Egypt | Centralized republic | 0 | **food 30**, economy 38 | 43, 10 | EG |
+| ZAF | South Africa | Parliamentary republic | 60 | energy 40, stability 42 | 40, 17 | ZA |
+| ARG | Argentina | Presidential republic | 48 | economy 42, treasury 250 (food **96**) | 22, 18 | AR |
+| VNM | Vietnam | Dominant-party state | 0 | materials 38, beside CHN | 63, 11 | VN |
+
+**The tail rule is load-bearing.** Expansion profiles, locations, trade links and
+posture rows are authored strictly *after* every Standard entry, and `CreateWorld`
+skips an excluded profile or location **without consuming a random draw** — the
+two rules that keep the Standard world bit-identical to the measured one
+(`WorldSizeTests.GrowingTheCatalogueDidNotMoveTheStandardWorld` asserts it).
+Author new content at the tail or you silently regenerate the measured world.
+
+Rosters interact with the flow: `AssessmentSystem.AssignPosting` defaults to the
+Standard roster and takes an allowed-ids overload; the assessment screen offers
+the three sizes on the intervention step and re-fits the posting when the chosen
+world does not contain it; `CreateWorld` falls a foreign posting back to the
+default post. Smaller worlds prune trade links and hosted-operator references to
+what both ends of exist. Balance on Regional and Full is **unmeasured** — run
+`Report_MultiSeedBalance` before tuning against either.
+
 ## 4. Archetypes
 
 The GDD (§31.2) asks for a mix rather than a shelf of peers, and the reason is
@@ -394,10 +436,13 @@ NGA is 52 with the US and 56 with China — so buffer states have somewhere to m
 when pressure arrives. Status (`Ally`, `Hostile`, …) is never stored; it is
 derived from these dimensions plus treaties (spec 04).
 
-## 9. Adding a seventeenth country
+## 9. Adding a country
 
-The roster is at sixteen, the GDD's target. If you add one, this is the work — in
-a single commit, per the spec-maintenance rule in the specs README.
+The catalogue is at 24 (16 Standard + 8 expansion, §3a). If you add one, this is
+the work — in a single commit, per the spec-maintenance rule in the specs README.
+**Author everything at the tail** (profiles, locations, links, posture) and add
+the id to the roster(s) it belongs in; a new country outside `StandardRoster`
+exists only in the Full world.
 
 1. **Profile.** Add a `CountryProfile` under the right archetype comment block in
    `WorldFactory.Profiles`. Fill every field in §2, including `mapX`/`mapY`,
@@ -422,7 +467,8 @@ a single commit, per the spec-maintenance rule in the specs README.
 
    | Test | Asserts |
    |---|---|
-   | `RealWorldRosterTests.Roster_CoversTheDesignedArchetypes` | 14 ≤ `Profiles.Length` ≤ 18; all five government types present |
+   | `RealWorldRosterTests.Roster_CoversTheDesignedArchetypes` | 14 ≤ `StandardRoster.Length` ≤ 18; all five government types present |
+   | `WorldSizeTests` (whole file) | Standard world bit-identical to the measured one; Regional/Full complete: ground, links, minds, relationships, vulnerabilities |
    | `RealWorldRosterTests.EveryCountry_HasAGenuineVulnerability` | The §5 weakness check, per country |
    | `RealWorldRosterTests.EveryCountry_HasStrategicLocations` | A capital plus ≥ 2 locations held |
    | `RealWorldRosterTests.EconomicCoercion_HasAffordableTargets` | ≥ 4 states at trade volume < 25 with the player |
@@ -436,7 +482,7 @@ a single commit, per the spec-maintenance rule in the specs README.
    | `ForeignCabinetTests.OfficialIdsAreUniqueAcrossTheWorld` | No id collides across the roster |
    | `ForeignCabinetTests.AForeignCabinetBelongsToItsOwnNation` | Names from that country's pools, titles from its `officeTitles` |
    | `DiplomacySystemTests.Factory_SeedsFullRelationshipGraph` | `n(n−1)/2` relationships (derives from the count) |
-   | `AISystemTests.Factory_SeedsAIForEveryNonPlayerState` | `Profiles.Length − 1` AI states |
+   | `AISystemTests.Factory_SeedsAIForEveryNonPlayerState` | one AI state per non-player country |
    | `MilitarySystemTests.Factory_BuildsForcesAndMap` | `locations.Count > 30` |
 
 8. **Re-run `Report_MultiSeedBalance`** (five seeds, per-component breakdown) and

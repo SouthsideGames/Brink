@@ -22,6 +22,7 @@ namespace Brink.UI
         int index;
         AssessmentResult pendingResult;
         int seed;
+        WorldSize chosenSize = WorldSize.Standard;
 
         public AssessmentScreen(System.Action onComplete)
         {
@@ -40,6 +41,7 @@ namespace Brink.UI
             answers.Clear();
             index = 0;
             pendingResult = null;
+            chosenSize = WorldSize.Standard;
             seed = System.Environment.TickCount;
             Render();
         }
@@ -108,6 +110,47 @@ namespace Brink.UI
             }
             header.text = sb.ToString();
 
+            // Theatre scale (GDD §31.2 amendment): how much of the authored
+            // world this save opens with. Chosen here, before acceptance,
+            // because world composition is part of the posting decision — a
+            // Regional world has fewer posts to be assigned to.
+            var scaleNote = AddLabel("terminal-text-dim");
+            scaleNote.style.whiteSpace = WhiteSpace.Normal;
+            scaleNote.text = "\n THEATER OF OPERATIONS — how much of the world this posting opens onto.\n";
+
+            var scaleRow = new VisualElement();
+            scaleRow.AddToClassList("button-row");
+            Root.Add(scaleRow);
+
+            void AddScale(WorldSize size, string label)
+            {
+                bool current = chosenSize == size;
+                var button = new Button(() =>
+                {
+                    chosenSize = size;
+
+                    // A posting the chosen world does not contain is reassigned
+                    // to the best fit inside it — never silently kept and then
+                    // quietly replaced at world creation.
+                    var roster = WorldFactory.RosterFor(chosenSize);
+                    if (System.Array.IndexOf(roster, pendingResult.assignedCountryId) < 0)
+                        pendingResult.assignedCountryId =
+                            AssessmentSystem.AssignPosting(pendingResult.doctrine, roster);
+                    Render();
+                })
+                { text = (current ? "► " : "") + label };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                scaleRow.Add(button);
+            }
+
+            AddScale(WorldSize.Regional,
+                $"REGIONAL — {WorldFactory.RegionalRoster.Length} STATES");
+            AddScale(WorldSize.Standard,
+                $"STANDARD — {WorldFactory.StandardRoster.Length} STATES");
+            AddScale(WorldSize.Full,
+                $"FULL WORLD — {WorldFactory.Profiles.Length} STATES");
+
             var note = AddLabel("terminal-text-dim");
             note.style.whiteSpace = WhiteSpace.Normal;
             note.text = "\n One reassignment is permitted before your posting is entered into the record.\n";
@@ -116,8 +159,12 @@ namespace Brink.UI
             row.AddToClassList("button-row");
             Root.Add(row);
 
+            var available = new System.Collections.Generic.HashSet<string>(
+                WorldFactory.RosterFor(chosenSize));
             foreach (var profile in WorldFactory.Profiles)
             {
+                if (!available.Contains(profile.id)) continue;
+
                 var captured = profile;
                 bool proposed = profile.id == pendingResult.assignedCountryId;
                 var button = new Button(() =>
@@ -137,7 +184,7 @@ namespace Brink.UI
 
             var accept = new Button(() =>
             {
-                GameController.Instance.NewGameFromAssessment(pendingResult, seed);
+                GameController.Instance.NewGameFromAssessment(pendingResult, seed, chosenSize);
                 onComplete?.Invoke();
             })
             { text = "ACCEPT POSTING AND BEGIN" };

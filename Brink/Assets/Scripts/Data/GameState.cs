@@ -30,6 +30,14 @@ namespace Brink.Data
         public string playerCountryId;
         public List<CountryState> countries = new List<CountryState>();
 
+        /// <summary>
+        /// How much of the authored world this save opened with (GDD §31.2
+        /// amendment). Fixed at creation — composition is a fact about the
+        /// playthrough. `Standard`'s ordinal is zero, so a save written before
+        /// the field existed deserializes to the world it was actually built in.
+        /// </summary>
+        public WorldSize worldSize;
+
         public CommandPointsState commandPoints = new CommandPointsState();
 
         /// <summary>
@@ -81,6 +89,12 @@ namespace Brink.Data
 
         /// <summary>When each event definition last fired (GDD §23 cooldowns).</summary>
         public List<EventCooldown> eventCooldowns = new List<EventCooldown>();
+
+        /// <summary>
+        /// How the player's recent crises ended (spec 11 §7). Feeds crisis
+        /// chains; pruned by `CrisisSystem` once too old for any chain to read.
+        /// </summary>
+        public List<CrisisOutcome> crisisOutcomes = new List<CrisisOutcome>();
 
         /// <summary>Strategic map (GDD §16, §19).</summary>
         public List<StrategicLocation> locations = new List<StrategicLocation>();

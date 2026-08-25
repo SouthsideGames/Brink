@@ -69,6 +69,21 @@ namespace Brink.UI.Views
             else
                 sb.AppendLine(" SUCCESSION: INTERNAL — NO SCHEDULED CONTEST");
 
+            // Faction arithmetic (spec 05 §2b) — say it in words where it bites.
+            // A penalty the operator cannot see is indistinguishable from a
+            // broken readout.
+            float factionShift = GovernmentSystem.FactionSupportShift(gov)
+                                 + GovernmentSystem.FactionCohesionShift(gov);
+            if (factionShift < -1f)
+                sb.AppendLine(gov.IsElective
+                    ? $" CHAMBER: NOT YET THEIRS — new governing faction, support runs {factionShift:F0} until it consolidates"
+                    : $" STANDING: UNCONSOLIDATED — this leadership's backing runs {factionShift:F0} while it settles");
+            else if (factionShift > 1f)
+                sb.AppendLine($" STANDING: THE ARRANGEMENT HOLDS — backing runs +{factionShift:F0} on loyalty");
+
+            if (gov.AllowsEarlyElection && gov.legislativeSupport < GovernmentSystem.ConfidenceThreshold)
+                sb.AppendLine(" ** CONFIDENCE AT RISK — a chamber this hostile can bring the government down **");
+
             if (gov.emergencyPowers)
                 sb.AppendLine($" ** EMERGENCY POWERS IN FORCE — {gov.emergencyPowersMonthsRemaining} MO REMAINING **");
 

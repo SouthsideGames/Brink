@@ -84,6 +84,8 @@ namespace Brink.Core
                 {
                     if (state.date.CompareTo(gov.nextElectionDate) >= 0)
                         HoldElection(state, country, gov, rng);
+                    else
+                        CheckConfidence(state, country, gov, rng);
                 }
                 else
                 {
@@ -117,6 +119,65 @@ namespace Brink.Core
                 default:
                     return 0f;
             }
+        }
+
+        // ---------- faction arithmetic (GDD §13, spec 05 §2b) ----------
+
+        /// <summary>
+        /// Months a new governing faction needs before the chamber is genuinely
+        /// theirs, and a provisional authority needs before it is a government
+        /// rather than a committee.
+        /// </summary>
+        public const int FactionConsolidationMonths = 30;
+
+        /// <summary>
+        /// What the leader's faction does to the legislative-support target
+        /// (elective systems).
+        ///
+        /// `Leader.faction` was a display string no rule read — a government of
+        /// continuity and one that had just thrown the old party out faced
+        /// identical chambers. A leader who arrived by turnover ("OPPOSITION",
+        /// "REFORM BLOC") governs against a chamber still partly held by the
+        /// people they defeated; the penalty decays with months in office, so it
+        /// is a term in a target rather than a ratchet, and `brokeredSupport`
+        /// remains the way to buy past it — which finally gives that verb its
+        /// most natural customer.
+        /// </summary>
+        public static float FactionSupportShift(GovernmentState gov)
+        {
+            if (!gov.IsElective) return 0f;
+            if (gov.leader.faction != "OPPOSITION" && gov.leader.faction != "REFORM BLOC") return 0f;
+
+            float remaining = Math.Max(0f,
+                1f - (float)gov.leader.monthsInOffice / FactionConsolidationMonths);
+            return -12f * remaining;
+        }
+
+        /// <summary>
+        /// What the leader's faction does to the elite-cohesion target
+        /// (non-elective systems).
+        ///
+        /// A military council stands on the officer corps — its cohesion tracks
+        /// `militaryLoyalty`, so undermining the army *is* undermining the junta,
+        /// which gives a coup-born government the specific vulnerability GDD §22
+        /// promises. A provisional authority is a state still deciding whether it
+        /// is one; the discount decays as it consolidates.
+        /// </summary>
+        public static float FactionCohesionShift(GovernmentState gov)
+        {
+            if (gov.IsElective) return 0f;
+
+            if (gov.leader.faction == "MILITARY COUNCIL")
+                return (gov.militaryLoyalty - 65f) * 0.25f;
+
+            if (gov.leader.faction == "PROVISIONAL AUTHORITY")
+            {
+                float remaining = Math.Max(0f,
+                    1f - (float)gov.leader.monthsInOffice / (FactionConsolidationMonths + 6));
+                return -10f * remaining;
+            }
+
+            return 0f;
         }
 
         /// <summary>Order is what a restrictive posture buys, and what an open one spends.</summary>
@@ -218,7 +279,11 @@ namespace Brink.Core
                 - Math.Max(0f, eco.inflation - 4f) * 1.5f
                 - Math.Max(0f, eco.unemployment - 6f) * 1.2f
                 - country.warExhaustion * 0.20f
-                - country.publicGrievance * 0.12f);
+                - country.publicGrievance * 0.12f
+                // Hunger. Zero by construction in normal play (authored food
+                // sits well above 50), so this adds a deprivation regime
+                // without retuning the ordinary one — the `distress` idiom.
+                - Math.Max(0f, 50f - country.resources.foodSecurity) * 0.5f);
 
             // Deliberately slower to rise than to fall. Prosperity is felt as it
             // accumulates; a collapse is felt immediately.
@@ -236,7 +301,12 @@ namespace Brink.Core
                 + Math.Max(0f, eco.inflation - 8f) * 1.6f
                 + Math.Max(0f, eco.unemployment - 10f) * 1.4f
                 + country.warExhaustion * 0.22f
-                + country.publicGrievance * 0.18f;
+                + country.publicGrievance * 0.18f
+                // Hunger organises faster than the living-standards average it
+                // is part of — standards move over years, an empty shelf moves
+                // people this month. Zero above 40, so it exists only in a
+                // genuine shortage.
+                + Math.Max(0f, 40f - country.resources.foodSecurity) * 0.45f;
 
             // National unity *damps* hardship; it does not cancel it.
             //
@@ -439,14 +509,16 @@ namespace Brink.Core
             if (gov.IsElective)
             {
                 float supportTarget = country.governmentApproval * 0.7f + country.pillars.government * 0.3f
-                                      + gov.brokeredSupport * 0.45f;
+                                      + gov.brokeredSupport * 0.45f
+                                      + FactionSupportShift(gov);
                 gov.legislativeSupport = Approach(gov.legislativeSupport, Clamp(supportTarget), 0.08f);
             }
             else
             {
                 float cohesionTarget = 40f + country.pillars.government * 0.35f + country.stability * 0.25f
                                        - country.warExhaustion * 0.15f
-                                       + gov.brokeredSupport * 0.45f;
+                                       + gov.brokeredSupport * 0.45f
+                                       + FactionCohesionShift(gov);
                 if (gov.emergencyPowers) cohesionTarget -= 8f;
                 gov.eliteCohesion = Approach(gov.eliteCohesion, Clamp(cohesionTarget), 0.06f);
             }
@@ -645,6 +717,53 @@ namespace Brink.Core
             {
                 InstallNewLeadership(state, country, gov, rng, "election defeat");
             }
+        }
+
+        // ---------- confidence (GDD §13, spec 05 §2b) ----------
+
+        /// <summary>Support below which a parliamentary government can fall.</summary>
+        public const float ConfidenceThreshold = 30f;
+
+        /// <summary>Monthly chance the chamber brings a failing government down.</summary>
+        public const double ConfidenceCollapseChance = 0.15;
+
+        /// <summary>
+        /// A parliamentary government that has lost its chamber can lose office
+        /// between elections. `GovernmentType.ParliamentaryRepublic`'s own
+        /// declaration promised this — "government falls with confidence, early
+        /// elections possible" — and nothing implemented the first half:
+        /// legislative support could sit at zero for a decade with no
+        /// consequence beyond a thinner PC income. This is where the number
+        /// finally bites, and what makes the two elective types play
+        /// differently: a presidential system rides out a hostile chamber to
+        /// the scheduled date; a parliamentary one lives month to month.
+        ///
+        /// Probabilistic rather than a hard threshold-plus-timer so the fall
+        /// arrives with the unpredictability of an ambushed division vote, and
+        /// deterministic per save for the same reason everything else is.
+        /// Recovery stays reachable the whole way down: brokered support,
+        /// patronage and messaging all move the target this reads.
+        /// </summary>
+        static void CheckConfidence(GameState state, CountryState country, GovernmentState gov, Random rng)
+        {
+            if (!gov.AllowsEarlyElection) return;
+            if (gov.legislativeSupport >= ConfidenceThreshold) return;
+            if (rng.NextDouble() >= ConfidenceCollapseChance) return;
+
+            state.AddChronicle(ChronicleCategory.Political, country.id,
+                $"{country.displayName}: the government of {gov.leader.name} falls on a confidence vote.",
+                Publicity.Public);
+            if (!country.isPlayer)
+                state.AddNotification(NotificationClass.Wire, "GOVERNMENT FALLS",
+                    $"{gov.leader.name}'s government has lost the confidence of the chamber in " +
+                    $"{country.displayName}. A new administration forms from the snap election.",
+                    country.id, desk: ReportingDesk.Government);
+
+            // The snap election is not a coin flip — a government that fell has
+            // already lost the argument. `InstallNewLeadership` files the
+            // player's own NEW ADMINISTRATION item; one item per handover.
+            InstallNewLeadership(state, country, gov, rng, "lost the confidence of the chamber");
+            gov.nextElectionDate = AddMonths(state.date, gov.termLengthMonths);
         }
 
         // ---------- succession ----------

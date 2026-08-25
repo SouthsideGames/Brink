@@ -49,10 +49,11 @@ namespace Brink.Core
         }
 
         /// <summary>Begin a save from a completed assessment (GDD §5).</summary>
-        public void NewGameFromAssessment(Data.AssessmentResult result, int seed)
+        public void NewGameFromAssessment(Data.AssessmentResult result, int seed,
+            Data.WorldSize size = Data.WorldSize.Standard)
         {
-            GameLog.Info("GAME", $"New posting: {result.assignedCountryId}. Seed: {seed}.");
-            var state = WorldFactory.CreateWorld(seed, result.assignedCountryId);
+            GameLog.Info("GAME", $"New posting: {result.assignedCountryId}. Seed: {seed}. World: {size}.");
+            var state = WorldFactory.CreateWorld(seed, result.assignedCountryId, size);
             AssessmentSystem.ApplyToWorld(state, result);
             ProgressionSystem.CaptureYearSnapshot(state);
             TutorialSystem.Begin(state);

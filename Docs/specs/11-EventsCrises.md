@@ -83,6 +83,9 @@ class EventDefinition
     Func<GameState, bool>  isEligible;             // systemic half
     Func<GameState, float> weight;                 // relative likelihood when eligible
     int cooldownMonths = 24;                       // per save, per definition
+    string followsFrom;                            // crisis chain parent (§7a), or null
+    int followUpDelayMonths = 3;                   // earliest arrival after the lapse
+    int followUpWindowMonths = 18;                 // latest arrival after the lapse
     Func<GameState, List<CrisisOption>> options;   // authored half
 }
 ```
@@ -343,27 +346,63 @@ close a strait to us and meet no answer draws the obvious conclusion.
 reputation in ways a single effect id would not capture. That special case is
 expected to stay.
 
+## 7a. Crisis chains (`followsFrom`)
+
+An unanswered crisis seeds a follow-up months later. Built on §6's outcome
+plumbing: `CrisisSystem` records every closed crisis in
+`GameState.crisisOutcomes` (`CrisisOutcome { defId, monthIndex, lapsed }`), and
+`SystemicCheck` admits a definition carrying `followsFrom` only when
+`ChainEligible` finds a **lapsed** outcome of the parent between
+`followUpDelayMonths` and `followUpWindowMonths` ago.
+
+Rules that are the design, not implementation detail:
+
+- **Only a lapse seeds a chain.** Every option on a crisis is somebody taking
+  responsibility; the follow-up is what happens when nobody did. A resolved
+  parent produces no sequel however badly the chosen option went — the option's
+  own costs are its consequence. This is the first mechanic that makes
+  *answering* a crisis worth something beyond its deltas.
+- **The delay is the point.** A consequence landing the next month reads as the
+  same event still happening; three or four months later it reads as the world
+  remembering. The window closes so one mistake is a consequence, not a
+  permanent tax.
+- **Chains are player-facing.** `ForeignCrisisSystem.PickFor` skips chained
+  definitions: a foreign government's situations resolve in the same tick and
+  leave no lapse to chain from.
+- **The record is pruned.** Outcomes older than the longest authored window are
+  dropped by `SystemicCheck`. Empty on an old save is correct — no measured
+  history, no invented sequels (the war-verdict reasoning).
+
+Authored chains (each still carries a live `isEligible`, so a lapse whose
+underlying condition was later repaired spawns nothing):
+
+| Chain | Parent | Fires when |
+|---|---|---|
+| `HUNGER_RIOTS` | `FOOD_SHORTAGE` | food security still < 70 |
+| `STRIKE_COMMITTEES` | `GENERAL_STRIKE` | unrest still > 45 |
+| `REFERENDUM_DEMAND` | `SEPARATIST_MOVEMENT` | unity still < 48 |
+
+Covered by `CrisisChainTests`.
+
 ## 7. Extension points
 
 - **Adding an effect** — add the constant to `CrisisEffects`, list it in `All`,
   and give it a case in `Apply`. The exhaustiveness test then covers it
   automatically, and `EveryEffectActuallyChangesTheWorld` will fail the build if
   it turns out to be decoration. Effects must tolerate a missing target.
-- **Crisis chains** — an unresolved or badly-handled crisis seeding a follow-up
-  months later is the cheapest way to make the world feel causal. Now unblocked:
-  §6 gives a lapse somewhere to record itself, and the chronicle carries the
-  outcome. A `followsFrom` field on `EventDefinition` is the missing piece.
+- **Adding a chain** — set `followsFrom` on the new definition and give it a
+  real `isEligible` re-checking the underlying condition. Nothing else: the
+  outcome record, gate and pruning are generic (§7a).
 - **Official competence gating** (GDD §28.1) — a low-competence official should
   sometimes fail to surface an item at all, making delegation part of the
   information experience. Nothing implements this yet.
 - **Crisis response quality** as a skill effect — the `SkillEffect` enum has room;
   reducing an option's downside would give the Government tree more to offer, and
   `CAP_CONTINUITY` already proves the softening mechanism works.
-- **Foreign crises** — crises only ever fire for the player. `SystemicCheck` reads
-  `state.PlayerCountry` throughout and every eligibility helper is written from
-  the player's viewpoint. AI states facing their own crises would create
-  observable instability the player could exploit, and would make the
-  world-reading events in §4.2 fire from real causes far more often.
+- **Foreign crises** — built: `ForeignCrisisSystem` (GDD §23 amendment). Foreign
+  states draw from the same catalog through `EventDefinition.befalls`, resolve in
+  the same tick scaled by `SeverityFor`, and reach the player only through the
+  chronicle and collection.
 - **Mutual exclusion** — there is no `excludes` field; two thematically
   overlapping definitions can fire back to back, held apart only by their own
   cooldowns.

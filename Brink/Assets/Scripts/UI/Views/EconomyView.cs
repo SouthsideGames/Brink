@@ -255,12 +255,14 @@ namespace Brink.UI.Views
 
             float energy = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy);
             float materials = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Materials);
-            if (energy > 0.5f || materials > 0.5f)
+            float food = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Food);
+            if (energy > 0.5f || materials > 0.5f || food > 0.5f)
             {
                 sb.AppendLine();
                 sb.AppendLine("  SUPPLIED BY TRADE");
                 if (energy > 0.5f) sb.AppendLine($"    ENERGY     +{energy:F0} to our ceiling");
                 if (materials > 0.5f) sb.AppendLine($"    MATERIALS  +{materials:F0} to our ceiling");
+                if (food > 0.5f) sb.AppendLine($"    FOOD       +{food:F0} to our ceiling");
             }
 
             text.text = sb.ToString();

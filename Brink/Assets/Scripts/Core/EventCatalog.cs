@@ -76,6 +76,29 @@ namespace Brink.Core
         public int cooldownMonths = 24;
 
         /// <summary>
+        /// Id of the crisis this one follows from (spec 11 §7), or null for an
+        /// ordinary event. A chained event is eligible only inside a window after
+        /// its parent **lapsed** — a crisis somebody actually dealt with does not
+        /// seed a sequel, which is what makes answering one worth it.
+        ///
+        /// Chains are player-facing by construction: the outcome record they read
+        /// exists only for crises the operator faced. A foreign government's
+        /// situations resolve in the same tick (`ForeignCrisisSystem`) and have no
+        /// lapse to chain from, so `ForeignCrisisSystem.PickFor` skips these.
+        /// </summary>
+        public string followsFrom;
+
+        /// <summary>
+        /// Earliest the follow-up can arrive, in months after the lapse. The gap
+        /// is the point: a consequence landing the next month reads as the same
+        /// event still happening, not as the world remembering.
+        /// </summary>
+        public int followUpDelayMonths = 3;
+
+        /// <summary>Latest the follow-up can arrive, in months after the lapse.</summary>
+        public int followUpWindowMonths = 18;
+
+        /// <summary>
         /// The state this situation is about, resolved once when it fires. The
         /// options close over the same value, so the crisis names one country
         /// and acts on that same country however long the operator deliberates.
@@ -309,6 +332,39 @@ namespace Brink.Core
                     Option("LOCAL AUTHORITIES HANDLE IT", "Delegate downward. Unrest likely.",
                         "Provinces left to cope. Scattered protests reported.",
                         approval: -3, stability: -2, unity: -1)
+                }
+            });
+
+            // ---- chained: what an unanswered shortage becomes (spec 11 §7) ----
+            list.Add(new EventDefinition
+            {
+                id = "HUNGER_RIOTS",
+                title = "HUNGER TURNS VIOLENT",
+                followsFrom = "FOOD_SHORTAGE",
+                followUpDelayMonths = 3,
+                followUpWindowMonths = 18,
+                cooldownMonths = 36,
+                // The chain gate says the shortage went unanswered; this says it
+                // was never fixed either. A government that let the crisis lapse
+                // but repaired the supply afterwards does not get the riot.
+                isEligible = s => s.PlayerCountry.resources.foodSecurity < 70f,
+                weight = s => 2.5f,
+                body = s => "The shortage this office declined to address has found its own " +
+                            "answer. Food depots have been broken open in three cities and " +
+                            "a distribution office is burning. This is no longer a supply figure.",
+                lapseEffectId = CrisisEffects.Conspiracy,
+                lapseMagnitude = 12,
+                options = s => new List<CrisisOption>
+                {
+                    Option("OPEN THE STRATEGIC RESERVE", "Feed people first, argue later. Expensive, late, and right.",
+                        "Reserves distributed under guard. The queues shorten; the memory does not.",
+                        treasury: -110, stability: 3, approval: 2),
+                    Option("PROTECT THE DEPOTS", "Order before bread. The hungry notice which came first.",
+                        "Depots secured. The riots end and the grievance goes home with everyone in them.",
+                        stability: 4, approval: -6, unity: -5),
+                    Option("BLAME HOARDERS AND SPECULATORS", "Name a villain. Cheaper than a granary and worth less.",
+                        "Arrests made, prices posted. Nobody eats a proclamation.",
+                        approval: -2, unity: -3, effect: CrisisEffects.MarketShock, magnitude: -6)
                 }
             });
 
@@ -748,6 +804,38 @@ namespace Brink.Core
                 }
             });
 
+            // ---- chained: a strike nobody answered organises itself (spec 11 §7) ----
+            list.Add(new EventDefinition
+            {
+                id = "STRIKE_COMMITTEES",
+                title = "THE COMMITTEES HAVE NOT DISBANDED",
+                followsFrom = "GENERAL_STRIKE",
+                followUpDelayMonths = 3,
+                followUpWindowMonths = 15,
+                cooldownMonths = 36,
+                isEligible = s => s.PlayerCountry.socialUnrest > 45f,
+                weight = s => 2.5f,
+                body = s => "The strike this office let run has ended, and its committees have not. " +
+                            "They are settling disputes, allocating fuel, and being obeyed. There " +
+                            "is a second authority operating in the industrial belt and it holds " +
+                            "meetings on Thursdays.",
+                lapseEffectId = CrisisEffects.Conspiracy,
+                lapseMagnitude = 14,
+                options = s => new List<CrisisOption>
+                {
+                    Option("BRING THEM INSIDE", "Recognise them as a negotiating body. Real, and a precedent.",
+                        "The committees are chartered. The state has a rival it can at least see.",
+                        unity: 5, stability: -2, approval: 2),
+                    Option("BUY THE GRIEVANCE OUT", "Wages and works programmes where they are strongest.",
+                        "Money moves. Attendance on Thursdays thins.",
+                        treasury: -140, unity: 3, stability: 1),
+                    Option("DECLARE THEM UNLAWFUL", "A state does not share its authority. Enforcing that costs.",
+                        "Offices raided, leaders held. The meetings continue without minutes.",
+                        stability: 2, approval: -5, unity: -6,
+                        effect: CrisisEffects.Conspiracy, magnitude: 10)
+                }
+            });
+
             list.Add(new EventDefinition
             {
                 id = "OLD_WOUND",
@@ -861,6 +949,38 @@ namespace Brink.Core
                         "The position is stated and final. So is theirs.",
                         stability: 3, unity: -9,
                         effect: CrisisEffects.Conspiracy, magnitude: 12)
+                }
+            });
+
+            // ---- chained: a movement nobody answered names a date (spec 11 §7) ----
+            list.Add(new EventDefinition
+            {
+                id = "REFERENDUM_DEMAND",
+                title = "THEY HAVE NAMED A DATE",
+                followsFrom = "SEPARATIST_MOVEMENT",
+                followUpDelayMonths = 4,
+                followUpWindowMonths = 18,
+                cooldownMonths = 40,
+                isEligible = s => s.PlayerCountry.nationalUnity < 48f,
+                weight = s => 2.5f,
+                body = s => "The movement this office declined to engage has stopped asking. A " +
+                            "referendum on separation is scheduled for the spring, without " +
+                            "authorisation, with printed ballots. Ignoring the question has " +
+                            "converted it into a date.",
+                lapseEffectId = CrisisEffects.Conspiracy,
+                lapseMagnitude = 18,
+                options = s => new List<CrisisOption>
+                {
+                    Option("NEGOTIATE A STATUTE", "An autonomy settlement with a real signature on it.",
+                        "Terms agreed. The date is withdrawn; the statute will be argued over for years.",
+                        unity: 7, stability: -2, approval: -3),
+                    Option("PERMIT AND CONTEST IT", "Let the vote run and win the argument. A gamble on the country.",
+                        "The campaign opens. Every ministry is now a canvasser.",
+                        treasury: -120, unity: -2, approval: 3),
+                    Option("SEIZE THE BALLOTS", "There will be no vote. The printing presses say otherwise.",
+                        "Warehouses raided. The date passes quietly, and the question has a martyr now.",
+                        stability: 3, unity: -10, approval: -4,
+                        effect: CrisisEffects.Conspiracy, magnitude: 15)
                 }
             });
 

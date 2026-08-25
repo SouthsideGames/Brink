@@ -201,13 +201,13 @@ entirely*, those two states were locked in terminal hostility for the rest of
 the save — one AI decision permanently removed a diplomatic partner from the
 board.
 
-## 5. Resources: manpower, energy, materials
+## 5. Resources: manpower, energy, materials, food
 
 These live on `NationalResources` and are updated from the economy tick because
 they are what the economy actually runs on. Each carries an **authored ceiling**
 seeded at world creation (`manpowerBaseline`, `energyEndowment`,
-`materialsEndowment`) and lazily backfilled from current values for saves written
-before the fields existed.
+`materialsEndowment`, `foodEndowment`) and lazily backfilled from current values
+for saves written before the fields existed.
 
 ### `RecoverManpower`
 
@@ -256,6 +256,38 @@ exactly that reason. The AI's `SecureResources` previously added energy with no
 ceiling at all, which silently repealed this section for every non-player state
 while leaving the code above it looking correct. A second definition of a ceiling
 is a repeal of the first.
+
+### Food security moves the same way
+
+`foodSecurity` was written once at world creation and never moved again — the
+last authored stat with no monthly behaviour at all. Now:
+
+```
+foodCeiling = clamp(foodEndowment + TradeSystem.Supply(country, Food), 0, 100)
+foodDrift   = sanctionPressure > 1.0 ? −0.6
+            : atWar                  ? min(−0.25, (foodCeiling − food) × 0.02)
+                                     : min(+0.30, (foodCeiling − food) × 0.02)
+```
+
+- **`TradeFocus.Food`** (appended to the enum so stored ordinals survive) makes
+  grain a negotiable commodity like energy and materials: `Supply` reads the
+  partner's own `foodSecurity`, `CostToPartner` prices selling what they are
+  short of, and food imports press on the **Agriculture** sector through
+  `ImportDisplacement`, completing that switch.
+- **War always erodes it** (at least −0.25/month) — harvests and distribution do
+  not run through a shooting conflict — and it recovers by drifting home once
+  the pressure lifts, for every country, which is the recovery-path rule.
+- **What hunger does** lives in the social layer (spec 05 §4): living-standards
+  target −0.5/point below 50, unrest pressure +0.45/point below 40. Both zero by
+  construction in normal play — the `distress` idiom, a crisis regime added
+  without retuning the ordinary one. Hunger also still scales `RecoverManpower`.
+- **The starting world authors three food dependencies** (the first authored
+  *focused* links anywhere — the Ramstein lesson): AUS→JPN, USA→KOR, IND→SAU.
+  Saudi Arabia's food 18 against an energy 100 is the designed mirror of the
+  energy-dependent archetypes: rich, capable, and fed by ships.
+
+`FoodCeilingFor` is public and is the single definition of the ceiling, same
+rule as energy and materials. Covered by `FoodSecurityTests`.
 
 ### Industrial capacity
 

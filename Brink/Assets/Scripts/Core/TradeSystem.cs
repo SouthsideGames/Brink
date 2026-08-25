@@ -64,6 +64,8 @@ namespace Brink.Core
                 cost += Math.Max(0f, 60f - partner.resources.energy) * 0.4f;
             if (deal.focus == TradeFocus.Materials)
                 cost += Math.Max(0f, 60f - partner.resources.strategicMaterials) * 0.4f;
+            if (deal.focus == TradeFocus.Food)
+                cost += Math.Max(0f, 60f - partner.resources.foodSecurity) * 0.4f;
 
             if (deal.preferentialTerms) cost -= 22f;
 
@@ -310,9 +312,13 @@ namespace Brink.Core
                 if (state.FindSanction(partner.id, countryId) != null) continue;
                 if (state.FindSanction(countryId, partner.id) != null) continue;
 
-                float theirs = focus == TradeFocus.Energy
-                    ? partner.resources.energy
-                    : partner.resources.strategicMaterials;
+                float theirs;
+                switch (focus)
+                {
+                    case TradeFocus.Energy: theirs = partner.resources.energy; break;
+                    case TradeFocus.Food: theirs = partner.resources.foodSecurity; break;
+                    default: theirs = partner.resources.strategicMaterials; break;
+                }
 
                 float throughput = link.volume / 100f * (1f - link.tariff / 150f);
                 supplied += theirs * MaxSupplyShare * throughput;

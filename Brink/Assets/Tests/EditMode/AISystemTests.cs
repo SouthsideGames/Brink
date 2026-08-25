@@ -44,7 +44,7 @@ namespace Brink.Tests
         public void Factory_SeedsAIForEveryNonPlayerState()
         {
             var state = WorldFactory.CreateDebugWorld(9001);
-            Assert.AreEqual(WorldFactory.Profiles.Length - 1, state.aiStates.Count,
+            Assert.AreEqual(state.countries.Count - 1, state.aiStates.Count,
                 "Every country except the player is AI-driven.");
             Assert.IsNull(state.FindAI("USA"), "The player is not driven by the AI.");
             Assert.NotNull(state.FindAI("CHN"));

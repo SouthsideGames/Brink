@@ -97,12 +97,76 @@ namespace Brink.Data
     }
 
     /// <summary>
+    /// How much of the authored world a new save opens with (GDD §31.2
+    /// amendment). Chosen once, at the assessment, and fixed for the save —
+    /// world composition is a fact about a playthrough, not a setting.
+    ///
+    /// `Standard` is declared first so its ordinal is zero: an old save
+    /// deserializes to the sixteen-state world it was actually created in.
+    /// Every measured balance figure was taken on Standard; Regional and Full
+    /// are curated subsets/supersets whose margins have not been separately
+    /// measured.
+    /// </summary>
+    public enum WorldSize
+    {
+        /// <summary>The sixteen-state measured world. The default.</summary>
+        Standard,
+
+        /// <summary>Ten states: the great-power core plus its key theatres.</summary>
+        Regional,
+
+        /// <summary>Every authored country.</summary>
+        Full
+    }
+
+    /// <summary>
     /// Builds the four-country MVP world (GDD §34 vertical slice). The launch
     /// target is roughly 16 authored countries; these four prove the simulation.
     /// </summary>
     public static class WorldFactory
     {
         public const string PlayerCountryId = "USA";
+
+        /// <summary>
+        /// The measured sixteen-state roster — the world every balance figure in
+        /// the project was taken on, and what <see cref="CreateDebugWorld"/>
+        /// builds. Kept as an explicit list rather than "everything authored
+        /// before a date" so growing <see cref="Profiles"/> can never silently
+        /// change the world the harness measures.
+        /// </summary>
+        public static readonly string[] StandardRoster =
+        {
+            "USA", "CHN", "RUS", "IND", "DEU", "JPN", "BRA", "TUR",
+            "NGA", "SAU", "AUS", "KOR", "MEX", "IDN", "POL", "KAZ"
+        };
+
+        /// <summary>
+        /// The ten-state regional world. Curated, not truncated: the great-power
+        /// core stays (the AI rivalry systems were tuned against it), every
+        /// member keeps several trade links inside the set, and all three
+        /// authored food dependencies survive intact. Trimming took the
+        /// mid-tier and buffer states, never the majors.
+        /// </summary>
+        public static readonly string[] RegionalRoster =
+        {
+            "USA", "CHN", "RUS", "IND", "DEU", "JPN", "KOR", "SAU", "TUR", "AUS"
+        };
+
+        /// <summary>Which country ids a world of the given size contains.</summary>
+        public static string[] RosterFor(WorldSize size)
+        {
+            switch (size)
+            {
+                case WorldSize.Regional: return RegionalRoster;
+                case WorldSize.Full:
+                {
+                    var ids = new string[Profiles.Length];
+                    for (int i = 0; i < Profiles.Length; i++) ids[i] = Profiles[i].id;
+                    return ids;
+                }
+                default: return StandardRoster;
+            }
+        }
 
 
         /// <summary>
@@ -463,29 +527,245 @@ namespace Brink.Data
                     "Chairman of the National Security Committee", "Minister of Foreign Affairs",
                     "Head of the Presidential Administration"
                 }
+            },
+
+            // ---------------- expansion roster (Full world) ----------------
+            //
+            // Authored strictly at the tail: CreateWorld skips excluded profiles
+            // without consuming a draw, so the Standard world stays bit-identical
+            // to the one every balance figure was measured on.
+            new CountryProfile
+            {
+                // Global intelligence and naval reach on a mid-sized base;
+                // vulnerability: imports much of what it eats and uses.
+                id = "GBR", displayName = "United Kingdom",
+                military = 58, economy = 70, intelligence = 78, diplomacy = 74, government = 70,
+                treasury = 1300, manpower = 340, energy = 46, industry = 58, materials = 30, food = 52,
+                approval = 44, stability = 66, unity = 52,
+                governmentType = GovernmentType.ParliamentaryRepublic, termLengthMonths = 60,
+                mapX = 34, mapY = 4, mapCode = "GB",
+                aggression = 46, caution = 58, opportunism = 60, patience = 60,
+                traitIds = new[] { Core.NationalTraitCatalog.Maritime, Core.NationalTraitCatalog.Convening },
+                navalAccess = NavalAccess.Maritime,
+                firstNames = new[] { "OLIVER", "FIONA", "HARRY", "IMOGEN", "ALISTAIR", "GRACE", "EDWARD", "SIOBHAN" },
+                lastNames = new[] { "PEMBERTON", "MACLEOD", "HARGREAVES", "ASHWORTH", "CAVENDISH", "OSEI", "THORNE", "GRIFFITHS" },
+                officeTitles = new[]
+                {
+                    "Secretary of State for Defence", "Chancellor of the Exchequer",
+                    "Chief of the Secret Intelligence Service", "Foreign Secretary",
+                    "Cabinet Secretary"
+                }
+            },
+            new CountryProfile
+            {
+                // Diplomatic weight and independent energy; vulnerability: a
+                // restive public and thin strategic materials.
+                id = "FRA", displayName = "France",
+                military = 60, economy = 68, intelligence = 66, diplomacy = 76, government = 64,
+                treasury = 1200, manpower = 380, energy = 64, industry = 62, materials = 32, food = 80,
+                approval = 40, stability = 58, unity = 48,
+                governmentType = GovernmentType.PresidentialRepublic, termLengthMonths = 60,
+                mapX = 35, mapY = 6, mapCode = "FR",
+                aggression = 52, caution = 48, opportunism = 62, patience = 55,
+                traitIds = new[] { Core.NationalTraitCatalog.Convening, Core.NationalTraitCatalog.Fractious },
+                navalAccess = NavalAccess.Maritime,
+                firstNames = new[] { "ANTOINE", "CAMILLE", "OLIVIER", "MARGAUX", "PASCAL", "ELODIE", "THIERRY", "AMELIE" },
+                lastNames = new[] { "MOREAU", "LEFEVRE", "GARNIER", "ROUSSEAU", "DUBOIS", "MARCHAND", "BERTRAND", "CHEVALIER" },
+                officeTitles = new[]
+                {
+                    "Minister of the Armed Forces", "Minister of the Economy",
+                    "Director-General for External Security", "Minister for Europe and Foreign Affairs",
+                    "Secretary-General of the Élysée"
+                }
+            },
+            new CountryProfile
+            {
+                // Industrial north on imported energy, governments that do not
+                // last: institutional churn is the authored character.
+                id = "ITA", displayName = "Italy",
+                military = 44, economy = 60, intelligence = 52, diplomacy = 64, government = 48,
+                treasury = 800, manpower = 340, energy = 24, industry = 66, materials = 28, food = 74,
+                approval = 42, stability = 52, unity = 50,
+                governmentType = GovernmentType.ParliamentaryRepublic, termLengthMonths = 36,
+                mapX = 38, mapY = 7, mapCode = "IT",
+                aggression = 30, caution = 56, opportunism = 58, patience = 48,
+                traitIds = new[] { Core.NationalTraitCatalog.Mercantile, Core.NationalTraitCatalog.Fractious },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "MARCO", "GIULIA", "ALESSANDRO", "CHIARA", "LORENZO", "FRANCESCA", "MATTEO", "SILVIA" },
+                lastNames = new[] { "MORETTI", "CONTI", "RICCI", "MARINO", "GRECO", "LOMBARDI", "BARBIERI", "FONTANA" },
+                officeTitles = new[]
+                {
+                    "Minister of Defence", "Minister of Economy and Finance",
+                    "Director of the Security Intelligence Department", "Minister of Foreign Affairs",
+                    "Secretary of the Council of Ministers"
+                }
+            },
+            new CountryProfile
+            {
+                // Resource depth across every column and a stable state on top;
+                // vulnerability: a small population and one overwhelming market.
+                id = "CAN", displayName = "Canada",
+                military = 38, economy = 62, intelligence = 54, diplomacy = 66, government = 76,
+                treasury = 850, manpower = 200, energy = 90, industry = 48, materials = 88, food = 92,
+                approval = 54, stability = 78, unity = 60,
+                governmentType = GovernmentType.ParliamentaryRepublic, termLengthMonths = 48,
+                mapX = 14, mapY = 3, mapCode = "CA",
+                aggression = 20, caution = 70, opportunism = 40, patience = 70,
+                traitIds = new[] { Core.NationalTraitCatalog.ResourceState, Core.NationalTraitCatalog.Mercantile },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "NOAH", "AVERY", "GRAHAM", "CHLOE", "DUNCAN", "MARIE", "ETIENNE", "HEATHER" },
+                lastNames = new[] { "MACDONALD", "TREMBLAY", "SINCLAIR", "LAVOIE", "CARMICHAEL", "BOUCHARD", "REDDICK", "FRASER" },
+                officeTitles = new[]
+                {
+                    "Minister of National Defence", "Minister of Finance",
+                    "Director of the Security Intelligence Service", "Minister of Foreign Affairs",
+                    "Clerk of the Privy Council"
+                }
+            },
+            new CountryProfile
+            {
+                // An army-anchored state astride the world's shortest sea route;
+                // vulnerability: it cannot feed itself and knows it.
+                id = "EGY", displayName = "Egypt",
+                military = 52, economy = 38, intelligence = 56, diplomacy = 58, government = 46,
+                treasury = 350, manpower = 800, energy = 55, industry = 40, materials = 36, food = 30,
+                approval = 46, stability = 44, unity = 56,
+                governmentType = GovernmentType.CentralizedRepublic, termLengthMonths = 0,
+                mapX = 43, mapY = 10, mapCode = "EG",
+                aggression = 50, caution = 52, opportunism = 62, patience = 50,
+                traitIds = new[] { Core.NationalTraitCatalog.Martial, Core.NationalTraitCatalog.Besieged },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "AHMED", "MONA", "KARIM", "SALMA", "TAREK", "HODA", "MAHMOUD", "NADIA" },
+                lastNames = new[] { "EL-SAYED", "MANSOUR", "ABDEL-AZIZ", "FAHMY", "SHALABY", "GHANEM", "EL-MASRY", "HASSANEIN" },
+                officeTitles = new[]
+                {
+                    "Minister of Defence", "Minister of Finance",
+                    "Director of General Intelligence", "Minister of Foreign Affairs",
+                    "Chief of the Presidential Office"
+                }
+            },
+            new CountryProfile
+            {
+                // A mineral vault with a failing grid: materials wealth the
+                // state struggles to keep the lights on above.
+                id = "ZAF", displayName = "South Africa",
+                military = 32, economy = 44, intelligence = 40, diplomacy = 58, government = 48,
+                treasury = 380, manpower = 480, energy = 40, industry = 44, materials = 90, food = 70,
+                approval = 38, stability = 42, unity = 44,
+                governmentType = GovernmentType.ParliamentaryRepublic, termLengthMonths = 60,
+                mapX = 40, mapY = 17, mapCode = "ZA",
+                aggression = 24, caution = 60, opportunism = 50, patience = 58,
+                traitIds = new[] { Core.NationalTraitCatalog.ResourceState, Core.NationalTraitCatalog.Fractious },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "SIPHO", "THANDIWE", "PIETER", "NALEDI", "JOHAN", "ZANELE", "KAGISO", "ANNELIE" },
+                lastNames = new[] { "NKOSI", "VAN DER MERWE", "DLAMINI", "BOTHA", "MOKOENA", "PRETORIUS", "KHUMALO", "NAIDOO" },
+                officeTitles = new[]
+                {
+                    "Minister of Defence", "Minister of Finance",
+                    "Director-General of the State Security Agency", "Minister of International Relations",
+                    "Director-General in the Presidency"
+                }
+            },
+            new CountryProfile
+            {
+                // A breadbasket that cannot keep its own books: enormous food
+                // surplus over a chronically unstable economy.
+                id = "ARG", displayName = "Argentina",
+                military = 30, economy = 42, intelligence = 36, diplomacy = 52, government = 44,
+                treasury = 250, manpower = 380, energy = 58, industry = 42, materials = 60, food = 96,
+                approval = 40, stability = 46, unity = 52,
+                governmentType = GovernmentType.PresidentialRepublic, termLengthMonths = 48,
+                mapX = 22, mapY = 18, mapCode = "AR",
+                aggression = 26, caution = 54, opportunism = 58, patience = 44,
+                traitIds = new[] { Core.NationalTraitCatalog.ResourceState, Core.NationalTraitCatalog.Fractious },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "JOAQUIN", "VALENTINA", "NICOLAS", "MILAGROS", "FACUNDO", "SOFIA", "GONZALO", "CATALINA" },
+                lastNames = new[] { "FERNANDEZ", "AGUIRRE", "MOLINA", "CABRERA", "SOSA", "VILLALBA", "QUIROGA", "LEDESMA" },
+                officeTitles = new[]
+                {
+                    "Minister of Defence", "Minister of Economy",
+                    "Director of the Federal Intelligence Agency", "Minister of Foreign Affairs",
+                    "Chief of the Cabinet of Ministers"
+                }
+            },
+            new CountryProfile
+            {
+                // A disciplined rising manufacturer living beside a giant:
+                // patient, wary, and building.
+                id = "VNM", displayName = "Vietnam",
+                military = 46, economy = 52, intelligence = 44, diplomacy = 54, government = 62,
+                treasury = 400, manpower = 850, energy = 48, industry = 70, materials = 38, food = 82,
+                approval = 58, stability = 68, unity = 66,
+                governmentType = GovernmentType.DominantPartyState, termLengthMonths = 0,
+                mapX = 63, mapY = 11, mapCode = "VN",
+                aggression = 38, caution = 66, opportunism = 56, patience = 76,
+                traitIds = new[] { Core.NationalTraitCatalog.Industrial, Core.NationalTraitCatalog.Besieged },
+                navalAccess = NavalAccess.Coastal,
+                firstNames = new[] { "MINH", "LINH", "DUC", "HUONG", "QUANG", "THAO", "BAO", "NGOC" },
+                lastNames = new[] { "NGUYEN", "TRAN", "PHAM", "HOANG", "VU", "DANG", "BUI", "DO" },
+                officeTitles = new[]
+                {
+                    "Minister of National Defence", "Minister of Finance",
+                    "Head of the General Intelligence Department", "Minister of Foreign Affairs",
+                    "Chairman of the Office of the Government"
+                }
             }
         };
 
         public static GameState CreateDebugWorld(int seed) => CreateWorld(seed, PlayerCountryId);
 
         /// <summary>Build a world with the player posted to any authored nation.</summary>
-        public static GameState CreateWorld(int seed, string playerCountryId)
+        public static GameState CreateWorld(int seed, string playerCountryId,
+            WorldSize size = WorldSize.Standard)
         {
+            var included = new HashSet<string>(RosterFor(size));
+
+            // A posting outside the chosen world falls back to the default post,
+            // which every roster contains — same shape as the unknown-id fallback.
+            bool validPosting = FindProfile(playerCountryId) != null && included.Contains(playerCountryId);
+
             var rng = new Random(seed);
             var state = new GameState
             {
                 rngSeed = seed,
-                playerCountryId = FindProfile(playerCountryId) != null ? playerCountryId : PlayerCountryId
+                worldSize = size,
+                playerCountryId = validPosting ? playerCountryId : PlayerCountryId
             };
 
+            // Excluded profiles are skipped without consuming a single random
+            // draw, and everything new is authored at the tail of the profile
+            // array, the location list, the trade network and the posture table.
+            // Together those two rules make the Standard world **bit-identical**
+            // to the world before Regional/Full existed — the measured balance
+            // figures still describe the game the default builds.
             foreach (var profile in Profiles)
+            {
+                if (!included.Contains(profile.id)) continue;
                 state.countries.Add(MakeCountry(rng, profile, profile.id == state.playerCountryId));
+            }
 
             MakeGovernments(rng, state);
             MakeCabinets(rng, state);
-            MakeMap(rng, state);
+
+            // MakeMap is told the roster rather than pruned afterwards: every
+            // authored location draws a garrison roll from the shared stream, so
+            // an add-then-prune would consume draws for ground that does not
+            // exist and silently regenerate everything MakeEconomies rolls after
+            // it — the Kazakhstan-fleet lesson, one system further down.
+            MakeMap(rng, state, included);
             MakeEconomies(rng, state);
             MakeTradeNetwork(state);
+
+            // The trade network is authored for the full world; a smaller one
+            // keeps only the links both ends of exist (no rng involved). A
+            // hosted base whose operator is absent is simply national ground.
+            state.trade.RemoveAll(link =>
+                !included.Contains(link.countryA) || !included.Contains(link.countryB));
+            foreach (var location in state.locations)
+                if (!string.IsNullOrEmpty(location.foreignOperatorId)
+                    && !included.Contains(location.foreignOperatorId))
+                    location.foreignOperatorId = string.Empty;
+
             Core.DiplomacySystem.SeedRelationships(state);
             SeedDiplomaticPosture(state);
             Core.AISystem.SeedAI(state, rng);
@@ -606,7 +886,8 @@ namespace Brink.Data
                     // separate is what stops every state drifting to a uniform
                     // resource profile over a long save.
                     energyEndowment = profile.energy,
-                    materialsEndowment = profile.materials
+                    materialsEndowment = profile.materials,
+                    foodEndowment = profile.food
                 },
                 military = new MilitaryState
                 {
@@ -834,8 +1115,8 @@ namespace Brink.Data
         /// </summary>
         static void MakeTradeNetwork(GameState state)
         {
-            void Link(string a, string b, float volume)
-                => state.trade.Add(new TradeRelation { countryA = a, countryB = b, volume = volume });
+            void Link(string a, string b, float volume, TradeFocus focus = TradeFocus.General)
+                => state.trade.Add(new TradeRelation { countryA = a, countryB = b, volume = volume, focus = focus });
 
             // Heavy interdependence — coercing these partners costs us most.
             Link("USA", "CHN", 78f);
@@ -851,13 +1132,18 @@ namespace Brink.Data
             Link("CHN", "IND", 40f);
             Link("CHN", "IDN", 38f);
             Link("DEU", "USA", 40f);
-            Link("JPN", "AUS", 36f);
+            // The first authored *focused* links (the mechanic shipped with no
+            // starting world using one — the Ramstein lesson). Each pairs a
+            // food-poor archetype with a plausible supplier, so an authored food
+            // dependency is a live lever from month one: embargo or sanction the
+            // supplier and the importer's food ceiling genuinely falls.
+            Link("JPN", "AUS", 36f, TradeFocus.Food);
             Link("USA", "IND", 34f);
-            Link("USA", "KOR", 34f);
+            Link("USA", "KOR", 34f, TradeFocus.Food);
             Link("DEU", "TUR", 32f);
             Link("RUS", "IND", 30f);
             Link("RUS", "KAZ", 34f);
-            Link("SAU", "IND", 34f);
+            Link("SAU", "IND", 34f, TradeFocus.Food);
             Link("SAU", "JPN", 32f);
             Link("SAU", "KOR", 30f);
             Link("BRA", "CHN", 36f);
@@ -879,6 +1165,35 @@ namespace Brink.Data
             Link("IND", "NGA", 16f);
             Link("BRA", "NGA", 12f);
             Link("KAZ", "CHN", 26f);
+
+            // ---------------- expansion roster (Full world) ----------------
+            // Links whose either end is absent are pruned by CreateWorld, so
+            // these exist only when the Full world does. Two more authored food
+            // dependencies (France feeds Egypt, Canada feeds Britain) join the
+            // three in the standard network; Argentina's soy link to China is a
+            // food *export* lever pointing the other way.
+            Link("USA", "GBR", 40f);
+            Link("USA", "CAN", 58f);
+            Link("USA", "FRA", 28f);
+            Link("FRA", "DEU", 44f);
+            Link("GBR", "DEU", 30f);
+            Link("GBR", "FRA", 26f);
+            Link("ITA", "DEU", 34f);
+            Link("ITA", "TUR", 18f);
+            Link("CAN", "CHN", 18f);
+            Link("CAN", "GBR", 20f, TradeFocus.Food);
+            Link("FRA", "EGY", 24f, TradeFocus.Food);
+            Link("EGY", "SAU", 22f);
+            Link("EGY", "TUR", 18f);
+            Link("ZAF", "CHN", 26f);
+            Link("ZAF", "DEU", 18f);
+            Link("ZAF", "GBR", 16f);
+            Link("ARG", "BRA", 30f);
+            Link("ARG", "CHN", 22f, TradeFocus.Food);
+            Link("VNM", "CHN", 36f);
+            Link("VNM", "USA", 30f);
+            Link("VNM", "KOR", 22f);
+            Link("VNM", "JPN", 20f);
         }
 
         /// <summary>
@@ -931,6 +1246,27 @@ namespace Brink.Data
             Set("IDN", "AUS", 56f, 48f, 52f);
             Set("NGA", "USA", 52f, 44f, 48f);
             Set("NGA", "CHN", 56f, 46f, 52f);
+
+            // ---------------- expansion roster (Full world) ----------------
+            // Set() no-ops when a relationship does not exist, so these bind
+            // only in worlds that contain both ends.
+            Set("USA", "GBR", 84f, 82f, 86f);
+            Set("USA", "CAN", 86f, 84f, 88f);
+            Set("USA", "FRA", 70f, 64f, 72f);
+            Set("GBR", "FRA", 68f, 62f, 70f);
+            Set("GBR", "DEU", 70f, 66f, 72f);
+            Set("FRA", "DEU", 78f, 74f, 80f);
+            Set("ITA", "DEU", 68f, 62f, 70f);
+            Set("CAN", "GBR", 74f, 70f, 76f);
+            Set("GBR", "RUS", 30f, 24f, 22f);
+            Set("FRA", "RUS", 36f, 30f, 30f);
+            Set("EGY", "SAU", 62f, 54f, 58f);
+            Set("EGY", "USA", 56f, 46f, 52f);
+            Set("VNM", "CHN", 38f, 32f, 30f);
+            Set("VNM", "USA", 54f, 46f, 50f);
+            Set("VNM", "KOR", 56f, 50f, 54f);
+            Set("ARG", "BRA", 62f, 56f, 58f);
+            Set("ZAF", "CHN", 58f, 48f, 54f);
         }
 
         /// <summary>
@@ -939,13 +1275,16 @@ namespace Brink.Data
         /// as the flashpoint. The lane is a deliberately generic maritime
         /// chokepoint rather than any real-world disputed territory.
         /// </summary>
-        static void MakeMap(Random rng, GameState state)
+        static void MakeMap(Random rng, GameState state, HashSet<string> included)
         {
             float Roll(float min, float max) => (float)Math.Round(min + (max - min) * rng.NextDouble(), 1);
 
             void Add(string id, string name, LocationType type, string owner, float defense, float value,
                      string hostedOperator = null)
             {
+                // Skipped entries consume no draw — see the CreateWorld comment.
+                if (!included.Contains(owner)) return;
+
                 state.locations.Add(new StrategicLocation
                 {
                     id = id,
@@ -1078,6 +1417,38 @@ namespace Brink.Data
             // The flashpoint: a deliberately generic maritime chokepoint rather
             // than any real-world disputed territory.
             Add("CONTESTED_LANE", "Contested Sea Lane", LocationType.Chokepoint, "CHN", 62, 70);
+
+            // ---------------- expansion roster ground (Full world) ----------------
+            //
+            // Authored after every Standard-world location so a Standard build
+            // draws an identical garrison stream — the same tail rule as the
+            // profiles. Maritime powers get ports (the fleet-basing invariant),
+            // Egypt gets the world's shortest sea route, and the southern
+            // hemisphere finally produces food and minerals on the map.
+            Add("GBR_CAP", "London", LocationType.Capital, "GBR", 66, 92);
+            Add("GBR_PRT", "Clyde Naval Anchorage", LocationType.Port, "GBR", 48, 70);
+
+            Add("FRA_CAP", "Paris", LocationType.Capital, "FRA", 66, 92);
+            Add("FRA_PRT", "Toulon Naval Harbour", LocationType.Port, "FRA", 46, 68);
+
+            Add("ITA_CAP", "Rome", LocationType.Capital, "ITA", 58, 88);
+            Add("ITA_IND", "Po Valley Industrial Belt", LocationType.IndustrialCenter, "ITA", 42, 72);
+
+            Add("CAN_CAP", "Ottawa", LocationType.Capital, "CAN", 54, 86);
+            Add("CAN_ENR", "Prairie Energy Corridor", LocationType.EnergyRegion, "CAN", 30, 72);
+            Add("CAN_MAT", "Shield Mineral Belt", LocationType.MaterialsRegion, "CAN", 26, 70);
+
+            Add("EGY_CAP", "Cairo", LocationType.Capital, "EGY", 56, 88);
+            Add("EGY_CHK", "Suez Transit", LocationType.Chokepoint, "EGY", 54, 90);
+
+            Add("ZAF_CAP", "Pretoria", LocationType.Capital, "ZAF", 48, 84);
+            Add("ZAF_MAT", "Highveld Mineral Complex", LocationType.MaterialsRegion, "ZAF", 28, 82);
+
+            Add("ARG_CAP", "Buenos Aires", LocationType.Capital, "ARG", 46, 84);
+            Add("ARG_PRT", "River Plate Terminal", LocationType.Port, "ARG", 32, 62);
+
+            Add("VNM_CAP", "Hanoi", LocationType.Capital, "VNM", 56, 86);
+            Add("VNM_IND", "Red River Manufacturing Belt", LocationType.IndustrialCenter, "VNM", 38, 70);
         }
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

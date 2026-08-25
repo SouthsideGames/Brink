@@ -119,6 +119,11 @@ namespace Brink.Core
                 // operator's position and have no meaning here.
                 if (definition.befalls == null) continue;
                 if (definition.nature != EventNature.Adversity) continue;
+
+                // A chained event reads the player's outcome record — a foreign
+                // government's situations resolve in the same tick and leave no
+                // lapse to chain from (spec 11 §7).
+                if (!string.IsNullOrEmpty(definition.followsFrom)) continue;
                 if (OnCooldown(state, country.id, definition.id, monthIndex)) continue;
 
                 bool passes;

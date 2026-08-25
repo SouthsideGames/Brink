@@ -14,7 +14,14 @@ namespace Brink.Data
     {
         General,
         Energy,
-        Materials
+        Materials,
+
+        /// <summary>
+        /// Grain and agricultural staples. Appended so existing saves keep
+        /// their focus ordinals; declaring it earlier would silently relabel
+        /// every stored link.
+        /// </summary>
+        Food
     }
 
     /// <summary>

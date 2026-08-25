@@ -216,6 +216,42 @@ competence +7 (and drops their loyalty −4; nobody enjoys being audited),
 strongest is deliberate: competence decides what reaches the terminal at all
 (spec 15), so this buys *awareness* as well as performance.
 
+## 2b-1. Faction arithmetic (GDD §13)
+
+`Leader.faction` was a display string no rule read. It now feeds the backing
+targets through two pure helpers, both tested in `FactionTests`:
+
+**`FactionSupportShift`** (elective) — a leader who arrived by turnover
+(`"OPPOSITION"`, `"REFORM BLOC"`) governs against a chamber still partly held by
+the people they defeated: **−12** on the legislative-support target, decaying
+linearly over `FactionConsolidationMonths = 30` in office. A term in a target,
+never a ratchet — and `brokeredSupport` (×0.45, §2b) can outbid the whole
+penalty, which finally gives the workhorse verb its most natural customer: a
+new government buying its chamber.
+
+**`FactionCohesionShift`** (non-elective) —
+- `"MILITARY COUNCIL"`: cohesion tracks the officer corps,
+  `(militaryLoyalty − 65) × 0.25`. Undermining the army *is* undermining the
+  junta — the specific vulnerability GDD §22 promises a coup-born government.
+- `"PROVISIONAL AUTHORITY"`: −10 decaying over 36 months; a breakaway is a
+  state still deciding whether it is one.
+- `"PARTY LEADERSHIP"` and every other label: zero. A label that penalises by
+  accident of wording would be worse than one that does nothing.
+
+**Confidence** — `GovernmentType.ParliamentaryRepublic`'s declaration
+("government falls with confidence") is now implemented:
+`GovernmentSystem.CheckConfidence` runs monthly for parliamentary systems
+between elections; below `ConfidenceThreshold = 30` legislative support there is
+a `ConfidenceCollapseChance = 0.15`/month the government falls —
+`InstallNewLeadership("lost the confidence of the chamber")`, snap-election
+calendar reset, public chronicle entry. Probabilistic so the fall arrives like
+an ambushed division vote; deterministic per save like everything else.
+Recovery stays reachable the whole way down (bargaining, patronage, messaging
+all move the target this reads). A presidential system rides a hostile chamber
+out to the scheduled date — this is what makes the two elective types play
+differently. Player-visible in GOVERNMENT: the chamber line and a
+`CONFIDENCE AT RISK` warning below the threshold.
+
 ## 2c. Succession preparation (GDD §13)
 
 `GroomSuccessor` / `…By` (3 PC, +22 readiness, capped). Administrations come and

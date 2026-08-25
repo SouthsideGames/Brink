@@ -49,11 +49,17 @@ namespace Brink.Tests
         [Test]
         public void EveryCountry_AppearsOnTheMap()
         {
+            // Every country *in the world*, not every authored profile — the
+            // debug world is the Standard roster and the expansion countries
+            // exist only in a Full-size save.
             string map = AsciiWorldMap.Render(state);
 
-            foreach (var profile in WorldFactory.Profiles)
+            foreach (var country in state.countries)
+            {
+                var profile = WorldFactory.FindProfile(country.id);
                 StringAssert.Contains(profile.mapCode, map,
-                    $"{profile.displayName} is not drawn anywhere on the map.");
+                    $"{country.displayName} is not drawn anywhere on the map.");
+            }
         }
 
         [Test]

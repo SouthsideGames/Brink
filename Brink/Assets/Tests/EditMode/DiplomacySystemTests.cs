@@ -40,7 +40,7 @@ namespace Brink.Tests
         public void Factory_SeedsFullRelationshipGraph()
         {
             // Every unordered pair gets a relationship.
-            int expectedPairs = WorldFactory.Profiles.Length * (WorldFactory.Profiles.Length - 1) / 2;
+            int expectedPairs = state.countries.Count * (state.countries.Count - 1) / 2;
             Assert.AreEqual(expectedPairs, state.relationships.Count);
             Assert.NotNull(state.FindRelationship("USA", "CHN"));
             Assert.NotNull(state.FindRelationship("CHN", "USA"), "Lookup must be order-independent.");
@@ -413,7 +413,8 @@ namespace Brink.Tests
         public void World_UsesAuthoredRealCountries()
         {
             var state = WorldFactory.CreateDebugWorld(1);
-            Assert.AreEqual(WorldFactory.Profiles.Length, state.countries.Count);
+            Assert.AreEqual(WorldFactory.StandardRoster.Length, state.countries.Count,
+                "The debug world is the measured Standard roster; growing Profiles must not grow it.");
             Assert.AreEqual("USA", state.playerCountryId);
             Assert.AreEqual("United States", state.PlayerCountry.displayName);
             Assert.NotNull(state.FindCountry("CHN"));
@@ -452,9 +453,12 @@ namespace Brink.Tests
         {
             var state = WorldFactory.CreateDebugWorld(4242);
 
-            Assert.GreaterOrEqual(WorldFactory.Profiles.Length, 14,
-                "GDD §31.2 targets roughly sixteen authored countries.");
-            Assert.LessOrEqual(WorldFactory.Profiles.Length, 18);
+            // The *Standard world* is GDD §31.2's roughly-sixteen; the authored
+            // catalogue may grow past it for the Full world.
+            Assert.GreaterOrEqual(WorldFactory.StandardRoster.Length, 14,
+                "GDD §31.2 targets roughly sixteen authored countries in the default world.");
+            Assert.LessOrEqual(WorldFactory.StandardRoster.Length, 18);
+            Assert.GreaterOrEqual(WorldFactory.Profiles.Length, WorldFactory.StandardRoster.Length);
 
             // Archetype diversity is the point — a world of peers has no texture.
             bool hasMonarchy = false, hasDominantParty = false,

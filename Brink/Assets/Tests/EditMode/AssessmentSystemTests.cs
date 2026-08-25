@@ -257,15 +257,18 @@ namespace Brink.Tests
         [Test]
         public void PlayerCanBePostedToAnyAuthoredNation()
         {
+            // The Full world, because "any authored nation" includes the
+            // expansion roster — a Standard world would silently fall the new
+            // postings back to the default and the loop would test nothing.
             foreach (var profile in WorldFactory.Profiles)
             {
-                var state = WorldFactory.CreateWorld(600, profile.id);
+                var state = WorldFactory.CreateWorld(600, profile.id, WorldSize.Full);
 
                 Assert.AreEqual(profile.id, state.playerCountryId);
                 Assert.IsTrue(state.PlayerCountry.isPlayer);
                 Assert.AreEqual(profile.displayName, state.PlayerCountry.displayName);
                 Assert.AreEqual(5, state.cabinet.Count, "Every posting gets a full Cabinet.");
-                Assert.AreEqual(WorldFactory.Profiles.Length - 1, state.aiStates.Count,
+                Assert.AreEqual(state.countries.Count - 1, state.aiStates.Count,
                     "Every other state is AI-driven.");
                 Assert.IsNull(state.FindAI(profile.id), "The player's own nation is never AI-driven.");
             }
