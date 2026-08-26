@@ -44,6 +44,119 @@ namespace Brink.UI.Views
             BuildEstimateBoard(state);
             BuildDefensivePosture(state, player);
             BuildNetworkControls(state);
+            BuildInsurgencySupport(state, player);
+        }
+
+        /// <summary>
+        /// Movements somebody else has to live with, and whether we are arming
+        /// them (GDD §14, §17.1).
+        ///
+        /// **The existence of a rising is public and its quartermaster is not.**
+        /// An armed movement is people in the street with rifles — everybody
+        /// knows it is there. Who is paying for the rifles is the secret, so this
+        /// panel names every movement in the world and says nothing about anyone
+        /// else's sponsorship unless it has been attributed.
+        ///
+        /// How strong it is sits behind collection like everything else: a
+        /// precise figure on our own ground, a band on somebody else's.
+        /// </summary>
+        void BuildInsurgencySupport(GameState state, CountryState player)
+        {
+            var text = AddText();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("ARMED MOVEMENTS", W));
+
+            if (state.insurgencies.Count == 0)
+            {
+                sb.AppendLine(" No organised movement is known anywhere. Risings come out of");
+                sb.AppendLine(" occupation, hardship or a region that wants out — not out of money.");
+                text.text = sb.ToString();
+                return;
+            }
+
+            foreach (var insurgency in state.insurgencies)
+            {
+                var location = state.FindLocation(insurgency.locationId);
+                if (location == null) continue;
+
+                var holder = state.FindCountry(location.ownerId);
+                if (holder == null) continue;
+
+                bool ours = holder.id == player.id;
+                string name = AsciiChart.Cell(location.displayName, AsciiChart.NameWidth(W, 0.34f));
+
+                sb.AppendLine($" {name} {holder.displayName.ToUpperInvariant()}");
+                sb.AppendLine($"   {InsurgencySystem.Describe(insurgency.cause).ToUpperInvariant()}");
+                sb.AppendLine(ours
+                    ? $"   STRENGTH {insurgency.strength:F0}   SUPPORT {insurgency.support:F0}"
+                    : $"   STRENGTH {Band(state, holder.id, insurgency.strength)}"
+                      + $"   SUPPORT {Band(state, holder.id, insurgency.support)}");
+
+                if (InsurgencySystem.KnownSponsor(state, player.id, insurgency))
+                {
+                    var sponsor = state.FindCountry(insurgency.sponsorId);
+                    bool us = insurgency.sponsorId == player.id;
+                    sb.AppendLine(us
+                        ? $"   OURS  —  {insurgency.sponsorMonths} MO, ATTRIBUTION RISK "
+                          + $"{insurgency.exposure:F0}{(insurgency.sponsorExposed ? "  (ATTRIBUTED)" : "")}"
+                        : $"   ARMED BY {(sponsor != null ? sponsor.displayName.ToUpperInvariant() : "UNKNOWN")}");
+                }
+                else if (insurgency.HasSponsor)
+                {
+                    sb.AppendLine("   SUPPLIED FROM SOMEWHERE. We cannot say by whom.");
+                }
+
+                sb.AppendLine();
+            }
+
+            text.text = sb.ToString();
+
+            var row = MakeRow();
+            foreach (var insurgency in state.insurgencies)
+            {
+                var location = state.FindLocation(insurgency.locationId);
+                if (location == null) continue;
+
+                var target = insurgency;   // captured deliberately, per-button
+                bool mine = insurgency.sponsorId == player.id;
+
+                var button = AddButton(row,
+                    mine
+                        ? $"STOP SUPPLYING {location.displayName.ToUpperInvariant()}"
+                        : $"ARM {location.displayName.ToUpperInvariant()} "
+                          + $"[{InsurgencySystem.SupportCost} CP]",
+                    mine ? null : "primary",
+                    () =>
+                    {
+                        if (mine) GameController.Instance.WithdrawInsurgencySupport(target.id);
+                        else GameController.Instance.SupportInsurgency(target.id);
+                        Refresh();
+                    });
+
+                if (!mine && !InsurgencySystem.CanSupport(
+                        state, player.id, insurgency, out string blocked))
+                    Block(button, blocked);
+            }
+            ExplainBlockedCommands(Root);
+        }
+
+        /// <summary>
+        /// A figure about somebody else's country, widened by how little we
+        /// actually know. The rule the whole pillar runs on: a view never prints
+        /// a foreign true value.
+        /// </summary>
+        static string Band(GameState state, string holderId, float value)
+        {
+            var network = state.FindNetwork(state.playerCountryId, holderId);
+            float width = network == null || network.compromised
+                ? 30f
+                : 24f - network.penetration * 0.18f;
+            if (width < 6f) width = 6f;
+
+            float low = value - width, high = value + width;
+            if (low < 0f) low = 0f;
+            if (high > 100f) high = 100f;
+            return $"{low:F0}-{high:F0}";
         }
 
         void BuildEstimateBoard(GameState state)

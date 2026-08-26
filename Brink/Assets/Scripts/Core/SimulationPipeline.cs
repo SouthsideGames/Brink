@@ -45,7 +45,18 @@ namespace Brink.Core
             turns.ResolveMonth += AgentSystem.MonthlyUpdate;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
             turns.ResolveMonth += AccessionSystem.MonthlyUpdate;
+
+            // After the bilateral diplomacy tick: the chamber votes on the world
+            // as it stands this month, and a state bought off last week should
+            // vote like it.
+            turns.ResolveMonth += CouncilSystem.MonthlyUpdate;
             turns.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+
+            // Straight after the government tick, so the case is built from the
+            // month that has just been governed rather than the one before it —
+            // and before `RegimeSystem`, because an opposition answered in public
+            // is the alternative to one that ends up conspiring.
+            turns.ResolveMonth += OppositionSystem.MonthlyUpdate;
             turns.ResolveMonth += RegimeSystem.MonthlyUpdate;
 
             // After the regime tick, because that is where a state fractures —
@@ -55,6 +66,12 @@ namespace Brink.Core
             turns.ResolveMonth += TechnologySystem.MonthlyUpdate;
             turns.ResolveMonth += EndgameSystem.MonthlyUpdate;
             turns.ResolveMonth += TerritorySystem.MonthlyUpdate;
+
+            // After territory, because who holds a province this month decides
+            // who its movement is shooting at — and before the AI thinks, so a
+            // government reasons about a rising that has already happened rather
+            // than about last month's map.
+            turns.ResolveMonth += InsurgencySystem.MonthlyUpdate;
             turns.ResolveMonth += AISystem.MonthlyThink;
             turns.ResolveMonth += ProgressionSystem.MonthlyXP;
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;

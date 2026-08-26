@@ -704,6 +704,14 @@ namespace Brink.Core
                     if (sender != null)
                         mitigation *= 1f - TechnologySystem.Effectiveness(sender, "CAP_FINANCE") * 0.3f;
 
+                    // **Multilateral measures cost the sender less.** This is what
+                    // a mandate actually buys, and the reason to spend a month's
+                    // diplomacy assembling one rather than simply imposing them:
+                    // a coalition of senders shares the disruption, and nobody's
+                    // exporters can be singled out for it.
+                    if (CouncilSystem.SanctionsMandated(state, sanction.targetId))
+                        mitigation *= 0.55f;
+
                     total += sanction.Blowback * exposure * mitigation;
                 }
             return total;
@@ -805,6 +813,20 @@ namespace Brink.Core
             var target = state.FindCountry(targetId);
             if (sanction == null || relationship == null || sender == null || target == null) return false;
 
+            // **A sender cannot unilaterally lift what the chamber authorised.**
+            // Otherwise a mandate would be worth less than a bilateral regime:
+            // the target would simply work the softest member and the whole
+            // apparatus would come apart one relationship at a time.
+            if (CouncilSystem.SanctionsMandated(state, targetId))
+            {
+                if (targetId == state.playerCountryId)
+                    state.AddNotification(NotificationClass.Advisory, "RELIEF REFUSED",
+                        $"{sender.displayName} cannot lift measures the chamber has authorised. "
+                        + "The authorisation is what would have to go.",
+                        senderId, desk: ReportingDesk.Diplomacy);
+                return false;
+            }
+
             float willingness = ReliefWillingness(state, senderId, targetId);
             if (willingness < 50f)
             {
@@ -861,6 +883,11 @@ namespace Brink.Core
                 // terminal hostility for the rest of the save.
                 if (sanction.senderId == state.playerCountryId) continue;
                 if (sanction.monthsActive < SanctionReviewMonths) continue;
+
+                // A mandated regime does not quietly lapse. Ending measures the
+                // chamber authorised is a decision somebody has to take in public,
+                // which is the other half of what a mandate is worth.
+                if (CouncilSystem.SanctionsMandated(state, sanction.targetId)) continue;
 
                 var sender = state.FindCountry(sanction.senderId);
                 var target = state.FindCountry(sanction.targetId);

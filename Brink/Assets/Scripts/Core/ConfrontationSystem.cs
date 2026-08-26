@@ -691,6 +691,13 @@ namespace Brink.Core
             }
             var theirCoalition = state.FindCoalitionLedBy(confrontation.id, opponent.id);
             if (theirCoalition == null || theirCoalition.dissolved) isolation += 5f;
+
+            // A standing public finding against them is real weight at the table.
+            // Without this a carried condemnation would be a line in the
+            // chronicle and nothing else — the "written but never read" bug with
+            // a gavel.
+            if (CouncilSystem.IsCensured(state, opponent.id)) isolation += 8f;
+
             isolation *= Weight(PrimaryStrategy.Diplomatic);
 
             // --- the ground itself ---

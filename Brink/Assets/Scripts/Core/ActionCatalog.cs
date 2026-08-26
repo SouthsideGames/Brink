@@ -17,6 +17,25 @@ namespace Brink.Core
 
         /// <summary>Why not, when unavailable. Never empty if `available` is false.</summary>
         public string blockedReason;
+
+        /// <summary>
+        /// The `GameController` method(s) this entry documents, by name.
+        ///
+        /// **This is what stops the index going stale.** The index was written
+        /// once and then ten verbs shipped past it — industrial programmes, agent
+        /// operations, accession efforts, equipment orders, war footing, the
+        /// strategic pivot, directives, direct action and securing the army —
+        /// each wired into a view and each invisible to the one screen whose
+        /// entire job is to answer "what can I do". A reference that is missing a
+        /// third of its subject is worse than none, because it is trusted.
+        ///
+        /// Written with `nameof`, so renaming an operator verb breaks the build
+        /// here rather than silently orphaning its entry, and
+        /// `ActionIndexTests` fails when a new one appears with no entry at all.
+        /// </summary>
+        public string[] verbs = EmptyVerbs;
+
+        static readonly string[] EmptyVerbs = new string[0];
     }
 
     /// <summary>
@@ -54,27 +73,43 @@ namespace Brink.Core
             bool atWar = confrontation != null && !confrontation.resolved
                          && confrontation.escalation >= EscalationState.LimitedConflict;
 
+            // A minister cannot be reached through a thin network, so the index
+            // says whether *any* of ours is deep enough rather than advertising a
+            // verb that would be refused wherever the operator pointed it.
+            bool deepNetwork = false;
+            foreach (var network in state.networks)
+                if (network.ownerId == state.playerCountryId && !network.compromised
+                    && network.penetration >= AgentSystem.MinimumPenetration)
+                { deepNetwork = true; break; }
+
             void Add(Pillar pillar, string viewId, string label, string cost,
-                string description, bool available = true, string blockedReason = "")
+                string description, bool available = true, string blockedReason = "",
+                string[] verbs = null)
                 => entries.Add(new ActionEntry
                 {
                     pillar = pillar, viewId = viewId, label = label, cost = cost,
                     description = description, available = available,
-                    blockedReason = available ? "" : blockedReason
+                    blockedReason = available ? "" : blockedReason,
+                    verbs = verbs ?? new string[0]
                 });
 
             // ---------- military ----------
 
             Add(Pillar.Military, "MILITARY", "Set posture", "1–2 CP",
-                "Peacetime, Alert or Forward. Higher postures hold readiness up and cost treasury every month.");
+                "Peacetime, Alert or Forward. Higher postures hold readiness up and cost treasury every month.",
+                verbs: new[] { nameof(GameController.SetPosture) });
             Add(Pillar.Military, "MILITARY", "Adopt doctrine", "2 CP",
-                "Maneuver, Attrition or Deterrence. Changes how operations resolve; grants no capability.");
+                "Maneuver, Attrition or Deterrence. Changes how operations resolve; grants no capability.",
+                verbs: new[] { nameof(GameController.SetDoctrine) });
             Add(Pillar.Military, "MILITARY", "Begin procurement", "2–3 CP",
-                "A multi-year programme. The only thing that writes force strength upward.");
+                "A multi-year programme. The only thing that writes force strength upward.",
+                verbs: new[] { nameof(GameController.BeginProcurement) });
             Add(Pillar.Military, "MILITARY", "Invest in logistics", "1 CP + treasury",
-                "Raises the sustainment ceiling and softens the drag of holding a posture.");
+                "Raises the sustainment ceiling and softens the drag of holding a posture.",
+                verbs: new[] { nameof(GameController.InvestInLogistics) });
             Add(Pillar.Military, "MILITARY", "Conduct a joint exercise", "1–3 CP",
-                "Readiness, interoperability and trust with a partner, bought with exposure.");
+                "Readiness, interoperability and trust with a partner, bought with exposure.",
+                verbs: new[] { nameof(GameController.ConductExercise) });
             // A second front is expensive, not forbidden. The gate is what the
             // force can actually sustain, so the index says "we are at our limit"
             // rather than "you already have one".
@@ -83,10 +118,12 @@ namespace Brink.Core
             Add(Pillar.Military, "MILITARY", "Open a confrontation", "2 CP",
                 "Commit against a state with a stated objective and primary strategy. " +
                 "A second front drags every operation in the first.",
-                canOpen, commitmentBlock);
+                canOpen, commitmentBlock,
+                verbs: new[] { nameof(GameController.BeginConfrontation) });
             Add(Pillar.Military, "MILITARY", "Change escalation", "1 CP + premium",
                 "Move up or down the ladder. Skipping levels costs a political premium.",
-                confrontation != null, "Requires an active confrontation.");
+                confrontation != null, "Requires an active confrontation.",
+                verbs: new[] { nameof(GameController.SetEscalation) });
             // Counted from the catalog rather than written out. This line used to
             // read "Assault, Raid, Siege or Withdraw" and stayed that way while
             // the list grew to twenty-three — the COMMAND INDEX exists precisely
@@ -95,104 +132,220 @@ namespace Brink.Core
             Add(Pillar.Military, "MILITARY", "Launch an operation", "1–4 CP",
                 $"{OperationCatalog.All.Count} operations across ground, naval, air and joint. " +
                 "Selecting one is free; only EXECUTE spends capacity.",
-                atWar, "Requires Limited Conflict or higher.");
+                atWar, "Requires Limited Conflict or higher.",
+                verbs: new[] { nameof(GameController.LaunchOperation) });
             Add(Pillar.Military, "MILITARY", "Defensive programme", "1–3 CP",
                 "Fortify ground we hold, pacify occupied territory, escort our shipping or " +
-                "build the shield. No confrontation required.");
+                "build the shield. No confrontation required.",
+                verbs: new[] { nameof(GameController.LaunchDefensiveProgramme) });
+            Add(Pillar.Military, "MILITARY", "Order equipment", "Treasury",
+                $"{AssetCatalog.All.Count} counted classes across air, sea and ground. "
+                + "Steel takes years, people take months; industry decides throughput.",
+                verbs: new[] { nameof(GameController.OrderAssets) });
+            Add(Pillar.Military, "MILITARY", "Set war footing", "5 PC + upkeep",
+                "Roughly doubles delivery tempo. Gated on political backing rather than money — "
+                + "moving the budget is something a chamber grants — and it lapses when it "
+                + "cannot be justified.",
+                player.government.legislativeSupport >= AcquisitionSystem.WarFootingSupport
+                    || !player.government.IsElective,
+                "The chamber will not carry it: support below "
+                    + $"{AcquisitionSystem.WarFootingSupport:F0}.",
+                verbs: new[] { nameof(GameController.SetWarFooting) });
+            Add(Pillar.Military, "MILITARY", "Change primary strategy", "3 CP + momentum",
+                "Pivot a running confrontation into another domain. Effort spent in the old one "
+                + "does not transfer, and the world can see we could not make it work.",
+                confrontation != null, "Requires an active confrontation.",
+                verbs: new[] { nameof(GameController.Pivot) });
             Add(Pillar.Military, "MILITARY", "Propose terms", "0 CP",
                 "Offer a settlement. Overreaching prolongs the war.",
-                confrontation != null, "Requires an active confrontation.");
+                confrontation != null, "Requires an active confrontation.",
+                verbs: new[] { nameof(GameController.ProposeTerms), nameof(GameController.ProposeSettlement) });
 
             // ---------- economy ----------
 
             Add(Pillar.Economy, "ECONOMY", "Impose sanctions", "2 CP",
-                "Five severities. Coercion always blows back on the sender through inflation.");
+                "Five severities. Coercion always blows back on the sender through inflation.",
+                verbs: new[] { nameof(GameController.ImposeSanctions) });
             Add(Pillar.Economy, "ECONOMY", "Lift sanctions", "1 CP",
-                "Ends a regime and begins repairing the relationship.");
+                "Ends a regime and begins repairing the relationship.",
+                verbs: new[] { nameof(GameController.LiftSanctions) });
             Add(Pillar.Economy, "ECONOMY", "Set tariffs", "1 CP",
-                "Adjust a trade link's terms. Protects an industry and costs the relationship.");
+                "Adjust a trade link's terms. Protects an industry and costs the relationship.",
+                verbs: new[] { nameof(GameController.SetTariff) });
             Add(Pillar.Economy, "ECONOMY", "Open a trade link", "1 CP",
-                "New trade builds dependence — theirs on us, and ours on them.");
+                "New trade builds dependence — theirs on us, and ours on them.",
+                verbs: new[] { nameof(GameController.ProposeTrade), nameof(GameController.WithdrawFromTrade) });
+
+            Add(Pillar.Economy, "ECONOMY", "Invest in a sector", "2 CP + monthly treasury",
+                "Repair, expand or modernise one of the seven sectors. Years of money now for "
+                + "capacity later, and the treasury has to carry it every month or the work stops.",
+                IndustrialSystem.CanBegin(state, state.playerCountryId, out string industrialBlock),
+                industrialBlock,
+                verbs: new[] { nameof(GameController.BeginIndustrialProgramme) });
 
             // ---------- intelligence ----------
 
             Add(Pillar.Intelligence, "INTELLIGENCE", "Establish a network", "2 CP",
-                "Collection against one state in one domain. Everything else here needs it first.");
+                "Collection against one state in one domain. Everything else here needs it first.",
+                verbs: new[] { nameof(GameController.EstablishNetwork) });
             Add(Pillar.Intelligence, "INTELLIGENCE", "Expand a network", "1 CP",
-                "Deeper penetration, better estimates, more exposure.");
+                "Deeper penetration, better estimates, more exposure.",
+                verbs: new[] { nameof(GameController.ExpandNetwork) });
             Add(Pillar.Intelligence, "INTELLIGENCE", "Set collection focus", "0 CP",
-                "Which domain a network reports on.");
+                "Which domain a network reports on.",
+                verbs: new[] { nameof(GameController.SetIntelFocus) });
             Add(Pillar.Intelligence, "INTELLIGENCE", "Run a covert operation", "2 CP",
-                "Sabotage, influence or theft. Exposure costs standing with everyone.");
+                "Sabotage, influence or theft. Exposure costs standing with everyone.",
+                verbs: new[] { nameof(GameController.RunCovertOperation) });
             Add(Pillar.Intelligence, "INTELLIGENCE", "Counterintelligence sweep", "1 CP",
-                "Harden the state against penetration.");
+                "Harden the state against penetration.",
+                verbs: new[] { nameof(GameController.StrengthenCounterIntelligence) });
+
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Approach an official", "1–2 CP",
+                "Cultivate, recruit or discredit a named foreign minister. Months of work, and "
+                + "who you approach matters more than how hard you press.",
+                deepNetwork,
+                $"No network is {AgentSystem.MinimumPenetration:F0} deep anywhere — "
+                + "a minister cannot be reached through a thin one.",
+                verbs: new[] { nameof(GameController.RunAgentOperation) });
+
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Arm a movement", "2 CP + treasury + stocks",
+                "Supply an existing rising in somebody else's country. Deniable until it is not, "
+                + "and it never hands us the ground — only takes it from them.",
+                state.insurgencies.Count > 0,
+                "No armed movement is known anywhere. Risings come out of occupation, hardship "
+                + "or separation — they cannot be commissioned.",
+                verbs: new[] { nameof(GameController.SupportInsurgency),
+                               nameof(GameController.WithdrawInsurgencySupport) });
 
             // ---------- diplomacy ----------
 
             Add(Pillar.Diplomacy, "DIPLOMACY", "Diplomatic outreach", "1 CP",
-                "Improve standing with one state. The groundwork everything else rests on.");
+                "Improve standing with one state. The groundwork everything else rests on.",
+                verbs: new[] { nameof(GameController.DiplomaticOutreach) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Propose a treaty", "2 CP",
-                "Explicit commitments. They accept on their interests, not our wishes.");
+                "Explicit commitments. They accept on their interests, not our wishes.",
+                verbs: new[] { nameof(GameController.ProposeTreaty), nameof(GameController.ProposeNegotiatedTreaty) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Deepen a treaty", "2 CP",
                 "Add commitments to a standing agreement. A partner with history signs "
-                + "what a stranger would not.");
+                + "what a stranger would not.",
+                verbs: new[] { nameof(GameController.DeepenTreaty) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Seek sanctions relief", "2 CP",
                 "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
-                + "blowback and warmth persuade; the threat they still see does not.");
+                + "blowback and warmth persuade; the threat they still see does not.",
+                verbs: new[] { nameof(GameController.SeekSanctionsRelief) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Break a treaty", "1 CP",
-                "Immediate freedom, lasting reputational damage with everyone watching.");
+                "Immediate freedom, lasting reputational damage with everyone watching.",
+                verbs: new[] { nameof(GameController.BreakTreaty) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Assemble a coalition", "3 CP",
                 "Recruit partners into a confrontation. They join on their own reasoning.",
-                confrontation != null, "Requires an active confrontation.");
+                confrontation != null, "Requires an active confrontation.",
+                verbs: new[] { nameof(GameController.RequestCoalition) });
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Open an accession effort", "3 CP",
+                "Absorb a state that trusts us, by its establishment or by its people. Needs deep "
+                + "trust, heavy dependence and something wrong with them — and it takes years.",
+                verbs: new[] { nameof(GameController.BeginAccession),
+                               nameof(GameController.AbandonAccession) });
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Put a motion to the chamber", "2 CP",
+                "Condemnation, authorised measures or relief. States vote their own interests, "
+                + "a permanent member can block anything, and losing a vote you called is public.",
+                CouncilSystem.CanRaise(state, state.playerCountryId, out string chamberBlock),
+                chamberBlock,
+                verbs: new[] { nameof(GameController.RaiseCouncilMotion) });
 
             // ---------- government ----------
 
             Add(Pillar.Government, "GOVERNMENT", "Public messaging", "2 PC",
-                "Approval and unity. The cheap instrument, and the one that fixes mood not machinery.");
+                "Approval and unity. The cheap instrument, and the one that fixes mood not machinery.",
+                verbs: new[] { nameof(GameController.PublicMessaging) });
             Add(Pillar.Government, "GOVERNMENT", "Institutional reform", "6 PC",
-                "Builds the state's capacity and costs the goodwill of whoever benefits from the status quo.");
+                "Builds the state's capacity and costs the goodwill of whoever benefits from the status quo.",
+                verbs: new[] { nameof(GameController.InstitutionalReform) });
             Add(Pillar.Government, "GOVERNMENT", "Declare emergency powers", "PC + approval",
-                "Extra command capacity, bought with legitimacy. Cheaper in centralized systems.");
+                "Extra command capacity, bought with legitimacy. Cheaper in centralized systems.",
+                verbs: new[] { nameof(GameController.DeclareEmergencyPowers) });
             Add(Pillar.Government, "GOVERNMENT", "Set national priority", "3 PC",
-                "Redirects every delegated official. The broadest lever available.");
+                "Redirects every delegated official. The broadest lever available.",
+                verbs: new[] { nameof(GameController.SetNationalPriority) });
             Add(Pillar.Government, "GOVERNMENT",
                 player.government.IsElective ? "Bargain with the chamber" : "Accommodate the elite", "2 PC",
-                "Support bought rather than earned. It decays, so it has to be kept up.");
+                "Support bought rather than earned. It decays, so it has to be kept up.",
+                verbs: new[] { nameof(GameController.BuildPoliticalSupport) });
             Add(Pillar.Government, "GOVERNMENT", "Distribute patronage", "1 PC + treasury",
                 "The same support, bought with money instead of standing — and it hollows the state.",
                 player.resources.treasury >= GovernmentSystem.PatronageTreasury,
-                "The treasury cannot cover it.");
+                "The treasury cannot cover it.",
+                verbs: new[] { nameof(GameController.DistributePatronage) });
             Add(Pillar.Government, "GOVERNMENT", "Public inquiry", "4 PC",
-                "Raises the weakest minister and the machinery around them. Nobody involved is grateful.");
+                "Raises the weakest minister and the machinery around them. Nobody involved is grateful.",
+                verbs: new[] { nameof(GameController.LaunchInquiry) });
             Add(Pillar.Government, "GOVERNMENT", "Prepare a successor", "3 PC",
                 "A transition you saw coming. Raises who arrives next and keeps the handover orderly.",
-                player.government.successorReadiness < 99f, "Continuity planning is already complete.");
+                player.government.successorReadiness < 99f, "Continuity planning is already complete.",
+                verbs: new[] { nameof(GameController.GroomSuccessor) });
             Add(Pillar.Government, "GOVERNMENT", "Set civic posture", "3 PC",
-                "Open or restrictive. Order against legitimacy, and it decides how fast plots form.");
+                "Open or restrictive. Order against legitimacy, and it decides how fast plots form.",
+                verbs: new[] { nameof(GameController.SetCivicPosture) });
             Add(Pillar.Government, "GOVERNMENT", "Consolidate authority", "12 PC",
-                "Permanently make one pillar the operator's to command. The one large purchase.");
+                "Permanently make one pillar the operator's to command. The one large purchase.",
+                verbs: new[] { nameof(GameController.ConsolidateAuthority) });
             Add(Pillar.Government, "GOVERNMENT", "Dismiss an official", "PC",
-                "Replace a minister. Costs more in elective systems.");
+                "Replace a minister. Costs more in elective systems.",
+                verbs: new[] { nameof(GameController.DismissOfficial) });
             Add(Pillar.Government, "GOVERNMENT", "Call an early election", "PC",
                 "Parliamentary systems only. A gamble on current standing.",
-                player.government.AllowsEarlyElection, "Only a parliamentary system can go to the country early.");
+                player.government.AllowsEarlyElection, "Only a parliamentary system can go to the country early.",
+                verbs: new[] { nameof(GameController.CallEarlyElection) });
+            Add(Pillar.Government, "GOVERNMENT", "Concede to the opposition", "2 PC + a real cost",
+                "Move toward them on what they are campaigning about. Always works, and what "
+                + "it costs depends on what you conceded — money, war support, allies or the "
+                + "civic posture itself.",
+                player.government.oppositionCase >= OppositionSystem.NoiseFloor,
+                "Nobody is making a serious case against this government.",
+                verbs: new[] { nameof(GameController.ConcedeToOpposition) });
+            Add(Pillar.Government, "GOVERNMENT", "Confront the opposition", "3 PC",
+                "Answer them in public. Effective where the case is mood; where it is hardship "
+                + "or a war, denying it makes the argument stronger.",
+                player.government.oppositionCase >= OppositionSystem.NoiseFloor,
+                "Nobody is making a serious case against this government.",
+                verbs: new[] { nameof(GameController.ConfrontOpposition) });
+            Add(Pillar.Government, "GOVERNMENT", "Secure the army's loyalty", "5 PC",
+                "Promotions, budgets and patronage where they will do the most good. Effective, "
+                + "and quietly corrosive.",
+                verbs: new[] { nameof(GameController.SecureMilitaryLoyalty) });
             Add(Pillar.Government, "CABINET", "Appoint to a vacancy", "0 CP",
                 "Choose from the shortlist. The government appoints for you after three months.",
-                player.vacancies.Count > 0, "No office is currently vacant.");
+                player.vacancies.Count > 0, "No office is currently vacant.",
+                verbs: new[] { nameof(GameController.AppointOfficial) });
+            Add(Pillar.Government, "CABINET", "Issue a directive", "1 INF",
+                "Tell a Directed official what to work on. Every directive changes something "
+                + "an autonomous month would not have.",
+                verbs: new[] { nameof(GameController.SetDirective) });
+            Add(Pillar.Government, "CABINET", "Take direct action", "CP + their trust",
+                "Run a pillar yourself for a month. It removes the intermediary — and the "
+                + "filter, so you see what their desk would have buried.",
+                verbs: new[] { nameof(GameController.ExecuteDirectAction) });
             Add(Pillar.Government, "CABINET", "Set a control mode", "0–1 INF",
-                "Autonomous, Directed or Direct Control. Direct Control needs constitutional authority.");
+                "Autonomous, Directed or Direct Control. Direct Control needs constitutional authority.",
+                verbs: new[] { nameof(GameController.SetControlMode) });
 
             // ---------- long game ----------
 
             Add(Pillar.Economy, "RESEARCH", "Authorize research", "2 CP + treasury",
-                "Multi-year programmes across all five pillars. Capabilities unlock ability, never force.");
+                "Multi-year programmes across all five pillars. Capabilities unlock ability, never force.",
+                verbs: new[] { nameof(GameController.BeginResearch) });
             Add(Pillar.Military, "ENDGAME", "Prepare an instrument", "2 CP + treasury",
-                "Months of preparation toward one decisive capability. Visible to anyone collecting on us.");
+                "Months of preparation toward one decisive capability. Visible to anyone collecting on us.",
+                verbs: new[] { nameof(GameController.PrepareEndgame) });
             Add(Pillar.Military, "ENDGAME", "Execute an instrument", "4 CP",
-                "Only when prepared, and only against a state we are confronting.");
+                "Only when prepared, and only against a state we are confronting.",
+                verbs: new[] { nameof(GameController.ExecuteEndgame) });
             Add(Pillar.Government, "OPERATOR", "Unlock a skill", "Skill points",
                 "Operator capability only — command capacity, action costs, precision. Never national power.",
-                state.skillPoints > 0, "No skill points available.");
+                state.skillPoints > 0, "No skill points available.",
+                verbs: new[] { nameof(GameController.UnlockSkill) });
 
             return entries;
         }

@@ -339,6 +339,16 @@ namespace Brink.Core
             // multiplier here changes nothing outside a genuine crisis.
             unrestPressure *= 1.18f - country.nationalUnity / 165f;
 
+            // An organised campaign against the government is people already
+            // meeting about it. Added to the pressure rather than to the value,
+            // so it raises where unrest settles instead of being erased by the
+            // next month's drift.
+            unrestPressure += OppositionSystem.UnrestPressure(gov);
+
+            // People shooting at the government somewhere in the country is not a
+            // mood, and it does not stay local.
+            unrestPressure += InsurgencySystem.UnrestPressure(state, country.id);
+
             // Some states argue about everything. Hardship organises faster there.
             float unrestTarget = Clamp(unrestPressure * NationalTraitCatalog.UnrestVolatility(country));
 
@@ -450,6 +460,7 @@ namespace Brink.Core
                 + country.governmentApproval * 0.20f
                 - country.warExhaustion * 0.25f
                 - (gov.inCivilConflict ? 22f : 0f)
+                - InsurgencySystem.StabilityDrag(state, country.id)
                 + StabilityShiftFor(gov));
             country.stability = Approach(country.stability, stabilityTarget, 0.05f);
 
@@ -521,7 +532,13 @@ namespace Brink.Core
             {
                 float supportTarget = country.governmentApproval * 0.7f + country.pillars.government * 0.3f
                                       + gov.brokeredSupport * 0.45f
-                                      + FactionSupportShift(gov);
+                                      + FactionSupportShift(gov)
+                                      // A campaign against the government is
+                                      // weight in the chamber. It moves the
+                                      // target, like everything else here —
+                                      // subtracting from the value would be
+                                      // erased by this same tick's drift.
+                                      - OppositionSystem.SupportDrag(gov);
                 gov.legislativeSupport = Approach(gov.legislativeSupport, Clamp(supportTarget), 0.08f);
             }
             else
@@ -677,6 +694,12 @@ namespace Brink.Core
                                    - Math.Max(0f, eco.inflation - 4f) * 1.8f
                                    - country.warExhaustion * 0.3f
                                    - gov.leader.termsServed * 6f
+                                   // What the opposition has actually been
+                                   // campaigning on, and for how long. Without
+                                   // this an election was a roll against
+                                   // incumbency fatigue and the campaign that
+                                   // preceded it counted for nothing.
+                                   - OppositionSystem.ElectionDrag(gov)
                                    + (float)(rng.NextDouble() * 28.0 - 14.0);
 
             bool incumbentHolds = incumbentScore >= 50f;

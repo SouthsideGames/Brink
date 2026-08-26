@@ -42,6 +42,103 @@ namespace Brink.UI.Views
             BuildTreatyControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
+            BuildCouncilControls(state);
+        }
+
+        /// <summary>
+        /// The chamber (GDD §15.2, §28).
+        ///
+        /// Two things it must say plainly, because both are counter-intuitive
+        /// and both are the design: which five seats can stop anything, and what
+        /// is currently standing against whom. A censure or a mandate is a fact
+        /// about the world that changes what other verbs cost, so it belongs on
+        /// the screen rather than in a notification that scrolls away.
+        /// </summary>
+        void BuildCouncilControls(GameState state)
+        {
+            CouncilSystem.EnsureSeated(state);
+            var council = state.council;
+
+            var text = AddText();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("THE CHAMBER", W));
+
+            var seats = new System.Text.StringBuilder();
+            foreach (string id in council.permanentMembers)
+            {
+                var member = state.FindCountry(id);
+                if (member == null) continue;
+                if (seats.Length > 0) seats.Append(", ");
+                seats.Append(member.displayName.ToUpperInvariant());
+            }
+            sb.AppendLine($" PERMANENT SEATS: {seats}");
+            sb.AppendLine(" Any of them can block a motion outright. Doing so is public, and the");
+            sb.AppendLine(" states that voted for it remember.");
+            sb.AppendLine();
+
+            if (council.censures.Count == 0 && council.mandates.Count == 0)
+                sb.AppendLine(" NOTHING STANDS AGAINST ANY STATE.");
+
+            foreach (var censure in council.censures)
+            {
+                var subject = state.FindCountry(censure.subjectId);
+                if (subject == null) continue;
+                sb.AppendLine($" CENSURED  {subject.displayName.ToUpperInvariant()} "
+                              + $"({censure.monthsRemaining} MO REMAINING)");
+            }
+            foreach (var mandate in council.mandates)
+            {
+                var subject = state.FindCountry(mandate.subjectId);
+                if (subject == null) continue;
+                sb.AppendLine($" MEASURES AUTHORISED AGAINST {subject.displayName.ToUpperInvariant()} "
+                              + $"({mandate.monthsRemaining} MO REMAINING)");
+            }
+
+            sb.AppendLine();
+            var recent = council.record;
+            int shown = 0;
+            for (int i = recent.Count - 1; i >= 0 && shown < 3; i--, shown++)
+            {
+                var motion = recent[i];
+                string verdict = motion.outcome == MotionOutcome.Passed ? "CARRIED"
+                    : motion.outcome == MotionOutcome.Vetoed ? "BLOCKED" : "REJECTED";
+                sb.AppendLine($" {motion.raised.DisplayString}  {verdict}  "
+                              + $"{motion.yes}-{motion.no}-{motion.abstain}");
+                sb.AppendLine("   " + motion.summary);
+            }
+
+            text.text = sb.ToString();
+
+            var motions = CouncilSystem.AvailableMotions(state, state.playerCountryId);
+            bool canRaise = CouncilSystem.CanRaise(state, state.playerCountryId, out string blocked);
+
+            if (motions.Count == 0)
+            {
+                AddText("terminal-text-dim").text =
+                    "   NOTHING TO PUT TO IT. The chamber has no agenda of its own — a motion "
+                    + "has to be about something a state is actually doing.";
+                return;
+            }
+
+            var row = MakeRow();
+            foreach (var motion in motions)
+            {
+                var captured = motion;
+                var subject = state.FindCountry(motion.subjectId);
+                if (subject == null) continue;
+
+                string label = motion.kind == MotionKind.Condemnation ? "CONDEMN"
+                    : motion.kind == MotionKind.SanctionsMandate ? "AUTHORISE MEASURES ON"
+                    : "FUND RELIEF FOR";
+
+                var button = AddButton(row,
+                    $"{label} {subject.displayName.ToUpperInvariant()} "
+                    + $"[{CouncilSystem.MotionCost} CP]", "primary",
+                    () => { GameController.Instance.RaiseCouncilMotion(captured); Refresh(); });
+
+                if (!canRaise) Block(button, blocked);
+            }
+            ExplainBlockedCommands(Root);
         }
 
         /// <summary>

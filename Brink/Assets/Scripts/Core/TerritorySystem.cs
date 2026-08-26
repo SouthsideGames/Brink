@@ -35,7 +35,20 @@ namespace Brink.Core
             foreach (var location in state.locations)
             {
                 if (location.type != type) continue;
-                if (location.ownerId == countryId) held += location.strategicValue;
+
+                // **Ground in open revolt pays nobody.** A province with a serious
+                // armed movement in it still has an owner on the map and produces
+                // nothing for them — which is what makes arming one a way to
+                // deny a rival an oilfield without taking it, and what makes a
+                // rising at home an economic event rather than a security one.
+                //
+                // Deliberately symmetric and deliberately in `held` only: the
+                // original owner keeps counting it in `original`, so a contested
+                // province is a loss to whoever it belongs to *and* to whoever is
+                // sitting on it. Nobody profits from a place that is fighting.
+                bool contested = InsurgencySystem.Denies(state, location);
+
+                if (location.ownerId == countryId && !contested) held += location.strategicValue;
                 if (location.originalOwnerId == countryId) original += location.strategicValue;
             }
             return held - original;
