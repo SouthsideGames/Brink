@@ -17,6 +17,7 @@ namespace Brink.UI
         public VisualElement Root { get; }
 
         readonly Action onChanged;
+        readonly ScrollView reader;
         bool confirmingReset;
 
         public DisplaySettingsPanel(Action onChanged)
@@ -26,6 +27,20 @@ namespace Brink.UI
             Root = new VisualElement();
             Root.AddToClassList("settings-panel");
             Root.style.display = DisplayStyle.None;
+
+            // The panel's content scrolls; CLOSE stays pinned below it. The
+            // panel was a plain VisualElement with `flex-shrink: 0` and no
+            // height cap — the tutorial-panel bug, refiled under Settings: on a
+            // phone with large text everything past the fold was unreachable,
+            // and the *last* thing in the panel was FULL RESET. A shipped game
+            // whose only new-game path is below the fold of a box that cannot
+            // scroll has no new-game path.
+            reader = new ScrollView(ScrollViewMode.Vertical)
+            {
+                verticalScrollerVisibility = ScrollerVisibility.Hidden,
+                horizontalScrollerVisibility = ScrollerVisibility.Hidden
+            };
+            Root.Add(reader);
 
             Rebuild();
         }
@@ -46,11 +61,22 @@ namespace Brink.UI
 
         void Rebuild()
         {
-            Root.Clear();
+            reader.Clear();
+
+            // Pinned children (title above the scroller, CLOSE below it) are
+            // rebuilt too, so clear everything except the scroller itself.
+            for (int i = Root.childCount - 1; i >= 0; i--)
+                if (Root[i] != reader) Root.RemoveAt(i);
+
+            // Settings may cover most of the screen — unlike the tutorial they
+            // are not teaching the panel behind them — but never all of it, and
+            // never more than fits: the content scrolls to whatever remains.
+            reader.style.maxHeight =
+                TerminalMetrics.PanelHeight * (TerminalMetrics.ShortScreen ? 0.55f : 0.70f);
 
             var title = new Label("DISPLAY");
             title.AddToClassList("terminal-text-bright");
-            Root.Add(title);
+            Root.Insert(0, title);
 
             BuildRow("TEXT SIZE",
                 (TextSize[])Enum.GetValues(typeof(TextSize)),
@@ -88,6 +114,20 @@ namespace Brink.UI
                 value => DisplaySettings.Atmosphere == value,
                 value => { DisplaySettings.Atmosphere = value; Refresh(); });
 
+            var displayRow = new VisualElement();
+            displayRow.AddToClassList("settings-row");
+            reader.Add(displayRow);
+
+            var reset = new Button(() => { DisplaySettings.ResetToDefaults(); Refresh(); })
+            { text = "RESET DISPLAY" };
+            reset.AddToClassList("cmd-button");
+            displayRow.Add(reset);
+
+            // The reset sits above the reference prose, not below it: on most
+            // screens it is now visible without scrolling at all, which is what
+            // "reachable from Settings" has to mean on a phone.
+            BuildFullReset();
+
             var hint = new Label(
                 "  Larger text means fewer characters per line — the screen does not\n" +
                 "  grow. COMPACT spacing fits more rows on a short screen at the cost\n" +
@@ -99,23 +139,18 @@ namespace Brink.UI
                 "  other countries; it reports only what is publicly known, so it never\n" +
                 "  replaces intelligence work.");
             hint.AddToClassList("terminal-text-dim");
-            Root.Add(hint);
+            reader.Add(hint);
 
-            var row = new VisualElement();
-            row.AddToClassList("settings-row");
-            Root.Add(row);
-
-            var reset = new Button(() => { DisplaySettings.ResetToDefaults(); Refresh(); })
-            { text = "RESET DISPLAY" };
-            reset.AddToClassList("cmd-button");
-            row.Add(reset);
+            // CLOSE is pinned outside the scroller — the one control that must
+            // never be below the fold, per the tutorial-panel rule.
+            var closeRow = new VisualElement();
+            closeRow.AddToClassList("settings-row");
+            Root.Add(closeRow);
 
             var close = new Button(Hide) { text = "CLOSE" };
             close.AddToClassList("cmd-button");
             close.AddToClassList("primary");
-            row.Add(close);
-
-            BuildFullReset();
+            closeRow.Add(close);
         }
 
         /// <summary>
@@ -138,11 +173,11 @@ namespace Brink.UI
                 "  It cannot be undone.");
             warning.AddToClassList("terminal-text");
             warning.AddToClassList("terminal-text-dim");
-            Root.Add(warning);
+            reader.Add(warning);
 
             var row = new VisualElement();
             row.AddToClassList("settings-row");
-            Root.Add(row);
+            reader.Add(row);
 
             if (!confirmingReset)
             {
@@ -176,7 +211,7 @@ namespace Brink.UI
         {
             var row = new VisualElement();
             row.AddToClassList("settings-row");
-            Root.Add(row);
+            reader.Add(row);
 
             var name = new Label(label);
             name.AddToClassList("settings-label");

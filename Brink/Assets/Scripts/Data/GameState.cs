@@ -78,6 +78,30 @@ namespace Brink.Data
         /// <summary>Administrations the player has served under in this save.</summary>
         public int administrationsServed = 1;
 
+        /// <summary>
+        /// Whether the forty-year career review has been delivered (GDD §9
+        /// amendment). False on old saves is correct — a save crossing the line
+        /// after loading simply receives its review at the next year-end.
+        /// </summary>
+        public bool tenureReviewed;
+
+        /// <summary>
+        /// Smoothed month-over-month change in the player's treasury (EWMA,
+        /// ~5-month memory), and the bookkeeping that seeds it. Written by
+        /// `EconomySystem.MonthlyUpdate`; read by the briefing's treasury line
+        /// and by `AttentionSystem`.
+        ///
+        /// Playtested into existence: deficit spending punishes on a lag of
+        /// *years* (debt → confidence → markets → living standards), so an
+        /// operator can bankrupt a healthy country and first hear about it a
+        /// decade later — a 20-year test campaign did exactly that, ending at
+        /// −4,905 with no warning ever shown. A consequence nobody was told
+        /// about is not a consequence, it is a bug report.
+        /// </summary>
+        public float treasuryTrend;
+        public float lastMonthTreasury;
+        public bool treasuryTrendSeeded;
+
         /// <summary>World Chronicle — automatic historical archive (GDD §31.3).</summary>
         public List<ChronicleEntry> chronicle = new List<ChronicleEntry>();
 

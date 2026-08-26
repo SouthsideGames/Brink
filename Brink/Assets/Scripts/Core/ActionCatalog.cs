@@ -133,6 +133,12 @@ namespace Brink.Core
                 "Improve standing with one state. The groundwork everything else rests on.");
             Add(Pillar.Diplomacy, "DIPLOMACY", "Propose a treaty", "2 CP",
                 "Explicit commitments. They accept on their interests, not our wishes.");
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Deepen a treaty", "2 CP",
+                "Add commitments to a standing agreement. A partner with history signs "
+                + "what a stranger would not.");
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Seek sanctions relief", "2 CP",
+                "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
+                + "blowback and warmth persuade; the threat they still see does not.");
             Add(Pillar.Diplomacy, "DIPLOMACY", "Break a treaty", "1 CP",
                 "Immediate freedom, lasting reputational damage with everyone watching.");
             Add(Pillar.Diplomacy, "DIPLOMACY", "Assemble a coalition", "3 CP",

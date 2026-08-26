@@ -253,19 +253,33 @@ Current `Report_MultiSeedBalance` means, 5 seeds × 10 years:
 
 ```
 PLAYSTYLE      MEAN GRADE   VS PASSIVE
-PASSIVE           2.50   —
-MILITARY          2.74      +0.24
-ECONOMY           3.08      +0.58
-INTELLIGENCE      3.00      +0.50
-DIPLOMACY         2.94      +0.44
-GOVERNMENT        2.72      +0.22
+PASSIVE           2.32   —
+DRIFTER           2.80      +0.48
+MILITARY          2.66      +0.34
+ECONOMY           2.96      +0.64
+INTELLIGENCE      2.96      +0.64
+DIPLOMACY         3.02      +0.70
+GOVERNMENT        2.84      +0.52
 ```
 
-**This is the one table.** Measured after foreign cabinets — every government now
-runs five officials every month (spec 15 §1, §7), with `AISystem.InvestInPillars`
-reduced to `RebuildForces` so nobody is paid twice (spec 06 §5). Where another
-section needs these figures it points here rather than quoting them, because two
-transcriptions of the same run drift.
+**This is the one table.** Measured 2026-08-26 on the complete current game —
+hot world (spec 06 §7c), bloc gravity (spec 04 §8a), food security (spec 02
+§5), faction arithmetic (spec 05 §2b-1), fiscal reserve, détente and treaty
+deepening (spec 04 §5a, spec 02 §4a). Where another section needs these
+figures it points here rather than quoting them, because two transcriptions of
+the same run drift.
+
+Read of the table: spread **0.36** — the tightest ever measured — with every
+playstyle above passive, no dead pillar and no dominant one. The long-standing
+**ECONOMY-outlier question is closed** (+0.92 at its peak → +0.64, mid-pack),
+resolved by the world's own pressure rather than tuning. MILITARY's floor
+position and net-zero-territory war outcomes retell the measured
+opportunity-cost-of-commitment story unchanged. Drifting costs −0.22 against
+the answering twin (was −0.32). Passive itself rose 2.24 → 2.32: the harness
+passive *answers crises*, and a busier world pays a present operator more —
+ad-hoc passive baselines on other countries and seeds measured 2.00–2.15, so
+**passive is country- and seed-sensitive; re-measure it on the exact scenario
+before judging any margin**. Regional and Full world sizes remain unmeasured.
 
 ### Foreign cabinets compressed the margins, which is the expected direction
 

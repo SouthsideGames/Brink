@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using Brink.Core;
 using Brink.Data;
@@ -95,7 +96,34 @@ namespace Brink.UI.Views
             sb.AppendLine("  " + AsciiChart.LabeledBar("GOVERNMENT", player.pillars.government, 100, 14, 20));
             sb.AppendLine();
             sb.AppendLine(" STRATEGIC RESOURCES");
-            sb.AppendLine("  " + AsciiChart.Row("TREASURY", $"{player.resources.treasury:F0}", W - 4));
+
+            // The trend beside the balance, and words when the arithmetic is
+            // against us. The lag between deficit spending and its consequences
+            // is measured in years, so the number alone was a trap: a test
+            // campaign bankrupted a healthy country to −4,905 without the game
+            // ever saying "we spend more than we make".
+            string trend = state.treasuryTrendSeeded && Math.Abs(state.treasuryTrend) >= 1f
+                ? $"{player.resources.treasury:F0}  ({(state.treasuryTrend >= 0 ? "+" : "")}{state.treasuryTrend:F0}/MO)"
+                : $"{player.resources.treasury:F0}";
+            sb.AppendLine("  " + AsciiChart.Row("TREASURY", trend, W - 4));
+
+            if (state.treasuryTrendSeeded && state.treasuryTrend < -4f)
+            {
+                if (player.resources.treasury <= 0f)
+                {
+                    sb.AppendLine("  ! THE TREASURY IS IN DEFICIT AND SINKING.");
+                    sb.AppendLine("    Programmes and research will stall.");
+                }
+                else
+                {
+                    float monthsLeft = player.resources.treasury / -state.treasuryTrend;
+                    if (monthsLeft < 36f)
+                    {
+                        sb.AppendLine($"  ! SPENDING RUNS {-state.treasuryTrend:F0}/MONTH AHEAD OF INCOME.");
+                        sb.AppendLine($"    Reserves carry ~{monthsLeft:F0} months at this rate.");
+                    }
+                }
+            }
             sb.AppendLine("  " + AsciiChart.Row("MANPOWER", $"{player.resources.manpower:F0}", W - 4));
             sb.AppendLine("  " + AsciiChart.Row("ENERGY", $"{player.resources.energy:F1}", W - 4));
             sb.AppendLine("  " + AsciiChart.Row("INDUSTRIAL CAPACITY", $"{player.resources.industrialCapacity:F1}", W - 4));

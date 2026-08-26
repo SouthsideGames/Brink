@@ -359,6 +359,16 @@ namespace Brink.Tests
                 country.resources.energy = 90f;
                 country.economy.confidence = 85f;
                 foreach (var sector in country.economy.sectors) sector.health = 92f;
+
+                // Recovery means the causes *end* — including the siege. The AI
+                // sanctions a collapsing power heavily (measured: pressure 3.0
+                // for 237 of 240 months on this seed), and food now genuinely
+                // responds to sanctions, so people hungry under an ongoing
+                // blockade staying angry is the design working, not unrest
+                // failing to subside. This fixture predates economic warfare
+                // being able to reach a population at all.
+                world.sanctions.RemoveAll(s => s.targetId == country.id);
+
                 turns.EndMonth();
             }
 

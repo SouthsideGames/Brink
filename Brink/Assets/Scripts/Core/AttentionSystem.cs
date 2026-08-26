@@ -80,6 +80,24 @@ namespace Brink.Core
                         $"Confrontation active — {Phrase.Of(confrontation.escalation)}");
             }
 
+            // A treasury draining faster than it fills, while it still can be
+            // fixed. The real consequences of deficit spending land years later
+            // (debt → confidence → markets → living standards), which is
+            // exactly the kind of lag an operator on a phone cannot be expected
+            // to notice from a raw balance — a test campaign bankrupted a
+            // healthy country to −4,905 without one warning. Decision when the
+            // account is already dry; a heads-up while there is still runway.
+            if (state.treasuryTrendSeeded && state.treasuryTrend < -4f)
+            {
+                if (player.resources.treasury <= 0f)
+                    Add("ECONOMY", AttentionLevel.Decision,
+                        $"Treasury in deficit and sinking ~{-state.treasuryTrend:F0}/month");
+                else if (player.resources.treasury / -state.treasuryTrend < 36f)
+                    Add("ECONOMY", AttentionLevel.Information,
+                        $"Spending exceeds income by ~{-state.treasuryTrend:F0}/month — reserves " +
+                        $"carry ~{player.resources.treasury / -state.treasuryTrend:F0} months");
+            }
+
             // ---- worth knowing ----
 
             int unseen = 0, unseenUrgent = 0;

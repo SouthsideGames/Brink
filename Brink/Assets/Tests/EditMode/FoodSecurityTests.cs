@@ -205,9 +205,11 @@ namespace Brink.Tests
         [Test]
         public void NormalPlayIsUntouched()
         {
-            // The deprivation terms gate at 50 and 40, so ordinary variation in a
-            // fed country changes nothing — the `distress` idiom: a crisis regime
-            // added without retuning the ordinary one.
+            // The deprivation terms measure a drop below the country's *own*
+            // endowment, so a state sitting at its authored baseline — however
+            // low that baseline is — feels nothing. An absolute threshold here
+            // read Saudi Arabia's authored food 18 as a permanent humanitarian
+            // crisis and rippled phantom unrest through the measured world.
             float[] Standards(float food)
             {
                 var world = WorldFactory.CreateDebugWorld(seed: 8181);
@@ -221,14 +223,42 @@ namespace Brink.Tests
                 return new[] { player.livingStandards, player.socialUnrest };
             }
 
-            var comfortable = Standards(65f);
-            var abundant = Standards(95f);
+            float endowment = WorldFactory.FindProfile("USA").food;
+            var atBaseline = Standards(endowment);
+            var abundant = Standards(100f);
 
-            Assert.AreEqual(abundant[0], comfortable[0], 0.01f,
-                "living standards distinguish 65 food from 95 — the term is retuning " +
-                "normal play instead of adding a deprivation regime.");
-            Assert.AreEqual(abundant[1], comfortable[1], 0.01f,
-                "unrest distinguishes 65 food from 95.");
+            Assert.AreEqual(abundant[0], atBaseline[0], 0.01f,
+                "living standards distinguish a country at its endowment from one above " +
+                "it — the term is retuning normal play instead of adding a deprivation regime.");
+            Assert.AreEqual(abundant[1], atBaseline[1], 0.01f,
+                "unrest distinguishes a country at its endowment from one above it.");
+        }
+
+        [Test]
+        public void AnAuthoredDependencyIsNotAHumanitarianCrisis()
+        {
+            // Saudi Arabia is authored at food 18 — the designed mirror of the
+            // energy-poor archetypes, fed by ships. Sitting at that baseline
+            // must produce zero deprivation pressure; only a *drop below its
+            // own normal* may.
+            var world = WorldFactory.CreateDebugWorld(seed: 8181);
+            var saudi = world.FindCountry("SAU");
+
+            float baselineUnrest = 0f, baselineStandards = 0f;
+            for (int i = 0; i < 36; i++)
+            {
+                GovernmentSystem.MonthlyUpdate(world);
+                world.date = world.date.NextMonth();
+                baselineUnrest = saudi.socialUnrest;
+                baselineStandards = saudi.livingStandards;
+            }
+
+            Assert.Less(baselineUnrest, 30f,
+                $"Saudi Arabia at its authored food baseline reached {baselineUnrest:F1} " +
+                "unrest with nothing else wrong — the hunger term is reading an authored " +
+                "dependency as a standing crisis.");
+            Assert.Greater(baselineStandards, 35f,
+                "An authored food importer lives in permanent deprivation.");
         }
     }
 }

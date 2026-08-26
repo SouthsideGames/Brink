@@ -73,6 +73,20 @@ namespace Brink.Core
                     network.compromised = true;
                     network.penetration *= 0.35f;
 
+                    // Rolling up a foreign network teaches the service that did
+                    // it — the same +6 lesson the covert-op exposure path has
+                    // always taught, and this path silently lacked. It matters
+                    // because this is the *event-driven* half of counter-play:
+                    // the AI's deliberate HardenSecurity policy competes for an
+                    // action budget that a hot world fills with wars, so once
+                    // the world started fighting its own wars, a decade of
+                    // caught networks measurably taught nobody anything until
+                    // the catch itself carried the lesson.
+                    target.counterIntel.counterIntelligence =
+                        Clamp(target.counterIntel.counterIntelligence + 6f);
+                    target.counterIntel.institutionalHardening =
+                        Math.Min(20f, target.counterIntel.institutionalHardening + 4f);
+
                     // Being caught goes on the record, for everyone, publicly.
                     //
                     // Two reasons this cannot stay a player-only line. First, only
@@ -475,6 +489,8 @@ namespace Brink.Core
                 network.compromised = true;
                 network.penetration = Clamp(network.penetration - 25f);
                 target.counterIntel.counterIntelligence = Clamp(target.counterIntel.counterIntelligence + 6f);
+                target.counterIntel.institutionalHardening =
+                    Math.Min(20f, target.counterIntel.institutionalHardening + 4f);
 
                 // Being caught costs you **how you are regarded**, not your
                 // government's capacity to conduct diplomacy.
@@ -586,7 +602,14 @@ namespace Brink.Core
                 var ci = country.counterIntel;
                 ci.deceptionStrength = Math.Max(0f, ci.deceptionStrength - 1.2f);
 
-                float baseline = 25f + country.pillars.intelligence * 0.45f;
+                // What has been learned from catching people is part of what the
+                // service reverts *to* — the reversion below erased every bump
+                // the catches wrote, which is how a decade of exposures taught
+                // the world 0.15 points. Procedures fade on a decade scale, not
+                // a quarterly one.
+                ci.institutionalHardening *= 0.995f;
+
+                float baseline = 25f + country.pillars.intelligence * 0.45f + ci.institutionalHardening;
                 ci.counterIntelligence = ci.counterIntelligence > baseline
                     ? Math.Max(baseline, ci.counterIntelligence - 0.8f)
                     : Math.Min(baseline, ci.counterIntelligence + 0.4f);

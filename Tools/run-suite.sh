@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Run the full EditMode suite as three partitioned Unity invocations.
+#
+# WHY NOT ONE RUN: the editor session *ages* — per-test cost grows with how
+# many tests have already run in the session, with flat process memory (GC
+# scan cost over the retained set, not a leak). Measured 2026-08-25 on
+# CommandPointsAreABindingConstraint: 12s in a small partition, 41.6s at
+# position ~970 of a healthy 999-test run, and 9+ minutes at position ~974
+# once the suite grew past ~1,050 tests — at which point a single full run
+# never finishes. Three fresh editor sessions stay fast and are the same
+# 15–25 minutes a single run used to be.
+#
+# The frozen-log trap: fixtures silence GameLog mirroring, so a hung run's
+# log looks identical to a healthy one's. TestProgressLogger stamps a
+# [TEST] line per test start — the last one in a stalled log names the
+# culprit.
+#
+# Usage: bash Tools/run-suite.sh   (Unity editor must be CLOSED)
+
+set -u
+UNITY="/c/Program Files/Unity/Hub/Editor/6000.3.9f1/Editor/Unity.exe"
+PROJECT='D:\Southside Games\Brink\Brink'
+OUT=/c/Temp
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+PART_A='Brink.Tests.AttentionSystemTests|Brink.Tests.ForceInventoryTests|Brink.Tests.GovernmentSystemTests|Brink.Tests.MapAndLayoutTests|Brink.Tests.OperationCatalogTests'
+PART_B='Brink.Tests.VerticalSliceValidationTests|Brink.Tests.WorldInvariantTests|Brink.Tests.AISystemTests|Brink.Tests.BugRegressionTests|Brink.Tests.PartialSystemsTests|Brink.Tests.WorldHeatTests'
+PART_C='Brink.Tests.DiplomacySecondActTests|Brink.Tests.AccessionTests|Brink.Tests.AIStrategyTests|Brink.Tests.AIDomesticTests|Brink.Tests.AgentSystemTests|Brink.Tests.AllianceSystemTests|Brink.Tests.AsciiChartTests|Brink.Tests.BreakpointTests|Brink.Tests.AsciiWorldMapTests|Brink.Tests.AssessmentSystemTests|Brink.Tests.AudioSystemTests|Brink.Tests.CabinetAdviceTests|Brink.Tests.CabinetLifecycleTests|Brink.Tests.CabinetSystemTests|Brink.Tests.ChronicleTests|Brink.Tests.CommunicationTests|Brink.Tests.CrisisChainTests|Brink.Tests.CrisisEffectTests|Brink.Tests.CrisisSystemTests|Brink.Tests.NotificationTests|Brink.Tests.DiplomacySystemTests|Brink.Tests.RealWorldRosterTests|Brink.Tests.EconomySystemTests|Brink.Tests.MarketChartTests|Brink.Tests.EndgameSystemTests|Brink.Tests.ExerciseSystemTests|Brink.Tests.FoodSecurityTests|Brink.Tests.EventCatalogTests|Brink.Tests.FactionTests|Brink.Tests.ForeignCabinetTests|Brink.Tests.ForeignCrisisTests|Brink.Tests.GeographySystemTests|Brink.Tests.GameDateTests|Brink.Tests.GovernmentVerbTests|Brink.Tests.IndustrialSystemTests|Brink.Tests.IntelligenceSystemTests|Brink.Tests.MilitarySystemTests|Brink.Tests.MilitaryAdviceTests|Brink.Tests.MilitaryVerbsTests|Brink.Tests.OperationVerbTests|Brink.Tests.PeaceSystemTests|Brink.Tests.PipelineWiringTests|Brink.Tests.ProgressionSystemTests|Brink.Tests.ReadabilityTests|Brink.Tests.RegimeSystemTests|Brink.Tests.ReportingSystemTests|Brink.Tests.SaveMigrationTests|Brink.Tests.SaveSystemTests|Brink.Tests.StrategyAndAuthorityTests|Brink.Tests.TechnologySystemTests|Brink.Tests.TelemetryTests|Brink.Tests.TerritorySystemTests|Brink.Tests.TextPolicyTests|Brink.Tests.TouchTargetTests|Brink.Tests.TradeAndConquestTests|Brink.Tests.TreatyNegotiationTests|Brink.Tests.TurnManagerTests|Brink.Tests.TutorialSystemTests|Brink.Tests.VeterancyTests|Brink.Tests.WorldSizeTests|Brink.Tests.WorldStructureTests'
+
+# NOTE: a class added to Assets/Tests/EditMode must be added to a partition
+# above, or it silently never runs. VerifyCoverage below fails the script if
+# the partitions and the test directory disagree.
+verify_coverage() {
+    local missing=0
+    for f in "$(dirname "$HERE")"/Brink/Assets/Tests/EditMode/*.cs; do
+        while IFS= read -r cls; do
+            [ "$cls" = "TestProgressLogger" ] && continue
+            if ! echo "$PART_A|$PART_B|$PART_C" | grep -q "Brink.Tests.$cls"; then
+                echo "PARTITION GAP: Brink.Tests.$cls is in no partition — it would never run."
+                missing=1
+            fi
+        done < <(grep -o 'public class [A-Za-z0-9_]*' "$f" | awk '{print $3}')
+    done
+    return $missing
+}
+
+run_part() {
+    local name=$1 filter=$2
+    rm -f "$OUT/brink_suite_$name.xml"
+    echo "--- partition $name ---"
+    "$UNITY" -batchmode -projectPath "$PROJECT" -runTests -testPlatform EditMode \
+        -testFilter "$filter" \
+        -testResults "C:\\Temp\\brink_suite_$name.xml" \
+        -logFile "C:\\Temp\\brink_suite_${name}_log.txt"
+    if [ ! -f "$OUT/brink_suite_$name.xml" ]; then
+        echo "PARTITION $name PRODUCED NO RESULTS — check C:\\Temp\\brink_suite_${name}_log.txt"
+        echo "(last test started: $(grep '\[TEST\]' "$OUT/brink_suite_${name}_log.txt" 2>/dev/null | tail -1))"
+        return 1
+    fi
+    bash "$HERE/extract-failures.sh" "$OUT/brink_suite_$name.xml"
+}
+
+verify_coverage || exit 1
+run_part A "$PART_A" || exit 1
+run_part B "$PART_B" || exit 1
+run_part C "$PART_C" || exit 1
+
+echo "=== COMBINED ==="
+total=0; passed=0; failed=0
+for name in A B C; do
+    line=$(grep -o 'total="[0-9]*" passed="[0-9]*" failed="[0-9]*"' "$OUT/brink_suite_$name.xml" | head -1)
+    t=$(echo "$line" | grep -o 'total="[0-9]*"' | grep -o '[0-9]*')
+    p=$(echo "$line" | grep -o 'passed="[0-9]*"' | grep -o '[0-9]*')
+    f=$(echo "$line" | grep -o 'failed="[0-9]*"' | grep -o '[0-9]*')
+    total=$((total + t)); passed=$((passed + p)); failed=$((failed + f))
+done
+echo "total=$total passed=$passed failed=$failed"
+[ "$failed" -eq 0 ] && [ "$total" -gt 0 ]

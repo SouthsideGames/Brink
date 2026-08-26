@@ -205,14 +205,18 @@ namespace Brink.Core
             if (state.HasOpenCrisis) return;
 
             int monthIndex = state.date.MonthsSince(state.startDate);
+
+            // Bookkeeping before the dice. Pruning behind the monthly roll left
+            // stale outcomes in the save on every quiet month — which is most of
+            // them. Consumes no randomness, so determinism is untouched.
+            PruneOutcomes(state, monthIndex);
+
             var rng = new Random(unchecked(state.rngSeed * 486187739 + monthIndex));
             if (rng.NextDouble() >= MonthlyCrisisChance) return;
 
             var eligible = new List<EventDefinition>();
             var weights = new List<float>();
             float total = 0f;
-
-            PruneOutcomes(state, monthIndex);
 
             foreach (var definition in EventCatalog.Definitions)
             {

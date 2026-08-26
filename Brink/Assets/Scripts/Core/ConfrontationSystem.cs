@@ -138,6 +138,10 @@ namespace Brink.Core
             };
             state.confrontations.Add(confrontation);
 
+            // A détente does not survive a declaration of war.
+            var pairRelationship = state.FindRelationship(initiatorId, defenderId);
+            if (pairRelationship != null) pairRelationship.sanctionsTruceMonths = 0;
+
             var initiator = state.FindCountry(initiatorId);
             var defender = state.FindCountry(defenderId);
 

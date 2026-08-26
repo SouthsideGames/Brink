@@ -155,6 +155,46 @@ namespace Brink.UI.Views
             text.text = sb.ToString();
         }
 
+        /// <summary>
+        /// Grow a standing treaty (spec 04 §5a). This panel used to go silent the
+        /// moment a treaty existed, which made the first signature per pair the
+        /// last — a friendship could never become an alliance.
+        /// </summary>
+        void BuildDeepeningControls(GameState state, Treaty standing)
+        {
+            AddText().text = "\n STANDING AGREEMENT — DEEPEN IT";
+
+            var row = new VisualElement();
+            row.AddToClassList("button-row");
+            Root.Add(row);
+
+            bool anyMissing = false;
+            foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+            {
+                if (standing.Has(commitment)) continue;
+                anyMissing = true;
+                var captured = commitment;
+
+                float reading = DiplomacySystem.TreatyWillingness(state, state.playerCountryId,
+                    selectedTargetId, new List<TreatyCommitment> { captured }) + 8f;
+                var button = new Button(() =>
+                {
+                    GameController.Instance.DeepenTreaty(selectedTargetId, captured);
+                    Refresh();
+                })
+                { text = $"ADD {Phrase.Caps(captured)} [{DiplomacySystem.TreatyProposalCost} CP]" };
+                button.AddToClassList("cmd-button");
+                if (reading < 40f)
+                    Block(button, "THE RELATIONSHIP IS NOT THERE YET FOR THIS COMMITMENT.");
+                row.Add(button);
+            }
+
+            AddText("terminal-text-dim").text = anyMissing
+                ? "  A partner with history signs what a stranger would not — and a pact "
+                  + "added here answers to bloc politics like any pact."
+                : "  Every commitment is already in force. This is as deep as treaties go.";
+        }
+
         void BuildTargetSelector(GameState state)
         {
             if (selectedTargetId == null)
@@ -187,6 +227,21 @@ namespace Brink.UI.Views
                 Refresh();
             });
 
+            // Their measures against us end at a table, not a countdown: the
+            // automatic lapse needs relations the sanctions themselves suppress.
+            if (state.FindSanction(selectedTargetId, state.playerCountryId) != null)
+            {
+                var relief = AddButton(actionRow, "SEEK SANCTIONS RELIEF [2 CP]", null, () =>
+                {
+                    GameController.Instance.SeekSanctionsRelief(selectedTargetId);
+                    Refresh();
+                });
+                float reliefReading = EconomySystem.ReliefWillingness(
+                    state, selectedTargetId, state.playerCountryId);
+                if (reliefReading < 35f)
+                    Block(relief, "THEY ARE NOT PERSUADABLE YET — THREAT AND WARMTH DECIDE THIS.");
+            }
+
             if (state.FindTreaty(state.playerCountryId, selectedTargetId) != null)
             {
                 AddButton(actionRow, "BREAK TREATY", "danger", () =>
@@ -199,7 +254,12 @@ namespace Brink.UI.Views
 
         void BuildTreatyControls(GameState state)
         {
-            if (state.FindTreaty(state.playerCountryId, selectedTargetId) != null) return;
+            var standing = state.FindTreaty(state.playerCountryId, selectedTargetId);
+            if (standing != null)
+            {
+                BuildDeepeningControls(state, standing);
+                return;
+            }
 
             var player = state.PlayerCountry;
 

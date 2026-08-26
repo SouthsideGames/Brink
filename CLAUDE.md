@@ -1365,13 +1365,21 @@ three had passed for a long time:
 - [x] **Food security has monthly behaviour** (spec 02 §5) — it was written at
       world creation and never moved: the last authored stat with none. Now the
       endowment/ceiling/drift idiom exactly as energy and materials
-      (`foodEndowment`, `FoodCeilingFor`, erosion under coercive sanctions and
-      **always during a war**, recovery by drifting home when pressure lifts —
-      both halves of the recovery rule, every country). `TradeFocus.Food`
+      (`foodEndowment`, `FoodCeilingFor`; **pressure moves the target, never
+      the value, for every source** — war depresses food toward 75% of the
+      ceiling, heavy sanctions toward 50%, and the same proportional drift
+      brings it home when the pressure lifts. The first version drained flat
+      rates; measured on seed 1212, a passive great power is sanctioned 237 of
+      240 months, so its food ground from 90 to zero and unrest pinned at the
+      cap — the ninth instance of the one-way-value family, caught by
+      `NoSocialValueRunsAwayInEitherDirection`). `TradeFocus.Food`
       (appended, ordinals preserved) makes grain negotiable; food imports press
       on the Agriculture sector via `ImportDisplacement`. Hunger reaches the
-      social layer with zero-by-construction terms (living standards below food
-      50, unrest below 40 — the `distress` idiom). The starting world authors
+      social layer as a **drop below the country's own endowment**, never an
+      absolute line — an absolute threshold read SAU's authored food 18 as a
+      standing humanitarian crisis and rippled phantom unrest through fifteen
+      AI states (found by `HardshipEventuallyOrganises` drifting). Zero by
+      construction at every authored baseline. The starting world authors
       **three food dependencies (AUS→JPN, USA→KOR, IND→SAU) — the first
       authored focused trade links anywhere**; SAU at food 18 is the designed
       mirror of the energy-poor archetypes. `FoodSecurityTests`.
@@ -1411,10 +1419,193 @@ three had passed for a long time:
       more. Save: `GameState.worldSize`, ordinal 0 = Standard, so old saves
       deserialize to the world they were built in; no migration.
 
+- [x] **The world pushes back** (GDD §24 amendment; user decisions: "noticeably
+      hotter" + career arc, not a turn limit). Reported from a phone playtest:
+      as the USA the operator befriended and treatied *every* nation and ran
+      out of things to do. Measured with a befriend-everyone bot and a world
+      census, both halves were real — **15/15 warm friendships achievable,
+      unresisted**, and **0–1 AI-vs-AI wars in thirty years across three
+      seeds**. Three mechanisms, all measured before/after with the headless
+      DiagHeat harness:
+      - **Bloc gravity** (`DiplomacySystem.RivalGravity`) — deep alignment
+        (>68) with a state's genuine enemy (<22 relations) puts a **ceiling**
+        on the relationship (100 − gravity×85) and chills outreach itself
+        (effectiveness × (1 − gravity×0.8)). A ceiling, not a drag — the drag
+        version lost to outreach spam (+3/month beats −0.9/month forever), and
+        a first calibration at gentler thresholds froze the whole planet (93 of
+        120 pairs hostile) because gravity-spread coldness fed more gravity.
+        Treaty acceptance uses the same thresholds ("we will not pact with our
+        enemy's ally"), and `PactAnxiety` prices encirclement: each defence
+        pact past the fourth makes every outsider warier and the next signature
+        harder. Befriend-all now tops out at **11–12/15 with a hostile state
+        emerging** — you lead a side, you cannot own the world.
+      - **The AI fights its own wars** — `AssertClaim`'s "not while anyone
+        involved is busy" guard made the overstretch opening (computed forty
+        lines earlier!) structurally unreachable, and its weakness-only gate
+        meant peer rivals could glare for thirty years without colliding. Now:
+        `CanOpenAnother` (fronts priced, same rule as the player), deep rivalry
+        (<25 relations) qualifies as cause, and **`ResourcePrize`** connects
+        authored shortfalls to the neighbour's ground that answers them —
+        energy- and materials-poor states covet the matching region types.
+        AI-AI wars: 0–1 → **~3 per 30 years**, world relations run ~15 points
+        colder (intended).
+      - **Career arc** (`ProgressionSystem.DeliverTenureReview`, 480 months) —
+        at forty years the record is closed and judged once: career
+        classification from the average annual grade, war record, treaties,
+        administrations served. **The world does not stop** — the review is an
+        arc, not an ending; FULL RESET remains the new-posting path.
+      `WorldHeatTests` pins all three. **Balance unmeasured since** — the
+      diplomacy playstyle's margin certainly moved; re-run
+      `Report_MultiSeedBalance` before tuning anything against it.
+      **Three knock-ons the suite caught within one run**, all the same
+      lesson — a busier AI must not stop doing its other jobs:
+      - **War footing went silent** — war objectives crowded `RebuildForces`
+        out of the top-N action cut, and no foreign government ever surged
+        again. Moved into `ManageOngoingConfrontation` (every warring state
+        runs it unconditionally): mobilising for the war you are *in* is war
+        management, not a strategic choice competing with starting new ones —
+        the restocking-to-the-desk reasoning.
+      - **Counter-play stopped teaching** — two layers. The policy layer:
+        `HardenSecurity` lost the cut to inflated war priorities; now ×1.6 on
+        observed subversion (steep scaling, deliberately NOT a flat floor —
+        a floor was tried and hardened everyone against background suspicion,
+        raising the no-subversion baseline 5 points and shrinking the signal).
+        The structural layer: **`CounterIntelState.institutionalHardening`** —
+        CI reverts monthly to a pillar-derived baseline, so every catch's +6
+        was erased within a quarter (value-vs-target, tenth instance, in the
+        system whose whole subject is learning). Catches now write +4 into the
+        reservoir (cap 20, ×0.995/month — procedures outlive the scare), and
+        the reservoir is a term in the baseline. Spec 03 §7a.
+      - **Two single-seed decade comparisons became three/two-seed averages**
+        (drift-costs, caught-subverting-hardens) — in a world that fights its
+        own wars, two decades diverging at the first difference are different
+        worlds, and one seed's luck swamps a real signal.
+      - **The AI went fiscally broke and the long game died** — threat-inflated
+        counter-spending (HardenDefenses at 160/act, spendable to zero) held
+        every AI treasury at ~50 permanently, so nothing treasury-gated could
+        ever fire: research stalled, and no government prepared a strategic
+        instrument in twenty years despite nine decade-long rivalries and
+        15/15 matured pillars (`OverALongGame_SomeGovernmentBuildsAnInstrument`
+        caught it). Two fixes: `AISystem.DiscretionaryReserve = 250` — a
+        government does not spend its last coin on this month's fear — and the
+        endgame pre-check now derives from `PreparationTreasuryCost × 1.5`
+        instead of a hand-written 400 (more than triple the real 120 — a
+        second, stricter definition of affordability, which is a repeal of the
+        first). Measured after: 2 governments preparing by year 14, and
+        world-wide matured capabilities **doubled** (14 → 28) because research
+        was fundable again.
+
+- [x] **Treasury trend warning** (spec 02 §5a) — found by playing: five
+      20-year campaigns as Japan against the win bar "avg grade ≥ 3.0, no lost
+      wars, country healthier"; the fifth hit the grade bar **by bankrupting
+      the country to −4,905 with no warning ever shown**, because deficit
+      consequences land years late. `GameState.treasuryTrend` (EWMA, seeded
+      lazily), the briefing's TREASURY row now reads `(−82/MO)` with a
+      plain-language runway warning below −4/month and <36 months of reserve,
+      and ATTENTION raises Information there — Decision once the account is
+      dry and sinking. Deliberately quiet for surpluses, drifts, and
+      nine-decade runways (the cried-wolf rule). The campaigns also confirmed
+      the engagement tranche from the player's chair: scores climbed
+      2.40 → 2.50 → 2.90 with strategy quality, wars arrived and were won
+      defensively, and the evaluation punished a coasting mid-game with D
+      grades — the exact boredom failure, now impossible to fall into quietly.
+
+- [x] **Sanctions can no longer zero a producer's own resources** (spec 02 §5).
+      Found by the five-pillar playtest: as Russia (energy endowment 96), the
+      hot world's standing sanctions ground energy to **literal 0** — with
+      living standards and approval following — because the energy/materials
+      sanction erosion was a floorless flat drain (−0.8/month) while the food
+      model had already learned "pressure moves the target." Ported the food
+      rule back: under heavy sanctions the drift targets 55% of the ceiling
+      (whose trade component sanctions already remove), so a sanctioned
+      producer settles near half strength instead of starving on its own
+      oilfields. Eleventh instance of the value-versus-target family.
+      Playtest record (5 countries, 5 pillar-styles, 20y each, judged against
+      each seed's measured passive baseline +0.5 with style goals): **won 3 of
+      5** — government/AUS +0.75, diplomacy/DEU +0.70 (both defence pacts),
+      intelligence/USA +0.55 (public 12 points better off than passive under
+      the same sanctions); lost military/RUS at +0.45 (two wars won as a
+      full-pariah — the measured opportunity-cost-of-commitment, felt from the
+      chair) and economy/CHN at +0.30 (dragged into three wars, two drawn).
+      **The hot world's passive baseline measures 2.00–2.15** (was 2.24) —
+      absolute grade expectations from before the heat are stale; judge play
+      relative to passive until `Report_MultiSeedBalance` re-anchors.
+
+- [x] **Diplomacy's second act** (spec 04 §5a, spec 02 §4a) — both halves found
+      by the five-pillar playtest. **Treaty deepening**: with no amendment path
+      the first signature per pair was the last, so a friendship permanently
+      locked out the alliance (campaign evidence: fourteen treaties, one pact).
+      `DeepenTreatyBy` judges the *added* burden through the same acceptance
+      logic — rival-tie and encirclement included, so every route to a pact
+      answers to bloc politics — plus a history bonus; AI partners deepen warm
+      treaties into pacts, which is how blocs solidify. **Sanctions détente**:
+      sanctions suppress the relations their auto-lapse requires (a
+      self-locking cycle; measured 237/240 sanctioned months for a pariah,
+      40–60 standing AI-AI regimes). `SeekSanctionsReliefBy` prices fatigue,
+      the sender's own blowback, warmth minus perceived threat; success sets a
+      24-month `sanctionsTruceMonths` on the pair that `ImposeSanctionsBy`
+      honours for player and AI alike, voided by war. AI pariahs use it via
+      `ConsiderDetente` (1.5 PC, outside the objective budget — being
+      sanctioned is a condition, not a strategy). New DIPLOMACY panel sections
+      + two ACTIONS entries. `DiplomacySecondActTests`.
+
+- [x] **Balance re-measured on the complete current game** (hot world, food,
+      factions, bloc gravity, fiscal reserve, détente, second-act diplomacy).
+      **These supersede every earlier figure**:
+
+      | Playstyle | Was (pre-heat) | Now |
+      |---|---|---|
+      | PASSIVE (baseline) | 2.24 | **2.32** |
+      | DIPLOMACY | +0.84 | **+0.70** |
+      | ECONOMY | +0.78 | **+0.64** |
+      | INTELLIGENCE | +0.64 | **+0.64** |
+      | GOVERNMENT | +0.44 | **+0.52** |
+      | DRIFTER | +0.52 | **+0.48** |
+      | MILITARY | +0.40 | **+0.34** |
+
+      Read of the table: every playstyle still beats passive; the spread
+      tightened to **0.36** (was 0.44, was 0.60) — the tightest ever measured,
+      with no dead pillar and no dominant one. **The ECONOMY outlier question
+      is closed**: +0.92 → +0.64, mid-pack, resolved by the world's own
+      pressure rather than tuning. DIPLOMACY (+0.70) leads modestly — bloc
+      gravity made friendship scarcer while détente and deepening gave the
+      pillar its second act; not an outlier. MILITARY (+0.34) is the floor
+      again and its war-outcome table retells the measured story unchanged:
+      the bot takes its objective in most seeds and ends at net-zero territory
+      — the opportunity cost of commitment, measured-and-closed. Drifting
+      costs −0.22 against the same routine that answers (was −0.32) — the
+      crisis turn still genuinely prices silence. Passive nudged UP (2.24 →
+      2.32) despite the hotter world: the harness passive answers crises, and
+      a world with more happening pays a present operator more — ad-hoc
+      passive bots on other countries/seeds measured 2.00–2.15, so the
+      baseline is country- and seed-sensitive; always re-measure passive on
+      the exact scenario before judging a margin.
+
+- [x] **The full-reset button became reachable** (spec 09 §12a). It already
+      existed in Settings — two-step confirm and all, placed there precisely
+      because the SYSTEM console is gated out of player builds — but the panel
+      was a plain VisualElement with `flex-shrink: 0` and **no scroll and no
+      height cap** (the tutorial-panel bug, refiled), and FULL RESET was the
+      *last* child. On a phone with large text it sat below the fold of a box
+      that cannot scroll: a shipped game whose only new-game path is invisible
+      has no new-game path. Reported from a device as "we need to add a reset
+      button" — it existed, invisibly, which is its own kind of missing.
+      Settings content now scrolls (capped at 55–70% of `PanelHeight`), the
+      reset section sits above the reference prose so most screens show it
+      without scrolling, and CLOSE is pinned outside the scroller. The
+      post-reset flow was verified intact: `ResetGame` → `StateReplaced` →
+      `UpdateSessionMode` → fresh assessment (`Restart()` already called).
+      Guarded by `MapAndLayoutTests.SettingsPanel_FullResetIsReachable`,
+      including the two-step confirm staying two-step.
+
 Recommended next:
-- **ECONOMY was the high outlier at +0.92 over passive** in the last measured
-  table. Re-measure before acting — the entries above (confidence collapses,
-  food erosion in war, crisis chains) all touch balance.
+- Diminishing returns on repeated covert ops (long-standing, niche).
+- An AI verb for food-poor states to seek food trade links — authored links
+  and player deals are still the only routes to a foreign food ceiling.
+- Touch-target layout cost on a real device (MILITARY and GOVERNMENT screens
+  first — buttons grew ~30% and nobody has looked on hardware).
+- Balance on **Regional and Full world sizes** remains unmeasured — the table
+  above is the Standard 16-state world.
 - **Run `Report_MultiSeedBalance` on Regional and Full worlds** before tuning
   anything against them, and consider whether the harness playstyles should run
   on Full at all — eight new states change coalition and sanction arithmetic.
@@ -1530,11 +1721,37 @@ Device test checklist: `Docs/AndroidTestChecklist.md`.
 
 In-editor: Window → General → Test Runner → EditMode → Run All.
 
-Headless (Unity editor must be CLOSED — the project lock blocks batch mode):
+Headless: **use `bash Tools/run-suite.sh`** (Unity editor must be CLOSED — the
+project lock blocks batch mode). It runs the suite as three partitioned Unity
+invocations and prints per-partition and combined totals.
+
+**Why not one `-runTests` invocation: the editor session *ages*.** Per-test cost
+grows with how many tests have already run in the session — process memory stays
+flat (~2.3 GB), so it is GC-scan cost over the retained set, not a leak.
+Measured on `CommandPointsAreABindingConstraint`: **12 s** in a small partition,
+**41.6 s** at position ~970 of a healthy 999-test run, **9+ minutes** at
+position ~974 once the suite passed ~1,050 tests — past that cliff a single
+full run simply never finishes (three were killed at 40–85 minutes; every
+partitioned run of the same tests was green). Fresh editor sessions stay fast.
+Two consequences:
+- **A new test class must be added to a partition in `run-suite.sh`** or it
+  never runs; the script's coverage check fails the build if the partitions
+  and the test directory disagree.
+- `TestProgressLogger` (a `TestRunCallback` in the test assembly) stamps a
+  `[TEST]` line into the log as each test starts. The suite silences GameLog,
+  so a stalled run's log is otherwise identical to a healthy one's — the last
+  `[TEST]` line names the culprit. Keep it.
+Root cause of the aging is unmeasured beyond the numbers above; if it is ever
+attacked, start by nulling fixture `state`/`turns` fields in teardowns to
+shrink the retained set, and re-measure with the timeline pattern
+(sample `tests_started` vs working set per minute).
+
+Legacy single-invocation form, for filtered subsets only:
 
 ```
 "C:\Program Files\Unity\Hub\Editor\6000.3.9f1\Editor\Unity.exe" -batchmode ^
   -projectPath "D:\Southside Games\Brink\Brink" -runTests -testPlatform EditMode ^
+  -testFilter "Brink.Tests.SomeFixture|Brink.Tests.OtherFixture" ^
   -testResults "C:\Temp\brink_test_results.xml" -logFile "C:\Temp\brink_test_log.txt"
 ```
 

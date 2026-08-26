@@ -99,6 +99,13 @@ namespace Brink.Core
             var player = state.PlayerCountry;
             float effectiveness = 1f + player.pillars.diplomacy / 100f;
 
+            // Envoys are received exactly as warmly as bloc politics allows. An
+            // operator deeply aligned with this state's enemy finds the meetings
+            // short and the communiqués thin — without this, monthly outreach
+            // simply out-pumped rival gravity (+3/month beats any drag), and the
+            // befriend-everyone line was measured achievable in full.
+            effectiveness *= 1f - RivalGravity(state, state.playerCountryId, targetId) * 0.8f;
+
             // Diminishing returns: courtesy calls cannot manufacture an alliance.
             // The warmer things already are, the less another visit achieves.
             relationship.relations = Growth.Apply(relationship.relations, 3f * effectiveness);
@@ -280,6 +287,102 @@ namespace Brink.Core
 
             ApplyReciprocity(state, proposer, target, BalanceOf(clauses));
             return true;
+        }
+
+        /// <summary>
+        /// Deepen an existing treaty with new commitments (spec 04 §5a).
+        ///
+        /// Until this existed a treaty could never be amended, so a friendship
+        /// signed early **permanently** locked that relationship out of ever
+        /// becoming an alliance — played out in a campaign that ended with
+        /// fourteen treaties and one defence pact, the pact possible only where
+        /// the operator had deliberately refused to sign anything for years.
+        /// Diplomacy dead-ended at the first signature per pair; a relationship
+        /// is supposed to be a thing that grows.
+        /// </summary>
+        public static bool DeepenTreaty(GameState state, TurnManager turns, string partnerId,
+            List<TreatyCommitment> addedCommitments)
+        {
+            var treaty = state.FindTreaty(state.playerCountryId, partnerId);
+            if (treaty == null || treaty.broken)
+            {
+                GameLog.Warn("DIPLO", "There is no standing treaty to deepen.");
+                return false;
+            }
+            var partner = state.FindCountry(partnerId);
+            if (partner == null) return false;
+            if (!turns.SpendCommandPoints(TreatyProposalCost, $"Deepen treaty with {partner.displayName}"))
+                return false;
+
+            bool deepened = DeepenTreatyBy(state, state.playerCountryId, partnerId, addedCommitments);
+            if (deepened)
+            {
+                ProgressionSystem.RecordInitiative(state);
+                ProgressionSystem.AwardXP(state, 20, "Treaty deepened");
+            }
+            return deepened;
+        }
+
+        /// <summary>Deepening by any state. AI blocs solidify through the same door.</summary>
+        public static bool DeepenTreatyBy(GameState state, string proposerId, string targetId,
+            List<TreatyCommitment> addedCommitments)
+        {
+            var treaty = state.FindTreaty(proposerId, targetId);
+            var relationship = state.FindRelationship(proposerId, targetId);
+            var target = state.FindCountry(targetId);
+            if (treaty == null || treaty.broken || relationship == null || target == null) return false;
+            if (addedCommitments == null) return false;
+
+            // Only what the treaty does not already carry.
+            var added = new List<TreatyCommitment>();
+            foreach (var commitment in addedCommitments)
+                if (!treaty.Has(commitment) && !added.Contains(commitment)) added.Add(commitment);
+            if (added.Count == 0) return false;
+
+            // Judged on the *added* burden by the same acceptance logic a new
+            // treaty faces — the rival-tie and encirclement penalties included,
+            // so deepening into a pact answers to bloc politics like any pact —
+            // plus what a standing relationship is worth: a partner with history
+            // signs what a stranger would not.
+            float history = Math.Min(12f, state.date.MonthsSince(treaty.signedDate) * 0.1f) + 8f;
+            float willingness = TreatyWillingness(state, proposerId, targetId, added) + history;
+
+            if (willingness < 50f)
+            {
+                relationship.AddMemory(state.date, "Declined to deepen the treaty", -0.5f);
+                if (proposerId == state.playerCountryId)
+                    state.AddNotification(NotificationClass.Advisory, "DEEPENING DECLINED",
+                        $"{target.displayName} values the treaty as it stands. Heavier commitments "
+                        + "need more warmth, more trust, or fewer of our friends among their enemies.",
+                        targetId, desk: ReportingDesk.Diplomacy);
+                GameLog.Info("DIPLO", $"{targetId} declined to deepen the treaty with {proposerId}.");
+                return false;
+            }
+
+            treaty.commitments.AddRange(added);
+
+            relationship.relations = Clamp(relationship.relations + 4f);
+            relationship.trust = Clamp(relationship.trust + 4f);
+            relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 8f);
+            relationship.AddMemory(state.date, "Deepened the treaty", 1.5f);
+
+            bool playerInvolved = proposerId == state.playerCountryId || targetId == state.playerCountryId;
+            state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
+                "TREATY DEEPENED",
+                $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} extend their "
+                + $"agreement: {DescribeCommitments(added)}.",
+                targetId, desk: ReportingDesk.Diplomacy);
+            state.AddChronicle(ChronicleCategory.Diplomatic, proposerId,
+                $"Treaty with {target.displayName} deepened ({DescribeCommitments(added)}).", Publicity.Public);
+            GameLog.Info("DIPLO", $"{proposerId} deepened treaty with {targetId}: {DescribeCommitments(added)}.");
+            return true;
+        }
+
+        static string DescribeCommitments(List<TreatyCommitment> commitments)
+        {
+            var parts = new List<string>();
+            foreach (var commitment in commitments) parts.Add(Phrase.Of(commitment).ToLowerInvariant());
+            return string.Join(", ", parts);
         }
 
         static ClauseSide Flip(ClauseSide side)
@@ -486,6 +589,32 @@ namespace Brink.Core
 
             // A state that already fears us wants fewer entanglements, not more.
             willingness -= relationship.ThreatPerceivedBy(targetId) * 0.25f;
+
+            // **We will not pact with our enemy's ally.** The strongest case over
+            // every third state of the proposer being deeply aligned with a
+            // genuine rival of the target. Without this, an operator could sign
+            // both sides of every rivalry on earth — measured: fifteen of
+            // fifteen friendships in twenty years, unresisted.
+            float rivalTie = 0f;
+            foreach (var third in state.countries)
+            {
+                if (third.id == proposerId || third.id == targetId) continue;
+                var proposerThird = state.FindRelationship(proposerId, third.id);
+                var targetThird = state.FindRelationship(targetId, third.id);
+                if (proposerThird == null || targetThird == null) continue;
+
+                // Same thresholds as RivalGravity, so the door and the room agree.
+                float warmth = Math.Max(0f, proposerThird.strategicAlignment - 68f) / 32f;
+                float coldness = Math.Max(0f, 22f - targetThird.relations) / 22f;
+                rivalTie = Math.Max(rivalTie, warmth * coldness);
+            }
+            willingness -= rivalTie * 40f;
+
+            // **Encirclement anxiety.** A proposer already pacted across the
+            // world is offering membership in a hegemony, and every signature
+            // makes the next state warier — which is what finally puts a ceiling
+            // on collecting the whole map.
+            willingness -= PactAnxiety(state, proposerId) * 25f;
 
             // **What kind of partner we have been to everyone else.**
             //
@@ -767,15 +896,125 @@ namespace Brink.Core
 
         // ---------- monthly resolution ----------
 
+        /// <summary>
+        /// How hard being close to one side of a rivalry pulls against being
+        /// close to the other, 0..1 (spec 04 §8a).
+        ///
+        /// Measured with the befriend-everyone bot: an operator could reach warm
+        /// relations with **all fifteen** other states in twenty years, on every
+        /// seed tried, with zero cost anywhere — the world offered friendship no
+        /// structural resistance at all, and a diplomatic playthrough solved
+        /// itself. Reported from play in exactly those terms.
+        ///
+        /// The fix is the oldest rule in alignment politics: *the friend of my
+        /// enemy cannot also be my friend.* For the pair (a,b), gravity is the
+        /// strongest case over every third state c of one side being **deeply
+        /// aligned** with c while the other side is in **genuine rivalry** with
+        /// c. Both thresholds are deliberately severe — ordinary warmth beside
+        /// ordinary coolness produces nothing, so a neutral broker stays
+        /// possible; it is committed alignment with somebody's enemy that a
+        /// relationship cannot survive.
+        /// </summary>
+        public static float RivalGravity(GameState state, Relationship pair,
+            Dictionary<string, Relationship> lookup)
+        {
+            // Thresholds are deliberately severe, and severity is load-bearing:
+            // at warmth-over-60 / coldness-under-30 the first calibration froze
+            // the whole planet — gravity spread coldness, coldness fed more
+            // gravity, and thirty years later 93 of 120 pairs were hostile.
+            // Only committed blocs (alignment past 68) radiate, and only real
+            // enmity (relations under 22) attracts.
+            float Warmth(Relationship r) => Math.Max(0f, r.strategicAlignment - 68f) / 32f;
+            float Coldness(Relationship r) => Math.Max(0f, 22f - r.relations) / 22f;
+
+            float worst = 0f;
+            foreach (var third in state.countries)
+            {
+                if (third.id == pair.countryA || third.id == pair.countryB) continue;
+                if (!lookup.TryGetValue(PairKey(pair.countryA, third.id), out var ac)) continue;
+                if (!lookup.TryGetValue(PairKey(pair.countryB, third.id), out var bc)) continue;
+
+                worst = Math.Max(worst, Warmth(ac) * Coldness(bc));
+                worst = Math.Max(worst, Warmth(bc) * Coldness(ac));
+            }
+            return worst;
+        }
+
+        static string PairKey(string a, string b)
+            => string.CompareOrdinal(a, b) < 0 ? a + "|" + b : b + "|" + a;
+
+        /// <summary>Single-pair gravity, for action-time checks like Outreach.</summary>
+        public static float RivalGravity(GameState state, string aId, string bId)
+        {
+            var pair = state.FindRelationship(aId, bId);
+            if (pair == null) return 0f;
+
+            var lookup = new Dictionary<string, Relationship>(state.relationships.Count);
+            foreach (var r in state.relationships)
+                lookup[PairKey(r.countryA, r.countryB)] = r;
+            return RivalGravity(state, pair, lookup);
+        }
+
+        /// <summary>
+        /// How anxious a state's alliance web makes everyone outside it, 0..1
+        /// (spec 04 §8a). A power with defence pacts everywhere reads as
+        /// encirclement to whoever is not inside the web — each pact past the
+        /// fourth raises it. This is what makes hegemony a held position rather
+        /// than a finish line.
+        /// </summary>
+        public static float PactAnxiety(GameState state, string countryId)
+        {
+            int pacts = 0;
+            foreach (var treaty in state.treaties)
+            {
+                if (treaty.broken) continue;
+                if (treaty.countryA != countryId && treaty.countryB != countryId) continue;
+                if (treaty.Has(TreatyCommitment.MutualDefense)) pacts++;
+            }
+            return Math.Min(1f, Math.Max(0f, pacts - 4) / 6f);
+        }
+
         public static void MonthlyUpdate(GameState state)
         {
             UpdateBasingRights(state);
+
+            // O(1) pair lookup for the gravity pass — FindRelationship scans the
+            // whole list, and gravity reads two third-party pairs per country per
+            // relationship, which is quadratic-times-linear without this.
+            var lookup = new Dictionary<string, Relationship>(state.relationships.Count);
+            foreach (var relationship in state.relationships)
+                lookup[PairKey(relationship.countryA, relationship.countryB)] = relationship;
 
             foreach (var relationship in state.relationships)
             {
                 var a = state.FindCountry(relationship.countryA);
                 var b = state.FindCountry(relationship.countryB);
                 if (a == null || b == null) continue;
+
+                // The friend of my enemy: deep alignment with a state's genuine
+                // rival caps how warm this relationship can be, and erodes what
+                // is above the cap. **A ceiling, not merely a drag** — the first
+                // version subtracted a fraction of a point per month, and the
+                // befriend-everyone bot simply out-spammed it with outreach
+                // (+3/month beats −0.9/month forever): fifteen of fifteen
+                // friendships survived the mechanic built to prevent them.
+                // Courtesy calls cannot outrun bloc politics.
+                float gravity = RivalGravity(state, relationship, lookup);
+                if (gravity > 0.01f)
+                {
+                    // 85, not 55: at the realistic gravity a committed bloc
+                    // produces (~0.45), a factor of 55 capped relations at 75 —
+                    // still comfortably a friendship, and the bot proved it by
+                    // befriending all fifteen anyway. The cap has to cross the
+                    // friendship line, or it decorates the thing it exists to
+                    // prevent.
+                    float ceiling = 100f - gravity * 85f;
+                    if (relationship.relations > ceiling)
+                        relationship.relations = Approach(relationship.relations, ceiling, 0.12f);
+                    if (relationship.trust > ceiling)
+                        relationship.trust = Approach(relationship.trust, ceiling, 0.08f);
+                    relationship.strategicAlignment = Clamp(relationship.strategicAlignment - gravity * 0.3f);
+                }
 
                 // What you learned of a partner's doctrine goes stale.
                 //
@@ -795,11 +1034,17 @@ namespace Brink.Core
                         relationship.doctrineFamiliarity
                         - (0.05f + relationship.doctrineFamiliarity * 0.004f));
 
-                // Threat perception tracks capability and posture.
+                // Threat perception tracks capability and posture — and the size
+                // of a state's alliance web. An army is a fact about them; a web
+                // of defence pacts is a fact about everyone else's room to move.
+                float anxietyA = state.FindTreaty(a.id, b.id) == null ? PactAnxiety(state, a.id) : 0f;
+                float anxietyB = state.FindTreaty(a.id, b.id) == null ? PactAnxiety(state, b.id) : 0f;
                 relationship.threatPerceptionOfA = Approach(relationship.threatPerceptionOfA,
-                    Clamp(a.pillars.military * 0.45f + (a.military.alertPosture ? 15f : 0f)), 0.1f);
+                    Clamp(a.pillars.military * 0.45f + (a.military.alertPosture ? 15f : 0f)
+                          + anxietyA * 14f), 0.1f);
                 relationship.threatPerceptionOfB = Approach(relationship.threatPerceptionOfB,
-                    Clamp(b.pillars.military * 0.45f + (b.military.alertPosture ? 15f : 0f)), 0.1f);
+                    Clamp(b.pillars.military * 0.45f + (b.military.alertPosture ? 15f : 0f)
+                          + anxietyB * 14f), 0.1f);
 
                 // Dependence follows live trade.
                 var link = state.FindTrade(a.id, b.id);
@@ -828,6 +1073,8 @@ namespace Brink.Core
 
                 // Historical memory fades but never fully disappears.
                 relationship.memoryWeight *= 0.985f;
+
+                if (relationship.sanctionsTruceMonths > 0) relationship.sanctionsTruceMonths--;
             }
 
             UpdateConfrontationEffects(state);

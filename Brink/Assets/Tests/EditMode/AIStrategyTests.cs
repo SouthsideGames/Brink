@@ -262,9 +262,9 @@ namespace Brink.Tests
             // runs covert networks at all. Exposure is left to the simulation —
             // setting `compromised` by hand would skip the code that writes the
             // public record, which is the thing the world actually reads.
-            float SecurityAfterDecade(bool operatorRunsNetworks)
+            float SecurityAfterDecade(int seed, bool operatorRunsNetworks)
             {
-                var state = World(9090);
+                var state = World(seed);
                 if (operatorRunsNetworks) GivePlayerNetworksEverywhere(state);
                 var turns = new TurnManager(state);
                 SimulationPipeline.Wire(turns, state);
@@ -282,8 +282,11 @@ namespace Brink.Tests
                 return total / counted;
             }
 
-            float careless = SecurityAfterDecade(true);
-            float careful = SecurityAfterDecade(false);
+            // Averaged over two seeds: in a world that fights its own wars, two
+            // decades diverging at the first exposure are different worlds, and
+            // one seed's fortunes can swamp a several-point real signal.
+            float careless = (SecurityAfterDecade(9090, true) + SecurityAfterDecade(2468, true)) / 2f;
+            float careful = (SecurityAfterDecade(9090, false) + SecurityAfterDecade(2468, false)) / 2f;
 
             Assert.Greater(careless, careful + 1f,
                 $"An operator who ran covert networks for a decade left the world's " +

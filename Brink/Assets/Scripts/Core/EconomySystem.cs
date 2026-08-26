@@ -19,6 +19,38 @@ namespace Brink.Core
         {
             foreach (var country in state.countries)
                 UpdateCountry(state, country);
+
+            TrackTreasuryTrend(state);
+        }
+
+        /// <summary>
+        /// The player's smoothed monthly treasury delta, measured at the same
+        /// point in the pipeline every month so the deltas are comparable.
+        ///
+        /// A readout, not a rule: nothing reads it but the briefing and the
+        /// attention list. It exists because the *real* consequences of deficit
+        /// spending arrive on a lag of years, and an operator on a phone is
+        /// entitled to hear "we spend more than we make" while it is still an
+        /// arithmetic fact rather than a collapsed market.
+        /// </summary>
+        static void TrackTreasuryTrend(GameState state)
+        {
+            var player = state.PlayerCountry;
+            if (player == null) return;
+
+            if (!state.treasuryTrendSeeded)
+            {
+                state.treasuryTrendSeeded = true;
+                state.lastMonthTreasury = player.resources.treasury;
+                return;
+            }
+
+            float delta = player.resources.treasury - state.lastMonthTreasury;
+            state.lastMonthTreasury = player.resources.treasury;
+
+            // ~5-month memory: quick enough to notice a new programme's bill,
+            // slow enough that one bad month is not a klaxon.
+            state.treasuryTrend = state.treasuryTrend * 0.8f + delta * 0.2f;
         }
 
         /// <summary>
@@ -406,33 +438,53 @@ namespace Brink.Core
             // can invest past its endowment only through capability.
             // Territory held is part of the endowment: an energy region you have
             // taken supplies you, and one taken from you does not (GDD §16).
+            // Sanctions move the target, never the value — the food rule, ported
+            // back to the two drifts it was copied from. The flat erosion here
+            // (−0.8/month, floorless) drained *authored energy superpowers* to
+            // literal zero under the hot world's standing sanction regimes:
+            // played as Russia (endowment 96), twenty sanctioned years ended at
+            // energy 0, living standards 0, approval 0 — a country that pumps
+            // its own oil starved of it by foreign paperwork. The eleventh
+            // instance of the value-versus-target family. The ceiling already
+            // loses its trade component under sanctions (`Supply` checks them),
+            // so the ×0.55 on what remains is disruption of domestic output —
+            // painful, and with a resting point a producer can live at.
             float energyCeiling = EnergyCeilingFor(state, country);
-            float energyDrift = sanctionPressure > 0.8f
-                ? -0.8f
-                : Math.Min(0.35f, (energyCeiling - country.resources.energy) * 0.02f);
+            float energyTarget = sanctionPressure > 0.8f ? energyCeiling * 0.55f : energyCeiling;
+            float energyDrift = Math.Max(-0.8f, Math.Min(0.35f,
+                (energyTarget - country.resources.energy) * 0.03f));
             country.resources.energy = Clamp(country.resources.energy + energyDrift, 0f, 100f);
 
             float materialsCeiling = MaterialsCeilingFor(state, country);
-            float materialsDrift = sanctionPressure > 1.2f
-                ? -0.7f
-                : Math.Min(0.25f, (materialsCeiling - country.resources.strategicMaterials) * 0.02f);
+            float materialsTarget = sanctionPressure > 1.2f ? materialsCeiling * 0.55f : materialsCeiling;
+            float materialsDrift = Math.Max(-0.7f, Math.Min(0.25f,
+                (materialsTarget - country.resources.strategicMaterials) * 0.03f));
             country.resources.strategicMaterials =
                 Clamp(country.resources.strategicMaterials + materialsDrift, 0f, 100f);
 
             // Food security moves the same way (GDD §10.1). Written once at world
             // creation and never touched again until this existed, so a siege,
             // an embargo or a lost breadbasket changed a number nobody ate from.
-            // A war on your own ground disrupts harvests and distribution; severe
-            // sanctions starve the imports. Both recover by drifting back to the
-            // ceiling once the pressure lifts — the recovery-path rule, both
-            // sides of it, since this runs for every country.
+            //
+            // **Pressure moves the target, never the value — for every source.**
+            // The first version drained flat rates (−0.25/month at war,
+            // −0.6/month under heavy sanctions), which is the one-way-value bug
+            // in a new costume: measured on seed 1212, a passive great power
+            // spends 237 of 240 months under sanctions, so its food ground from
+            // 90 to literal zero and the hunger terms pinned its unrest at the
+            // cap — caught by `NoSocialValueRunsAwayInEitherDirection`, the
+            // ninth instance of the family. Now a war depresses food toward 75%
+            // of the ceiling (harvests and distribution run badly; they do not
+            // stop) and heavy sanctions toward 50% (siege-level hardship, and a
+            // real resting point), with the same proportional drift bringing it
+            // home when the pressure lifts. Every level of hardship has
+            // somewhere to settle; only the causes decide where.
             float foodCeiling = FoodCeilingFor(state, country);
-            float foodDrift;
-            if (sanctionPressure > 1.0f) foodDrift = -0.6f;
-            else if (atWar) foodDrift = Math.Min(-0.25f,
-                (foodCeiling - country.resources.foodSecurity) * 0.02f);
-            else foodDrift = Math.Min(0.3f,
-                (foodCeiling - country.resources.foodSecurity) * 0.02f);
+            float foodTarget = foodCeiling;
+            if (atWar) foodTarget = Math.Min(foodTarget, foodCeiling * 0.75f);
+            if (sanctionPressure > 1.0f) foodTarget = Math.Min(foodTarget, foodCeiling * 0.5f);
+            float foodDrift = Math.Max(-0.6f, Math.Min(0.3f,
+                (foodTarget - country.resources.foodSecurity) * 0.03f));
             country.resources.foodSecurity =
                 Clamp(country.resources.foodSecurity + foodDrift, 0f, 100f);
 
@@ -541,6 +593,19 @@ namespace Brink.Core
             var target = state.FindCountry(targetId);
             var sender = state.FindCountry(senderId);
             if (target == null || sender == null) return false;
+
+            // A négotiated détente holds for both sides while it runs — one
+            // gate, actor-generic, so the promise binds the player exactly as
+            // it binds the AI. War voids it (ConfrontationSystem.BeginBy).
+            var relationship = state.FindRelationship(senderId, targetId);
+            if (relationship != null && relationship.sanctionsTruceMonths > 0)
+            {
+                if (senderId == state.playerCountryId)
+                    GameLog.Warn("ECONOMY",
+                        $"The détente with {target.displayName} holds for another "
+                        + $"{relationship.sanctionsTruceMonths} month(s).");
+                return false;
+            }
 
             state.sanctions.Add(new Sanction
             {
@@ -681,6 +746,106 @@ namespace Brink.Core
         }
 
         /// <summary>Advance sanction ages; called once per resolved month.</summary>
+        /// <summary>Months a negotiated détente holds against new sanctions.</summary>
+        public const int DetenteTruceMonths = 24;
+
+        /// <summary>
+        /// How willing a sender is to lift its measures when asked (spec 02 §4a).
+        ///
+        /// The trap this answers, in the code's own numbers: sanctions push a
+        /// pair's relations down 1.2/month while the automatic lapse needs
+        /// relations above 30 — a self-locking cycle with **no verb anywhere to
+        /// break it**. Measured on the world census: 40–60 standing AI-AI
+        /// regimes, and a pariah great power sanctioned 237 of 240 months with
+        /// no road back however it behaved. Willingness prices what actually
+        /// moves a sender: the fatigue of an old regime, the blowback it pays
+        /// itself, the warmth that survives, minus the threat it still sees.
+        /// </summary>
+        public static float ReliefWillingness(GameState state, string senderId, string targetId)
+        {
+            var sanction = state.FindSanction(senderId, targetId);
+            var relationship = state.FindRelationship(senderId, targetId);
+            if (sanction == null || relationship == null) return 0f;
+
+            float willingness = 12f
+                                + relationship.relations * 0.55f
+                                + relationship.trust * 0.30f
+                                + Math.Min(30f, sanction.monthsActive * 0.5f)   // regimes grow stale
+                                + SanctionBlowbackFor(state, senderId) * 8f     // their own cost
+                                + relationship.memoryWeight * 1.5f
+                                - relationship.ThreatPerceivedBy(senderId) * 0.45f;
+
+            if (state.IsAtWar(targetId)) willingness -= 20f;   // nobody relieves a belligerent
+            return willingness;
+        }
+
+        /// <summary>Ask a state to lift its measures against us and hold a détente.</summary>
+        public static bool SeekSanctionsRelief(GameState state, TurnManager turns, string senderId)
+        {
+            var sender = state.FindCountry(senderId);
+            if (sender == null || state.FindSanction(senderId, state.playerCountryId) == null) return false;
+            if (!turns.SpendCommandPoints(2, $"Seek sanctions relief from {sender.displayName}"))
+                return false;
+
+            bool lifted = SeekSanctionsReliefBy(state, state.playerCountryId, senderId);
+            if (lifted)
+            {
+                ProgressionSystem.RecordInitiative(state);
+                ProgressionSystem.AwardXP(state, 18, "Sanctions relief negotiated");
+            }
+            return lifted;
+        }
+
+        /// <summary>Relief sought by any sanctioned state. AI pariahs use the same door.</summary>
+        public static bool SeekSanctionsReliefBy(GameState state, string targetId, string senderId)
+        {
+            var sanction = state.FindSanction(senderId, targetId);
+            var relationship = state.FindRelationship(senderId, targetId);
+            var sender = state.FindCountry(senderId);
+            var target = state.FindCountry(targetId);
+            if (sanction == null || relationship == null || sender == null || target == null) return false;
+
+            float willingness = ReliefWillingness(state, senderId, targetId);
+            if (willingness < 50f)
+            {
+                relationship.AddMemory(state.date, "Rebuffed a request for sanctions relief", -0.4f);
+                if (targetId == state.playerCountryId)
+                {
+                    // The refusal says what would change it — the NO ASSESSMENT rule.
+                    string why = relationship.ThreatPerceivedBy(senderId) > 55f
+                        ? "They still regard us as a threat; posture and conduct are what move that."
+                        : state.IsAtWar(targetId)
+                            ? "Not while we are at war."
+                            : "The relationship is not warm enough yet to carry it.";
+                    state.AddNotification(NotificationClass.Advisory, "RELIEF REFUSED",
+                        $"{sender.displayName} keeps its measures in force. {why}",
+                        senderId, desk: ReportingDesk.Diplomacy);
+                }
+                GameLog.Info("ECONOMY", $"{senderId} refused sanctions relief to {targetId}.");
+                return false;
+            }
+
+            state.sanctions.Remove(sanction);
+            var link = state.FindTrade(senderId, targetId);
+            if (link != null) link.embargoed = false;
+
+            relationship.sanctionsTruceMonths = DetenteTruceMonths;
+            relationship.relations = Clamp(relationship.relations + 6f, 0f, 100f);
+            relationship.trust = Clamp(relationship.trust + 5f, 0f, 100f);
+            relationship.AddMemory(state.date, "Negotiated an end to sanctions", 1.5f);
+
+            bool playerInvolved = senderId == state.playerCountryId || targetId == state.playerCountryId;
+            state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
+                "SANCTIONS LIFTED BY NEGOTIATION",
+                $"{sender.displayName} lifts its measures against {target.displayName}. A détente "
+                + $"holds for {DetenteTruceMonths} months.",
+                targetId, desk: ReportingDesk.Diplomacy);
+            state.AddChronicle(ChronicleCategory.Diplomatic, targetId,
+                $"Negotiated an end to {sender.displayName}'s sanctions.", Publicity.Public);
+            GameLog.Info("ECONOMY", $"{senderId} lifted sanctions on {targetId} by negotiation.");
+            return true;
+        }
+
         public static void AgeSanctions(GameState state)
         {
             for (int i = state.sanctions.Count - 1; i >= 0; i--)

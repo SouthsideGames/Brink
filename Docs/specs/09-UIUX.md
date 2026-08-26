@@ -516,6 +516,25 @@ theme class, forcing a panel-scale recompute, re-measuring the columns and
 refreshing the active view — a size change therefore reflows every view
 immediately, not on the next month.
 
+### The panel scrolls; CLOSE and the title are pinned
+
+The panel used to be a plain VisualElement with `flex-shrink: 0`, no height cap
+and no scrolling — the tutorial-panel bug (§11), refiled under Settings. On a
+phone with large text everything past the fold was unreachable, and the *last*
+child was FULL RESET: a shipped game whose only new-game path sits below the
+fold of a box that cannot scroll has no new-game path. It was reported from a
+device as "we need to add a reset button" — the button existed, invisibly,
+which is its own kind of missing.
+
+Now the content lives in a hidden-scroller `ScrollView` capped at 55% of
+`PanelHeight` on short screens, 70% otherwise; the DISPLAY title sits above it
+and CLOSE below it, both pinned — CLOSE is the one control that must never
+leave the screen. The FULL RESET section sits **above** the reference prose,
+so on most screens it is visible without scrolling at all. FULL RESET remains
+two-step (FULL RESET → CONFIRM — ERASE EVERYTHING / CANCEL) because there is
+no undo. `MapAndLayoutTests.SettingsPanel_FullResetIsReachable` guards the
+scroller, its height cap, the pinned CLOSE, and the two-step confirm.
+
 ---
 
 ## 8. View catalogue

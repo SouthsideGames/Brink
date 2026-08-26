@@ -63,6 +63,15 @@ namespace Brink.Data
         /// <summary>Weighted memory pressure; positive is goodwill, negative is grievance.</summary>
         public float memoryWeight;
 
+        /// <summary>
+        /// Months remaining of a negotiated détente: neither side imposes new
+        /// sanctions on the other while it runs (spec 02 §4a). Opening a
+        /// confrontation between the pair voids it — a détente does not survive
+        /// a declaration of war. Zero on old saves is correct: no truce was
+        /// ever negotiated.
+        /// </summary>
+        public int sanctionsTruceMonths;
+
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
 

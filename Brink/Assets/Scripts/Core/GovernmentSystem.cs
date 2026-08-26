@@ -280,10 +280,18 @@ namespace Brink.Core
                 - Math.Max(0f, eco.unemployment - 6f) * 1.2f
                 - country.warExhaustion * 0.20f
                 - country.publicGrievance * 0.12f
-                // Hunger. Zero by construction in normal play (authored food
-                // sits well above 50), so this adds a deprivation regime
-                // without retuning the ordinary one — the `distress` idiom.
-                - Math.Max(0f, 50f - country.resources.foodSecurity) * 0.5f);
+                // Hunger — measured against the country's *own normal*, not an
+                // absolute line. An absolute threshold (the first version used
+                // 50) reads an authored dependency as a standing humanitarian
+                // crisis: Saudi Arabia is authored at food 18 and would carry
+                // permanent phantom deprivation from month one, which rippled
+                // through fifteen AI states and moved measured balance. A state
+                // authored food-poor has adapted; what starves people is food
+                // *falling below its own endowment* — which war, siege and
+                // sanctions now genuinely cause. Zero by construction at every
+                // authored baseline — the `distress` idiom, kept honest.
+                - Math.Max(0f, country.resources.foodEndowment
+                               - country.resources.foodSecurity - 5f) * 0.5f);
 
             // Deliberately slower to rise than to fall. Prosperity is felt as it
             // accumulates; a collapse is felt immediately.
@@ -304,9 +312,12 @@ namespace Brink.Core
                 + country.publicGrievance * 0.18f
                 // Hunger organises faster than the living-standards average it
                 // is part of — standards move over years, an empty shelf moves
-                // people this month. Zero above 40, so it exists only in a
-                // genuine shortage.
-                + Math.Max(0f, 40f - country.resources.foodSecurity) * 0.45f;
+                // people this month. Gap against the country's own endowment
+                // (see the standards term above for why not an absolute line),
+                // with a deeper grace: organisation needs a real drop, not a
+                // lean month.
+                + Math.Max(0f, country.resources.foodEndowment
+                               - country.resources.foodSecurity - 10f) * 0.45f;
 
             // National unity *damps* hardship; it does not cancel it.
             //

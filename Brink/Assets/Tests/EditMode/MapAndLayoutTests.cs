@@ -2,6 +2,7 @@ using Brink.Core;
 using Brink.Data;
 using Brink.UI;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -20,6 +21,54 @@ namespace Brink.Tests
         {
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 3131);
+        }
+
+        // ---------- the settings panel reaches its own bottom ----------
+
+        [Test]
+        public void SettingsPanel_FullResetIsReachable()
+        {
+            // The panel was a plain VisualElement with `flex-shrink: 0` and no
+            // height cap — the tutorial-panel bug refiled under Settings. On a
+            // phone with large text everything past the fold was unreachable,
+            // and the *last* thing in the panel was FULL RESET: a shipped game
+            // whose only new-game path sits below the fold of a box that cannot
+            // scroll has no new-game path. Reported from a device as "we need
+            // to add a reset button" — it existed, invisibly.
+            var panel = new DisplaySettingsPanel(() => { });
+            panel.Toggle();
+
+            var reader = panel.Root.Q<UnityEngine.UIElements.ScrollView>();
+            Assert.IsNotNull(reader,
+                "The settings content no longer scrolls — on a short screen, whatever " +
+                "does not fit is unreachable again.");
+            Assert.Greater(reader.style.maxHeight.value.value, 0f,
+                "The scroller has no height cap, so it will not scroll — an unbounded " +
+                "panel happily pushes itself below the fold.");
+
+            bool resetInReader = false, confirmVisible = false;
+            reader.Query<UnityEngine.UIElements.Button>().ForEach(button =>
+            {
+                if (button.text == "FULL RESET") resetInReader = true;
+                if (button.text != null && button.text.StartsWith("CONFIRM")) confirmVisible = true;
+            });
+            Assert.IsTrue(resetInReader, "FULL RESET is not in the settings panel at all.");
+            Assert.IsFalse(confirmVisible,
+                "The erase-everything confirmation is visible before anyone asked for a " +
+                "reset — the two-step guard on an irreversible action is gone.");
+
+            // CLOSE stays pinned outside the scroller: the one control that must
+            // never be below the fold.
+            bool closePinned = false;
+            foreach (var child in panel.Root.Children())
+            {
+                if (child == reader) continue;
+                child.Query<UnityEngine.UIElements.Button>().ForEach(button =>
+                {
+                    if (button.text == "CLOSE") closePinned = true;
+                });
+            }
+            Assert.IsTrue(closePinned, "CLOSE is inside the scroller and can leave the screen.");
         }
 
         [TearDown]

@@ -80,6 +80,18 @@ namespace Brink.Data
         /// <summary>0..100 ability to detect and roll up foreign networks.</summary>
         public float counterIntelligence = 35f;
 
+        /// <summary>
+        /// 0..20 lasting procedure learned from catching foreign networks — a
+        /// term in the baseline `counterIntelligence` reverts to, not a bump to
+        /// the value. Every bump to the value was being erased by the monthly
+        /// reversion within months, so a decade of caught operations measurably
+        /// taught the world nothing: the value-versus-target trap, in the one
+        /// system whose whole subject is learning. Decays on a decade scale —
+        /// procedures outlive the scare that wrote them. Zero on old saves is
+        /// correct: nothing was caught, nothing was learned.
+        /// </summary>
+        public float institutionalHardening;
+
         /// <summary>0..100 strength of active deception programs.</summary>
         public float deceptionStrength;
 

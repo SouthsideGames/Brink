@@ -351,8 +351,71 @@ namespace Brink.Core
             FileYearInReview(state, year);
             GameLog.Info("PROG", $"Annual evaluation {year}: {grade} ({score:F1}), +{points} SP.");
 
+            if (!state.tenureReviewed && state.date.MonthsSince(state.startDate) >= TenureMonths)
+                DeliverTenureReview(state);
+
             CaptureYearSnapshot(state, year + 1);
             return record;
+        }
+
+        /// <summary>Months of service before the career review. Forty years.</summary>
+        public const int TenureMonths = 480;
+
+        /// <summary>
+        /// The career arc (GDD §9 amendment, user decision). Reported from play:
+        /// an operator who reaches the top of the world runs out of reasons to
+        /// keep ending months — the game is open-ended by design, but open-ended
+        /// and *shapeless* are different things. At forty years of service the
+        /// record is formally closed and judged: every annual grade, every war
+        /// verdict, every treaty and instrument, rolled into one career
+        /// classification.
+        ///
+        /// **The world does not stop.** Nothing is disabled, no screen is forced,
+        /// and the month after the review is a month like any other — the review
+        /// is an arc, not an ending, per the same reasoning that keeps saves
+        /// alive through coups and secessions. An operator who wants a fresh
+        /// posting has FULL RESET; one who wants to see year sixty simply keeps
+        /// playing, with the review standing in the record.
+        /// </summary>
+        public static void DeliverTenureReview(GameState state)
+        {
+            var player = state.PlayerCountry;
+            if (player == null) return;
+            state.tenureReviewed = true;
+
+            float gradeSum = 0f;
+            foreach (var evaluation in state.evaluations) gradeSum += (int)evaluation.grade;
+            float career = state.evaluations.Count > 0 ? gradeSum / state.evaluations.Count : 0f;
+
+            // The same scale the annual grades use, applied to their average, so
+            // the career classification cannot disagree with the record it sums.
+            string classification =
+                career >= 4.5f ? "EXCEPTIONAL — a tenure that redrew the world" :
+                career >= 3.5f ? "DISTINGUISHED — consistently ahead of events" :
+                career >= 2.5f ? "CREDITABLE — the state is stronger for these years" :
+                career >= 1.5f ? "MIXED — years of drift among years of judgement" :
+                                 "CENSURED — the record speaks against this office";
+
+            int treaties = 0;
+            foreach (var treaty in state.treaties)
+                if (!treaty.broken && (treaty.countryA == player.id || treaty.countryB == player.id))
+                    treaties++;
+
+            string body =
+                $"Forty years at this terminal. The record is closed and reads as follows.\n" +
+                $"CAREER CLASSIFICATION: {classification}.\n" +
+                $"ANNUAL EVALUATIONS: {state.evaluations.Count}, averaging {career:F1} on the grade scale.\n" +
+                $"WARS: {player.warsWon} won, {player.warsLost} lost, {player.warsDrawn} drawn.\n" +
+                $"TREATIES IN FORCE: {treaties}. ADMINISTRATIONS SERVED: {state.administrationsServed}.\n" +
+                $"OPERATOR LEVEL {state.strategistLevel}, {state.strategistXP} XP.\n" +
+                "The post remains yours. History does not stop being made because " +
+                "it has been judged — and a new posting is always available through FULL RESET.";
+
+            state.AddNotification(NotificationClass.Priority, "TENURE REVIEW — FORTY YEARS OF SERVICE",
+                body, player.id, desk: ReportingDesk.Command);
+            state.AddChronicle(ChronicleCategory.System, player.id,
+                $"Tenure review at forty years: {classification}.");
+            GameLog.Info("PROG", $"Tenure review delivered: {classification} ({career:F2}).");
         }
 
         /// <summary>

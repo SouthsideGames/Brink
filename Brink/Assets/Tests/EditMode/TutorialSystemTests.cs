@@ -53,21 +53,26 @@ namespace Brink.Tests
         {
             Assert.IsTrue(state.tutorial.active);
             Assert.IsFalse(state.tutorial.completed);
-            Assert.AreEqual("BRIEFING", TutorialSystem.CurrentStep(state).id);
+
+            // YOUR_POST first, deliberately: a player who thinks they are the
+            // head of state reads the next election as the end of their game
+            // (GDD §5, the four-reports tranche).
+            Assert.AreEqual("YOUR_POST", TutorialSystem.CurrentStep(state).id);
         }
 
         [Test]
         public void ReadOnlySteps_AdvanceOnAcknowledgement()
         {
-            Assert.AreEqual("BRIEFING", TutorialSystem.CurrentStep(state).id);
+            Assert.AreEqual("YOUR_POST", TutorialSystem.CurrentStep(state).id);
             TutorialSystem.Evaluate(state);
-            Assert.AreEqual("COMMAND_POINTS", TutorialSystem.CurrentStep(state).id,
+            Assert.AreEqual("BRIEFING", TutorialSystem.CurrentStep(state).id,
                 "An informational step should advance when acknowledged.");
         }
 
         [Test]
         public void ActionSteps_WaitForTheOperatorToActuallyAct()
         {
+            TutorialSystem.Evaluate(state); // past YOUR_POST
             TutorialSystem.Evaluate(state); // past BRIEFING
             Assert.AreEqual("COMMAND_POINTS", TutorialSystem.CurrentStep(state).id);
 

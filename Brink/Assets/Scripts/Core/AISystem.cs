@@ -103,6 +103,7 @@ namespace Brink.Core
                 Act(state, ai, country, rng);
                 ManageOngoingConfrontation(state, ai, country, rng);
                 ConsiderStrategicInstruments(state, ai, country, rng);
+                ConsiderDetente(state, ai, country, rng);
             }
         }
 
@@ -277,7 +278,16 @@ namespace Brink.Core
                 if (TheatreSystem.IsOverstretched(state, other.id))
                     perceivedWeakness += TheatreSystem.TotalCommitment(state, other.id) * 9f;
 
-                if (perceivedWeakness > 8f && relationship.relations < 50f)
+                // A claim needs either an exploitable weakness or a genuine
+                // rivalry. The weakness-only gate meant two well-matched rivals
+                // could glare at each other for thirty years and never once
+                // collide — measured: 0–1 AI-vs-AI wars across three 30-year
+                // seeds, which is the whole world at peace with itself while
+                // sanctioning itself into depression. Peer rivals do fight; what
+                // they need is a reason, and coldness plus a resource prize is
+                // one.
+                bool deepRivalry = relationship.relations < 25f;
+                if ((perceivedWeakness > 8f || deepRivalry) && relationship.relations < 50f)
                 {
                     // Ambition is bounded by reach (GDD §16). A government does
                     // not press a claim it has no way to prosecute, so a weak
@@ -299,7 +309,8 @@ namespace Brink.Core
                         priority = (perceivedWeakness * 1.5f * (ai.profile.opportunism / 100f)
                                     * (0.6f + horizon * 0.8f)
                                     * (0.5f + 0.5f * confidenceFactor)
-                                    + (40f - relationship.relations) * 0.35f) // hostility invites pressure
+                                    + (40f - relationship.relations) * 0.35f // hostility invites pressure
+                                    + ResourcePrize(state, country, other.id) * 22f) // their ground answers our shortfall
                                    * reach
                     });
                 }
@@ -393,12 +404,23 @@ namespace Brink.Core
                         priority = (coerce - hesitation) * 0.8f
                     });
 
+                // ×1.6, and steep on purpose: counter-play answers a pattern the
+                // government has *observed*, and strong evidence must outbid
+                // speculative ambition or the anti-memorisation design dies
+                // quietly — when the world ran hotter, inflated war and rivalry
+                // priorities pushed HardenSecurity out of the top-N cut and a
+                // decade of caught operations hardened the world by 0.15 points.
+                // Steeper scaling, NOT a flat floor: a floor was tried first and
+                // hardened everyone against ordinary background suspicion, which
+                // raised the no-subversion baseline five points and *shrank* the
+                // player-specific signal it was meant to protect. The boost has
+                // to live where the evidence is.
                 if (subvert - hesitation > 20f)
                     candidates.Add(new AIObjective
                     {
                         type = AIObjectiveType.HardenSecurity,
                         targetId = other.id,
-                        priority = (subvert - hesitation) * 0.9f
+                        priority = (subvert - hesitation) * 1.6f
                     });
 
                 // Someone building a bloc is answered by building one back, which
@@ -418,9 +440,21 @@ namespace Brink.Core
         /// political capital, like everything else a government does — a state
         /// cannot armour itself for free any more than the player can.
         /// </summary>
+        /// <summary>
+        /// Treasury a government keeps in hand before discretionary counter-play
+        /// spending. Without it, threat-inflated hardening spent every state to
+        /// zero the month money appeared — measured on seed 90210, the whole
+        /// world ran at ~50 treasury for a decade, so nothing treasury-gated
+        /// (research funding, procurement, strategic instruments at 120) could
+        /// ever fire again. A government does not spend its last coin on this
+        /// month's fear; the reserve is what keeps the long game fundable while
+        /// the short one is being played.
+        /// </summary>
+        const float DiscretionaryReserve = 250f;
+
         static bool HardenDefenses(GameState state, AIState ai, CountryState country, Random rng)
         {
-            if (country.resources.treasury < 160f) return false;
+            if (country.resources.treasury < 160f + DiscretionaryReserve) return false;
             if (ai.politicalCapital < 1.2f) return false;
 
             country.resources.treasury -= 160f;
@@ -453,7 +487,7 @@ namespace Brink.Core
         /// </summary>
         static bool InsulateEconomy(GameState state, AIState ai, CountryState country, Random rng)
         {
-            if (country.resources.treasury < 200f) return false;
+            if (country.resources.treasury < 200f + DiscretionaryReserve) return false;
             country.resources.treasury -= 200f;
 
             // Spread trade rather than deepen it: a thinner link to the state we
@@ -479,7 +513,7 @@ namespace Brink.Core
         /// </summary>
         static bool HardenSecurity(GameState state, AIState ai, CountryState country, Random rng)
         {
-            if (country.resources.treasury < 90f) return false;
+            if (country.resources.treasury < 90f + DiscretionaryReserve) return false;
             if (ai.politicalCapital < 0.8f) return false;
 
             country.resources.treasury -= 90f;
@@ -1022,7 +1056,21 @@ namespace Brink.Core
         static bool SeekTreaty(GameState state, CountryState country, string targetId)
         {
             if (string.IsNullOrEmpty(targetId)) return false;
-            if (state.FindTreaty(country.id, targetId) != null) return false;
+
+            // A standing treaty is not a finished relationship: a warm, trusted
+            // partner gets asked for the next commitment up — which is how AI
+            // blocs solidify into defence pacts, and how alliance obligations
+            // get real signatories instead of a world of friendship letters.
+            var existing = state.FindTreaty(country.id, targetId);
+            if (existing != null)
+            {
+                if (existing.broken || existing.Has(TreatyCommitment.MutualDefense)) return false;
+                var r = state.FindRelationship(country.id, targetId);
+                if (r == null || r.relations < 68f || r.trust < 55f) return false;
+
+                return DiplomacySystem.DeepenTreatyBy(state, country.id, targetId,
+                    new List<TreatyCommitment> { TreatyCommitment.MutualDefense });
+            }
 
             // A more capable diplomacy tailors the offer instead of always
             // tabling the same two commitments (GDD §24.3). Reasoning quality,
@@ -1042,27 +1090,75 @@ namespace Brink.Core
         }
 
         /// <summary>Press a claim — opening a confrontation when conditions justify it.</summary>
+        /// <summary>
+        /// How much of a claimant's authored shortfall the target's ground would
+        /// answer, 0..1. Energy- or materials-poor beside a state holding the
+        /// matching region type is the classic cause of war this world had all
+        /// the pieces for and never used: the regions existed, the shortfalls
+        /// existed, and no AI ever connected them.
+        /// </summary>
+        static float ResourcePrize(GameState state, CountryState claimant, string targetId)
+        {
+            bool wantsEnergy = claimant.resources.energy < 40f;
+            bool wantsMaterials = claimant.resources.strategicMaterials < 40f;
+            if (!wantsEnergy && !wantsMaterials) return 0f;
+
+            float prize = 0f;
+            foreach (var location in state.locations)
+            {
+                if (location.ownerId != targetId) continue;
+                if (wantsEnergy && location.type == LocationType.EnergyRegion) prize = Math.Max(prize, 1f);
+                if (wantsMaterials && location.type == LocationType.MaterialsRegion) prize = Math.Max(prize, 0.8f);
+            }
+            return prize;
+        }
+
         static bool AssertClaim(GameState state, AIState ai, CountryState country, string targetId, Random rng)
         {
             if (string.IsNullOrEmpty(targetId)) return false;
-            if (state.ActiveConfrontationFor(country.id) != null) return false;
-            if (state.ActiveConfrontationFor(targetId) != null) return false;
 
-            // Domestic weakness argues against foreign adventures.
-            if (country.stability < 40f || country.warExhaustion > 55f) return false;
+            // Fronts are priced, not forbidden — the same gate the player is
+            // held to. The old check here was a flat "not while anyone involved
+            // is busy", which had two consequences the measurements finally made
+            // visible (0–1 AI-vs-AI wars in thirty years, three seeds):
+            // - a government could never open a second front however strong, and
+            // - **a target already fighting elsewhere could not be attacked at
+            //   all** — while forty lines up, `IsOverstretched` was adding that
+            //   exact opening to this exact objective's weight. The opportunity
+            //   was computed every month and structurally unreachable: the
+            //   written-but-never-read family, wearing a guard clause.
+            if (!ConfrontationSystem.CanOpenAnother(state, country.id, out _)) return false;
 
-            float commitChance = 0.09f + ai.profile.aggression / 300f + ai.profile.opportunism / 400f;
+            // Domestic weakness argues against foreign adventures. 35, not 40:
+            // in a world of standing sanctions regimes much of the roster lives
+            // in the high 30s, and the old bar quietly pacified all of it.
+            if (country.stability < 35f || country.warExhaustion > 55f) return false;
+
+            float commitChance = 0.14f + ai.profile.aggression / 300f + ai.profile.opportunism / 400f;
+
+            // A neighbour's oilfield or mine is a reason, not a backdrop — a
+            // state short of what the target's ground supplies commits more
+            // readily. This is the world-as-structure work reaching the AI's
+            // willingness to actually pull the trigger.
+            commitChance += ResourcePrize(state, country, targetId) * 0.10f;
+
             if (state.difficulty == Difficulty.Ruthless) commitChance += 0.05f;
             if (rng.NextDouble() >= commitChance) return false;
 
-            // Prefer a concrete objective the AI can actually hold.
+            // Prefer a concrete objective the AI can actually hold — and prefer
+            // the ground that answers a shortfall over the first on the list.
             string locationId = null;
             foreach (var location in state.locations)
             {
                 if (location.ownerId != targetId) continue;
                 if (location.type == LocationType.Capital) continue; // never a realistic demand
-                locationId = location.id;
-                break;
+
+                bool prize =
+                    (country.resources.energy < 40f && location.type == LocationType.EnergyRegion)
+                    || (country.resources.strategicMaterials < 40f
+                        && location.type == LocationType.MaterialsRegion);
+                if (prize) { locationId = location.id; break; }
+                if (locationId == null) locationId = location.id;
             }
 
             var objective = locationId != null
@@ -1086,6 +1182,20 @@ namespace Brink.Core
             bool isInitiator = confrontation.initiatorId == country.id;
             float ourExhaustion = isInitiator ? confrontation.initiatorWarExhaustion : confrontation.defenderWarExhaustion;
             float ourMomentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
+
+            // A state at war moves money to the military, if its politics will
+            // carry it. This lives here, not in the objective budget: when the
+            // world ran hotter, war objectives crowded `RebuildForces` out of
+            // the top-N cut and **no foreign government ever surged again** —
+            // the test that owns the claim failed within one census. Managing a
+            // war a government is already in is not a strategic choice competing
+            // for attention; it is what the war ministry does with the war it
+            // has. Same reasoning that moved routine restocking to the desk.
+            if (!country.military.warFooting
+                && confrontation.escalation >= EscalationState.LimitedConflict
+                && AcquisitionSystem.CanDeclareWarFooting(state, country.id, out _)
+                && rng.NextDouble() < 0.30)
+                AcquisitionSystem.SetWarFootingBy(state, country.id, true);
 
             // Seek terms when the war has stopped paying for itself.
             bool wantsOut = ourExhaustion > 45f + ai.profile.patience * 0.3f
@@ -1306,8 +1416,18 @@ namespace Brink.Core
 
             // 2. Prepare, when a rival has come to look permanent. Preparation is
             //    expensive and slow, so only a sustained threat justifies it.
+            //
+            //    The affordability check derives from the price the programme
+            //    actually charges (×1.5 for a government's prudence), because a
+            //    hand-written `400` here was **more than triple the real 120**
+            //    — a second, stricter definition of affordability, which is a
+            //    repeal of the first. It cost nothing while the world was rich;
+            //    the moment the world started fighting its own wars and
+            //    treasuries ran near zero, nine states with decade-long
+            //    rivalries and matured capabilities could never once fund a
+            //    programme the endgame system itself would have sold them.
             if (LongStandingRival(ai) == null) return;
-            if (country.resources.treasury < 400f) return;
+            if (country.resources.treasury < EndgameSystem.PreparationTreasuryCost * 1.5f) return;
 
             // Patience is what lets a government fund something for years.
             float commitment = 0.18f + ai.profile.patience / 400f + PlanningHorizon(state.difficulty) * 0.2f;
@@ -1315,6 +1435,36 @@ namespace Brink.Core
 
             var chosen = PreferredInstrument(state, country);
             if (chosen.HasValue) EndgameSystem.PrepareBy(state, country.id, chosen.Value);
+        }
+
+        /// <summary>
+        /// A sanctioned government asks its way out (spec 02 §4a). Runs outside
+        /// the objective budget, like war management — living under sanctions
+        /// is a condition, not a strategic choice competing for attention, and
+        /// the census showed 40–60 standing AI-AI regimes precisely because no
+        /// AI ever had a verb to end one. Costs Political Capital, so relief is
+        /// something a government spends standing on, exactly as the player
+        /// spends Command Points on it.
+        /// </summary>
+        static void ConsiderDetente(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (EconomySystem.SanctionPressureOn(state, country.id) <= 0.5f) return;
+            if (rng.NextDouble() >= 0.12) return;
+
+            // Ask the heaviest sender that is plausibly persuadable.
+            string bestSender = null;
+            float bestWeight = 0f;
+            foreach (var sanction in state.sanctions)
+            {
+                if (sanction.targetId != country.id) continue;
+                if (EconomySystem.ReliefWillingness(state, sanction.senderId, country.id) < 45f) continue;
+                if (sanction.Weight > bestWeight) { bestWeight = sanction.Weight; bestSender = sanction.senderId; }
+            }
+            if (bestSender == null) return;
+            if (!GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1.5f, "Seek sanctions relief"))
+                return;
+
+            EconomySystem.SeekSanctionsReliefBy(state, country.id, bestSender);
         }
 
         /// <summary>

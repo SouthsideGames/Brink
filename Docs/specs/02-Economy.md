@@ -201,6 +201,29 @@ entirely*, those two states were locked in terminal hostility for the rest of
 the save — one AI decision permanently removed a diplomatic partner from the
 board.
 
+## 4a. Sanctions détente (GDD §20 amendment)
+
+The trap, in the code's own numbers: sanctions push a pair's relations down
+1.2/month while the automatic lapse (§4) requires relations above 30 — a
+self-locking cycle with **no verb anywhere to break it**. Measured: a pariah
+great power sanctioned 237 of 240 months regardless of conduct, and 40–60
+standing AI-AI regimes grinding the world.
+
+`EconomySystem.SeekSanctionsRelief / …By` (player 2 CP; AI 1.5 PC via
+`ConsiderDetente`, run outside the objective budget like war management —
+living under sanctions is a condition, not a strategy). `ReliefWillingness`
+prices what actually moves a sender: regime fatigue (+0.5/month, capped 30),
+the sender's **own blowback** (×8 — their cost is the lever), surviving warmth
+and trust, minus the threat they still perceive (×0.45) and −20 while the
+target is at war. Threshold 50; refusal tells the player which lever is short.
+
+Success lifts the sanction, un-embargoes the link, warms the pair, and sets a
+**détente**: `Relationship.sanctionsTruceMonths = 24`, during which
+`ImposeSanctionsBy` refuses new measures between the pair — one gate, binding
+the player exactly as it binds the AI. Opening a confrontation between the
+pair voids the truce (`ConfrontationSystem.BeginBy`). Zero on old saves is
+correct; no migration. Covered by `DiplomacySecondActTests`.
+
 ## 5. Resources: manpower, energy, materials, food
 
 These live on `NationalResources` and are updated from the economy tick because
@@ -232,13 +255,24 @@ save, and heavy losses drove the figure negative and displayed it as such.
 energyCeiling  = clamp(energyEndowment
                        + CAP_ENERGY effectiveness × 30
                        + TerritorySystem.EnergySwing, 0, 100)
-energyDrift    = sanctionPressure > 0.8 ? −0.8
-                                        : min(0.35, (energyCeiling − energy) × 0.02)
+energyTarget   = sanctionPressure > 0.8 ? energyCeiling × 0.55 : energyCeiling
+energyDrift    = clamp((energyTarget − energy) × 0.03, −0.8, +0.35)
 
-materialsCeiling = clamp(materialsEndowment, 0, 100)
-materialsDrift   = sanctionPressure > 1.2 ? −0.7
-                                          : min(0.25, (ceiling − materials) × 0.02)
+materialsCeiling = clamp(materialsEndowment + ..., 0, 100)
+materialsTarget  = sanctionPressure > 1.2 ? materialsCeiling × 0.55 : materialsCeiling
+materialsDrift   = clamp((materialsTarget − materials) × 0.03, −0.7, +0.25)
 ```
+
+**Sanctions move the target, never the value** — the food rule (above), ported
+back to the two drifts it was copied from. The original flat erosion (−0.8,
+floorless) drained *authored energy superpowers* to literal zero under the hot
+world's standing sanction regimes: played as Russia (endowment 96), twenty
+sanctioned years ended at energy 0, living standards 0, approval 0 — a country
+that pumps its own oil starved of it by foreign paperwork. Eleventh instance of
+the value-versus-target family, found by playing. The ceiling already loses its
+trade component under sanctions (`Supply` checks them), so the ×0.55 on what
+remains is disruption of domestic output — painful, with a resting point a
+producer can live at (sanctioned Russia now settles near 54).
 
 **The ceiling is the point.** A flat +0.35/month with no ceiling took every
 authored energy-poor state to 100 within about nineteen years, so the deliberate
@@ -264,9 +298,10 @@ last authored stat with no monthly behaviour at all. Now:
 
 ```
 foodCeiling = clamp(foodEndowment + TradeSystem.Supply(country, Food), 0, 100)
-foodDrift   = sanctionPressure > 1.0 ? −0.6
-            : atWar                  ? min(−0.25, (foodCeiling − food) × 0.02)
-                                     : min(+0.30, (foodCeiling − food) × 0.02)
+foodTarget  = foodCeiling
+              × (atWar ? 0.75 : 1)              // harvests run badly, not never
+              × (sanctionPressure > 1.0 ? 0.5 : 1, whichever is lower)
+foodDrift   = clamp((foodTarget − food) × 0.03, −0.60, +0.30)
 ```
 
 - **`TradeFocus.Food`** (appended to the enum so stored ordinals survive) makes
@@ -274,13 +309,25 @@ foodDrift   = sanctionPressure > 1.0 ? −0.6
   partner's own `foodSecurity`, `CostToPartner` prices selling what they are
   short of, and food imports press on the **Agriculture** sector through
   `ImportDisplacement`, completing that switch.
-- **War always erodes it** (at least −0.25/month) — harvests and distribution do
-  not run through a shooting conflict — and it recovers by drifting home once
-  the pressure lifts, for every country, which is the recovery-path rule.
-- **What hunger does** lives in the social layer (spec 05 §4): living-standards
-  target −0.5/point below 50, unrest pressure +0.45/point below 40. Both zero by
-  construction in normal play — the `distress` idiom, a crisis regime added
-  without retuning the ordinary one. Hunger also still scales `RecoverManpower`.
+- **Pressure moves the target, never the value — for every source.** War
+  depresses food toward 75% of the ceiling, heavy sanctions toward 50%
+  (siege-level hardship with a real resting point), and the same proportional
+  drift brings it home when the pressure lifts, for every country. The first
+  version drained flat rates instead; measured on seed 1212, a passive great
+  power spends 237 of 240 months under sanctions, so its food ground from 90 to
+  literal zero and unrest pinned at the cap (the one-way-value family, ninth
+  instance; caught by `NoSocialValueRunsAwayInEitherDirection`). Every level of
+  hardship has somewhere to settle; only the causes decide where.
+- **What hunger does** lives in the social layer (spec 05 §4), measured as a
+  **drop below the country's own endowment**, never an absolute line:
+  living-standards target −0.5/point of `(foodEndowment − food − 5)`, unrest
+  pressure +0.45/point of `(foodEndowment − food − 10)`, both floored at zero.
+  An absolute threshold read Saudi Arabia's authored food 18 as a standing
+  humanitarian crisis and rippled phantom unrest through the measured world; a
+  state authored food-poor has adapted, and what starves people is collapse
+  relative to its own normal — which war, siege and sanctions genuinely cause.
+  Zero by construction at every authored baseline. Hunger also still scales
+  `RecoverManpower`.
 - **The starting world authors three food dependencies** (the first authored
   *focused* links anywhere — the Ramstein lesson): AUS→JPN, USA→KOR, IND→SAU.
   Saudi Arabia's food 18 against an energy 100 is the designed mirror of the
@@ -302,6 +349,24 @@ Capability compounds slowly into real capacity (GDD §11) — it unlocks the abi
 to build, it does not hand over the result. Territory is applied as a slow drift
 so seizing a works does not teleport its output home the month it falls.
 `MilitarySystem`'s procurement adds a third input (spec 01 §2).
+
+## 5a. The treasury trend readout
+
+`GameState.treasuryTrend` — the player's smoothed month-over-month treasury
+delta (EWMA ×0.8/0.2, ~5-month memory), written at a fixed point in
+`EconomySystem.MonthlyUpdate` so deltas are comparable, lazily seeded
+(`treasuryTrendSeeded`; old saves start reading a month after load). **A
+readout, not a rule** — only the briefing and `AttentionSystem` consume it.
+
+Playtested into existence: deficit spending punishes on a lag of *years*
+(debt → confidence → markets → living standards), and a 20-year test campaign
+bankrupted a healthy country to −4,905 without the game ever saying "we spend
+more than we make." The briefing's TREASURY row now carries `(−82/MO)`, grows a
+plain-language warning when the trend runs below −4 with under 36 months of
+runway, and `AttentionSystem` raises Information at that threshold — Decision
+once the account is dry and still sinking. Deliberately quiet otherwise: a
+surplus, a trivial drift, or a nine-decade runway raises nothing (the
+cried-wolf rule, applied on day one). Covered in `EconomySystemTests`.
 
 ## 6. National Market Index (GDD §20.1)
 

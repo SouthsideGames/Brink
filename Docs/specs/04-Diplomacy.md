@@ -361,6 +361,57 @@ diplomacy, and three of its effects are purely relational:
   Familiarity is permanent and aids operations against a *former* partner, so
   every exercise is a bet that the relationship lasts.
 
+## 5a. Treaty deepening (GDD §15 amendment)
+
+`DiplomacySystem.DeepenTreaty / DeepenTreatyBy` — add commitments to a standing
+treaty. Found by playing: with no amendment path, the first signature per pair
+was the last, so a friendship treaty **permanently** locked that relationship
+out of ever becoming an alliance (a campaign ended with fourteen treaties and
+one defence pact — the pact possible only where signing had been deliberately
+refused for years).
+
+- Judged on the **added** burden by `TreatyWillingness` — the rival-tie and
+  encirclement penalties included, so deepening into a pact answers to bloc
+  politics like any pact — plus a history bonus (+8, +0.1/month of treaty age
+  capped at +12): a partner with history signs what a stranger would not.
+- Success appends commitments to the existing treaty (never a second treaty,
+  never duplicates), warms the pair, and goes on the record; refusal costs a
+  small memory and, for the player, says what would change it.
+- **The AI deepens too** (`SeekTreaty`): a warm, trusted treaty partner
+  (relations > 68, trust > 55) gets asked for `MutualDefense` — which is how AI
+  blocs solidify and alliance obligations get real signatories.
+- UI: the DIPLOMACY panel's treaty area, which previously went silent once a
+  treaty existed, now offers ADD-commitment buttons with the willingness gate
+  explained on refusal. Covered by `DiplomacySecondActTests`.
+
+## 9a. Bloc politics (GDD §24 amendment)
+
+Measured with a befriend-everyone bot: warm relations with **all fifteen** other
+states in twenty years, unresisted, on every seed — a diplomatic playthrough
+solved itself and ended in boredom (reported from play in exactly those terms).
+Three mechanisms fix it, all in `DiplomacySystem`:
+
+- **`RivalGravity(a,b)`** (0..1) — strongest case over any third state `c` of
+  one side being *deeply aligned* with `c` (alignment > 68) while the other is
+  in *genuine enmity* with `c` (relations < 22). Applied monthly as a
+  **ceiling**: relations and trust approach `100 − gravity × 85`, alignment
+  erodes ×0.3. A ceiling, not a drag — a drag loses to outreach spam
+  (+3/month beats any fraction). `Outreach` itself is scaled by
+  `1 − gravity × 0.8`: envoys are received as warmly as bloc politics allows.
+  Thresholds are deliberately severe and load-bearing: a gentler calibration
+  (60/30, drag-only) froze the entire planet — gravity spread coldness, which
+  fed more gravity, until 93 of 120 pairs were hostile.
+- **Treaty acceptance** uses the same thresholds (−40 × rivalTie): *we will not
+  pact with our enemy's ally* — so the door and the room agree.
+- **`PactAnxiety`** (0..1, defence pacts past the fourth /6) — an alliance web
+  reads as encirclement to everyone outside it: +14 on their threat-perception
+  target monthly, −25 × anxiety on the next treaty's acceptance. Hegemony is a
+  held position, not a finish line.
+
+Post-fix measurement: a bot doing nothing but diplomacy for twenty years tops
+out at **11–12 friendships with at least one state going hostile**. Covered by
+`WorldHeatTests`.
+
 ## 10. Extension points
 
 - **Treaty expiry / renegotiation** — treaties are permanent until broken. Note

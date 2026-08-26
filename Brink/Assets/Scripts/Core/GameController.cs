@@ -453,6 +453,23 @@ namespace Brink.Core
             return ok;
         }
 
+        public bool DeepenTreaty(string partnerId, Data.TreatyCommitment commitment)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool ok = DiplomacySystem.DeepenTreaty(State, Turns, partnerId,
+                new System.Collections.Generic.List<Data.TreatyCommitment> { commitment });
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool SeekSanctionsRelief(string senderId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool ok = EconomySystem.SeekSanctionsRelief(State, Turns, senderId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool ProposeTreaty(string targetId, System.Collections.Generic.List<Data.TreatyCommitment> commitments)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;

@@ -308,6 +308,24 @@ out.
 `DiscountedCost` never reduces a cost below 1 CP (or 0 for actions explicitly
 allowed to become free, currently only diplomatic outreach).
 
+## 4a. The career arc (GDD §9 amendment, user decision)
+
+At **480 months of service** the next year-end delivers the **tenure review**
+(`ProgressionSystem.DeliverTenureReview`), exactly once per save
+(`GameState.tenureReviewed`): a career classification derived from the average
+annual grade — the same scale the yearly evaluations use, so the summary cannot
+disagree with the record it sums — plus the war record, treaties in force,
+administrations served, and operator level. Priority traffic on the Command
+desk, plus a chronicle entry.
+
+**The world does not stop.** Nothing is disabled and the month after the review
+is a month like any other. The design question it answers came from play: an
+operator who reaches the top runs out of shape, and the chosen answer was an
+arc, not an ending — a turn limit was explicitly declined. FULL RESET remains
+the new-posting path. Old saves get the review at their next year-end past the
+line; `tenureReviewed` false on load is correct, not missing data. Covered by
+`WorldHeatTests.TenureReviewArrivesAtFortyYears`.
+
 ## 5. Extension points
 
 - **More nodes per tree.** Validation shows a decade unlocks well under half the

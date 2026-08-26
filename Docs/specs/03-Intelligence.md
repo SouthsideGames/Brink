@@ -225,6 +225,30 @@ network of rolling it up.
 - `AsciiCountryMap.LevelFor` gates how much of a country's interior renders at
   all (spec 09 §10)
 
+## 7a. Institutional hardening (GDD §24.2 amendment)
+
+`CounterIntelState.institutionalHardening` (0..20): lasting procedure learned
+from catching foreign networks. **A term in the baseline `counterIntelligence`
+reverts to, never a bump to the value** — the monthly reversion (−0.8 toward
+`25 + intelligence pillar × 0.45`) erased every bump the catches wrote, so a
+decade of caught operations measurably hardened the world by 0.15 points and
+the anti-memorisation promise (spec 06 §7b) failed silently the moment the
+hotter world crowded the AI's `HardenSecurity` policy out of its action budget.
+The value-versus-target trap, tenth instance, in the one system whose whole
+subject is learning.
+
+Both catch paths write it (+4 per roll-up, capped 20) alongside their immediate
++6 to the value; it decays ×0.995/month — procedures outlive the scare that
+wrote them, fading on a decade scale. Zero on old saves is correct (nothing
+caught, nothing learned); no migration. `HardenSecurity`'s priority is also
+×1.6 on observed subversion — steep scaling, deliberately **not** a flat floor,
+which was tried and hardened everyone against ordinary background suspicion,
+raising the no-subversion baseline five points and shrinking the exact signal
+it existed to protect. Covered by
+`AIStrategyTests.RepeatedlyBeingCaughtSubvertingHardensTheWorldAgainstUs`
+(two-seed averaged — in a world that fights its own wars, single-seed decade
+comparisons measure the seed's luck).
+
 ## 8. Extension points
 
 - **Named assets** — GDD §14 allows high-value sources to become named characters.

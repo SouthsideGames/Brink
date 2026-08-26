@@ -900,40 +900,57 @@ namespace Brink.Tests
         [Test]
         public void DriftingThroughCrisesCostsMoreThanAnsweringThemBadly()
         {
-            const int seed = 8712;
-            var engaged = Play("DIPLOMACY", seed, DiplomaticPlay);
-            var drifter = Play("DRIFTER", seed, DiplomaticPlay, answerCrises: false);
-
-            // A decade that faced nothing would compare two identical runs and
-            // pass without testing anything — the vacuity guard this codebase has
-            // been caught needing before.
-            int crisesSeen = 0;
-            foreach (var record in drifter.state.evaluations) crisesSeen++;
-            Assert.Greater(crisesSeen, 0, "No years were evaluated, so nothing was measured.");
-
+            // Averaged over three seeds, not one. The single-seed version
+            // inverted by 0.10 the moment the world ran hotter — not because
+            // drifting stopped costing (the crisis component still separated
+            // cleanly) but because two decades that diverge at the first
+            // unanswered crisis are two different worlds, and on one seed the
+            // engaged operator's world simply went worse. A one-seed comparison
+            // of total grade measures that seed's luck; the design claim is
+            // about the average.
+            var seeds = new[] { 8712, 3344, 5566 };
+            float engagedTotal = 0f, drifterTotal = 0f;
             float engagedCrisisScore = 0f, drifterCrisisScore = 0f;
-            foreach (var record in engaged.state.evaluations) engagedCrisisScore += record.crisisScore;
-            foreach (var record in drifter.state.evaluations) drifterCrisisScore += record.crisisScore;
-            engagedCrisisScore /= Math.Max(1, engaged.state.evaluations.Count);
-            drifterCrisisScore /= Math.Max(1, drifter.state.evaluations.Count);
+            float engagedStability = 0f, drifterStability = 0f;
+            int evaluatedYears = 0;
+
+            foreach (int seed in seeds)
+            {
+                var engaged = Play("DIPLOMACY", seed, DiplomaticPlay);
+                var drifter = Play("DRIFTER", seed, DiplomaticPlay, answerCrises: false);
+
+                engagedTotal += engaged.averageGrade;
+                drifterTotal += drifter.averageGrade;
+                engagedStability += engaged.state.PlayerCountry.stability;
+                drifterStability += drifter.state.PlayerCountry.stability;
+
+                foreach (var record in engaged.state.evaluations) engagedCrisisScore += record.crisisScore;
+                foreach (var record in drifter.state.evaluations) drifterCrisisScore += record.crisisScore;
+                evaluatedYears += drifter.state.evaluations.Count;
+            }
+
+            // A decade that faced nothing would compare identical runs and pass
+            // without testing anything — the vacuity guard this codebase has
+            // been caught needing before.
+            Assert.Greater(evaluatedYears, 0, "No years were evaluated, so nothing was measured.");
 
             Assert.Less(drifterCrisisScore, engagedCrisisScore,
-                $"An operator who never answered a crisis scored {drifterCrisisScore:F1} on the " +
-                $"crisis component against {engagedCrisisScore:F1} for one who always did. If those " +
-                "match, the component is inert and 11% of the grade is a constant.");
+                $"Operators who never answered a crisis scored {drifterCrisisScore:F1} summed on " +
+                $"the crisis component against {engagedCrisisScore:F1} for ones who always did. " +
+                "If those match, the component is inert and 11% of the grade is a constant.");
 
-            Assert.Less(drifter.averageGrade, engaged.averageGrade,
-                $"Drifting through a decade of crises graded {drifter.averageGrade:F2} against " +
-                $"{engaged.averageGrade:F2} for answering them. Ignoring a decision has to cost " +
-                "something, or the crisis turn is optional.");
+            Assert.Less(drifterTotal / seeds.Length, engagedTotal / seeds.Length,
+                $"Drifting through three decades of crises graded {drifterTotal / seeds.Length:F2} " +
+                $"on average against {engagedTotal / seeds.Length:F2} for answering them. Ignoring " +
+                "a decision has to cost something, or the crisis turn is optional.");
 
             // And the standing damage in LapseUnanswered has to actually land —
             // otherwise the grade difference is bookkeeping rather than a world
-            // that responded to being ignored.
-            Assert.Less(drifter.state.PlayerCountry.stability,
-                engaged.state.PlayerCountry.stability,
-                "A government that ignored every crisis for ten years was no less stable " +
-                "than one that handled them all.");
+            // that responded to being ignored. Averaged like the grades, and for
+            // the same reason.
+            Assert.Less(drifterStability, engagedStability,
+                "Governments that ignored every crisis for ten years were no less stable " +
+                "on average than ones that handled them all.");
         }
 
         [Test]

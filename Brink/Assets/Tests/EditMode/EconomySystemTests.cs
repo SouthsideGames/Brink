@@ -32,6 +32,68 @@ namespace Brink.Tests
             GameLog.Clear();
         }
 
+        // ---------- the treasury trend warning ----------
+
+        [Test]
+        public void TreasuryTrend_TracksASustainedDeficit()
+        {
+            // Force a drain larger than the world's own noise and check the
+            // readout reports roughly that number, in the right direction.
+            for (int month = 0; month < 12; month++)
+            {
+                state.PlayerCountry.resources.treasury -= 300f;
+                turns.EndMonth();
+            }
+
+            Assert.IsTrue(state.treasuryTrendSeeded, "the trend was never seeded");
+            Assert.Less(state.treasuryTrend, -100f,
+                $"A forced 300/month drain reads as {state.treasuryTrend:F0}/month. Deficit " +
+                "spending punishes on a lag of years, so this readout is the only timely " +
+                "warning the operator gets — a test campaign bankrupted a healthy country " +
+                "to −4,905 without one.");
+        }
+
+        [Test]
+        public void ASinkingTreasuryRaisesAttention()
+        {
+            state.treasuryTrendSeeded = true;
+            state.treasuryTrend = -80f;
+            state.PlayerCountry.resources.treasury = 900f; // ~11 months of runway
+
+            bool warned = false;
+            foreach (var item in AttentionSystem.Collect(state))
+                if (item.viewId == "ECONOMY" && item.summary.Contains("exceeds income")) warned = true;
+            Assert.IsTrue(warned, "eleven months of runway at the current burn raised nothing");
+
+            state.PlayerCountry.resources.treasury = -500f;
+            bool urgent = false;
+            foreach (var item in AttentionSystem.Collect(state))
+                if (item.viewId == "ECONOMY" && item.level == AttentionLevel.Decision) urgent = true;
+            Assert.IsTrue(urgent, "an account already dry and sinking is not flagged as a decision");
+        }
+
+        [Test]
+        public void AHealthyAccountStaysQuiet()
+        {
+            // A warning that cries wolf is a warning nobody reads — the
+            // telemetry ratchet detector lesson, applied here on day one.
+            state.treasuryTrendSeeded = true;
+            state.treasuryTrend = 12f;
+            state.PlayerCountry.resources.treasury = 800f;
+
+            foreach (var item in AttentionSystem.Collect(state))
+                Assert.IsFalse(item.viewId == "ECONOMY" && item.summary.Contains("income"),
+                    "a growing treasury triggered the deficit warning");
+
+            // And a deficit with years of runway is information the briefing
+            // line already carries — not an attention item.
+            state.treasuryTrend = -4.5f;
+            state.PlayerCountry.resources.treasury = 5000f; // ~1100 months of runway
+            foreach (var item in AttentionSystem.Collect(state))
+                Assert.IsFalse(item.viewId == "ECONOMY" && item.summary.Contains("exceeds income"),
+                    "a nine-decade runway is being escalated as if it were a crisis");
+        }
+
         [Test]
         public void Factory_SeedsEconomiesSectorsAndTrade()
         {
