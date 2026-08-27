@@ -407,6 +407,15 @@ namespace Brink.Data
         }
 
         /// <summary>Every unresolved confrontation this country is party to.</summary>
+        /// <summary>An unresolved confrontation by id, or null.</summary>
+        public Confrontation FindConfrontation(string confrontationId)
+        {
+            if (string.IsNullOrEmpty(confrontationId)) return null;
+            for (int i = 0; i < confrontations.Count; i++)
+                if (confrontations[i].id == confrontationId) return confrontations[i];
+            return null;
+        }
+
         public List<Confrontation> ActiveConfrontationsFor(string countryId)
         {
             var active = new List<Confrontation>();

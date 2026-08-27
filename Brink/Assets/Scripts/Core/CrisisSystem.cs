@@ -118,7 +118,7 @@ namespace Brink.Core
                 // An alliance call left unanswered is a repudiation. Saying
                 // nothing to a partner who asked for help *is* an answer.
                 if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
-                    AllianceSystem.ApplyPlayerDecision(state, honored: false);
+                    AllianceSystem.ApplyPlayerDecision(state, honored: false, crisis.contextId);
 
                 // Terms left unanswered are terms refused.
                 if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
@@ -161,7 +161,7 @@ namespace Brink.Core
 
             // Alliance obligations carry consequences far beyond their deltas.
             if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
-                AllianceSystem.ApplyPlayerDecision(state, honored: optionIndex == 0);
+                AllianceSystem.ApplyPlayerDecision(state, honored: optionIndex == 0, crisis.contextId);
 
             // Offered terms: option 0 accepts, option 1 refuses.
             if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
