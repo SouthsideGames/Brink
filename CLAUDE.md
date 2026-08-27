@@ -1807,6 +1807,99 @@ three had passed for a long time:
         only one that grades below passive (2.18 vs 2.29) — consistent with "never
         a conquest checklist", but confirm it is the intended reading.
 
+- [x] **The mandate, and two dead systems brought to life (2026-08-27).**
+      - **`MandateSystem` — what a posting is for** (spec 22, GDD §25 amendment).
+        The game had annual grades, a forty-year tenure review and five
+        instruments, and nothing that said what the operator was there to do; the
+        playtest had to invent its own definition of winning. Every posting now
+        opens with a mandate — three or four claims about the world drawn from
+        its spec 08 character and vulnerability, **never foreign ground** — and
+        gets a FULFILLED / HELD / FAILED verdict at ten years. The save continues.
+        Sixteen authored in `MandateCatalog`; the expansion roster derives one
+        from its traits. STRATEGIST shows it; `MandateTests` guards it.
+      - **No AI state ever held an instrument capability.**
+        `TechnologySystem.ConsiderAiResearch` existed (6%/month, national
+        priority only, no prerequisite walk) and the pre-fix treasury starved it,
+        so the world used an instrument against the player in 4 of 556 measured
+        decades. `TechnologySystem.BeginResearchBy` + `AISystem.ConsiderResearch`
+        build toward the strongest pillar's instrument, walking prerequisites. A
+        prepared *severe* instrument may now also be used **in a war it is
+        winning** against an enemy at ≤35 relations, not only from desperation —
+        `CanExecuteBy` requires an active confrontation, so a peaceful player is
+        never a target. The "FOREIGN CAPABILITY" wire is gated on a ≥35
+        penetration network: announcing every foreign completion broke the fog
+        rule and added 83 items a decade.
+      - **The AI never assembled a coalition.** `RequestCoalition` was
+        player-only (spec 06 §7). `DiplomacySystem.RequestCoalitionBy` +
+        `AISystem.ConsiderCoalition`, reached once a war is a war. Coalitions
+        went from 12 of 556 decades to a routine feature of every world.
+      - `WorldInvariantTests` gained the playtest's measured gaps as assertions:
+        coalitions form, wars are events (pinned at the measured **92
+        confrontation-months per unattended decade — an open balance item**),
+        delegation is not routinely fatal; the instrument-against-the-player
+        check is `Inconclusive` until it fires, by design.
+      - The coverage audit's "15 of 16 countries have no national traits and AI
+        personality is rolled per save" is **stale**: all 25 profiles carry
+        authored traits and personalities (±8 jitter). What postings lacked was
+        a purpose, which is what the mandate is.
+
+- [x] **Audio audit (2026-08-27, spec 23).** The audio layer was complete and
+      **never driven**: outside `GameBootstrap` and the debug view, nothing in
+      the game called `AudioDirector` — a player heard the ambience loop and
+      nothing else. Also: the mixer exposed **no parameters**, so every
+      preference `SetFloat` failed silently and no volume/mute did anything; no
+      screen set a preference; seven of twenty sounds had no clip; the music
+      fade-out faded source A unconditionally. Now: `AudioCues` (pure, tested)
+      maps world → music / alert; the shell calls `Play`/`SetContext` on view
+      change and `Play(EndMonth)` + `AudioDirector.Sync(state)` after End Month;
+      the mixer exposes all five parameters and `Apply` reports whether they
+      took, falling back to per-source levels; the DSP panel has an AUDIO
+      section; every sound is mapped and `AudioSystemTests` refuses a gap.
+      **Rule:** a new cue is a `SfxId`, a library entry *and* a call site — the
+      first two without the third is how this layer went silent.
+
+- [x] **"Played it as a person" pass (2026-08-27).** A narrated decade from the
+      operator's chair (`C:\Temp\brink-harness`, `BRINK_NARRATE=1`) — 1,088
+      terminal items, of which ~70% were noise — and ten fixes from it:
+      - **Wire editor.** `WorldWire.Watches(state, id)` (network ≥ 20 penetration,
+        defence/intel treaty, or live confrontation) gates foreign cabinet changes,
+        foreign operations and third-party sanctions; foreign cabinet *setbacks*
+        (265 a decade, the single largest item) no longer notify at all; the
+        monthly standing-directive line is gone; `MONTH START` is ARCHIVE.
+        1,088 → ~550 items a decade for a diplomatic posting.
+      - **Things explain themselves.** Sanctions on us say why (their view of us,
+        read off the relationship); treaties list their commitments; the annual
+        evaluation names what carried and what held back the year, and says so
+        when the treasury is in the red.
+      - **Cold open.** `AISystem.TreatyReadiness` ramps AI treaty-signing from 15%
+        to 100% over 36 months — eleven treaties used to be signed in month one.
+      - **Grades.** S ≥ 88, A ≥ 76 (were 82 / 72); a first year of answering two
+        crises graded S.
+      - **War appetite.** `WarRecoveryMonths = 18` of peace after any war of a
+        government's own; base commit chance 0.14 → 0.10; governments seek terms at
+        exhaustion 35 (was 45) and after two years without momentum;
+        `SettlementTruceMonths` 12 → 24. Passive USA: 92 → ~40
+        confrontation-months a decade.
+      - **The record closes on screen.** `TerminalShellController.ShowRecordClosedIfDue`
+        puts the mandate verdict and the tenure review in the briefing overlay,
+        ahead of the briefing.
+      - **Crises.** `MonthlyCrisisChance` 0.08 → 0.10 and four more definitions
+        with foreign consequences (`ALLY_REQUESTS_ARMS`, `OFFICER_ARRESTED_ABROAD`,
+        `DISASTER_ABROAD`, `ULTIMATUM`). Note the catalogue was already 31 entries
+        with `OpenConfrontation` / `ImposeSanction` / `ForeignUnrest` effects —
+        the coverage doc's "no crisis can touch a foreign state" was stale.
+      - **Faces.** `AISystem.TemperamentOf` renders the authored personality as a
+        reputation line on the dossier (HAWKISH, CAUTIOUS, OPPORTUNISTIC …).
+        (The chronicle was already seeded by `HistoryCatalog`; that gap was also
+        stale.)
+      - **Phone chrome.** SAVE TO / LOAD FROM slots 1–3 in the DSP panel; a
+        `YOUR_MANDATE` tutorial step.
+      - **Sound.** War verdicts, the mandate verdict and the annual evaluation now
+        fire their cues from `AudioDirector.Sync`.
+      - Also: foreign capability acquisitions and AI programme starts are no
+        longer chronicled (the thirty-year growth cap), and `MandateSystem.Assign`
+        runs after `HistoryCatalog.Seed` so the record reads forward in time.
+
 **Not yet verified by a test run** — the environment this was written in has no
 Unity and no C# compiler at all, so nothing above has been compiled or executed.
 Run `bash Tools/run-suite.sh` before trusting any of it, and re-run

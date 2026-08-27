@@ -88,9 +88,9 @@ namespace Brink.Tests
         /// </summary>
         static PlaythroughResult Play(string playstyle, int seed,
             Action<GameState, TurnManager, PlaythroughResult> monthlyDecisions,
-            bool answerCrises)
+            bool answerCrises, string posting = WorldFactory.PlayerCountryId)
         {
-            var state = WorldFactory.CreateDebugWorld(seed);
+            var state = WorldFactory.CreateWorld(seed, posting);
             state.difficulty = Difficulty.Challenging;
             var turns = BuildSimulation(state);
             var result = new PlaythroughResult { playstyle = playstyle, state = state };
@@ -303,6 +303,17 @@ namespace Brink.Tests
             if (ConfrontationSystem.OpponentWouldAccept(state, confrontation))
             {
                 if (ConfrontationSystem.ProposeSettlement(state, confrontation)) result.decisionsTaken++;
+                return;
+            }
+
+            // The world now builds coalitions against a belligerent (AI
+            // `ConsiderCoalition`, 2026-08). A military operator answers in kind
+            // with the verb it has always had.
+            if (confrontation.escalation >= EscalationState.LimitedConflict
+                && state.FindCoalitionLedBy(confrontation.id, state.playerCountryId) == null
+                && state.commandPoints.current >= DiplomacySystem.CoalitionRequestCost)
+            {
+                if (DiplomacySystem.RequestCoalition(state, turns) != null) result.decisionsTaken++;
                 return;
             }
 
@@ -1064,6 +1075,33 @@ namespace Brink.Tests
             foreach (var network in state.networks)
                 if (network.ownerId != state.playerCountryId) aiNetworks++;
             Assert.Greater(aiNetworks, 0, "AI states never pursued their own intelligence objectives.");
+        }
+
+        /// <summary>
+        /// The player can be posted to any authored nation (Phase 11), so every
+        /// posting needs at least one way to play a decade to a C. The 2026-08
+        /// sixteen-posting harness found Russia at 1.6–2.3 under everything but
+        /// economy and diplomacy — bankrupt from constant war — and this is the
+        /// assertion that would have said so. Two styles per posting keeps the
+        /// runtime near a minute; add a third if a posting needs it.
+        /// </summary>
+        [Test]
+        public void EveryPosting_HasAPlaystyleThatReachesC()
+        {
+            var failing = new List<string>();
+            foreach (string posting in WorldFactory.RosterFor(WorldSize.Standard))
+            {
+                float best = 0f;
+                best = Math.Max(best, Play("ECONOMY", 7, EconomicPlay, true, posting).averageGrade);
+                if (best < (int)EvaluationGrade.C)
+                    best = Math.Max(best, Play("DIPLOMACY", 7, DiplomaticPlay, true, posting).averageGrade);
+                if (best < (int)EvaluationGrade.C) failing.Add($"{posting} ({best:F1})");
+            }
+
+            Assert.IsEmpty(failing,
+                "These postings cannot reach a C under either an economic or a diplomatic "
+                + $"decade: {string.Join(", ", failing)}. An authored country nobody can play "
+                + "well is a bug in the country bible, not in balance.");
         }
 
         [Test]

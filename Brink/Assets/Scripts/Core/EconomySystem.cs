@@ -666,11 +666,27 @@ namespace Brink.Core
                 link.embargoed = true;
 
             bool playerInvolved = senderId == state.playerCountryId || targetId == state.playerCountryId;
-            state.AddNotification(
-                playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
-                targetId == state.playerCountryId ? "SANCTIONS IMPOSED ON US" : "SANCTIONS IMPOSED",
-                $"{sender.displayName}: {Phrase.Of(severity)} measures against {target.displayName}.", targetId,
-                desk: ReportingDesk.Economy);
+
+            // Say why (2026-08): "coercive measures against United States"
+            // arrived with no reason and no way to ask. The sender's own view
+            // of us is on the relationship; read it back in plain language.
+            string why = "";
+            if (targetId == state.playerCountryId)
+            {
+                var view = state.FindRelationship(senderId, targetId);
+                if (state.FindSanction(targetId, senderId) != null) why = " A reply to our own measures.";
+                else if (view != null && view.ThreatPerceivedBy(senderId) > 55f) why = " It cites the threat our posture presents.";
+                else if (view != null && view.relations < 30f) why = " Relations have been poor for some time; this is the next step.";
+                else if (state.ActiveConfrontationFor(senderId)?.Involves(targetId) == true) why = " Part of the confrontation between us.";
+                else why = " No public justification was offered.";
+            }
+
+            if (playerInvolved || WorldWire.Watches(state, senderId) || WorldWire.Watches(state, targetId))
+                state.AddNotification(
+                    playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
+                    targetId == state.playerCountryId ? "SANCTIONS IMPOSED ON US" : "SANCTIONS IMPOSED",
+                    $"{sender.displayName}: {Phrase.Of(severity)} measures against {target.displayName}.{why}", targetId,
+                    desk: ReportingDesk.Economy);
             // Coercion winds a confrontation up even though nobody fires (GDD §18.1).
             ConfrontationSystem.AddPressure(state, senderId, targetId, 6f);
 

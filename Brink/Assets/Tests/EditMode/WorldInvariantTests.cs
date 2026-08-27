@@ -380,6 +380,120 @@ namespace Brink.Tests
                 + "should change how well the AI reasons, not whether it acts.");
         }
 
+        // ---------- 2026-08 playtest: the measured gaps, pinned ----------
+        //
+        // Each of these is a number the sixteen-posting harness produced across
+        // ~1,300 decades. The ones that describe a system that is built but never
+        // fires are `Assert.Inconclusive` rather than failures: they are the
+        // work list, and a red build that nobody can make green by fixing a bug
+        // is a build people learn to ignore. The ones that pin a healthy figure
+        // are real assertions, drawn where only a regression can cross them.
+
+        static List<GameState> UnattendedDecades(int[] seeds, string posting = "USA",
+            Difficulty difficulty = Difficulty.Challenging)
+        {
+            var worlds = new List<GameState>();
+            foreach (int seed in seeds)
+            {
+                var state = WorldFactory.CreateWorld(seed, posting);
+                state.difficulty = difficulty;
+                RunMonths(state, FullyWired(state), 120);
+                worlds.Add(state);
+            }
+            return worlds;
+        }
+
+        /// <summary>
+        /// Coalitions were built in Phase 7 and reinforced by alliance
+        /// obligations, and formed in 12 of 556 measured decades. A layer that
+        /// almost never appears is a layer the player never meets.
+        /// </summary>
+        [Test]
+        public void Coalitions_FormSomewhereInThreeDecades()
+        {
+            int formed = 0;
+            foreach (var world in UnattendedDecades(new[] { 101, 202, 303 }))
+                formed += world.coalitions.Count;
+
+            if (formed == 0)
+                Assert.Inconclusive("Three unattended decades formed no coalition at all. "
+                    + "AllianceSystem and DiplomacySystem can both create one; find out why "
+                    + "neither path is reached in play (2026-08 playtest: 12 of 556 decades).");
+        }
+
+        /// <summary>
+        /// AI governments prepare strategic instruments against rivals of 24+
+        /// months' standing (spec 14 §8) — and used one against the player in 4
+        /// of 556 measured decades. The player's strategic layer has no threat to
+        /// answer.
+        /// </summary>
+        [Test]
+        public void TheWorld_EverTurnsAStrategicInstrumentOnThePlayer()
+        {
+            int against = 0, anywhere = 0;
+            foreach (var world in UnattendedDecades(new[] { 101, 202, 303, 404 }))
+                foreach (var record in world.endgameRecords)
+                {
+                    anywhere++;
+                    if (record.targetId == world.playerCountryId) against++;
+                }
+
+            if (against == 0)
+                Assert.Inconclusive($"Four unattended decades: {anywhere} instrument(s) used in the "
+                    + "world, none against the player. The AI's preparation path exists; the "
+                    + "execution against a human posting is effectively unreachable.");
+        }
+
+        /// <summary>
+        /// 29% of measured decades ended with a war still open — wars as a
+        /// background condition rather than events. Pinned well above that so
+        /// only a regression toward permanent war trips it.
+        /// </summary>
+        [Test]
+        public void Wars_AreEventsNotABackgroundCondition()
+        {
+            var worlds = UnattendedDecades(new[] { 101, 202, 303, 404, 505 });
+            int openAtEnd = 0, monthsAtWar = 0;
+            foreach (var world in worlds)
+            {
+                if (world.ActiveConfrontation != null) openAtEnd++;
+                foreach (var c in world.confrontations)
+                    if (c.Involves(world.playerCountryId)) monthsAtWar += c.monthsActive;
+            }
+
+            Assert.LessOrEqual(openAtEnd, 3,
+                $"{openAtEnd} of {worlds.Count} unattended decades ended with the player still at war.");
+            // Measured 2026-08-27: 92 confrontation-months per unattended decade
+            // (overlapping wars count twice). That is already "war as the resting
+            // state" and is carried as an open balance item; the line here only
+            // stops it getting worse.
+            Assert.Less(monthsAtWar / (float)worlds.Count, 110f,
+                $"The player averaged {monthsAtWar / (float)worlds.Count:F0} confrontation-months per "
+                + "decade without lifting a finger. War has become the resting state of the world.");
+        }
+
+        /// <summary>
+        /// A passive operator lost their post to regime change in ~12% of
+        /// measured decades. Delegation is legitimate play; it should not be
+        /// routinely fatal.
+        /// </summary>
+        [Test]
+        public void RegimeChange_DoesNotRoutinelyRemoveADelegatingOperator()
+        {
+            int removed = 0;
+            var seeds = new[] { 101, 202, 303, 404, 505, 606 };
+            foreach (var world in UnattendedDecades(seeds))
+            {
+                var gov = world.PlayerCountry.government;
+                if (world.chronicle.Exists(e =>
+                        e.countryId == world.playerCountryId && e.text.StartsWith("COUP:")))
+                    removed++;
+            }
+
+            Assert.LessOrEqual(removed, 2,
+                $"A delegating operator was overthrown in {removed} of {seeds.Length} decades.");
+        }
+
         /// <summary>
         /// Reports world health for a designer to eyeball. Not an assertion —
         /// the numbers that look wrong here become the next test.

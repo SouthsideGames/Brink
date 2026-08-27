@@ -28,6 +28,12 @@ namespace Brink.Audio
         int next;
         AudioLibrary library;
 
+        // Preference level applied on top of the entry's authored volume when
+        // the mixer is not driving levels (see AudioDirector.ApplySettings).
+        float level = 1f;
+
+        public void SetLevel(float value) => level = Mathf.Clamp01(value);
+
         public void Initialize(AudioLibrary configuration)
         {
             library = configuration;
@@ -64,7 +70,8 @@ namespace Brink.Audio
             var source = Claim();
             source.outputAudioMixerGroup = entry.isUi ? library.uiGroup : library.sfxGroup;
             source.clip = entry.clip;
-            source.volume = entry.volume;
+            source.volume = entry.volume * level;
+            if (source.volume <= 0f) return;
             source.Play();
 
             // Some good candidates are authored as loops — the terminal alarm

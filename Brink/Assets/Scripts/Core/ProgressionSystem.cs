@@ -347,6 +347,24 @@ namespace Brink.Core
                 summary = BuildSummary(grade, wasAtWar, pillarDelta, gdpGrowth, state)
             };
 
+            // Say *why* (2026-08): the components were computed and shown as
+            // numbers, and the summary said "Economy flat" and nothing else.
+            // Name the strongest and weakest, in the operator's language.
+            var named = new (string name, float score)[]
+            {
+                ("national trajectory", trajectory), ("the economy", economy), ("stability at home", stability),
+                ("the country's position abroad", position), ("crisis handling", crisis),
+                ("initiative shown", initiative), ("value for money spent", efficiency)
+            };
+            var best = named[0]; var worst = named[0];
+            foreach (var component in named)
+            {
+                if (component.score > best.score) best = component;
+                if (component.score < worst.score) worst = component;
+            }
+            record.summary += $" Carried by {best.name} ({best.score:F0}); held back by {worst.name} ({worst.score:F0}).";
+            if (SolvencyPenalty(player) > 0f) record.summary += " The treasury is in the red, and it shows.";
+
             state.evaluations.Add(record);
             state.skillPoints += points;
 
@@ -512,8 +530,12 @@ namespace Brink.Core
         /// </summary>
         public static EvaluationGrade GradeFor(float score)
         {
-            if (score >= 82f) return EvaluationGrade.S;
-            if (score >= 72f) return EvaluationGrade.A;
+            // S and A moved up (2026-08): a first year of answering two crises
+            // and signing what was offered graded S. The top bands are for years
+            // that were actually exceptional; B is still where a well-delegated
+            // year lands (spec 12 §3).
+            if (score >= 88f) return EvaluationGrade.S;
+            if (score >= 76f) return EvaluationGrade.A;
             if (score >= 60f) return EvaluationGrade.B;
             if (score >= 48f) return EvaluationGrade.C;
             if (score >= 38f) return EvaluationGrade.D;

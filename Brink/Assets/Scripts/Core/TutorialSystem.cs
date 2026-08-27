@@ -144,6 +144,26 @@ namespace Brink.Core
                     isSatisfied = s => true // satisfied by acknowledgement
                 },
 
+                // What the posting is *for* (2026-08, spec 22). Before the
+                // mandate existed the orientation ended with "the world does not
+                // wait for you" and never said what the operator was there to do.
+                new TutorialStep
+                {
+                    id = "YOUR_MANDATE",
+                    title = "YOUR MANDATE",
+                    targetViewId = "STRATEGIST",
+                    body =
+                        "You arrived with a brief. It is on the STRATEGIST panel under MANDATE: " +
+                        "three or four things the government expects to be true about this " +
+                        "country in ten years. None of them asks you to take anything from " +
+                        "anyone; all of them ask you to leave the state stronger than you found it.\n\n" +
+                        "At ten years the record is reviewed and a verdict delivered — FULFILLED, " +
+                        "HELD or FAILED. The posting continues either way. The annual grade says " +
+                        "how a year went; the mandate says whether the years added up.",
+                    instruction = "Read the mandate on STRATEGIST.",
+                    isSatisfied = s => s.mandate != null
+                },
+
                 new TutorialStep
                 {
                     id = "BRIEFING",

@@ -119,18 +119,28 @@ namespace Brink.Audio
         /// channel, so the mixer graph does the work and a future effect on the
         /// master bus behaves correctly.
         /// </summary>
-        public static void Apply(AudioMixer mixer)
+        public static bool Apply(AudioMixer mixer)
         {
-            if (mixer == null) return;
+            if (mixer == null) return false;
             Load();
 
+            // `SetFloat` returns false for a parameter the mixer does not expose.
+            // The shipped mixer exposed none (2026-08 audit), so every call here
+            // failed silently and no preference reached the ear. The result is
+            // reported so the director can fall back to scaling the sources.
             float gate = muted ? 0f : 1f;
-            mixer.SetFloat(MasterParam, ToDecibels(master * gate));
-            mixer.SetFloat(MusicParam, ToDecibels(music));
-            mixer.SetFloat(SfxParam, ToDecibels(sfx));
-            mixer.SetFloat(UiParam, ToDecibels(sfx));      // UI rides the SFX slider
-            mixer.SetFloat(AmbienceParam, ToDecibels(ambience));
+            bool ok = true;
+            ok &= mixer.SetFloat(MasterParam, ToDecibels(master * gate));
+            ok &= mixer.SetFloat(MusicParam, ToDecibels(music));
+            ok &= mixer.SetFloat(SfxParam, ToDecibels(sfx));
+            ok &= mixer.SetFloat(UiParam, ToDecibels(sfx));      // UI rides the SFX slider
+            ok &= mixer.SetFloat(AmbienceParam, ToDecibels(ambience));
+            return ok;
         }
+
+        /// <summary>Every parameter the preferences drive. A mixer must expose all of them.</summary>
+        public static readonly string[] MixerParameters =
+            { MasterParam, MusicParam, SfxParam, UiParam, AmbienceParam };
 
         // ---------- persistence ----------
 

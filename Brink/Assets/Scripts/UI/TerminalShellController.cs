@@ -68,7 +68,16 @@ namespace Brink.UI
             if (endMonth != null)
                 endMonth.clicked += () =>
                 {
-                    if (!GameController.Instance.EndMonth()) return;
+                    if (!GameController.Instance.EndMonth())
+                    {
+                        Brink.Audio.AudioDirector.Play(Brink.Audio.SfxId.CommandRejected);
+                        return;
+                    }
+                    Brink.Audio.AudioDirector.Play(Brink.Audio.SfxId.EndMonth);
+                    // The month's traffic and the world's temperature, as sound
+                    // (2026-08 audio audit: nothing in the game drove the audio
+                    // system before this — every cue existed and none was called).
+                    Brink.Audio.AudioDirector.Sync(GameController.Instance.State);
 
                     // **Refresh before showing the briefing.** `EndMonth` does not
                     // raise `StateReplaced`, and the log handler only touches the
@@ -78,7 +87,7 @@ namespace Brink.UI
                     // happened to tap a nav button, which reads as the game not
                     // having resolved the turn.
                     RefreshAll();
-                    ShowMonthlyBriefing();
+                    if (!ShowRecordClosedIfDue()) ShowMonthlyBriefing();
                 };
 
             // Display preferences ship in every build — unlike the debug console.
@@ -203,12 +212,18 @@ namespace Brink.UI
         void SelectView(string id)
         {
             if (GameController.Instance.AwaitingAssessment) return;
+            bool changed = activeView == null || activeView.Id != id;
             foreach (var view in views)
             {
                 bool isTarget = view.Id == id;
                 view.SetVisible(isTarget);
                 if (isTarget) activeView = view;
                 navButtons[view.Id].EnableInClassList("nav-button-active", isTarget);
+            }
+            if (changed)
+            {
+                Brink.Audio.AudioDirector.Play(Brink.Audio.SfxId.PanelOpen);
+                Brink.Audio.AudioDirector.SetContext(Brink.Audio.AudioCues.ContextFor(id));
             }
         }
 
@@ -222,6 +237,11 @@ namespace Brink.UI
 
             assessmentScreen.Root.style.display = awaiting ? DisplayStyle.Flex : DisplayStyle.None;
             navRail.style.display = awaiting ? DisplayStyle.None : DisplayStyle.Flex;
+
+            // The assessment is the main menu, musically; a running game sounds
+            // like the world it is in.
+            if (awaiting) Brink.Audio.AudioDirector.SetMusic(Brink.Audio.MusicState.MainMenu);
+            else Brink.Audio.AudioDirector.Sync(GameController.Instance.State, silentAlerts: true);
 
             // **Orientation has nothing to say during the assessment.**
             //
@@ -475,6 +495,82 @@ namespace Brink.UI
             // full width ran a fifth of every long line off the screen.
             ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns);
 
+            overlay.style.display = DisplayStyle.Flex;
+        }
+
+        // ---------- the record closes (2026-08) ----------
+
+        string lastVerdictShownFor = "";
+        bool tenureShown;
+
+        /// <summary>
+        /// The ten-year mandate verdict and the forty-year tenure review are
+        /// moments, not traffic. They arrived as a FLASH in the feed; now they
+        /// take the screen, in the same overlay as the briefing, and the
+        /// briefing waits its turn behind them.
+        /// </summary>
+        bool ShowRecordClosedIfDue()
+        {
+            var gc = GameController.Instance;
+            if (!gc.IsRunning) return false;
+            var state = gc.State;
+
+            if (state.mandateRecord != null && lastVerdictShownFor != state.mandate?.title)
+            {
+                lastVerdictShownFor = state.mandate?.title ?? "";
+                string headline = state.mandateRecord.verdict.ToString().ToUpperInvariant();
+                ShowRecordClosed($"MANDATE REVIEW — {headline}",
+                    (state.mandate?.title ?? "").ToUpperInvariant(),
+                    state.mandateRecord.summary,
+                    "The posting continues. The record is closed.");
+                return true;
+            }
+
+            if (state.tenureReviewed && !tenureShown)
+            {
+                tenureShown = true;
+                Brink.Data.Notification review = null;
+                for (int i = state.notifications.Count - 1; i >= 0; i--)
+                    if (state.notifications[i].title.StartsWith("TENURE")) { review = state.notifications[i]; break; }
+                ShowRecordClosed("TENURE REVIEW", "FORTY YEARS AT THIS TERMINAL",
+                    review?.body ?? "The record is closed.", "");
+                return true;
+            }
+            return false;
+        }
+
+        void ShowRecordClosed(string heading, string subheading, string bodyText, string footer)
+        {
+            var overlay = root.Q<VisualElement>("rollover-overlay");
+            var body = root.Q<ScrollView>("rollover-body");
+            var actions = root.Q<VisualElement>("rollover-actions");
+            var title = root.Q<Label>("rollover-title");
+            if (overlay == null || body == null || actions == null) return;
+
+            body.Clear();
+            actions.Clear();
+            if (title != null) title.text = heading;
+
+            void Line(string text, string ussClass = "terminal-text")
+            {
+                var label = new Label(text);
+                label.AddToClassList("terminal-text");
+                if (ussClass != "terminal-text") label.AddToClassList(ussClass);
+                body.Add(label);
+            }
+
+            Line(" " + subheading, "terminal-text-bright");
+            Line("");
+            foreach (var line in bodyText.Split('\n')) Line(" " + line);
+            if (!string.IsNullOrEmpty(footer)) { Line(""); Line(" " + footer, "terminal-text-dim"); }
+
+            var dismiss = new Button(() => { overlay.style.display = DisplayStyle.None; ShowMonthlyBriefing(); })
+            { text = "ACKNOWLEDGE" };
+            dismiss.AddToClassList("cmd-button");
+            dismiss.AddToClassList("primary");
+            actions.Add(dismiss);
+
+            ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns);
             overlay.style.display = DisplayStyle.Flex;
         }
 

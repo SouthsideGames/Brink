@@ -104,6 +104,8 @@ namespace Brink.Core
                 ManageOngoingConfrontation(state, ai, country, rng);
                 ConsiderStrategicInstruments(state, ai, country, rng);
                 ConsiderDetente(state, ai, country, rng);
+                ConsiderResearch(state, ai, country, rng);
+                ConsiderCoalition(state, ai, country, rng);
             }
         }
 
@@ -1053,9 +1055,31 @@ namespace Brink.Core
             return theirNetwork != null ? theirNetwork.focus : IntelDomain.Military;
         }
 
+        /// <summary>
+        /// Months over which the world's governments warm to formal treaties
+        /// (2026-08 "cold open"). Eleven treaties were signed in the first month
+        /// of every game and every one was mutual defence by the third: the
+        /// alliance map was finished before a new operator had read the briefing.
+        /// The willingness to *sign* now ramps from 15% to 100% over three years;
+        /// outreach, trade and the relationships underneath are unchanged.
+        /// </summary>
+        public const int TreatyWarmUpMonths = 36;
+
+        /// <summary>Months of peace a government keeps after any war of its own before opening another.</summary>
+        public const int WarRecoveryMonths = 18;
+
+        public static float TreatyReadiness(GameState state)
+        {
+            int month = state.date.MonthsSince(state.startDate);
+            return 0.15f + 0.85f * Math.Min(1f, month / (float)TreatyWarmUpMonths);
+        }
+
         static bool SeekTreaty(GameState state, CountryState country, string targetId)
         {
             if (string.IsNullOrEmpty(targetId)) return false;
+
+            var readinessRng = new Random(unchecked(state.rngSeed * 31 + state.date.MonthsSince(state.startDate) * 7 + Hash.Of(country.id + targetId)));
+            if (readinessRng.NextDouble() >= TreatyReadiness(state)) return false;
 
             // A standing treaty is not a finished relationship: a warm, trusted
             // partner gets asked for the next commitment up — which is how AI
@@ -1134,7 +1158,16 @@ namespace Brink.Core
             // in the high 30s, and the old bar quietly pacified all of it.
             if (country.stability < 35f || country.warExhaustion > 55f) return false;
 
-            float commitChance = 0.14f + ai.profile.aggression / 300f + ai.profile.opportunism / 400f;
+            // A government that has just fought does not open another war the
+            // month its last one closed (2026-08): a passive player was at war
+            // 92 confrontation-months per decade because the world's wars ran
+            // back to back. Eighteen months of peace after any war of its own.
+            foreach (var past in state.confrontations)
+                if (past.resolved && past.Involves(country.id)
+                    && state.date.MonthsSince(past.startDate) - past.monthsActive < WarRecoveryMonths)
+                    return false;
+
+            float commitChance = 0.10f + ai.profile.aggression / 300f + ai.profile.opportunism / 400f;
 
             // A neighbour's oilfield or mine is a reason, not a backdrop — a
             // state short of what the target's ground supplies commits more
@@ -1198,9 +1231,13 @@ namespace Brink.Core
                 AcquisitionSystem.SetWarFootingBy(state, country.id, true);
 
             // Seek terms when the war has stopped paying for itself.
-            bool wantsOut = ourExhaustion > 45f + ai.profile.patience * 0.3f
-                            || country.warSupport < 20f
-                            || (ourMomentum < -25f && ai.profile.caution > 50f);
+            // Wars ran 30+ months because nobody asked for terms until
+            // exhaustion was well past 45 (2026-08). A government now seeks
+            // terms sooner, and any war that has run two years wears on it.
+            bool wantsOut = ourExhaustion > 35f + ai.profile.patience * 0.25f
+                            || country.warSupport < 25f
+                            || (ourMomentum < -25f && ai.profile.caution > 50f)
+                            || (confrontation.monthsActive >= 24 && ourMomentum < 15f);
 
             if (wantsOut && confrontation.monthsActive >= 2)
             {
@@ -1405,6 +1442,30 @@ namespace Brink.Core
                 }
 
                 // Mobilization is the one instrument a state turns on itself.
+                // From strength, not only from desperation (2026-08). A
+                // government at war with a state it cannot stand may use a
+                // prepared *severe* instrument — destabilization or isolation,
+                // the ones that do not escalate the target to Total War — while
+                // it is ahead, not only when it is losing. Existential ones stay
+                // behind the desperation gate above. Rare per month, so a decade
+                // holds a few such moves across the world, not a barrage. Before
+                // this the world used an instrument on the player in 1 of 225
+                // measured decades.
+                var opponentRelationship = state.FindRelationship(country.id, opponentId);
+                if (!losing && confrontation.escalation >= EscalationState.LimitedConflict
+                    && opponentRelationship != null && opponentRelationship.relations <= 35f)
+                {
+                    float appetite = 0.03f + ai.profile.opportunism / 1000f + ai.profile.aggression / 1400f;
+                    if (rng.NextDouble() < appetite)
+                        foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+                        {
+                            if (EndgameSystem.SeverityOf(type) != StrategicSeverity.Severe) continue;
+                            if (!EndgameSystem.CanExecuteBy(state, country.id, type, opponentId, out _)) continue;
+                            EndgameSystem.ExecuteBy(state, country.id, type, opponentId);
+                            return;
+                        }
+                }
+
                 if ((losing || confrontation.escalation >= EscalationState.LimitedConflict)
                     && EndgameSystem.CanExecuteBy(state, country.id, EndgameType.TotalMobilization, null, out _)
                     && rng.NextDouble() < 0.25)
@@ -1426,7 +1487,22 @@ namespace Brink.Core
             //    treasuries ran near zero, nine states with decade-long
             //    rivalries and matured capabilities could never once fund a
             //    programme the endgame system itself would have sold them.
-            if (LongStandingRival(ai) == null) return;
+            // A long-standing rival is one the objective budget has been working
+            // against for two years; a state this government simply cannot stand
+            // (≤ 30 relations, high perceived threat) counts for the from-strength
+            // use below even if the budget never got round to it. Without the
+            // fallback the player — who is rarely a *budgeted* rival for 24
+            // months — was almost never a *prepared-against* target.
+            string rivalId = LongStandingRival(ai) ?? MostHatedState(state, country);
+            if (rivalId == null) return;
+
+            // From strength, not only from desperation (2026-08). A prepared
+            // *severe* instrument — destabilization or isolation, the ones that do
+            // not escalate the target to Total War — can be used against a
+            // long-standing rival the government genuinely wants weakened,
+            // without waiting to be losing a war to it. Existential instruments
+            // stay behind the desperation gate above. Rare per month, so a decade
+            // holds one or two such moves across the world, not a barrage.
             if (country.resources.treasury < EndgameSystem.PreparationTreasuryCost * 1.5f) return;
 
             // Patience is what lets a government fund something for years.
@@ -1541,6 +1617,137 @@ namespace Brink.Core
         }
 
         /// <summary>A rival faced long enough to justify building against them.</summary>
+        // ---------- research (2026-08) ----------
+
+        /// <summary>
+        /// A foreign government funds the capability its posture calls for.
+        ///
+        /// `TechnologySystem.ConsiderAiResearch` funds programmes along national
+        /// priority at 6% a month and never walks a prerequisite chain, and the
+        /// pre-fix treasury starved it besides — so no AI state ever held an
+        /// instrument capability, and the player faced an instrument in 4 of
+        /// 556 measured decades. This is the directed half: the same choice
+        /// `PreferredInstrument` makes — the strongest pillar's instrument
+        /// capability, walking its prerequisites — with a long-standing rival
+        /// making it likelier and patience making it steadier. Same gates as the
+        /// player's verb, no CP.
+        /// </summary>
+        static void ConsiderResearch(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (country.technology.programs.Count >= TechnologySystem.MaxPrograms) return;
+
+            float chance = 0.06f + ai.profile.patience / 600f
+                           + (LongStandingRival(ai) != null ? 0.06f : 0f)
+                           + PlanningHorizon(state.difficulty) * 0.04f;
+            if (rng.NextDouble() >= chance) return;
+
+            // Strongest pillar first, then the rest, so a state builds toward
+            // the instrument it could actually use.
+            var pillars = new List<Pillar>((Pillar[])Enum.GetValues(typeof(Pillar)));
+            pillars.Sort((a, b) => country.pillars.Get(b).CompareTo(country.pillars.Get(a)));
+
+            foreach (var pillar in pillars)
+            {
+                string goal = EndgameSystem.RequiredCapability(InstrumentFor(pillar));
+                string next = NextMissingPrerequisite(country, goal);
+                if (next == null) continue;
+                if (country.technology.IsResearching(next)) continue;
+                if (TechnologySystem.BeginResearchBy(state, country.id, next)) return;
+            }
+        }
+
+        static EndgameType InstrumentFor(Pillar pillar)
+        {
+            switch (pillar)
+            {
+                case Pillar.Military: return EndgameType.StrategicDestruction;
+                case Pillar.Economy: return EndgameType.SystemicCollapse;
+                case Pillar.Intelligence: return EndgameType.StateDestabilization;
+                case Pillar.Diplomacy: return EndgameType.StrategicIsolation;
+                default: return EndgameType.TotalMobilization;
+            }
+        }
+
+        /// <summary>The deepest capability on the way to <paramref name="goal"/> not yet held, or null if held.</summary>
+        static string NextMissingPrerequisite(CountryState country, string goal)
+        {
+            string next = goal;
+            for (int guard = 0; guard < 8; guard++)
+            {
+                if (TechnologySystem.Has(country, next)) return null;
+                var definition = CapabilityCatalog.Find(next);
+                if (definition == null) return null;
+                string missing = null;
+                foreach (var prerequisite in definition.prerequisites)
+                    if (!TechnologySystem.Has(country, prerequisite)) { missing = prerequisite; break; }
+                if (missing == null) return next;
+                next = missing;
+            }
+            return null;
+        }
+
+        // ---------- coalitions (2026-08) ----------
+
+        /// <summary>
+        /// A government at war asks its friends to stand with it.
+        ///
+        /// Coalitions formed in 12 of 556 measured decades. AI states could
+        /// *join* a defender-led coalition through an alliance obligation and
+        /// could never assemble one: `RequestCoalition` was player-only (spec 06
+        /// §7 open item). The same verb at the same recruitment test, reached
+        /// once a war has become a war, by governments with the standing to ask.
+        /// </summary>
+        static void ConsiderCoalition(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            var confrontation = state.ActiveConfrontationFor(country.id);
+            if (confrontation == null || confrontation.resolved) return;
+            if (confrontation.escalation < EscalationState.LimitedConflict) return;
+            if (state.FindCoalitionLedBy(confrontation.id, country.id) != null) return;
+            if (country.pillars.diplomacy < 40f) return;
+
+            float chance = 0.12f + ai.profile.opportunism / 500f + ai.profile.aggression / 800f;
+            if (rng.NextDouble() >= chance) return;
+
+            DiplomacySystem.RequestCoalitionBy(state, country.id);
+        }
+
+        /// <summary>
+        /// A government's temperament in the operator's language (2026-08): the
+        /// authored personality rendered as reputation, so a posting's neighbours
+        /// read as people rather than as four hidden numbers. Empty for the
+        /// player's own state — its temperament is whatever the operator makes it.
+        /// </summary>
+        public static string TemperamentOf(GameState state, string countryId)
+        {
+            AIState ai = null;
+            foreach (var candidate in state.aiStates) if (candidate.countryId == countryId) { ai = candidate; break; }
+            if (ai == null) return "";
+            var p = ai.profile;
+            var words = new List<string>();
+            words.Add(p.aggression >= 62f ? "HAWKISH" : p.aggression <= 36f ? "RESTRAINED" : "FIRM");
+            if (p.caution >= 64f) words.Add("CAUTIOUS");
+            else if (p.caution <= 42f) words.Add("BOLD");
+            if (p.opportunism >= 64f) words.Add("OPPORTUNISTIC");
+            if (p.patience >= 66f) words.Add("PATIENT");
+            else if (p.patience <= 44f) words.Add("IMPATIENT");
+            return string.Join(", ", words);
+        }
+
+        /// <summary>The state this government most wants weakened, by relations and perceived threat; null if nobody is hated enough.</summary>
+        static string MostHatedState(GameState state, CountryState country)
+        {
+            string worst = null; float score = 0f;
+            foreach (var other in state.countries)
+            {
+                if (other.id == country.id) continue;
+                var relationship = state.FindRelationship(country.id, other.id);
+                if (relationship == null || relationship.relations > 30f) continue;
+                float s = (30f - relationship.relations) + relationship.ThreatPerceivedBy(country.id) * 0.5f;
+                if (s > score) { score = s; worst = other.id; }
+            }
+            return worst;
+        }
+
         static string LongStandingRival(AIState ai)
         {
             string longest = null;

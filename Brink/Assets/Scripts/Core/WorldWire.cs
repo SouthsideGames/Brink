@@ -42,6 +42,34 @@ namespace Brink.Core
     /// </summary>
     public static class WorldWire
     {
+        /// <summary>Network penetration at which a state's domestic news reaches our wire.</summary>
+        public const float WatchPenetration = 20f;
+
+        /// <summary>
+        /// Whether a foreign state's *domestic* news is ours to hear (2026-08).
+        /// A network with real penetration, an unbroken treaty, or a live
+        /// confrontation with them earns it; the rest of the world's cabinet
+        /// reshuffles and ministerial stumbles stay in the chronicle, where they
+        /// always were. Unfiltered, foreign cabinet gossip was a quarter of all
+        /// terminal traffic.
+        /// </summary>
+        public static bool Watches(GameState state, string countryId)
+        {
+            if (string.IsNullOrEmpty(countryId) || countryId == state.playerCountryId) return true;
+            var network = state.FindNetwork(state.playerCountryId, countryId);
+            if (network != null && network.penetration >= WatchPenetration) return true;
+            // A trade preference does not put our people in their ministries;
+            // a defence pact or an intelligence-sharing clause does.
+            var treaty = state.FindTreaty(state.playerCountryId, countryId);
+            if (treaty != null && !treaty.broken
+                && (treaty.Has(TreatyCommitment.MutualDefense) || treaty.Has(TreatyCommitment.IntelligenceSharing)))
+                return true;
+            foreach (var confrontation in state.confrontations)
+                if (!confrontation.resolved && confrontation.Involves(state.playerCountryId) && confrontation.Involves(countryId))
+                    return true;
+            return false;
+        }
+
         /// <summary>
         /// Categories that reach the wire at all. Intelligence never does — it is
         /// the category of things done quietly, and is exactly what the fog is

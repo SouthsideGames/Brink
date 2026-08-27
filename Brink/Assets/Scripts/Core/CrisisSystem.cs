@@ -18,8 +18,13 @@ namespace Brink.Core
     /// </summary>
     public static class CrisisSystem
     {
-        /// <summary>Chance per resolved month that a crisis fires (when none is active).</summary>
-        public const double MonthlyCrisisChance = 0.08;
+        /// <summary>
+        /// Chance per resolved month that a crisis fires (when none is active).
+        /// 0.08 → 0.10 (2026-08): a decade produced ~13 Crisis Turns from a
+        /// thirty-one-entry catalogue, so the same handful recurred and most
+        /// of the authored world never reached the operator.
+        /// </summary>
+        public const double MonthlyCrisisChance = 0.10;
 
         /// <summary>Every authored crisis id.</summary>
         public static string[] CatalogIds

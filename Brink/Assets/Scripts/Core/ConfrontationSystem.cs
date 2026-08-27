@@ -477,10 +477,18 @@ namespace Brink.Core
             else
             {
                 // Somebody else's war. The outcome is public; the analysis is not
-                // ours to have.
-                state.AddNotification(NotificationClass.Wire,
-                    $"FOREIGN OPERATION — {target.displayName}", record.summary, attackerId,
-                    desk: ReportingDesk.Military);
+                // ours to have — and it is only *our* wire if we have a stake:
+                // a partner, a coalition, ground we hold nearby, or a network
+                // watching. Every operation on earth used to arrive here (125 a
+                // decade); the chronicle still records all of them.
+                var owner = state.FindCountry(target.ownerId);
+                bool ourStake = WorldWire.Watches(state, attackerId)
+                                || WorldWire.Watches(state, target.ownerId)
+                                || (owner != null && state.FindTreaty(state.playerCountryId, owner.id) != null);
+                if (ourStake)
+                    state.AddNotification(NotificationClass.Wire,
+                        $"FOREIGN OPERATION — {target.displayName}", record.summary, attackerId,
+                        desk: ReportingDesk.Military);
             }
             return record;
         }
@@ -964,7 +972,7 @@ namespace Brink.Core
         /// nobody: the harness re-declared the same war eighteen times in a
         /// decade, one month apart, each ended by the same offer.
         /// </summary>
-        public const int SettlementTruceMonths = 12;
+        public const int SettlementTruceMonths = 24;
 
         /// <summary>
         /// A foreign government's terms arrive as a decision, not as a fait

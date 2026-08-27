@@ -118,9 +118,10 @@ namespace Brink.Core
                 // would ever read it, and simulating a choice with no observer
                 // is cost without consequence.
                 Install(country, BestFor(Shortlist(country, official.office, rng), rng), official.office, rng);
-                state.AddNotification(NotificationClass.Wire, "FOREIGN CABINET CHANGE",
-                    $"{official.displayName} {what} in {country.displayName}.",
-                    country.id, desk: ReportingDesk.Intelligence);
+                if (WorldWire.Watches(state, country.id))
+                    state.AddNotification(NotificationClass.Wire, "FOREIGN CABINET CHANGE",
+                        $"{official.displayName} {what} in {country.displayName}.",
+                        country.id, desk: ReportingDesk.Intelligence);
                 return;
             }
 

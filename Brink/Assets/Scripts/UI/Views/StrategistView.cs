@@ -31,9 +31,33 @@ namespace Brink.UI.Views
 
             Root.Clear();
             BuildStanding(state);
+            BuildMandate(state);
             BuildEvaluations(state);
             BuildTreeSelector(state);
             BuildTree(state);
+        }
+
+        /// <summary>
+        /// What this posting is for (GDD §25 amendment). The brief the operator
+        /// arrived with, each undertaking marked as it stands today, and the
+        /// verdict once the ten-year review has been delivered.
+        /// </summary>
+        void BuildMandate(GameState state)
+        {
+            var text = AddText("terminal-text-bright");
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("MANDATE", W));
+            if (state.mandate == null)
+            {
+                sb.AppendLine(" No mandate on file.");
+            }
+            else
+            {
+                sb.AppendLine(" " + state.mandate.brief);
+                foreach (var line in MandateSystem.StatusText(state).Split('\n'))
+                    sb.AppendLine(" " + line);
+            }
+            text.text = sb.ToString();
         }
 
         void BuildStanding(GameState state)

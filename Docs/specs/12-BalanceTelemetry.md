@@ -273,7 +273,15 @@ them, and the evaluation deliberately gives conquest no credit. Absolute grades
 shifted down ~0.1–0.3 because a deficit now costs the economy component; do not
 compare to the previous table (2.32 / 2.80 / 2.66 / 2.96 / 2.96 / 3.02 / 2.84),
 which was measured with every posting tens of thousands in the red and graded
-as if it were not. Previous table, for the record, measured the same morning on —
+as if it were not.
+
+**2026-08-27 evening, after the "played it as a person" pass:** S ≥ 88 and A ≥ 76
+(S was being handed out for a first year of answering two crises — it is now 2 of
+~2,240 measured year-grades, B the norm); war appetite tuned (`WarRecoveryMonths`,
+terms sought at exhaustion 35, truce 24) — a passive USA now spends ~40
+confrontation-months a decade, from 92. Re-measure this table before trusting it.
+
+Previous table, for the record, measured the same morning on —
 hot world (spec 06 §7c), bloc gravity (spec 04 §8a), food security (spec 02
 §5), faction arithmetic (spec 05 §2b-1), fiscal reserve, détente and treaty
 deepening (spec 04 §5a, spec 02 §4a). Where another section needs these

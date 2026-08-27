@@ -179,7 +179,8 @@ namespace Brink.Core
             bool playerInvolved = proposerId == state.playerCountryId || targetId == state.playerCountryId;
             state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
                 "TREATY SIGNED",
-                $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} conclude an agreement.",
+                $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} conclude an agreement: " +
+                $"{string.Join(", ", commitments).ToLowerInvariant()}.",
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, proposerId,
                 $"Treaty signed with {target.displayName}.", Publicity.Public);
@@ -698,6 +699,52 @@ namespace Brink.Core
         /// its own interests; the player can exploit an enemy's rocky
         /// relationships to recruit support (GDD §15.2).
         /// </summary>
+        /// <summary>
+        /// Actor-generic coalition request (2026-08). Any state at war assembles
+        /// one around its own confrontation with the same recruitment test the
+        /// player faces. `RequestCoalition` was player-only, so AI states could
+        /// join a defender-led coalition through an obligation and could never
+        /// build one — coalitions formed in 12 of 556 measured decades.
+        /// </summary>
+        public static Coalition RequestCoalitionBy(GameState state, string leaderId)
+        {
+            var confrontation = state.ActiveConfrontationFor(leaderId);
+            if (confrontation == null || confrontation.resolved) return null;
+            if (state.FindCoalitionLedBy(confrontation.id, leaderId) != null) return null;
+
+            string targetId = confrontation.OpponentOf(leaderId);
+            var coalition = new Coalition
+            {
+                id = $"COAL_{state.date.SortKey}_{leaderId}",
+                leaderId = leaderId,
+                confrontationId = confrontation.id,
+                targetId = targetId
+            };
+            coalition.memberIds.Add(leaderId);
+
+            foreach (var country in state.countries)
+            {
+                if (country.id == leaderId || country.id == targetId) continue;
+                if (CoalitionWillingness(state, leaderId, country.id, targetId) < 50f) continue;
+                coalition.memberIds.Add(country.id);
+                state.FindRelationship(leaderId, country.id)?.AddMemory(state.date, "Joined our coalition", 3f);
+                if (country.isPlayer)
+                    state.AddNotification(NotificationClass.Priority, "COALITION JOINED",
+                        $"We stand with {state.FindCountry(leaderId)?.displayName} against " +
+                        $"{state.FindCountry(targetId)?.displayName}.", leaderId, desk: ReportingDesk.Diplomacy);
+            }
+
+            state.coalitions.Add(coalition);
+            state.AddChronicle(ChronicleCategory.Diplomatic, leaderId,
+                $"Coalition formed against {state.FindCountry(targetId)?.displayName} " +
+                $"with {coalition.memberIds.Count - 1} partner(s).", Publicity.Public);
+            if (targetId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "COALITION AGAINST US",
+                    $"{state.FindCountry(leaderId)?.displayName} has assembled {coalition.memberIds.Count - 1} " +
+                    "partner(s) against us.", leaderId, desk: ReportingDesk.Diplomacy);
+            return coalition;
+        }
+
         public static Coalition RequestCoalition(GameState state, TurnManager turns)
         {
             var confrontation = state.ActiveConfrontation;

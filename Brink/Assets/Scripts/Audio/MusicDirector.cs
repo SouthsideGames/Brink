@@ -38,6 +38,18 @@ namespace Brink.Audio
 
         public AudioClip CurrentClip => active != null ? active.clip : null;
 
+        // Preference level applied on top of the entry's authored volume when
+        // the mixer is not driving levels (see AudioDirector.ApplySettings).
+        float level = 1f;
+        float targetVolume;
+
+        public void SetLevel(float value)
+        {
+            level = Mathf.Clamp01(value);
+            if (fade == null && active != null && active.isPlaying)
+                active.volume = targetVolume * level;
+        }
+
         public void Initialize(AudioLibrary configuration)
         {
             library = configuration;
@@ -97,8 +109,9 @@ namespace Brink.Audio
             active = incoming;
 
             StopFade();
+            targetVolume = entry.volume;
             float seconds = immediate ? 0f : Mathf.Max(0.01f, library.crossfadeSeconds);
-            fade = StartCoroutine(Crossfade(outgoing, incoming, entry.volume, seconds));
+            fade = StartCoroutine(Crossfade(outgoing, incoming, entry.volume * level, seconds));
         }
 
         /// <summary>Silence the music entirely, e.g. for Mute or a full reset.</summary>
@@ -117,7 +130,12 @@ namespace Brink.Audio
                 if (b != null) { b.Stop(); b.volume = 0f; }
                 return;
             }
-            fade = StartCoroutine(Crossfade(a, null, 0f, library.crossfadeSeconds));
+            // Fade whichever source is carrying the music. This used to fade `a`
+            // unconditionally, so an unmapped state reached while `b` was active
+            // left `b` playing at full volume with `Current` claiming silence.
+            var idle = active == a ? b : a;
+            if (idle != null) { idle.Stop(); idle.volume = 0f; }
+            fade = StartCoroutine(Crossfade(active, null, 0f, library.crossfadeSeconds));
         }
 
         void StopFade()

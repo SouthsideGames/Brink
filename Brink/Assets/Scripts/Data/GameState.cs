@@ -86,6 +86,15 @@ namespace Brink.Data
         public bool tenureReviewed;
 
         /// <summary>
+        /// What this posting is for (GDD §25 amendment, 2026-08): the mandate the
+        /// operator was given on arrival and the verdict delivered on it at the
+        /// ten-year review. Null on an old save; `MandateSystem` assigns one at
+        /// the next month.
+        /// </summary>
+        public Mandate mandate;
+        public MandateRecord mandateRecord;
+
+        /// <summary>
         /// Smoothed month-over-month change in the player's treasury (EWMA,
         /// ~5-month memory), and the bookkeeping that seeds it. Written by
         /// `EconomySystem.MonthlyUpdate`; read by the briefing's treasury line

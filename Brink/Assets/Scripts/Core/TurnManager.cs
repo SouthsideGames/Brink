@@ -79,7 +79,10 @@ namespace Brink.Core
             State.influence = Math.Min(GameState.InfluenceCap + influenceGain - GameState.InfluencePerMonth,
                                        State.influence + influenceGain);
 
-            State.AddNotification(NotificationClass.Advisory, "MONTH START",
+            // ARCHIVE, not ADVISORY (2026-08): the date and CP are on the status
+            // bar every frame; as an advisory this was 120 items a decade of the
+            // terminal telling the operator what the terminal already shows.
+            State.AddNotification(NotificationClass.Archive, "MONTH START",
                 $"{State.date.DisplayString}. Command capacity: {State.commandPoints.current} CP.");
             if (State.activeCrises.Count > 0)
                 State.AddNotification(NotificationClass.Flash, "CRISIS AWAITING DECISION",
