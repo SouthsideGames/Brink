@@ -44,11 +44,20 @@ namespace Brink.UI.Views
         /// <summary>Standing directives — what the Cabinet thinks is worth doing.</summary>
         readonly UnityEngine.UIElements.VisualElement directiveList;
 
+        /// <summary>The HOLD control and the last hold's outcome.</summary>
+        readonly UnityEngine.UIElements.VisualElement holdPanel;
+
         public BriefingView()
         {
             header = AddText("terminal-text-bright");
             attentionList = new UnityEngine.UIElements.VisualElement();
             Root.Add(attentionList);
+            // **Built once, like everything else here.** `Build` on this view sets
+            // text on persistent elements and never clears `Root`, so a panel that
+            // called `MakeRow()` on every refresh would append a fresh row every
+            // time the briefing was redrawn and grow without bound.
+            holdPanel = new UnityEngine.UIElements.VisualElement();
+            Root.Add(holdPanel);
             directiveList = new UnityEngine.UIElements.VisualElement();
             Root.Add(directiveList);
             trafficHeading = AddText();
@@ -69,6 +78,7 @@ namespace Brink.UI.Views
             header.text = AsciiChart.BoxHeader($"STRATEGIC BRIEFING — {state.date.DisplayString}", W);
 
             BuildAttention(state);
+            BuildHold(state);
             BuildDirectives(state);
             BuildTraffic(state);
 
@@ -297,5 +307,63 @@ namespace Brink.UI.Views
                 default: return "terminal-text-dim";
             }
         }
+
+        /// <summary>
+        /// Standing back through a quiet stretch (GDD §6).
+        ///
+        /// On the briefing rather than in the status bar, for two reasons. The
+        /// bar is already carrying a classification, a date, three resource
+        /// readouts and END MONTH on a landscape phone, and this is the screen
+        /// where an operator decides that nothing needs them — the decision and
+        /// the control belong in the same place.
+        ///
+        /// The last hold's outcome is printed underneath, because a control that
+        /// silently advances four months and stops is indistinguishable from one
+        /// that is broken.
+        /// </summary>
+        void BuildHold(GameState state)
+        {
+            holdPanel.Clear();
+
+            bool possible = HoldSystem.CanHold(state, out string blocked);
+
+            var row = new UnityEngine.UIElements.VisualElement();
+            row.AddToClassList("button-row");
+            holdPanel.Add(row);
+
+            var hold = AddButton(row, $"HOLD ({holdMonths} MO)", null, () =>
+            {
+                lastHold = GameController.Instance.Hold(holdMonths);
+                Refresh();
+            });
+            if (!possible) Block(hold, blocked);
+
+            AddButton(row, holdMonths <= 3 ? "LONGER ►" : "SHORTER ◄", null, () =>
+            {
+                holdMonths = holdMonths <= 3 ? HoldSystem.MaxMonths : 3;
+                Refresh();
+            });
+
+            if (lastHold.months > 0)
+            {
+                var outcome = new UnityEngine.UIElements.Label();
+                outcome.AddToClassList("terminal-text");
+                outcome.AddToClassList("terminal-text-dim");
+                outcome.text = $"   HELD {lastHold.months} MO — "
+                    + (lastHold.RanToCompletion
+                        ? "the stretch ran out quietly."
+                        : "STOPPED: " + lastHold.stopped);
+                holdPanel.Add(outcome);
+            }
+
+            ExplainBlockedCommands(holdPanel);
+        }
+
+        /// <summary>How long a hold the operator has asked for. A view preference, not save state.</summary>
+        static int holdMonths = 3;
+
+        /// <summary>What the last hold came to, so the control can say what it did.</summary>
+        static HoldSystem.Result lastHold;
+
     }
 }

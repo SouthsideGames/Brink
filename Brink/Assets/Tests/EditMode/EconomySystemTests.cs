@@ -445,5 +445,77 @@ namespace Brink.Tests
             string chart = AsciiChart.LineChart(values, 30, 5);
             StringAssert.Contains("199.0", chart, "Newest value should anchor the scale.");
         }
+
+        // ---------- capability erodes in a bad decade, not only in a collapse ----------
+
+        [Test]
+        public void AHealthyEconomyLosesNoCapabilityToStagnation()
+        {
+            var healthy = new EconomyState { growthRate = 2.6f, unemployment = 6f };
+
+            Assert.AreEqual(0f, EconomySystem.StagnationDrag(healthy), 0.0001f,
+                "A growing economy with ordinary unemployment was losing capability. "
+                + "This term has to be zero by construction in normal play or it quietly "
+                + "retunes every economy in the game.");
+        }
+
+        [Test]
+        public void AShrinkingEconomyWithIdlePlantLosesCapability()
+        {
+            var stagnant = new EconomyState { growthRate = -3f, unemployment = 14f };
+
+            float drag = EconomySystem.StagnationDrag(stagnant);
+
+            Assert.Greater(drag, 0.05f,
+                "Years of contraction with people out of work cost the country nothing it "
+                + "could do. The economy pillar was the last one with no ordinary downward "
+                + "path — the military erodes from losses, peace terms and purges.");
+
+            // Sized against the routine ministry contribution (0.05–0.30 a month
+            // before damping). A bad decade must stop the pillar growing, not
+            // destroy it: a country has to be able to govern its way out.
+            Assert.Less(drag, 0.30f,
+                "Stagnation outruns everything a working ministry can do, which makes a "
+                + "bad decade unrecoverable rather than expensive.");
+        }
+
+        [Test]
+        public void ADepressedEconomyEndsTheDecadeLessCapableThanAHealthyOne()
+        {
+            // A/B on one world: the same country, run twice, differing only in
+            // whether its economy is allowed to work. Both arms use the real
+            // pipeline, so nothing else is being measured by accident.
+            float Run(bool depress)
+            {
+                var world = WorldFactory.CreateDebugWorld(seed: 4242);
+                var run = new TurnManager(world);
+                SimulationPipeline.Wire(run, world);
+
+                var subject = world.PlayerCountry;
+                for (int month = 0; month < 120; month++)
+                {
+                    if (depress)
+                    {
+                        // Hold the conditions the claim is about. Set before the
+                        // tick, because the drag reads the figures the tick
+                        // recomputes from them.
+                        subject.economy.confidence = 12f;
+                        subject.resources.industrialCapacity = 20f;
+                        subject.resources.energy = 15f;
+                    }
+                    run.EndMonth();
+                }
+                return subject.pillars.economy;
+            }
+
+            float healthy = Run(depress: false);
+            float depressed = Run(depress: true);
+
+            Assert.Less(depressed, healthy,
+                $"A decade of depression ({depressed:F1}) left the country as economically "
+                + $"capable as a decade of normality ({healthy:F1}). Economic warfare has to "
+                + "be able to reach the thing the annual evaluation actually grades.");
+        }
+
     }
 }

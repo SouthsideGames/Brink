@@ -291,7 +291,11 @@ namespace Brink.Core
                 // sanctions now genuinely cause. Zero by construction at every
                 // authored baseline — the `distress` idiom, kept honest.
                 - Math.Max(0f, country.resources.foodEndowment
-                               - country.resources.foodSecurity - 5f) * 0.5f);
+                               - country.resources.foodSecurity - 5f) * 0.5f
+                // Carrying a crisis for somebody else is a strain on services.
+                // Mild per point, and through the target like everything else
+                // here — a host that is otherwise well run absorbs it.
+                - DisplacementSystem.StandardsDrag(country));
 
             // Deliberately slower to rise than to fall. Prosperity is felt as it
             // accumulates; a collapse is felt immediately.
@@ -348,6 +352,12 @@ namespace Brink.Core
             // People shooting at the government somewhere in the country is not a
             // mood, and it does not stay local.
             unrestPressure += InsurgencySystem.UnrestPressure(state, country.id);
+
+            // Arrivals are an argument in the host, and people who wanted out and
+            // could not get out are an argument at home. Different countries,
+            // different terms.
+            unrestPressure += DisplacementSystem.UnrestPressure(country);
+            unrestPressure += DisplacementSystem.PressureAtSource(state, country);
 
             // Some states argue about everything. Hardship organises faster there.
             float unrestTarget = Clamp(unrestPressure * NationalTraitCatalog.UnrestVolatility(country));

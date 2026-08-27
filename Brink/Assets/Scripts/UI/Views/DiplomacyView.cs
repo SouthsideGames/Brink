@@ -42,7 +42,92 @@ namespace Brink.UI.Views
             BuildTreatyControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
+            BuildBlocControls(state);
             BuildCouncilControls(state);
+        }
+
+        /// <summary>
+        /// Sides with names (GDD §15.2).
+        ///
+        /// Placed above the chamber deliberately: a bloc is what an operator
+        /// arrives in the chamber *as*, and the panel order should read the way
+        /// the causation runs.
+        /// </summary>
+        void BuildBlocControls(GameState state)
+        {
+            var player = state.PlayerCountry;
+            var ours = BlocSystem.BlocOf(state, player.id);
+
+            var text = AddText();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("BLOCS", W));
+
+            bool any = false;
+            foreach (var bloc in state.blocs)
+            {
+                if (bloc.dissolved) continue;
+                any = true;
+
+                var leader = state.FindCountry(bloc.leaderId);
+                sb.AppendLine($" {bloc.name}"
+                              + (ours != null && ours.id == bloc.id ? "   [OURS]" : ""));
+                sb.AppendLine($"   LED BY {(leader != null ? leader.displayName.ToUpperInvariant() : "NOBODY")}"
+                              + $"   COHESION {bloc.cohesion:F0}"
+                              + $"   {bloc.memberIds.Count} STATE(S)");
+
+                var names = new System.Text.StringBuilder();
+                foreach (string memberId in bloc.memberIds)
+                {
+                    var member = state.FindCountry(memberId);
+                    if (member == null) continue;
+                    if (names.Length > 0) names.Append(", ");
+                    names.Append(member.displayName.ToUpperInvariant());
+                }
+                sb.AppendLine("   " + names);
+                sb.AppendLine();
+            }
+
+            if (!any)
+                sb.AppendLine(" NO BLOC EXISTS. The world has sides; none of them has a name yet.");
+
+            text.text = sb.ToString();
+
+            var row = MakeRow();
+
+            if (ours == null)
+            {
+                var found = AddButton(row, $"FOUND A BLOC [{BlocSystem.FoundCost} CP]", "primary",
+                    () => { GameController.Instance.FoundBloc(null); Refresh(); });
+                if (!BlocSystem.CanFound(state, player.id, out string blocked))
+                    Block(found, blocked);
+            }
+            else
+            {
+                if (ours.leaderId == player.id)
+                {
+                    foreach (var candidate in state.countries)
+                    {
+                        if (candidate.isPlayer || ours.Has(candidate.id)) continue;
+                        if (BlocSystem.BlocOf(state, candidate.id) != null) continue;
+
+                        // Only the states that would plausibly say yes. Twenty-three
+                        // buttons is not a row on a phone, and offering an invitation
+                        // that will certainly be refused is the dead-button bug.
+                        if (BlocSystem.JoinWillingness(state, ours, candidate.id) < 40f) continue;
+
+                        var captured = candidate.id;
+                        AddButton(row,
+                            $"INVITE {candidate.displayName.ToUpperInvariant()} "
+                            + $"[{BlocSystem.InviteCost} CP]", null,
+                            () => { GameController.Instance.InviteToBloc(captured); Refresh(); });
+                    }
+                }
+
+                AddButton(row, "LEAVE THE BLOC", "danger",
+                    () => { GameController.Instance.LeaveBloc(); Refresh(); });
+            }
+
+            ExplainBlockedCommands(Root);
         }
 
         /// <summary>

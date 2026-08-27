@@ -10,6 +10,58 @@ namespace Brink.UI
     /// </summary>
     public static class IntelReadout
     {
+        /// <summary>
+        /// How much of a foreign government's personnel our collection reaches.
+        ///
+        /// Extracted here because two screens now render the same dossier — the
+        /// INTELLIGENCE panel and the country dossier — and two copies of a
+        /// threshold are two thresholds. The same reason `OperationCatalog.CanOrder`
+        /// is shared between the order screen and the launch path: what is offered
+        /// and what is true cannot be allowed to disagree.
+        /// </summary>
+        public enum PersonnelAccess
+        {
+            /// <summary>We do not know who runs their ministries.</summary>
+            None,
+
+            /// <summary>Names and offices, and nothing about how good they are.</summary>
+            Identities,
+
+            /// <summary>Names, and a band on their competence.</summary>
+            Assessed
+        }
+
+        /// <summary>Penetration needed to put names to their offices.</summary>
+        public const float NameThreshold = 20f;
+
+        /// <summary>Penetration needed to judge how good they are at the job.</summary>
+        public const float AssessThreshold = 55f;
+
+        public static PersonnelAccess PersonnelAccessOf(GameState state, string targetId)
+        {
+            if (state == null || string.IsNullOrEmpty(targetId)) return PersonnelAccess.None;
+            if (targetId == state.playerCountryId) return PersonnelAccess.Assessed;
+
+            var network = state.FindNetwork(state.playerCountryId, targetId);
+            float penetration = network != null && !network.compromised ? network.penetration : 0f;
+
+            if (penetration >= AssessThreshold) return PersonnelAccess.Assessed;
+            if (penetration >= NameThreshold) return PersonnelAccess.Identities;
+            return PersonnelAccess.None;
+        }
+
+        /// <summary>
+        /// A band, never a number. An estimate that printed 63.4 would be
+        /// claiming a precision collection does not have.
+        /// </summary>
+        public static string CompetenceBand(float competence)
+        {
+            if (competence >= 70f) return "CAPABLE";
+            if (competence >= 50f) return "ADEQUATE";
+            if (competence >= 35f) return "WEAK";
+            return "OUT OF DEPTH";
+        }
+
         /// <summary>Maps a pillar to the collection domain that assesses it, if any.</summary>
         public static bool TryDomainFor(Pillar pillar, out IntelDomain domain)
         {

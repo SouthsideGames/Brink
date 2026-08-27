@@ -38,7 +38,7 @@ namespace Brink.Core
     /// What passing actually buys is deliberately mechanical rather than
     /// atmospheric: a mandate makes coercion measurably cheaper to sustain
     /// (`EconomySystem.SanctionBlowbackFor`), stops the target talking their way
-    /// out of it (`AgeSanctions`, `DiplomacySystem.SeekSanctionsReliefBy`), and a
+    /// out of it (`EconomySystem.AgeSanctions`, `EconomySystem.SeekSanctionsReliefBy`), and a
     /// censure is real weight in a confrontation
     /// (`ConfrontationSystem.StrategicPressure`). A resolution that only printed a
     /// line in the chronicle would be the "written but never read" bug with a
@@ -167,10 +167,16 @@ namespace Brink.Core
                     motions.Add(Draft(state, MotionKind.SanctionsMandate, moverId, subject.id,
                         $"That measures against {subject.displayName} be authorised."));
 
-                // Relief: the one motion that is not aimed at anybody.
+                // Relief: the one motion that is not aimed at anybody. Either the
+                // country is destitute, or it is carrying a crisis that started
+                // somewhere else — which is the case the chamber exists for.
                 if (subject.livingStandards < 30f)
                     motions.Add(Draft(state, MotionKind.Relief, moverId, subject.id,
                         $"That the chamber fund relief for {subject.displayName}."));
+                else if (subject.displacement.hosted >= 12f)
+                    motions.Add(Draft(state, MotionKind.Relief, moverId, subject.id,
+                        $"That the chamber share the cost {subject.displayName} is carrying "
+                        + "for people displaced from elsewhere."));
             }
 
             return motions;
@@ -246,6 +252,13 @@ namespace Brink.Core
             float loyalty = (withMover.relations - 50f) * 0.45f
                           + (withMover.strategicAlignment - 50f) * 0.25f
                           + (withMover.trust - 50f) * 0.15f;
+
+            // **A bloc votes as a bloc.** This is what makes one worth founding:
+            // the chamber is the room where acting together is the whole point,
+            // and until blocs existed there was no way to arrive in it as a side.
+            if (BlocSystem.SameBloc(state, voterId, motion.moverId)) loyalty += 30f;
+            else if (BlocSystem.SameBloc(state, voterId, motion.subjectId)) loyalty -= 34f;
+            else if (BlocSystem.OpposedBlocs(state, voterId, motion.moverId)) loyalty -= 14f;
 
             if (motion.kind == MotionKind.Relief)
             {

@@ -31,6 +31,9 @@ crises against fifteen) both drifted because that rule was skipped.
 | 16 | [Insurgency](16-Insurgency.md) | Armed movements, where they come from, sponsorship and attribution, contested ground | As-built |
 | 17 | [The Chamber](17-Council.md) | Multilateral motions, voting, the veto, censure and sanctions mandates | As-built |
 | 18 | [The Opposition](18-Opposition.md) | The case against a government, themes, conceding and confronting | As-built |
+| 19 | [Displacement](19-Displacement.md) | Who leaves, where they go, what hosting costs, the border | As-built |
+| 20 | [Blocs](20-Blocs.md) | Standing sides with names: joining, cohesion, upkeep, defection | As-built |
+| 21 | [Dossier & Hold](21-DossierAndHold.md) | The per-country deep terminal, and standing back through quiet months | As-built |
 
 Coverage of the GDD as a whole — what is done, partial, missing and
 contradicted, section by section — is tracked separately in

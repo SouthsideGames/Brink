@@ -323,6 +323,48 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// Stand back for a stretch of quiet months (GDD §6).
+        ///
+        /// Not a fast-forward: it ends the moment anything needs deciding, and
+        /// the capacity of the months it consumes is genuinely forgone.
+        /// </summary>
+        public HoldSystem.Result Hold(int months)
+        {
+            if (!IsRunning) return new HoldSystem.Result { months = 0, stopped = "No session." };
+
+            var result = HoldSystem.Hold(State, Turns, months);
+            if (result.months > 0) SaveSystem.Save(State, AutosaveSlot);
+            return result;
+        }
+
+        /// <summary>Found a standing bloc and lead it (GDD §15.2).</summary>
+        public bool FoundBloc(string name)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            var bloc = BlocSystem.Found(State, Turns, name);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return bloc != null;
+        }
+
+        /// <summary>Ask a state into the bloc we lead. They decide.</summary>
+        public bool InviteToBloc(string targetId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool ok = BlocSystem.Invite(State, Turns, targetId);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
+        /// <summary>Walk out. It costs trust with everyone still in it.</summary>
+        public bool LeaveBloc()
+        {
+            if (!IsRunning) return false;
+            bool ok = BlocSystem.LeaveBy(State, State.playerCountryId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
         /// Put a motion to the multilateral chamber (GDD §15.2).
         ///
         /// The motion itself is drafted from live world state by
@@ -435,6 +477,22 @@ namespace Brink.Core
         {
             if (!MayCommand(Data.Pillar.Government)) return false;
             bool ok = GovernmentSystem.BuildPoliticalSupport(State);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Shut the border to arrivals, or open it again (GDD §12, §27).
+        ///
+        /// A national posture with a standing price on both settings, not a
+        /// filter: closing it does not make the pressure go away, it leaves it on
+        /// the other side of the line — and every state still carrying that
+        /// crisis notices who stopped carrying it.
+        /// </summary>
+        public bool SetBorderPolicy(bool closed)
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            bool ok = DisplacementSystem.SetBorderPolicy(State, closed);
             if (ok) SaveSystem.Save(State, AutosaveSlot);
             return ok;
         }

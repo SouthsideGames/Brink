@@ -286,14 +286,17 @@ namespace Brink.UI.Views
             var header = AddText("terminal-text-bright");
             header.text = $"\n {target.displayName.ToUpperInvariant()} — GOVERNMENT PERSONNEL";
 
-            if (penetration < 20f)
+            // One definition of what our access reaches, shared with the country
+            // dossier — two copies of a threshold are two thresholds.
+            var access = IntelReadout.PersonnelAccessOf(state, target.id);
+            if (access == IntelReadout.PersonnelAccess.None)
             {
                 AddText("terminal-text-dim").text =
                     "   No reporting. Establish and deepen a network to identify their ministers.";
                 return;
             }
 
-            bool assessable = penetration >= 55f;
+            bool assessable = access == IntelReadout.PersonnelAccess.Assessed;
             int nameWidth = AsciiChart.NameWidth(W - 6, 0.45f);
 
             var sb = new System.Text.StringBuilder();
@@ -301,7 +304,7 @@ namespace Brink.UI.Views
             {
                 string office = official.office.ToString().ToUpperInvariant();
                 string assessment = assessable
-                    ? CompetenceBand(official.competence)
+                    ? IntelReadout.CompetenceBand(official.competence)
                     : "UNASSESSED";
                 sb.AppendLine($"   {office,-13} {AsciiChart.Cell(official.displayName, nameWidth)}  {assessment}");
             }
@@ -399,18 +402,6 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text =
                 "   CULTIVATE is patient and quiet. RECRUIT asks the question — refused, they "
                 + "know. DISCREDIT ruins them publicly and everyone can see it was done.";
-        }
-
-        /// <summary>
-        /// A band, never a number. An estimate that printed 63.4 would be
-        /// claiming a precision collection does not have.
-        /// </summary>
-        static string CompetenceBand(float competence)
-        {
-            if (competence >= 70f) return "CAPABLE";
-            if (competence >= 50f) return "ADEQUATE";
-            if (competence >= 35f) return "WEAK";
-            return "OUT OF DEPTH";
         }
 
         void BuildNetworkControls(GameState state)

@@ -202,6 +202,7 @@ namespace Brink.UI.Views
                 () => { GameController.Instance.SecureMilitaryLoyalty(); Refresh(); });
 
             BuildOppositionControls(state, player, gov);
+            BuildDisplacementControls(state, player);
 
             // The bargaining instruments: repeatable, cheap, and the pillar's
             // day-to-day work. Two roads to the same destination — one spends
@@ -427,6 +428,44 @@ namespace Brink.UI.Views
             AddButton(row, $"CONFRONT THEM [{OppositionSystem.ConfrontCost:F0} PC]",
                 effectiveness < 0.33f ? "danger" : null,
                 () => { GameController.Instance.ConfrontOpposition(); Refresh(); });
+        }
+
+        /// <summary>
+        /// People arriving, and people leaving (GDD §12, §27).
+        ///
+        /// On the GOVERNMENT screen rather than DIPLOMACY because the decision it
+        /// presents is a domestic one — it is paid for in money and in argument at
+        /// home — even though everything that produced it happened somewhere else.
+        /// </summary>
+        void BuildDisplacementControls(GameState state, CountryState player)
+        {
+            var displacement = player.displacement;
+            if (displacement.hosted < 0.5f && displacement.displaced < 0.5f
+                && !displacement.bordersClosed)
+                return;
+
+            AddText().text = "\n DISPLACEMENT";
+
+            var readout = AddText("terminal-text-dim");
+            readout.text =
+                $"   HOSTING {displacement.hosted:F0}   OUR OWN DISPLACED {displacement.displaced:F0}"
+                + $"   BORDER {(displacement.bordersClosed ? "CLOSED" : "OPEN")}"
+                + (displacement.hosted >= 0.5f
+                    ? $"\n   COSTING {displacement.hosted * DisplacementSystem.HostingCostPerPoint:F0} A MONTH"
+                      + $", AND {DisplacementSystem.StandardsDrag(player):F0} OFF LIVING STANDARDS"
+                    : "")
+                + (displacement.bordersClosed
+                    ? $"\n   SHUT {displacement.monthsClosed} MO. The pressure has not gone away; "
+                      + "it is on the other side of the line."
+                    : "");
+
+            var row = MakeRow();
+            bool closed = displacement.bordersClosed;
+            AddButton(row,
+                (closed ? "OPEN THE BORDER" : "CLOSE THE BORDER")
+                + $" [{DisplacementSystem.BorderPolicyCost:F0} PC]",
+                closed ? "primary" : "danger",
+                () => { GameController.Instance.SetBorderPolicy(!closed); Refresh(); });
         }
 
     }

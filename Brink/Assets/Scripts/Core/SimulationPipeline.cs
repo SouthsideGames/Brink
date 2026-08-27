@@ -44,6 +44,10 @@ namespace Brink.Core
             turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
             turns.ResolveMonth += AgentSystem.MonthlyUpdate;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;
+
+            // Straight after the bilateral tick and before the chamber, because a
+            // bloc's binding pull moves the alignment that the chamber then reads.
+            turns.ResolveMonth += BlocSystem.MonthlyUpdate;
             turns.ResolveMonth += AccessionSystem.MonthlyUpdate;
 
             // After the bilateral diplomacy tick: the chamber votes on the world
@@ -72,6 +76,18 @@ namespace Brink.Core
             // government reasons about a rising that has already happened rather
             // than about last month's map.
             turns.ResolveMonth += InsurgencySystem.MonthlyUpdate;
+
+            // After the risings and after territory, because both are what makes
+            // people leave — and before the AI thinks, so a government reasons
+            // about the arrivals it already has.
+            //
+            // Note the deliberate one-month lag: `GovernmentSystem` reads the
+            // displacement figures from the month before, because whichever of
+            // the two runs first reads the other's previous values. A government
+            // responding to last month's arrivals is the more defensible half of
+            // that trade — the alternative has people leaving on the strength of
+            // living standards that have not been computed yet.
+            turns.ResolveMonth += DisplacementSystem.MonthlyUpdate;
             turns.ResolveMonth += AISystem.MonthlyThink;
             turns.ResolveMonth += ProgressionSystem.MonthlyXP;
             turns.ResolveMonth += ConfrontationSystem.MonthlyTick;

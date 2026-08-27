@@ -1703,6 +1703,72 @@ three had passed for a long time:
       written-down debt in the `PipelineWiringTests.Grandfathered` sense, and it
       may only shrink.
 
+- [x] **Six more, in one pass** — the country dossier, displacement, blocs, the
+      economy's ordinary decline, the world's own past, and a way to stand back.
+      - **`DossierView` — the deep terminal tier at last** (spec 21, §28.1's
+        oldest named gap). Every fact was already in the game and **nothing
+        collected them by subject**: answering "what is this state doing?" meant
+        visiting five pillar screens and CHRONICLE and assembling it yourself,
+        every time. The argument is not tidiness — **collection had no visible
+        payoff**, because buying intelligence improved numbers scattered across
+        five screens. This is the one page where a well-collected state visibly
+        reads differently from an uncollected one: same layout, same headings,
+        half of it saying NO REPORTING. `IntelReadout.PersonnelAccessOf` is
+        **extracted and shared** with the INTELLIGENCE panel, because two screens
+        rendering one dossier with two copies of a threshold is two thresholds.
+      - **`DisplacementSystem` — the missing externality** (spec 19). Everything
+        bad that happened to a country stayed inside its borders: a state could be
+        bombed flat, starved and torn apart, and its neighbours noticed nothing but
+        a market number. War, insurgency and deprivation now displace people;
+        distance decides where they go; the receiving state's living standards and
+        unrest move; and the answer — carry them or shut the border — costs
+        either way. **Hosting is a trade, not a penalty** (arrivals work, slowly,
+        through `Growth.Apply`), or the only correct play would be to close on day
+        one and the decision would not be a decision. Border policy is national
+        rather than per-pair, on the `CivicPosture` model.
+      - **`BlocSystem` — sides with names** (spec 20). Blocs existed only as a
+        *term* in `RivalGravity`: nothing to join, lead, be excluded from or walk
+        out of. A bloc deliberately **carries no commitments** — defence, transit
+        and trade preference stay in `Treaty` where the acceptance logic and the
+        reputational costs already are — and is read in exactly two places, both
+        already load-bearing: `CouncilSystem.VoteScore` (+30 for a partner's
+        motion) and a monthly alignment pull between members. Leading costs PC
+        every month; cohesion is a target set by the members' own relations, so a
+        bloc of states that dislike each other comes apart on its own.
+      - **The economy pillar erodes in an ordinary bad decade.** The `distress`
+        term only fires below a market index of 55 — a collapse — so the case that
+        actually happens was still free: years of contraction with plant idle left
+        `pillars.economy` exactly where it started, while the military pillar
+        erodes from losses, peace terms and purges. `StagnationDrag` is zero by
+        construction at any healthy figure and sized against the routine ministry
+        contribution, so a bad decade **stops the pillar growing rather than
+        destroying it** — a condition a country can govern its way out of.
+      - **`HistoryCatalog` — the world before 1984.** The chronicle opened with two
+        lines in it, so CHRONICLE was blank for two years of every save and every
+        system that reasons from the past started from nothing. Three rules keep it
+        backstory rather than a second world generator: **history explains the
+        starting position and never creates it** (no statistic moves, and every
+        seeded memory is written at **weight zero** — `memoryWeight` has four
+        readers and would have retuned treaty acceptance, sanctions relief and
+        alliance willingness before month one); it is **derived, so it cannot
+        contradict** (a grievance only between states world generation already made
+        cold); and it **consumes no random draws**, so the Standard world stays
+        bit-identical to the one every balance figure was measured on. Content is
+        archetype-flavoured, never real events — the roster's standing rule.
+      - **`HoldSystem` — standing back on purpose.** There was one way to pass time
+        and it was a tap. A hold ends the moment anything needs the operator (an
+        open crisis, **FLASH** traffic, a vacancy, a war, an emptying treasury),
+        the months it uses are genuinely forgone rather than banked, and it pays no
+        XP and records no initiative — so a held year grades like a passive one,
+        which the harness has already priced at −0.22. Capped at 12 months, and it
+        **refuses to begin** on top of an open decision, because that would resolve
+        it by lapsing.
+      **Bug caught while writing it:** the first HOLD panel called `MakeRow()`
+      inside `BriefingView.Build`, which sets text on elements created once in the
+      constructor and never clears `Root` — it would have appended a fresh row on
+      every refresh and grown without bound. The panel is now built once and
+      rebuilt in place.
+
 **Not yet verified by a test run** — the environment this was written in has no
 Unity and no C# compiler at all, so nothing above has been compiled or executed.
 Run `bash Tools/run-suite.sh` before trusting any of it, and re-run
@@ -1712,9 +1778,15 @@ dragging the support target are all balance-relevant and none of them are
 measured.
 
 Recommended next:
-- **Run the suite.** Four new test classes (`ActionIndexTests`, `InsurgencyTests`,
-  `CouncilTests`, `OppositionTests`) and three new monthly systems, none of them
-  compiled. `run-suite.sh` partitions are already updated.
+- **Run the suite.** Nine new test classes (`ActionIndexTests`, `InsurgencyTests`,
+  `CouncilTests`, `OppositionTests`, `DisplacementTests`, `BlocTests`,
+  `HoldTests`, `HistoryCatalogTests`, `DossierTests`) and five new monthly
+  systems, none of them compiled. `run-suite.sh` partitions are already updated.
+- **The invariants most likely to complain**, in order: the readiness targets in
+  `WorldInvariantTests` (occupation drag now stacks with `InsurgencySystem.ForceDrag`),
+  the unrest and living-standards invariants (three new pressure terms), and any
+  test that assumed an empty chronicle at month zero (none found, but the sweep
+  was by grep).
 - **Re-measure balance** — see the note above; the last table predates all three
   new systems.
 - Diminishing returns on repeated covert ops (long-standing, niche).

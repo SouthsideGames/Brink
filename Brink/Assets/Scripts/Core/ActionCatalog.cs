@@ -248,6 +248,19 @@ namespace Brink.Core
                 verbs: new[] { nameof(GameController.BeginAccession),
                                nameof(GameController.AbandonAccession) });
 
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Found a bloc", "3 CP + monthly PC",
+                "A standing side with a name, rather than a coalition raised for one war. "
+                + "Members vote together in the chamber; holding it together is a monthly bill.",
+                BlocSystem.CanFound(state, state.playerCountryId, out string blocBlock),
+                blocBlock,
+                verbs: new[] { nameof(GameController.FoundBloc) });
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Bring a state into the bloc", "2 CP",
+                "They accept on their own interests — warmth, trust, dependence, and how "
+                + "frightened of us they are.",
+                BlocSystem.BlocOf(state, state.playerCountryId) != null,
+                "We do not lead a bloc.",
+                verbs: new[] { nameof(GameController.InviteToBloc),
+                               nameof(GameController.LeaveBloc) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Put a motion to the chamber", "2 CP",
                 "Condemnation, authorised measures or relief. States vote their own interests, "
                 + "a permanent member can block anything, and losing a vote you called is public.",
@@ -298,6 +311,13 @@ namespace Brink.Core
                 "Parliamentary systems only. A gamble on current standing.",
                 player.government.AllowsEarlyElection, "Only a parliamentary system can go to the country early.",
                 verbs: new[] { nameof(GameController.CallEarlyElection) });
+            Add(Pillar.Government, "GOVERNMENT",
+                player.displacement.bordersClosed ? "Open the border" : "Close the border",
+                "2 PC + standing",
+                "Whether we take people displaced from elsewhere. Carrying them costs money "
+                + "and is argued about; refusing them costs standing with every state that "
+                + "is still carrying them, and leaves the pressure next door.",
+                verbs: new[] { nameof(GameController.SetBorderPolicy) });
             Add(Pillar.Government, "GOVERNMENT", "Concede to the opposition", "2 PC + a real cost",
                 "Move toward them on what they are campaigning about. Always works, and what "
                 + "it costs depends on what you conceded — money, war support, allies or the "
@@ -342,6 +362,13 @@ namespace Brink.Core
             Add(Pillar.Military, "ENDGAME", "Execute an instrument", "4 CP",
                 "Only when prepared, and only against a state we are confronting.",
                 verbs: new[] { nameof(GameController.ExecuteEndgame) });
+            Add(Pillar.Government, "BRIEFING", "Hold for a stretch",
+                $"Up to {HoldSystem.MaxMonths} months of capacity",
+                "Stand back through a quiet run of months. It stops the moment anything needs "
+                + "deciding, and the command capacity of the months it uses is forgone — a "
+                + "held year grades like a passive one.",
+                HoldSystem.CanHold(state, out string holdBlock), holdBlock,
+                verbs: new[] { nameof(GameController.Hold) });
             Add(Pillar.Government, "OPERATOR", "Unlock a skill", "Skill points",
                 "Operator capability only — command capacity, action costs, precision. Never national power.",
                 state.skillPoints > 0, "No skill points available.",

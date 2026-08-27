@@ -160,6 +160,15 @@ namespace Brink.Data
         public List<Coalition> coalitions = new List<Coalition>();
 
         /// <summary>
+        /// Standing alignments with names (GDD §15.2).
+        ///
+        /// Distinct from `coalitions`, which are raised for one confrontation and
+        /// dissolve after it. A bloc outlives the reason it was founded, which is
+        /// the whole difference. Empty on an old save is correct — no migration.
+        /// </summary>
+        public List<Bloc> blocs = new List<Bloc>();
+
+        /// <summary>
         /// The multilateral chamber (GDD §15.2, §28).
         ///
         /// Its permanent seats are filled lazily by `CouncilSystem.EnsureSeated`
