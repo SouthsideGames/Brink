@@ -2154,6 +2154,11 @@ pass/fail totals and each failing test's name and assertion message.
   "Contested Sea Lane", **not** any real disputed territory — avoid modeling
   live real-world territorial claims (also an app-store risk in some regions).
 - In-game calendar starts JAN 1984 (placeholder epoch; revisit for real-world roster).
+- **Conquest counts in the annual grade** (user decision, 2026-08-28, supersedes
+  GDD §25's "never a conquest checklist"): `position` pays 30 per location taken
+  in the year and 8 a year per location held beyond the posting's opening
+  holdings, and held ground adds up to 12 points to the score directly
+  (spec 07 §3). Mandates still never ask for foreign ground.
 - Terminal voice: cold governmental language, uppercase headers ("MAR 1984",
   "CP 5", FLASH/PRIORITY/ADVISORY/WIRE/ARCHIVE notification classes).
 - Officials get country-appropriate titles (`Official.title`) from the profile.

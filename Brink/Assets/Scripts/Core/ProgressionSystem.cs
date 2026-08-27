@@ -253,7 +253,13 @@ namespace Brink.Core
             // even if no border changed.
             int treaties = TreatiesHeld(state, out int defensePacts);
             float position = 50f
-                             + (LocationsHeld(state) - snapshot.locationsHeld) * 12f
+                             // Conquest counts (2026-08-28, a design decision that
+                             // supersedes GDD §25's "never a conquest checklist"):
+                             // ground taken this year at 18, and ground held beyond
+                             // the posting's opening holdings at 4 a year, every
+                             // year — a position, not a one-off bonus.
+                             + (LocationsHeld(state) - snapshot.locationsHeld) * 30f
+                             + Math.Max(0, LocationsHeld(state) - OpeningHoldings(state)) * 8f
                              + (RelationsTotal(state) - snapshot.relationsTotal) * 0.35f
                              + (treaties - snapshot.treatiesHeld) * 9f
                              + (defensePacts - snapshot.defensePactsHeld) * 7f
@@ -327,6 +333,12 @@ namespace Brink.Core
             // Circumstance and difficulty context: a hard year is graded gently,
             // and a sharper AI is a harder world to perform in (GDD §25.2).
             score += adversity * 6f;
+
+            // Ground held beyond the opening holdings also pays directly (user
+            // decision, 2026-08-28): position is a tenth of the score, so a
+            // decade of conquest moved the grade by a tenth of a letter through
+            // that channel alone. Capped, so a map painter still has to govern.
+            score += Math.Min(12f, Math.Max(0, LocationsHeld(state) - OpeningHoldings(state)) * 1.5f);
             if (state.difficulty == Difficulty.Challenging) score += 3f;
             if (state.difficulty == Difficulty.Ruthless) score += 6f;
 
@@ -596,6 +608,12 @@ namespace Brink.Core
             float forces = mil.TotalPower / 3f * 100f;
             return Math.Min(1f, (forces * 0.6f + mil.logistics * 0.4f) / 100f);
         }
+
+        /// <summary>Locations the posting opened with (the mandate's base), or today's count on a save without one.</summary>
+        static int OpeningHoldings(GameState state)
+            => state.mandate != null && state.mandate.startLocationIds.Count > 0
+                ? state.mandate.startLocationIds.Count
+                : LocationsHeld(state);
 
         static int LocationsHeld(GameState state)
         {
