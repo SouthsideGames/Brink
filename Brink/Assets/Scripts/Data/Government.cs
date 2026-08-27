@@ -3,6 +3,31 @@ using System;
 namespace Brink.Data
 {
     /// <summary>
+    /// What an opposition is campaigning on (GDD §13).
+    ///
+    /// `Drift` is declared first so its ordinal is zero and a save written
+    /// before oppositions existed deserializes to the vaguest, least consequential
+    /// case rather than to an accusation nobody made.
+    /// </summary>
+    public enum OppositionTheme
+    {
+        /// <summary>"They have run out of ideas." The residual case, always available.</summary>
+        Drift = 0,
+
+        /// <summary>"People cannot afford to live." The material case.</summary>
+        Hardship = 1,
+
+        /// <summary>"End it." Against a war that is costing more than it is winning.</summary>
+        War = 2,
+
+        /// <summary>"They have hollowed out the state." Against how power is being used.</summary>
+        Corruption = 3,
+
+        /// <summary>"They are governing by fiat." Against the boot, not the budget.</summary>
+        Liberty = 4
+    }
+
+    /// <summary>
     /// Structural government types (GDD §13). These are institutional
     /// descriptions that change *how power works* — who can be dismissed, how
     /// leaders are replaced, what emergency authority costs — not flavor labels
@@ -125,6 +150,32 @@ namespace Brink.Data
         /// maintained rather than bought once.
         /// </summary>
         public float brokeredSupport;
+
+        /// <summary>
+        /// 0..100 how strong the argument against this government has become
+        /// (GDD §13, §27).
+        ///
+        /// **Faction was arithmetic and the opposition still did nothing.** A
+        /// turnover government took a support penalty, a chamber could withdraw
+        /// confidence, and an election was a roll against incumbency fatigue —
+        /// but nobody was ever *campaigning*. Nothing accumulated a case, nothing
+        /// chose an issue, and there was no way to answer one.
+        ///
+        /// Drifts toward `OppositionSystem.CaseTargetFor`, so it is built out of
+        /// the government's actual record and comes apart when the record
+        /// improves. Zero on an old save is right: a government that has not been
+        /// campaigned against has nothing standing against it yet.
+        /// </summary>
+        public float oppositionCase;
+
+        /// <summary>
+        /// What they are campaigning on. Decides which answer works — the whole
+        /// point of storing it rather than deriving a number.
+        /// </summary>
+        public OppositionTheme oppositionTheme;
+
+        /// <summary>Consecutive months this case has stood above the noise.</summary>
+        public int oppositionMonths;
 
         /// <summary>
         /// Standing built by addressing the public directly, 0..100.

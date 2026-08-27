@@ -153,6 +153,10 @@ namespace Brink.UI
                 // thing their eye lands on.
                 new ActionsView(),
                 new WorldMapView(),
+                // Beside the map, because both answer "tell me about them" — the
+                // map by position, the dossier by everything else. It is the one
+                // screen organised by *their* country rather than by our pillar.
+                new DossierView(),
                 new CabinetView(),
                 new MilitaryView(),
                 new EconomyView(),

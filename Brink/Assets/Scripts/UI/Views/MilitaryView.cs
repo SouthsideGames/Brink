@@ -265,6 +265,12 @@ namespace Brink.UI.Views
         /// they need no confrontation, do not escalate one, and pay no
         /// abruptness surcharge.
         /// </summary>
+        static string Sponsor(GameState state, Data.Insurgency rising)
+        {
+            var sponsor = state.FindCountry(rising.sponsorId);
+            return sponsor != null ? sponsor.displayName.ToUpperInvariant() : "AN UNKNOWN STATE";
+        }
+
         void BuildDefensiveProgrammes(GameState state, CountryState player)
         {
             var ours = new System.Collections.Generic.List<StrategicLocation>();
@@ -297,6 +303,26 @@ namespace Brink.UI.Views
                 $"   DEFENCE {site.defenseValue:F0}   GARRISON {site.garrison:F0}" +
                 (site.IsOccupied ? $"   PACIFICATION {site.pacification:F0}   (OCCUPIED)" : "") +
                 $"   OUR SHIELD {player.military.missileDefense:F0}";
+
+            // **An armed movement on ground we hold is a military fact and it
+            // belongs on the military screen.** Its numbers are precise here
+            // because this is our own territory — we are counting our own
+            // problem, not estimating somebody else's.
+            var rising = InsurgencySystem.At(state, site.id);
+            if (rising != null)
+            {
+                var line = AddText("sig-advice");
+                line.text =
+                    $"   ARMED MOVEMENT — STRENGTH {rising.strength:F0}  SUPPORT {rising.support:F0}"
+                    + (InsurgencySystem.Denies(state, site)
+                        ? "\n   This ground is producing nothing for us while it is contested."
+                        : "")
+                    + "\n   Counter-insurgency holds it down; only answering "
+                    + InsurgencySystem.Describe(rising.cause) + " ends it."
+                    + (InsurgencySystem.KnownSponsor(state, player.id, rising)
+                        ? "\n   ARMED BY " + Sponsor(state, rising)
+                        : "");
+            }
 
             var row = new VisualElement();
             row.AddToClassList("button-row");

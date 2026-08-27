@@ -779,6 +779,13 @@ namespace Brink.Data
             state.commandPoints.BeginMonth();
             state.influence = GameState.InfluencePerMonth;
             Core.ProgressionSystem.CaptureYearSnapshot(state);
+
+            // The decade before the operator arrived. Written last, after
+            // relationships exist, and deliberately **after** every random draw
+            // is spent: it consumes none, so the Standard world stays
+            // bit-identical to the one every balance figure was measured on.
+            Core.HistoryCatalog.Seed(state);
+
             state.AddChronicle(ChronicleCategory.System, null,
                 "Command terminal initialized. Operator access granted.");
             state.AddChronicle(ChronicleCategory.Political, state.playerCountryId,

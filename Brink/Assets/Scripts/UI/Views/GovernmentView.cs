@@ -201,6 +201,9 @@ namespace Brink.UI.Views
             AddButton(row1, $"SECURE COMMAND LOYALTY [{RegimeSystem.SecureLoyaltyCost:F0} PC]", null,
                 () => { GameController.Instance.SecureMilitaryLoyalty(); Refresh(); });
 
+            BuildOppositionControls(state, player, gov);
+            BuildDisplacementControls(state, player);
+
             // The bargaining instruments: repeatable, cheap, and the pillar's
             // day-to-day work. Two roads to the same destination — one spends
             // the operator's standing, the other spends the treasury.
@@ -383,5 +386,87 @@ namespace Brink.UI.Views
             sb.Append("  ").Append(AsciiChart.Cell(stat, labelWidth)).Append("  ");
             sb.AppendLine(AsciiChart.Cell(detail, System.Math.Max(8, W - labelWidth - 5)));
         }
+
+        /// <summary>
+        /// The people who want this government out (GDD §13).
+        ///
+        /// The theme is printed in words rather than as a number because the
+        /// theme is the decision: it decides which of the two answers works, and
+        /// an operator who reaches for the wrong one makes the case stronger.
+        /// The panel says so outright rather than making that a thing you learn
+        /// by losing an election.
+        /// </summary>
+        void BuildOppositionControls(GameState state, CountryState player, GovernmentState gov)
+        {
+            AddText().text = "\n THE OPPOSITION";
+
+            if (gov.oppositionCase < OppositionSystem.NoiseFloor)
+            {
+                AddText("terminal-text-dim").text =
+                    "   Nobody is making a serious case against this government. That is a "
+                    + "condition, not a fact — it is built out of the record, and the record "
+                    + "is still being written.";
+                return;
+            }
+
+            float effectiveness = OppositionSystem.ConfrontationEffectiveness(gov.oppositionTheme);
+
+            var readout = AddText("sig-advice");
+            readout.text =
+                $"   THEY ARE CAMPAIGNING {OppositionSystem.Describe(gov.oppositionTheme).ToUpperInvariant()}"
+                + $"\n   CASE {gov.oppositionCase:F0}   STANDING {gov.oppositionMonths} MO"
+                + $"   HOLDING DOWN SUPPORT BY {OppositionSystem.SupportDrag(gov):F0}"
+                + "\n   " + (effectiveness < 0.33f
+                    ? "This is not an argument that can be denied. The country can see it."
+                    : effectiveness < 0.6f
+                        ? "Denying it works, partly. Conceding works, and costs."
+                        : "This is mood rather than fact, and mood can be answered in public.");
+
+            var row = MakeRow();
+            AddButton(row, $"CONCEDE GROUND [{OppositionSystem.ConcedeCost:F0} PC]", "primary",
+                () => { GameController.Instance.ConcedeToOpposition(); Refresh(); });
+            AddButton(row, $"CONFRONT THEM [{OppositionSystem.ConfrontCost:F0} PC]",
+                effectiveness < 0.33f ? "danger" : null,
+                () => { GameController.Instance.ConfrontOpposition(); Refresh(); });
+        }
+
+        /// <summary>
+        /// People arriving, and people leaving (GDD §12, §27).
+        ///
+        /// On the GOVERNMENT screen rather than DIPLOMACY because the decision it
+        /// presents is a domestic one — it is paid for in money and in argument at
+        /// home — even though everything that produced it happened somewhere else.
+        /// </summary>
+        void BuildDisplacementControls(GameState state, CountryState player)
+        {
+            var displacement = player.displacement;
+            if (displacement.hosted < 0.5f && displacement.displaced < 0.5f
+                && !displacement.bordersClosed)
+                return;
+
+            AddText().text = "\n DISPLACEMENT";
+
+            var readout = AddText("terminal-text-dim");
+            readout.text =
+                $"   HOSTING {displacement.hosted:F0}   OUR OWN DISPLACED {displacement.displaced:F0}"
+                + $"   BORDER {(displacement.bordersClosed ? "CLOSED" : "OPEN")}"
+                + (displacement.hosted >= 0.5f
+                    ? $"\n   COSTING {displacement.hosted * DisplacementSystem.HostingCostPerPoint:F0} A MONTH"
+                      + $", AND {DisplacementSystem.StandardsDrag(player):F0} OFF LIVING STANDARDS"
+                    : "")
+                + (displacement.bordersClosed
+                    ? $"\n   SHUT {displacement.monthsClosed} MO. The pressure has not gone away; "
+                      + "it is on the other side of the line."
+                    : "");
+
+            var row = MakeRow();
+            bool closed = displacement.bordersClosed;
+            AddButton(row,
+                (closed ? "OPEN THE BORDER" : "CLOSE THE BORDER")
+                + $" [{DisplacementSystem.BorderPolicyCost:F0} PC]",
+                closed ? "primary" : "danger",
+                () => { GameController.Instance.SetBorderPolicy(!closed); Refresh(); });
+        }
+
     }
 }

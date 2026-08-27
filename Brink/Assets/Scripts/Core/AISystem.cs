@@ -450,7 +450,7 @@ namespace Brink.Core
         /// month's fear; the reserve is what keeps the long game fundable while
         /// the short one is being played.
         /// </summary>
-        const float DiscretionaryReserve = 250f;
+        public const float DiscretionaryReserve = 250f;
 
         static bool HardenDefenses(GameState state, AIState ai, CountryState country, Random rng)
         {

@@ -126,6 +126,18 @@ namespace Brink.Data
         /// <summary>Active and resolved confrontations (GDD §18).</summary>
         public List<Confrontation> confrontations = new List<Confrontation>();
 
+        /// <summary>
+        /// Armed movements on the map (GDD §12, §17.1, §19).
+        ///
+        /// The first thing in this list that is not a government. Empty is
+        /// correct for a save written before they existed — a world that
+        /// predates them has no *recorded* movements, and inventing some from
+        /// its unrest figures would be guessing at a history nobody played.
+        /// Same reasoning as the war-verdict counters, and the same conclusion:
+        /// no migration step.
+        /// </summary>
+        public List<Insurgency> insurgencies = new List<Insurgency>();
+
         /// <summary>Bilateral trade links (GDD §20).</summary>
         public List<TradeRelation> trade = new List<TradeRelation>();
 
@@ -146,6 +158,25 @@ namespace Brink.Data
 
         /// <summary>Active coalitions (GDD §15.2).</summary>
         public List<Coalition> coalitions = new List<Coalition>();
+
+        /// <summary>
+        /// Standing alignments with names (GDD §15.2).
+        ///
+        /// Distinct from `coalitions`, which are raised for one confrontation and
+        /// dissolve after it. A bloc outlives the reason it was founded, which is
+        /// the whole difference. Empty on an old save is correct — no migration.
+        /// </summary>
+        public List<Bloc> blocs = new List<Bloc>();
+
+        /// <summary>
+        /// The multilateral chamber (GDD §15.2, §28).
+        ///
+        /// Its permanent seats are filled lazily by `CouncilSystem.EnsureSeated`
+        /// from the capability the world opened with, so an existing save picks
+        /// up a chamber on load without a migration step and always seats the
+        /// same five.
+        /// </summary>
+        public CouncilState council = new CouncilState();
 
         /// <summary>Joint exercise after-action records (GDD §15.3).</summary>
         public List<ExerciseRecord> exercises = new List<ExerciseRecord>();

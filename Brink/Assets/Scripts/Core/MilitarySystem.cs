@@ -254,6 +254,11 @@ namespace Brink.Core
                 float garrisonDrag = Math.Min(25f,
                     TerritorySystem.OccupiedValue(state, country.id) * 0.12f);
 
+                // An armed movement on our own ground ties down the same force,
+                // and by the same mechanism: it moves the target rather than
+                // subtracting from the value.
+                garrisonDrag += InsurgencySystem.ForceDrag(state, country.id);
+
                 foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
                 {
                     var force = mil.Get(branch);
@@ -1193,6 +1198,14 @@ namespace Brink.Core
                     target.pacification = Clamp(target.pacification + 12f);
                     if (attacker != null)
                         attacker.stability = Clamp(attacker.stability + 0.8f);
+
+                    // If there is an actual movement there, this is what it is
+                    // for. Raising `pacification` alone would leave the fighters
+                    // untouched while the readout said the operation worked —
+                    // an operation that appears to succeed and changes nothing
+                    // the operator was aiming at.
+                    InsurgencySystem.OnCounterInsurgency(state, target, 1f);
+
                     return $"Security operations across {target.displayName}. The population is "
                            + "quieter, and not necessarily more willing.";
 

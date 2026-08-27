@@ -295,6 +295,90 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Arm an existing movement in somebody else's country (GDD §17.1).
+        ///
+        /// Note what is missing: there is no verb here that *starts* one. A
+        /// government finds a rising and supplies it; it does not commission a
+        /// grievance. That is the same rule `RegimeSystem` runs on, and it is
+        /// what keeps a stable state un-destabilisable by clicking.
+        /// </summary>
+        public bool SupportInsurgency(string insurgencyId)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = InsurgencySystem.Support(State, Turns,
+                InsurgencySystem.Find(State, insurgencyId));
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
+        /// <summary>Close the channel. What they hold, they keep.</summary>
+        public bool WithdrawInsurgencySupport(string insurgencyId)
+        {
+            if (!IsRunning) return false;
+            bool ok = InsurgencySystem.WithdrawSupportBy(State, State.playerCountryId,
+                InsurgencySystem.Find(State, insurgencyId));
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Stand back for a stretch of quiet months (GDD §6).
+        ///
+        /// Not a fast-forward: it ends the moment anything needs deciding, and
+        /// the capacity of the months it consumes is genuinely forgone.
+        /// </summary>
+        public HoldSystem.Result Hold(int months)
+        {
+            if (!IsRunning) return new HoldSystem.Result { months = 0, stopped = "No session." };
+
+            var result = HoldSystem.Hold(State, Turns, months);
+            if (result.months > 0) SaveSystem.Save(State, AutosaveSlot);
+            return result;
+        }
+
+        /// <summary>Found a standing bloc and lead it (GDD §15.2).</summary>
+        public bool FoundBloc(string name)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            var bloc = BlocSystem.Found(State, Turns, name);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return bloc != null;
+        }
+
+        /// <summary>Ask a state into the bloc we lead. They decide.</summary>
+        public bool InviteToBloc(string targetId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool ok = BlocSystem.Invite(State, Turns, targetId);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
+        /// <summary>Walk out. It costs trust with everyone still in it.</summary>
+        public bool LeaveBloc()
+        {
+            if (!IsRunning) return false;
+            bool ok = BlocSystem.LeaveBy(State, State.playerCountryId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Put a motion to the multilateral chamber (GDD §15.2).
+        ///
+        /// The motion itself is drafted from live world state by
+        /// `CouncilSystem.AvailableMotions` — the operator chooses which
+        /// grievance to spend the agenda on, not what to allege.
+        /// </summary>
+        public bool RaiseCouncilMotion(Data.CouncilMotion motion)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            var resolved = CouncilSystem.Raise(State, Turns, motion);
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return resolved != null;
+        }
+
         /// <summary>Begin an industrial programme (GDD §20 amendment).</summary>
         public bool BeginIndustrialProgramme(EconomicSector sector, IndustrialScale scale)
         {
@@ -393,6 +477,46 @@ namespace Brink.Core
         {
             if (!MayCommand(Data.Pillar.Government)) return false;
             bool ok = GovernmentSystem.BuildPoliticalSupport(State);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Shut the border to arrivals, or open it again (GDD §12, §27).
+        ///
+        /// A national posture with a standing price on both settings, not a
+        /// filter: closing it does not make the pressure go away, it leaves it on
+        /// the other side of the line — and every state still carrying that
+        /// crisis notices who stopped carrying it.
+        /// </summary>
+        public bool SetBorderPolicy(bool closed)
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            bool ok = DisplacementSystem.SetBorderPolicy(State, closed);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Give ground to the opposition (GDD §13). Always works; the cost is
+        /// chosen to match what was conceded.
+        /// </summary>
+        public bool ConcedeToOpposition()
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            bool ok = OppositionSystem.Concede(State);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Take the opposition on in public. Effective against a case made of
+        /// mood; counter-productive against one made of facts.
+        /// </summary>
+        public bool ConfrontOpposition()
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            bool ok = OppositionSystem.Confront(State);
             if (ok) SaveSystem.Save(State, AutosaveSlot);
             return ok;
         }

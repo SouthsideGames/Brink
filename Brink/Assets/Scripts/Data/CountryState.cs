@@ -153,6 +153,17 @@ namespace Brink.Data
         /// years, and never quite to zero.
         /// </summary>
         public float publicGrievance;
+
+        /// <summary>
+        /// People who have had to leave, and the people this country is carrying
+        /// for somebody else (GDD §12, §27).
+        ///
+        /// The first thing in this class that is about the *world's* effect on a
+        /// country rather than the country's own condition. Zero on an old save
+        /// is correct — nobody was displaced in a world with no way to displace
+        /// them — so it needs no migration step.
+        /// </summary>
+        public DisplacementState displacement = new DisplacementState();
     }
 
     /// <summary>Chronicle categories for the world archive (GDD §31.3).</summary>

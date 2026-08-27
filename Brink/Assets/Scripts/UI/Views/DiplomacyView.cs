@@ -42,6 +42,188 @@ namespace Brink.UI.Views
             BuildTreatyControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
+            BuildBlocControls(state);
+            BuildCouncilControls(state);
+        }
+
+        /// <summary>
+        /// Sides with names (GDD §15.2).
+        ///
+        /// Placed above the chamber deliberately: a bloc is what an operator
+        /// arrives in the chamber *as*, and the panel order should read the way
+        /// the causation runs.
+        /// </summary>
+        void BuildBlocControls(GameState state)
+        {
+            var player = state.PlayerCountry;
+            var ours = BlocSystem.BlocOf(state, player.id);
+
+            var text = AddText();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("BLOCS", W));
+
+            bool any = false;
+            foreach (var bloc in state.blocs)
+            {
+                if (bloc.dissolved) continue;
+                any = true;
+
+                var leader = state.FindCountry(bloc.leaderId);
+                sb.AppendLine($" {bloc.name}"
+                              + (ours != null && ours.id == bloc.id ? "   [OURS]" : ""));
+                sb.AppendLine($"   LED BY {(leader != null ? leader.displayName.ToUpperInvariant() : "NOBODY")}"
+                              + $"   COHESION {bloc.cohesion:F0}"
+                              + $"   {bloc.memberIds.Count} STATE(S)");
+
+                var names = new System.Text.StringBuilder();
+                foreach (string memberId in bloc.memberIds)
+                {
+                    var member = state.FindCountry(memberId);
+                    if (member == null) continue;
+                    if (names.Length > 0) names.Append(", ");
+                    names.Append(member.displayName.ToUpperInvariant());
+                }
+                sb.AppendLine("   " + names);
+                sb.AppendLine();
+            }
+
+            if (!any)
+                sb.AppendLine(" NO BLOC EXISTS. The world has sides; none of them has a name yet.");
+
+            text.text = sb.ToString();
+
+            var row = MakeRow();
+
+            if (ours == null)
+            {
+                var found = AddButton(row, $"FOUND A BLOC [{BlocSystem.FoundCost} CP]", "primary",
+                    () => { GameController.Instance.FoundBloc(null); Refresh(); });
+                if (!BlocSystem.CanFound(state, player.id, out string blocked))
+                    Block(found, blocked);
+            }
+            else
+            {
+                if (ours.leaderId == player.id)
+                {
+                    foreach (var candidate in state.countries)
+                    {
+                        if (candidate.isPlayer || ours.Has(candidate.id)) continue;
+                        if (BlocSystem.BlocOf(state, candidate.id) != null) continue;
+
+                        // Only the states that would plausibly say yes. Twenty-three
+                        // buttons is not a row on a phone, and offering an invitation
+                        // that will certainly be refused is the dead-button bug.
+                        if (BlocSystem.JoinWillingness(state, ours, candidate.id) < 40f) continue;
+
+                        var captured = candidate.id;
+                        AddButton(row,
+                            $"INVITE {candidate.displayName.ToUpperInvariant()} "
+                            + $"[{BlocSystem.InviteCost} CP]", null,
+                            () => { GameController.Instance.InviteToBloc(captured); Refresh(); });
+                    }
+                }
+
+                AddButton(row, "LEAVE THE BLOC", "danger",
+                    () => { GameController.Instance.LeaveBloc(); Refresh(); });
+            }
+
+            ExplainBlockedCommands(Root);
+        }
+
+        /// <summary>
+        /// The chamber (GDD §15.2, §28).
+        ///
+        /// Two things it must say plainly, because both are counter-intuitive
+        /// and both are the design: which five seats can stop anything, and what
+        /// is currently standing against whom. A censure or a mandate is a fact
+        /// about the world that changes what other verbs cost, so it belongs on
+        /// the screen rather than in a notification that scrolls away.
+        /// </summary>
+        void BuildCouncilControls(GameState state)
+        {
+            CouncilSystem.EnsureSeated(state);
+            var council = state.council;
+
+            var text = AddText();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("THE CHAMBER", W));
+
+            var seats = new System.Text.StringBuilder();
+            foreach (string id in council.permanentMembers)
+            {
+                var member = state.FindCountry(id);
+                if (member == null) continue;
+                if (seats.Length > 0) seats.Append(", ");
+                seats.Append(member.displayName.ToUpperInvariant());
+            }
+            sb.AppendLine($" PERMANENT SEATS: {seats}");
+            sb.AppendLine(" Any of them can block a motion outright. Doing so is public, and the");
+            sb.AppendLine(" states that voted for it remember.");
+            sb.AppendLine();
+
+            if (council.censures.Count == 0 && council.mandates.Count == 0)
+                sb.AppendLine(" NOTHING STANDS AGAINST ANY STATE.");
+
+            foreach (var censure in council.censures)
+            {
+                var subject = state.FindCountry(censure.subjectId);
+                if (subject == null) continue;
+                sb.AppendLine($" CENSURED  {subject.displayName.ToUpperInvariant()} "
+                              + $"({censure.monthsRemaining} MO REMAINING)");
+            }
+            foreach (var mandate in council.mandates)
+            {
+                var subject = state.FindCountry(mandate.subjectId);
+                if (subject == null) continue;
+                sb.AppendLine($" MEASURES AUTHORISED AGAINST {subject.displayName.ToUpperInvariant()} "
+                              + $"({mandate.monthsRemaining} MO REMAINING)");
+            }
+
+            sb.AppendLine();
+            var recent = council.record;
+            int shown = 0;
+            for (int i = recent.Count - 1; i >= 0 && shown < 3; i--, shown++)
+            {
+                var motion = recent[i];
+                string verdict = motion.outcome == MotionOutcome.Passed ? "CARRIED"
+                    : motion.outcome == MotionOutcome.Vetoed ? "BLOCKED" : "REJECTED";
+                sb.AppendLine($" {motion.raised.DisplayString}  {verdict}  "
+                              + $"{motion.yes}-{motion.no}-{motion.abstain}");
+                sb.AppendLine("   " + motion.summary);
+            }
+
+            text.text = sb.ToString();
+
+            var motions = CouncilSystem.AvailableMotions(state, state.playerCountryId);
+            bool canRaise = CouncilSystem.CanRaise(state, state.playerCountryId, out string blocked);
+
+            if (motions.Count == 0)
+            {
+                AddText("terminal-text-dim").text =
+                    "   NOTHING TO PUT TO IT. The chamber has no agenda of its own — a motion "
+                    + "has to be about something a state is actually doing.";
+                return;
+            }
+
+            var row = MakeRow();
+            foreach (var motion in motions)
+            {
+                var captured = motion;
+                var subject = state.FindCountry(motion.subjectId);
+                if (subject == null) continue;
+
+                string label = motion.kind == MotionKind.Condemnation ? "CONDEMN"
+                    : motion.kind == MotionKind.SanctionsMandate ? "AUTHORISE MEASURES ON"
+                    : "FUND RELIEF FOR";
+
+                var button = AddButton(row,
+                    $"{label} {subject.displayName.ToUpperInvariant()} "
+                    + $"[{CouncilSystem.MotionCost} CP]", "primary",
+                    () => { GameController.Instance.RaiseCouncilMotion(captured); Refresh(); });
+
+                if (!canRaise) Block(button, blocked);
+            }
+            ExplainBlockedCommands(Root);
         }
 
         /// <summary>

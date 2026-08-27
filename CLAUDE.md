@@ -1598,7 +1598,197 @@ three had passed for a long time:
       Guarded by `MapAndLayoutTests.SettingsPanel_FullResetIsReachable`,
       including the two-step confirm staying two-step.
 
+- [x] **The first actor that is not a government** (`InsurgencySystem`, spec 16).
+      Every actor on the map was a state, so the only violence available was
+      declared, attributed and closed with a verdict — there was **no way to
+      bleed a rival without becoming a belligerent**, which is the most
+      characteristic instrument of the era this game is set in. The pieces
+      existed and never met: `PopularResistance` was a number an operation
+      resolved against (occupied ground fought back when attacked and did nothing
+      in between), `pacification` had one producer and one consumer, and
+      `publicGrievance` fed conspiracy that could only ever end *its own*
+      government, never cost anybody a province.
+      Five rules, each one already paid for elsewhere in this file:
+      - **Nobody creates an insurgency.** They arise from conditions the
+        simulation already computes; a sponsor *finds* one and arms it. There is
+        no `GameController` method that starts a rising, and sponsorship is a
+        ×1.28 multiplier on an existing cause — the `RegimeSystem` rule, so a
+        contented province stays contented however much money is pushed at it.
+      - **Support is a target** (`SupportTargetFor`), so an occupation movement
+        evaporates the month the ground stops being occupied and repairing
+        hardship genuinely ends a rising. Nothing here ratchets.
+      - **Being attributed costs standing, never a pillar** — relations −22,
+        trust −26, threat +18, and −3.5 trust with everyone else.
+      - **Actor-generic and reachable.** `ConsiderSponsorship` runs for every AI
+        government *outside the objective budget* (the `ConsiderDetente`
+        precedent), because a standing covert programme is not a strategy
+        competing for this month's actions — which is exactly how routine
+        restocking went silent for thirty years.
+      - **The sponsor never gets the ground.** A won occupation rising reverts
+        the province to its original owner; if arming a movement were a route to
+        annexation it would simply be a better war. A separatist victory drives
+        the conditions `SecessionSystem` reads — countries are still created in
+        exactly one place.
+      **`Denies` is the load-bearing consequence**: at strength ≥50 a province
+      pays *nobody*, excluded from `held` in `TerritorySystem.Swing` while
+      remaining in `original`, so a contested location is a loss to its owner and
+      to whoever is sitting on it. That is how you take an oilfield off a rival
+      without taking it.
+      **Caught while writing it:** the first draft billed the holder's
+      `stability` and `ground.supply` monthly, and both are target-driven — a
+      flat subtraction erased by the same tick, the occupation-readiness bug
+      being written for the twelfth time. Costs now move targets
+      (`ForceDrag` / `StabilityDrag` / `UnrestPressure`); only genuine stores
+      (garrison, pacification, treasury, war exhaustion) are written directly.
+      **When you add a recurring cost, check whether its victim drifts.**
+
+- [x] **The multilateral chamber** (`CouncilSystem`, spec 17). Diplomacy was
+      bilateral outreach plus coalitions raised for one war, so **sanctions were
+      unilateral by construction** — five states squeezing one meant five
+      separate persuasions and five senders each paying full blowback — and there
+      was no way to act on somebody else's war short of joining it.
+      - **Votes are read, never stored.** `VoteScore` computes from the six
+        `Relationship` dimensions each time, so there is no second opinion model
+        to drift out of step with the first, and a state bought off this month
+        votes differently this month. The dependence term is what finally makes
+        trade dependence a *diplomatic* asset: you do not vote to sanction your
+        own supplier.
+      - **The veto is the design.** A permanent member kills anything, so a great
+        power cannot be censured while it has a friend in the chamber. Not free:
+        blocking costs standing with every state that voted yes.
+      - **A lost vote costs the mover**, or the correct play is to table one every
+        month and see what sticks. One motion worldwide every four months.
+      - What passing buys is **mechanical, not atmospheric**: a mandate multiplies
+        every sender's blowback by 0.55, stops the regime lapsing, and makes
+        `SeekSanctionsReliefBy` refuse outright (otherwise the target works the
+        softest member and the apparatus comes apart one relationship at a time);
+        a censure is +8 diplomatic isolation in `StrategicPressure`.
+      Seats are filled lazily and **never revised** — a chamber tracking this
+      year's league table would have no grievance in it, and the grievance is the
+      point.
+
+- [x] **The opposition does something** (`OppositionSystem`, spec 18). Faction
+      became arithmetic and confidence votes worked, but nobody was ever
+      *campaigning*: an election was a roll against incumbency fatigue, and the
+      pillar's only domestic antagonist was a coup — either nothing was happening
+      or the army was in the building.
+      **The theme decides which answer works**, and that is the whole system.
+      Hardship and a war cannot be shouted down (confronting them *backfires*,
+      +9 to the case, because what is being denied is visible from every kitchen
+      in the country); drift is mood, and mood is what a communications operation
+      is for. Conceding always works and always costs something matched to what
+      was conceded — money for hardship, war support for a war, elite goodwill
+      for corruption, and for liberty **the civic posture itself**, because there
+      is no way to grant that one and keep the instrument.
+      Read in three places so it is a force rather than a readout: the support
+      target, the election, and unrest pressure — all **targets**, never values.
+      A restrictive posture multiplies every theme but Liberty by 0.65: it
+      suppresses the campaign while the causes keep accruing, the same bargain
+      the posture already makes with unrest.
+
+- [x] **The COMMAND INDEX had gone stale, and now cannot** (`ActionIndexTests`).
+      `ActionCatalog` exists because this project's own author, who designed every
+      verb in it, reported forgetting what was possible — and then **ten operator
+      verbs shipped past it**: industrial programmes, agent operations, accession
+      efforts, equipment orders, war footing, the strategic pivot, directives,
+      direct action and securing the army, every one wired into a view and
+      invisible on the single screen whose job is to answer "what can I do". The
+      "written but never read" bug wearing the opposite costume — read constantly,
+      quietly incomplete.
+      `ActionEntry.verbs` names the `GameController` method(s) each entry
+      documents via `nameof`, so renaming a verb breaks the build here instead of
+      orphaning its entry, and a test reflects over `GameController` and fails
+      when a public operator method has no entry. Anything on that class which is
+      not an operator action is named in `NotOperatorActions` **with a reason** —
+      written-down debt in the `PipelineWiringTests.Grandfathered` sense, and it
+      may only shrink.
+
+- [x] **Six more, in one pass** — the country dossier, displacement, blocs, the
+      economy's ordinary decline, the world's own past, and a way to stand back.
+      - **`DossierView` — the deep terminal tier at last** (spec 21, §28.1's
+        oldest named gap). Every fact was already in the game and **nothing
+        collected them by subject**: answering "what is this state doing?" meant
+        visiting five pillar screens and CHRONICLE and assembling it yourself,
+        every time. The argument is not tidiness — **collection had no visible
+        payoff**, because buying intelligence improved numbers scattered across
+        five screens. This is the one page where a well-collected state visibly
+        reads differently from an uncollected one: same layout, same headings,
+        half of it saying NO REPORTING. `IntelReadout.PersonnelAccessOf` is
+        **extracted and shared** with the INTELLIGENCE panel, because two screens
+        rendering one dossier with two copies of a threshold is two thresholds.
+      - **`DisplacementSystem` — the missing externality** (spec 19). Everything
+        bad that happened to a country stayed inside its borders: a state could be
+        bombed flat, starved and torn apart, and its neighbours noticed nothing but
+        a market number. War, insurgency and deprivation now displace people;
+        distance decides where they go; the receiving state's living standards and
+        unrest move; and the answer — carry them or shut the border — costs
+        either way. **Hosting is a trade, not a penalty** (arrivals work, slowly,
+        through `Growth.Apply`), or the only correct play would be to close on day
+        one and the decision would not be a decision. Border policy is national
+        rather than per-pair, on the `CivicPosture` model.
+      - **`BlocSystem` — sides with names** (spec 20). Blocs existed only as a
+        *term* in `RivalGravity`: nothing to join, lead, be excluded from or walk
+        out of. A bloc deliberately **carries no commitments** — defence, transit
+        and trade preference stay in `Treaty` where the acceptance logic and the
+        reputational costs already are — and is read in exactly two places, both
+        already load-bearing: `CouncilSystem.VoteScore` (+30 for a partner's
+        motion) and a monthly alignment pull between members. Leading costs PC
+        every month; cohesion is a target set by the members' own relations, so a
+        bloc of states that dislike each other comes apart on its own.
+      - **The economy pillar erodes in an ordinary bad decade.** The `distress`
+        term only fires below a market index of 55 — a collapse — so the case that
+        actually happens was still free: years of contraction with plant idle left
+        `pillars.economy` exactly where it started, while the military pillar
+        erodes from losses, peace terms and purges. `StagnationDrag` is zero by
+        construction at any healthy figure and sized against the routine ministry
+        contribution, so a bad decade **stops the pillar growing rather than
+        destroying it** — a condition a country can govern its way out of.
+      - **`HistoryCatalog` — the world before 1984.** The chronicle opened with two
+        lines in it, so CHRONICLE was blank for two years of every save and every
+        system that reasons from the past started from nothing. Three rules keep it
+        backstory rather than a second world generator: **history explains the
+        starting position and never creates it** (no statistic moves, and every
+        seeded memory is written at **weight zero** — `memoryWeight` has four
+        readers and would have retuned treaty acceptance, sanctions relief and
+        alliance willingness before month one); it is **derived, so it cannot
+        contradict** (a grievance only between states world generation already made
+        cold); and it **consumes no random draws**, so the Standard world stays
+        bit-identical to the one every balance figure was measured on. Content is
+        archetype-flavoured, never real events — the roster's standing rule.
+      - **`HoldSystem` — standing back on purpose.** There was one way to pass time
+        and it was a tap. A hold ends the moment anything needs the operator (an
+        open crisis, **FLASH** traffic, a vacancy, a war, an emptying treasury),
+        the months it uses are genuinely forgone rather than banked, and it pays no
+        XP and records no initiative — so a held year grades like a passive one,
+        which the harness has already priced at −0.22. Capped at 12 months, and it
+        **refuses to begin** on top of an open decision, because that would resolve
+        it by lapsing.
+      **Bug caught while writing it:** the first HOLD panel called `MakeRow()`
+      inside `BriefingView.Build`, which sets text on elements created once in the
+      constructor and never clears `Root` — it would have appended a fresh row on
+      every refresh and grown without bound. The panel is now built once and
+      rebuilt in place.
+
+**Not yet verified by a test run** — the environment this was written in has no
+Unity and no C# compiler at all, so nothing above has been compiled or executed.
+Run `bash Tools/run-suite.sh` before trusting any of it, and re-run
+`Report_MultiSeedBalance`: contested ground denying its own owner, a censure in
+`StrategicPressure`, mandated sanctions at 0.55 blowback and an opposition
+dragging the support target are all balance-relevant and none of them are
+measured.
+
 Recommended next:
+- **Run the suite.** Nine new test classes (`ActionIndexTests`, `InsurgencyTests`,
+  `CouncilTests`, `OppositionTests`, `DisplacementTests`, `BlocTests`,
+  `HoldTests`, `HistoryCatalogTests`, `DossierTests`) and five new monthly
+  systems, none of them compiled. `run-suite.sh` partitions are already updated.
+- **The invariants most likely to complain**, in order: the readiness targets in
+  `WorldInvariantTests` (occupation drag now stacks with `InsurgencySystem.ForceDrag`),
+  the unrest and living-standards invariants (three new pressure terms), and any
+  test that assumed an empty chronicle at month zero (none found, but the sweep
+  was by grep).
+- **Re-measure balance** — see the note above; the last table predates all three
+  new systems.
 - Diminishing returns on repeated covert ops (long-standing, niche).
 - An AI verb for food-poor states to seek food trade links — authored links
   and player deals are still the only routes to a foreign food ceiling.

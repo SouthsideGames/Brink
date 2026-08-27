@@ -337,6 +337,35 @@ namespace Brink.Core
             if (distress > 0.01f)
                 country.pillars.economy = Clamp(country.pillars.economy - distress * 0.11f, 0f, 100f);
 
+            // **And the ordinary version of the same thing.**
+            //
+            // The `distress` term above only fires below a market index of 55 —
+            // a genuine collapse — so it closed the crisis case and left the one
+            // that actually happens: a decade of stagnation. An economy that is
+            // shrinking, with plant idle and people out of work for years, loses
+            // capability whether or not the index ever crosses the crisis line,
+            // and until now such a decade left `pillars.economy` exactly where it
+            // started. Compare the military pillar, which erodes from losses,
+            // peace terms and purges.
+            //
+            // Zero by construction in normal play, deliberately, and by the same
+            // discipline as `distress`: growth has to be actually negative and
+            // unemployment above 9% before either term is non-zero, so this
+            // cannot quietly retune a healthy economy.
+            //
+            // Sized against the routine ministry contribution (`amount` in
+            // `CabinetSystem.ApplyPillarEffect` is 0.05–0.30 a month before
+            // damping, so roughly 1.8 points a year). At −3% growth and 14%
+            // unemployment this is ~1.4 a year: a bad decade stops the pillar
+            // growing rather than destroying it, which is the right severity for
+            // a condition a country can govern its way out of. The recovery path
+            // is the same one that produced the capability — a working ministry
+            // and industrial programmes — and it is reachable the month growth
+            // turns positive.
+            float stagnation = StagnationDrag(eco);
+            if (stagnation > 0.001f)
+                country.pillars.economy = Clamp(country.pillars.economy - stagnation, 0f, 100f);
+
             // ---- inflation ----
             // Coercion is a supply shock: scarcity raises prices even as demand
             // cools, so a sanctioned economy stagflates rather than disinflates.
@@ -686,6 +715,15 @@ namespace Brink.Core
         }
 
         /// <summary>Self-inflicted damage from sanctions this country imposes on others.</summary>
+        /// <summary>
+        /// Monthly capability lost to an economy that is shrinking with plant
+        /// idle. **Zero at any healthy figure**, by construction — see the
+        /// commentary at the call site in `UpdateCountry`.
+        /// </summary>
+        public static float StagnationDrag(EconomyState eco)
+            => Math.Max(0f, -eco.growthRate) * 0.020f
+             + Math.Max(0f, eco.unemployment - 9f) * 0.012f;
+
         public static float SanctionBlowbackFor(GameState state, string countryId)
         {
             float total = 0f;
@@ -703,6 +741,14 @@ namespace Brink.Core
                     var sender = state.FindCountry(countryId);
                     if (sender != null)
                         mitigation *= 1f - TechnologySystem.Effectiveness(sender, "CAP_FINANCE") * 0.3f;
+
+                    // **Multilateral measures cost the sender less.** This is what
+                    // a mandate actually buys, and the reason to spend a month's
+                    // diplomacy assembling one rather than simply imposing them:
+                    // a coalition of senders shares the disruption, and nobody's
+                    // exporters can be singled out for it.
+                    if (CouncilSystem.SanctionsMandated(state, sanction.targetId))
+                        mitigation *= 0.55f;
 
                     total += sanction.Blowback * exposure * mitigation;
                 }
@@ -805,6 +851,20 @@ namespace Brink.Core
             var target = state.FindCountry(targetId);
             if (sanction == null || relationship == null || sender == null || target == null) return false;
 
+            // **A sender cannot unilaterally lift what the chamber authorised.**
+            // Otherwise a mandate would be worth less than a bilateral regime:
+            // the target would simply work the softest member and the whole
+            // apparatus would come apart one relationship at a time.
+            if (CouncilSystem.SanctionsMandated(state, targetId))
+            {
+                if (targetId == state.playerCountryId)
+                    state.AddNotification(NotificationClass.Advisory, "RELIEF REFUSED",
+                        $"{sender.displayName} cannot lift measures the chamber has authorised. "
+                        + "The authorisation is what would have to go.",
+                        senderId, desk: ReportingDesk.Diplomacy);
+                return false;
+            }
+
             float willingness = ReliefWillingness(state, senderId, targetId);
             if (willingness < 50f)
             {
@@ -861,6 +921,11 @@ namespace Brink.Core
                 // terminal hostility for the rest of the save.
                 if (sanction.senderId == state.playerCountryId) continue;
                 if (sanction.monthsActive < SanctionReviewMonths) continue;
+
+                // A mandated regime does not quietly lapse. Ending measures the
+                // chamber authorised is a decision somebody has to take in public,
+                // which is the other half of what a mandate is worth.
+                if (CouncilSystem.SanctionsMandated(state, sanction.targetId)) continue;
 
                 var sender = state.FindCountry(sanction.senderId);
                 var target = state.FindCountry(sanction.targetId);
