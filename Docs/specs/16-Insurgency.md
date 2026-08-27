@@ -104,6 +104,12 @@ Only genuine stores are written monthly (`Bill`): garrison attrition,
 pacification suppression, treasury, war exhaustion, and national unity for a
 separatist movement.
 
+The treasury line is `intensity × InsurgencyBillPerMonth (24)`, i.e. a
+full-strength insurgency costs roughly one month's income (`gdp × 0.012`,
+15–40 for the roster) per month. It shipped at 210 — 6–12× income — which put a
+passive-decade Russia at −11,000 on its own; see spec 19 §5 for the same class of
+scale bug in hosting costs.
+
 **Everything target-driven is pushed through a target instead**, because a flat
 monthly subtraction on any of them is erased by the same month's drift — the trap
 that made occupation's readiness cost dead code for a year:

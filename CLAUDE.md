@@ -1769,6 +1769,44 @@ three had passed for a long time:
       every refresh and grown without bound. The panel is now built once and
       rebuilt in place.
 
+- [x] **Sixteen-posting playtest fixes (2026-08-26).** A headless harness
+      (`C:\Temp\brink-harness`, runtime compiled with Unity's Roslyn, ~90 s per
+      16-country × 7-playstyle × 10-year matrix) played every Standard posting
+      under every playstyle bot plus a strategic-instrument bot on two seeds.
+      What it found, and what changed:
+      - **Every state was bankrupt by year ten under every playstyle, including
+        doing nothing.** `DisplacementSystem` billed `hosted × 22`/month against
+        income of ~`gdp × 0.012` ≈ 15–40/month; every AI closed its border, the
+        player carried the world at 70–97 hosted, USA passive was −57,000.
+        Research is gated on a positive treasury, so **no strategic endgame was
+        reachable** in 224 decades. Now `0.4`/point, paid only from what is there
+        (spec 19 §5). `InsurgencySystem.Bill` had the same class of bug
+        (`intensity × 210` → `InsurgencyBillPerMonth = 24`, spec 16 §5).
+        **The annual grade never looks at the treasury**, which is why
+        `Report_MultiSeedBalance` could not see any of it — any new monthly cost
+        should be sized against `gdp × 0.012`, and
+        `DisplacementTests.ADecadeOfDoingNothingDoesNotEndInTheRed` is the leak
+        detector. Wars, occupation and posture still run a belligerent mid-tier
+        state several thousand into the red over a decade; that is an income-scale
+        question left open, not a leak.
+      - **Settlements ceded the objective to whoever proposed** —
+        `ProposeSettlementBy` called `Cede(loc, proposerId)` regardless of who
+        owned the ground or who was demanding it, and never checked the defender
+        still held it. `Settle` now gives the objective to the initiator only when
+        the initiator proposed; a defender's terms are the status quo; third-party
+        ground is renounced, not transferred. `CanOpenAgainst` refuses a demand
+        for ground the defender does not hold (spec 01 §5).
+      - **The AI could end the player's war without a decision** — its offer
+        auto-closed on the player's *computed* willingness. It now raises a
+        `TERMS_OFFERED` Crisis Turn; refusal or lapse buys six months' quiet.
+      - **Settlements did not bind** — the harness re-declared one war eighteen
+        times in a decade. `Relationship.settlementTruceMonths` (12) now blocks a
+        new confrontation between the pair; `Begin` checks it before charging CP.
+      - Open, not fixed: `ReachFactor`'s 0.35 floor lets Kazakhstan occupy the
+        Gulf Coast; military play is the only ground-gaining playstyle and the
+        only one that grades below passive (2.18 vs 2.29) — consistent with "never
+        a conquest checklist", but confirm it is the intended reading.
+
 **Not yet verified by a test run** — the environment this was written in has no
 Unity and no C# compiler at all, so nothing above has been compiled or executed.
 Run `bash Tools/run-suite.sh` before trusting any of it, and re-run

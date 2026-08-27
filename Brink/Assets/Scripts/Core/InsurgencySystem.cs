@@ -80,6 +80,9 @@ namespace Brink.Core
         /// <summary>Treasury one shipment costs the sponsor.</summary>
         public const float ShipmentTreasury = 420f;
 
+        /// <summary>Treasury a full-strength insurgency costs its holder per month (see <c>Bill</c>).</summary>
+        public const float InsurgencyBillPerMonth = 24f;
+
         /// <summary>
         /// Ground-force supply one shipment costs the sponsor.
         ///
@@ -614,7 +617,12 @@ namespace Brink.Core
             if (location.IsOccupied)
                 location.pacification = Clamp(location.pacification - intensity * 2.2f);
 
-            holder.resources.treasury -= intensity * 210f;
+            // Scaled to what a treasury earns (`EconomySystem`: ~gdp × 0.012 a
+            // month, 15–40 for the authored roster). A full-strength insurgency
+            // costs roughly one month's income per month — a serious, open-ended
+            // drain, not a bankruptcy. At 210 it was 6–12× income: Russia was
+            // −11,000 by year ten of a passive decade with nobody choosing anything.
+            holder.resources.treasury -= intensity * InsurgencyBillPerMonth;
             holder.warExhaustion = Clamp(holder.warExhaustion + intensity * 0.24f);
 
             if (insurgency.cause == InsurgencyCause.Separatism)

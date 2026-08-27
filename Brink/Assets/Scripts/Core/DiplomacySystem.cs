@@ -1075,6 +1075,7 @@ namespace Brink.Core
                 relationship.memoryWeight *= 0.985f;
 
                 if (relationship.sanctionsTruceMonths > 0) relationship.sanctionsTruceMonths--;
+                if (relationship.settlementTruceMonths > 0) relationship.settlementTruceMonths--;
             }
 
             UpdateConfrontationEffects(state);

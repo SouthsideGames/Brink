@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Brink.Data;
 
 namespace Brink.Core
@@ -37,6 +38,11 @@ namespace Brink.Core
             {
                 GameLog.Warn("CONFRONT",
                     $"{state.FindCountry(defenderId)?.displayName ?? defenderId} is already committed elsewhere.");
+                return null;
+            }
+            if (!CanOpenAgainst(state, initiatorId, defenderId, objective, objectiveLocationId, out string blocked))
+            {
+                GameLog.Warn("CONFRONT", blocked);
                 return null;
             }
             if (!turns.SpendCommandPoints(OpenCost, "Open confrontation"))
@@ -82,6 +88,37 @@ namespace Brink.Core
         /// The reason is returned because a refusal the operator cannot explain
         /// reads as a bug — the same rule the operation catalogue follows.
         /// </summary>
+        /// <summary>
+        /// Whether a confrontation against *this* state over *this* objective may
+        /// open at all: a settled pair is under truce for
+        /// <see cref="SettlementTruceMonths"/>, and a territorial demand must name
+        /// ground the defender actually holds — a war with Russia over a place
+        /// Brazil has since taken is not a war with Russia.
+        /// </summary>
+        public static bool CanOpenAgainst(GameState state, string initiatorId, string defenderId,
+            ConfrontationObjective objective, string objectiveLocationId, out string reason)
+        {
+            reason = "";
+            var relationship = state.FindRelationship(initiatorId, defenderId);
+            if (relationship != null && relationship.settlementTruceMonths > 0)
+            {
+                reason = $"A settlement with {state.FindCountry(defenderId)?.displayName ?? defenderId} " +
+                         $"binds us for {relationship.settlementTruceMonths} more month(s).";
+                return false;
+            }
+            if (objective == ConfrontationObjective.TerritorialConcession && !string.IsNullOrEmpty(objectiveLocationId))
+            {
+                var location = state.FindLocation(objectiveLocationId);
+                if (location != null && location.ownerId != defenderId)
+                {
+                    reason = $"{location.displayName} is not held by " +
+                             $"{state.FindCountry(defenderId)?.displayName ?? defenderId}.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public static bool CanOpenAnother(GameState state, string countryId, out string reason)
         {
             reason = "";
@@ -103,6 +140,12 @@ namespace Brink.Core
             // between the same pair — that is the same war. Fighting somebody
             // else at the same time is a different question, answered below.
             if (ExistingBetween(state, initiatorId, defenderId) != null) return null;
+
+            if (!CanOpenAgainst(state, initiatorId, defenderId, objective, objectiveLocationId, out string blocked))
+            {
+                if (initiatorId == state.playerCountryId) GameLog.Warn("CONFRONT", blocked);
+                return null;
+            }
 
             // A second front is a decision, not a prohibition (GDD §16, §18.1).
             //
@@ -467,6 +510,7 @@ namespace Brink.Core
         static void TickConfrontation(GameState state, Confrontation confrontation)
         {
             confrontation.monthsActive++;
+            if (confrontation.monthsUntilNextOffer > 0) confrontation.monthsUntilNextOffer--;
 
             var initiator = state.FindCountry(confrontation.initiatorId);
             var defender = state.FindCountry(confrontation.defenderId);
@@ -798,6 +842,11 @@ namespace Brink.Core
                 return true;
             }
 
+            // A foreign government's terms reach the operator as a decision,
+            // never as a fait accompli.
+            if (opponent.isPlayer && proposerId != state.playerCountryId)
+                return OfferTermsToPlayer(state, confrontation, proposerId);
+
             if (!WouldAcceptTermsFrom(state, confrontation, proposerId))
             {
                 state.AddNotification(NotificationClass.Advisory, "TERMS REJECTED",
@@ -807,43 +856,171 @@ namespace Brink.Core
                 return false;
             }
 
-            // Terms accepted: apply the objective.
+            Settle(state, confrontation, proposerId);
+            return true;
+        }
+
+        /// <summary>
+        /// Apply accepted terms. **The objective belongs to the initiator.** A
+        /// settlement proposed by the side that made the demand delivers the
+        /// demand; one proposed by the side that was demanded of is a withdrawal
+        /// of the claim and delivers nothing.
+        ///
+        /// This used to hand the objective to whoever *proposed* — so a defender
+        /// suing for peace "ceded" ground it already owned (recorded as "United
+        /// States cedes Western Siberian Fields"), and a war with Russia over a
+        /// location Brazil had since taken transferred Brazil's title to the
+        /// proposer. A cession now also requires that the ground is actually held
+        /// by one of the two parties.
+        /// </summary>
+        static void Settle(GameState state, Confrontation confrontation, string proposerId)
+        {
+            var proposer = state.FindCountry(proposerId);
+            var opponent = state.FindCountry(confrontation.OpponentOf(proposerId));
+            bool proposerIsClaimant = proposerId == confrontation.initiatorId;
+
             string summary;
-            switch (confrontation.objective)
+            if (!proposerIsClaimant)
             {
-                case ConfrontationObjective.TerritorialConcession:
+                // The defender's terms are the status quo. The initiator accepted
+                // them, so the claim is withdrawn and nothing changes hands.
+                summary = $"Settlement: {opponent.displayName} withdraws its claim against " +
+                          $"{proposer.displayName}. Nothing changes hands.";
+            }
+            else
+            {
+                switch (confrontation.objective)
                 {
-                    var loc = state.FindLocation(confrontation.objectiveLocationId);
-                    // A settled cession is recognised title, not occupation.
-                    if (loc != null) TerritorySystem.Cede(state, loc, proposerId);
-                    summary = $"Settlement: {opponent.displayName} cedes {loc?.displayName}.";
-                    player.pillars.diplomacy = Clamp(player.pillars.diplomacy - 3f);
-                    break;
+                    case ConfrontationObjective.TerritorialConcession:
+                    {
+                        var loc = state.FindLocation(confrontation.objectiveLocationId);
+                        if (loc != null && (loc.ownerId == opponent.id || loc.ownerId == proposer.id))
+                        {
+                            // A settled cession is recognised title, not occupation.
+                            TerritorySystem.Cede(state, loc, proposerId);
+                            summary = $"Settlement: {opponent.displayName} cedes {loc.displayName}.";
+                        }
+                        else if (loc != null)
+                        {
+                            var holder = state.FindCountry(loc.ownerId);
+                            summary = $"Settlement: {opponent.displayName} renounces {loc.displayName}, " +
+                                      $"but it is held by {holder?.displayName ?? loc.ownerId}. Nothing changes hands.";
+                        }
+                        else summary = $"Settlement: {opponent.displayName} accepts our terms.";
+                        proposer.pillars.diplomacy = Clamp(proposer.pillars.diplomacy - 3f);
+                        break;
+                    }
+                    case ConfrontationObjective.ResourceAccess:
+                        proposer.resources.strategicMaterials = Clamp(proposer.resources.strategicMaterials + 12f);
+                        proposer.resources.energy = Clamp(proposer.resources.energy + 8f);
+                        summary = $"Settlement: resource access secured from {opponent.displayName}.";
+                        break;
+                    case ConfrontationObjective.PolicyReversal:
+                        opponent.pillars.government = Clamp(opponent.pillars.government - 5f);
+                        proposer.pillars.diplomacy = Clamp(proposer.pillars.diplomacy + 4f);
+                        summary = $"Settlement: {opponent.displayName} reverses the contested policy.";
+                        break;
+                    default:
+                        proposer.pillars.military = Clamp(proposer.pillars.military + 3f);
+                        summary = $"Settlement: {opponent.displayName} stands down. Deterrence established.";
+                        break;
                 }
-                case ConfrontationObjective.ResourceAccess:
-                    player.resources.strategicMaterials = Clamp(player.resources.strategicMaterials + 12f);
-                    player.resources.energy = Clamp(player.resources.energy + 8f);
-                    summary = $"Settlement: resource access secured from {opponent.displayName}.";
-                    break;
-                case ConfrontationObjective.PolicyReversal:
-                    opponent.pillars.government = Clamp(opponent.pillars.government - 5f);
-                    player.pillars.diplomacy = Clamp(player.pillars.diplomacy + 4f);
-                    summary = $"Settlement: {opponent.displayName} reverses the contested policy.";
-                    break;
-                default:
-                    player.pillars.military = Clamp(player.pillars.military + 3f);
-                    summary = $"Settlement: {opponent.displayName} stands down. Deterrence established.";
-                    break;
             }
 
-            player.governmentApproval = Clamp(player.governmentApproval + 6f);
+            proposer.governmentApproval = Clamp(proposer.governmentApproval + 6f);
             if (proposerId == state.playerCountryId)
             {
                 ProgressionSystem.RecordInitiative(state);
                 ProgressionSystem.AwardXP(state, 80, "Confrontation settled on our terms");
             }
-            Close(state, confrontation, proposerId, true, summary);
-            return true;
+            Close(state, confrontation, proposerId, proposerIsClaimant, summary);
+        }
+
+        // ---------- terms offered to the player ----------
+
+        /// <summary>Crisis definition id used when a foreign government offers the player terms.</summary>
+        public const string TermsOfferedCrisisId = "TERMS_OFFERED";
+
+        /// <summary>Months a refused offer waits before the same government asks again.</summary>
+        public const int OfferCooldownMonths = 6;
+
+        /// <summary>
+        /// Months after any settlement before the same two states can open a new
+        /// confrontation against each other. Without it a settlement bound
+        /// nobody: the harness re-declared the same war eighteen times in a
+        /// decade, one month apart, each ended by the same offer.
+        /// </summary>
+        public const int SettlementTruceMonths = 12;
+
+        /// <summary>
+        /// A foreign government's terms arrive as a decision, not as a fait
+        /// accompli. `ProposeSettlementBy` used to close the player's war on the
+        /// player's behalf whenever their *computed* willingness cleared the bar
+        /// — a peace imposed without a decision, which the design forbids for a
+        /// war (§18.1) and should forbid for its ending too. Always returns
+        /// false: the confrontation is still open until the operator answers.
+        /// </summary>
+        static bool OfferTermsToPlayer(GameState state, Confrontation confrontation, string proposerId)
+        {
+            if (confrontation.monthsUntilNextOffer > 0) return false;
+            foreach (var open in state.activeCrises)
+                if (open.defId == TermsOfferedCrisisId && open.subjectCountryId == proposerId) return false;
+
+            var proposer = state.FindCountry(proposerId);
+            bool proposerIsClaimant = proposerId == confrontation.initiatorId;
+            string objective = ObjectiveText(state, confrontation);
+
+            var crisis = new ActiveCrisis
+            {
+                defId = TermsOfferedCrisisId,
+                subjectCountryId = proposerId,
+                title = "TERMS OFFERED",
+                body = proposerIsClaimant
+                    ? $"{proposer?.displayName} offers to end the confrontation if we concede its objective: {objective}."
+                    : $"{proposer?.displayName} offers to end the confrontation on the status quo. We would withdraw our claim: {objective}.",
+                startDate = state.date,
+                options = new List<CrisisOption>
+                {
+                    new CrisisOption
+                    {
+                        label = "ACCEPT THE TERMS",
+                        description = proposerIsClaimant
+                            ? "The war ends and they get what they demanded."
+                            : "The war ends and nothing changes hands.",
+                        resultText = $"Terms accepted. The confrontation with {proposer?.displayName} is over."
+                    },
+                    new CrisisOption
+                    {
+                        label = "REFUSE",
+                        description = "The confrontation continues. They will not ask again for some months.",
+                        resultText = $"Terms refused. {proposer?.displayName} will not ask again soon."
+                    }
+                }
+            };
+
+            state.activeCrises.Add(crisis);
+            state.crisesFacedThisYear++;
+            confrontation.monthsUntilNextOffer = OfferCooldownMonths;
+            state.AddNotification(NotificationClass.Flash, crisis.title,
+                "Immediate decision required. End Month is suspended.", proposerId);
+            GameLog.Info("CONFRONT", $"{proposerId} offers the player terms.");
+            return false;
+        }
+
+        /// <summary>Apply the player's answer to an offer. Called by <see cref="CrisisSystem"/>.</summary>
+        public static void ApplyOfferDecision(GameState state, ActiveCrisis crisis, bool accepted)
+        {
+            string proposerId = crisis.subjectCountryId;
+            var confrontation = ExistingBetween(state, state.playerCountryId, proposerId);
+            if (confrontation == null) return;
+
+            if (!accepted)
+            {
+                confrontation.monthsUntilNextOffer = OfferCooldownMonths;
+                GameLog.Info("CONFRONT", "Player refused offered terms.");
+                return;
+            }
+            Settle(state, confrontation, proposerId);
         }
 
         /// <summary>
@@ -1021,6 +1198,10 @@ namespace Brink.Core
         {
             confrontation.resolved = true;
             confrontation.outcomeSummary = summary;
+
+            // A settlement binds both parties for a while (see SettlementTruceMonths).
+            var pair = state.FindRelationship(confrontation.initiatorId, confrontation.defenderId);
+            if (pair != null) pair.settlementTruceMonths = SettlementTruceMonths;
 
             // Judged from the world, not from which path closed the war.
             confrontation.verdict = DetermineVerdict(state, confrontation, out string reason);

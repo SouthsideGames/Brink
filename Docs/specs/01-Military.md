@@ -1041,6 +1041,27 @@ to audit, and verification is what actually closes a settlement (GDD §11).
 **A capital can never be won at the table** (GDD §22) — only by occupation.
 Conceding is always available and costs war support and approval.
 
+**The objective belongs to the initiator** (`ConfrontationSystem.Settle`). Terms
+proposed by the demanding side deliver the demand; terms proposed by the side
+demanded of are the status quo — the claim is withdrawn and nothing changes hands.
+A territorial cession also requires that the ground is currently held by one of
+the two parties; a location a third state has since taken is *renounced*, not
+transferred. (Shipped behaviour handed the objective to whoever *proposed*, so a
+defender suing for peace "ceded" its own ground under the initiator's name, and a
+war with Russia over a location Brazil held transferred Brazil's title.)
+
+**A foreign offer is a decision.** When an AI government proposes to the player,
+`ProposeSettlementBy` raises a `TERMS_OFFERED` Crisis Turn (accept / refuse)
+instead of closing the war on the player's computed willingness. A refusal — or
+an unanswered offer — waits `OfferCooldownMonths = 6` before the same government
+asks again. AI-vs-AI settlements are unchanged.
+
+**A settlement binds.** `Close` sets `Relationship.settlementTruceMonths =
+SettlementTruceMonths (12)`; `CanOpenAgainst` refuses a new confrontation between
+the pair while it runs, and refuses a territorial demand for ground the defender
+does not hold. `Begin` checks both before charging CP. Guarded by the five
+`Settlement_*` / `Confrontation_*` cases in `BugRegressionTests`.
+
 ### Negotiated terms (`Core/PeaceSystem.cs`, GDD §26)
 
 A settlement is assembled from terms rather than accepted wholesale. The willingness

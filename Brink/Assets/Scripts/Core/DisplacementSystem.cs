@@ -52,8 +52,19 @@ namespace Brink.Core
         /// <summary>Distance beyond which a state is not somewhere people can walk to.</summary>
         public const float ReachableDistance = 34f;
 
-        /// <summary>Treasury per point hosted, per month.</summary>
-        public const float HostingCostPerPoint = 22f;
+        /// <summary>
+        /// Treasury per point hosted, per month.
+        ///
+        /// Scaled to what a treasury actually earns: `EconomySystem` pays a great
+        /// power roughly 25–40 a month, so a full load of 100 hosted costs about
+        /// one month's income — a real burden, not a bankruptcy. At the original
+        /// 22 the same load cost 2,200 a month (≈70× income), every AI government
+        /// shut its border within four years, the player became the world's only
+        /// open door, and every posting was at −30,000 to −170,000 by year ten
+        /// under every playstyle including doing nothing. Research is gated on a
+        /// positive treasury, so no strategic instrument could ever be reached.
+        /// </summary>
+        public const float HostingCostPerPoint = 0.4f;
 
         // ---------- what a country produces ----------
 
@@ -289,7 +300,14 @@ namespace Brink.Core
 
                 if (displacement.hosted < 0.5f) continue;
 
-                country.resources.treasury -= displacement.hosted * HostingCostPerPoint;
+                // Paid out of what is there. Hosting is the one recurring cost
+                // that cannot lapse (people who have arrived do not un-arrive),
+                // so it must not be the one that drives a balance below zero —
+                // an empty treasury already pays for it through the standards
+                // and unrest targets above.
+                float bill = Math.Min(displacement.hosted * HostingCostPerPoint,
+                    Math.Max(0f, country.resources.treasury));
+                country.resources.treasury -= bill;
 
                 // And what it is worth. Slow, and through `Growth.Apply`, because
                 // people arriving with nothing take years to be an economy and

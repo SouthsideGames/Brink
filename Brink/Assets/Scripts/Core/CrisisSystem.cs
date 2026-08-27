@@ -115,6 +115,10 @@ namespace Brink.Core
                 if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
                     AllianceSystem.ApplyPlayerDecision(state, honored: false);
 
+                // Terms left unanswered are terms refused.
+                if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
+                    ConfrontationSystem.ApplyOfferDecision(state, crisis, accepted: false);
+
                 // If the operator will not decide, the situation decides for
                 // them (GDD §23). Drifting used to cost standing and nothing
                 // else, which made ignoring a crisis the cheapest way to avoid
@@ -153,6 +157,10 @@ namespace Brink.Core
             // Alliance obligations carry consequences far beyond their deltas.
             if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
                 AllianceSystem.ApplyPlayerDecision(state, honored: optionIndex == 0);
+
+            // Offered terms: option 0 accepts, option 1 refuses.
+            if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
+                ConfrontationSystem.ApplyOfferDecision(state, crisis, accepted: optionIndex == 0);
 
             if (player != null)
             {

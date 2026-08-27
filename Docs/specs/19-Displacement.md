@@ -67,7 +67,7 @@ neighbour is.
 
 | Effect | Route |
 |---|---|
-| `HostingCostPerPoint = 22` treasury/month | Written directly — a treasury is a balance |
+| `HostingCostPerPoint = 0.4` treasury/month, paid only from what is there (never drives the balance below zero) | Written directly — a treasury is a balance |
 | `StandardsDrag = min(9, hosted × 0.22)` | Living-standards **target** in `GovernmentSystem` |
 | `UnrestPressure = min(10, hosted × 0.20)` | Unrest **pressure** in `GovernmentSystem` |
 | `industrialCapacity + hosted × 0.010` | Through `Growth.Apply` |
@@ -75,6 +75,15 @@ neighbour is.
 **Hosting is a trade, not a penalty.** People who arrive work, and the labour
 shows up slowly. Without that the only correct play would be to shut the border
 on day one and the decision would not be a decision.
+
+**The bill is scaled to income.** `EconomySystem` pays roughly `gdp × 0.012` a
+month — 15–40 for the authored roster — so a full load of 100 hosted costs about
+one month's income. It shipped at 22 per point (≈70× income): every AI government
+closed within four years, the player became the world's only open door, and every
+posting under every playstyle was −30,000 to −170,000 by year ten. Because research
+is gated on a positive treasury, no strategic instrument was reachable in 224
+measured decades. `DisplacementTests.HostingIsABurdenNotABankruptcy` and
+`ADecadeOfDoingNothingDoesNotEndInTheRed` guard the scale.
 
 `PressureAtSource` is the other half: unrest at *home* from people who could not
 get out, scaled by how much of the region is closed to them. Closing the door has

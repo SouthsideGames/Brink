@@ -669,5 +669,108 @@ namespace Brink.Tests
                 + "who changed course was read as maximally aggressive regardless "
                 + "(GDD §24.2 is explicitly about a pattern that can be broken).");
         }
+
+        // ---------- settlements (2026-08 playtest) ----------
+
+        Confrontation OpenLaneWar()
+        {
+            return ConfrontationSystem.BeginBy(state, "USA", "CHN",
+                ConfrontationObjective.TerritorialConcession, "CONTESTED_LANE", PrimaryStrategy.Military);
+        }
+
+        static void ExhaustPlayerSide(GameState state, Confrontation confrontation)
+        {
+            var usa = state.PlayerCountry;
+            usa.warSupport = 0f;
+            usa.pillars.government = 10f;
+            confrontation.initiatorWarExhaustion = 90f;
+            confrontation.momentum = -60f;
+        }
+
+        [Test]
+        public void Settlement_ProposedByTheDefender_WithdrawsTheClaimAndCedesNothing()
+        {
+            var confrontation = OpenLaneWar();
+            var lane = state.FindLocation("CONTESTED_LANE");
+
+            ExhaustPlayerSide(state, confrontation);
+            Assert.IsFalse(ConfrontationSystem.ProposeSettlementBy(state, confrontation, "CHN"),
+                "A foreign offer must not close the player's war by itself.");
+            Assert.IsFalse(confrontation.resolved);
+            Assert.IsTrue(state.HasOpenCrisis, "The offer should reach the operator as a decision.");
+            var offer = state.activeCrises[state.activeCrises.Count - 1];
+            Assert.AreEqual(ConfrontationSystem.TermsOfferedCrisisId, offer.defId);
+
+            CrisisSystem.Resolve(state, offer, 0); // accept
+
+            Assert.IsTrue(confrontation.resolved);
+            Assert.AreEqual("CHN", lane.ownerId,
+                "The defender proposed. The defender's terms are the status quo — it "
+                + "used to 'cede' ground it already held, recorded as the *initiator* ceding it.");
+            Assert.AreEqual("CHN", lane.originalOwnerId);
+            StringAssert.DoesNotContain("United States cedes", confrontation.outcomeSummary);
+        }
+
+        [Test]
+        public void Settlement_RefusedTerms_KeepTheWarOpenAndWaitBeforeAskingAgain()
+        {
+            var confrontation = OpenLaneWar();
+            ExhaustPlayerSide(state, confrontation);
+            ConfrontationSystem.ProposeSettlementBy(state, confrontation, "CHN");
+            var offer = state.activeCrises[state.activeCrises.Count - 1];
+
+            CrisisSystem.Resolve(state, offer, 1); // refuse
+
+            Assert.IsFalse(confrontation.resolved);
+            Assert.IsFalse(state.HasOpenCrisis);
+            Assert.IsFalse(ConfrontationSystem.ProposeSettlementBy(state, confrontation, "CHN"));
+            Assert.IsFalse(state.HasOpenCrisis,
+                "They asked again the same month. A refusal has to buy the operator some quiet.");
+        }
+
+        [Test]
+        public void Settlement_CannotCedeGroundHeldByAThirdParty()
+        {
+            var confrontation = OpenLaneWar();
+            var lane = state.FindLocation("CONTESTED_LANE");
+            lane.ownerId = "IND"; // taken by somebody else mid-war
+
+            var china = state.FindCountry("CHN");
+            china.warSupport = 0f;
+            china.pillars.government = 10f;
+            confrontation.defenderWarExhaustion = 90f;
+            confrontation.momentum = 60f;
+
+            Assert.IsTrue(ConfrontationSystem.ProposeSettlement(state, confrontation));
+            Assert.AreEqual("IND", lane.ownerId,
+                "A settlement with China transferred India's ground.");
+            Assert.AreEqual("CHN", lane.originalOwnerId);
+        }
+
+        [Test]
+        public void Confrontation_CannotDemandGroundTheDefenderDoesNotHold()
+        {
+            state.FindLocation("CONTESTED_LANE").ownerId = "IND";
+            Assert.IsNull(OpenLaneWar(),
+                "A war with China over a place India holds is not a war with China.");
+        }
+
+        [Test]
+        public void Settlement_BindsBothSidesForAYear()
+        {
+            var confrontation = OpenLaneWar();
+            Assert.IsTrue(ConfrontationSystem.ProposeSettlement(state, confrontation, concedeInstead: true));
+
+            Assert.IsNull(OpenLaneWar(),
+                "The same war was re-declared the month after it was settled. The harness "
+                + "did this eighteen times in a decade.");
+            Assert.IsNull(ConfrontationSystem.BeginBy(state, "CHN", "USA",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military),
+                "The truce binds the other side too.");
+
+            var pair = state.FindRelationship("USA", "CHN");
+            pair.settlementTruceMonths = 0;
+            Assert.NotNull(OpenLaneWar(), "And it expires.");
+        }
     }
 }
