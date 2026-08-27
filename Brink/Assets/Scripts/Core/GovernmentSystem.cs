@@ -909,6 +909,7 @@ namespace Brink.Core
                 // it. A new administration decides for itself what the operator
                 // may command (spec 05 §1a).
                 AuthoritySystem.ClearGrantedAuthority(state);
+                MandateSystem.Reissue(state, cause);   // spec 24 §3
 
                 // **The one item that must never be buried.**
                 //

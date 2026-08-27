@@ -403,8 +403,12 @@ namespace Brink.Core
             // incapable of passing ~12 however comprehensively the economy failed,
             // because growth itself is bounded — so "mass unemployment" was not a
             // state this simulation could represent.
+            // distress × 22 → 16 (2026-08): with sanctions adapting the spiral
+            // no longer locks, but a fully distressed market still put a great
+            // power at 28% unemployment for a decade; 16 keeps "mass
+            // unemployment" representable (≈22% at the floor) with a way back.
             float targetUnemployment = 6.5f - eco.growthRate * 0.9f + sanctionPressure * 0.5f
-                                       + distress * 22f
+                                       + distress * 16f
                                        + (atWar ? -0.8f : 0f);
             eco.unemployment = Clamp(Approach(eco.unemployment, targetUnemployment, 0.25f), 1.5f, 35f);
 
@@ -739,11 +743,35 @@ namespace Brink.Core
         // ---------- queries ----------
 
         /// <summary>Total sanction weight bearing on a country, and ages the regimes.</summary>
+        /// <summary>Months over which a sanctioned economy reroutes around a standing regime.</summary>
+        public const int SanctionAdaptationMonths = 48;
+
+        /// <summary>Share of a regime's bite that adaptation eventually removes.</summary>
+        public const float SanctionAdaptationFloor = 0.5f;
+
+        /// <summary>
+        /// Total sanction weight on a country, **net of adaptation** (2026-08).
+        ///
+        /// A standing regime used to bite at full weight forever, and a regime
+        /// lapses only when the sender stops being hostile — so two hostile
+        /// neighbours could hold a great power in a permanent depression:
+        /// fundamentals pinned, distress feeding unemployment (28%) feeding
+        /// living standards (1) feeding unrest (77) feeding approval (0) and a
+        /// coup, with nothing the target could do and no path back. The
+        /// death-spiral rule: every value that falls needs a reachable recovery
+        /// path. An economy reroutes around measures it has lived under for
+        /// years; a four-year-old regime bites at half weight. New measures still
+        /// land at full weight, so coercion keeps its edge as a *move*.
+        /// </summary>
         public static float SanctionPressureOn(GameState state, string countryId)
         {
             float total = 0f;
             foreach (var sanction in state.sanctions)
-                if (sanction.targetId == countryId) total += sanction.Weight;
+                if (sanction.targetId == countryId)
+                {
+                    float adapted = Math.Min(1f, sanction.monthsActive / (float)SanctionAdaptationMonths);
+                    total += sanction.Weight * (1f - SanctionAdaptationFloor * adapted);
+                }
             return total;
         }
 

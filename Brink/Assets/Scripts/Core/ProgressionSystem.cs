@@ -202,6 +202,7 @@ namespace Brink.Core
             state.crisesFacedThisYear = 0;
             state.crisesResolvedThisYear = 0;
             state.initiativesThisYear = 0;
+            state.directivesCompletedThisYear = 0;
 
             // Repetition is measured per year: a lever worn out last year is
             // worth learning from again after a year of doing something else.
@@ -284,7 +285,8 @@ namespace Brink.Core
             // playstyles grading *below* doing nothing.
             // Saturates around 17 decisions a year — roughly one a month plus
             // change. Beyond that, more clicking is not more statecraft.
-            float initiative = 40f + Math.Min(38f, state.initiativesThisYear * 2.2f);
+            float initiative = 40f + Math.Min(38f, state.initiativesThisYear * 2.2f)
+                               + Math.Min(18f, state.directivesCompletedThisYear * 6f);   // GDD §29, spec 24
 
             // --- efficiency: what the year's spending actually bought (GDD §25.2) ---
             //
@@ -366,6 +368,7 @@ namespace Brink.Core
             if (SolvencyPenalty(player) > 0f) record.summary += " The treasury is in the red, and it shows.";
 
             state.evaluations.Add(record);
+            CareerRecord.Record(state);   // spec 24 §2 — refreshed yearly, so an abandoned posting still shows what it was
             state.skillPoints += points;
 
             // Kept modest relative to decision XP, so a decade of engagement
@@ -428,6 +431,7 @@ namespace Brink.Core
             var player = state.PlayerCountry;
             if (player == null) return;
             state.tenureReviewed = true;
+            CareerRecord.Record(state);   // spec 24 §2
 
             float gradeSum = 0f;
             foreach (var evaluation in state.evaluations) gradeSum += (int)evaluation.grade;

@@ -307,8 +307,11 @@ namespace Brink.Core
                           + "some of its force.",
                     countryId, desk: ReportingDesk.Government);
 
-            state.AddChronicle(ChronicleCategory.Political, countryId,
-                $"{country.displayName}'s government moves against its critics.", Publicity.Public);
+            // One campaign, one line: a government answering its critics every
+            // month was 1,279 identical entries in a thirty-year world.
+            string line = $"{country.displayName}'s government moves against its critics.";
+            if (!state.ChronicledWithin(countryId, line, 12))
+                state.AddChronicle(ChronicleCategory.Political, countryId, line, Publicity.Public);
             return true;
         }
 
@@ -389,8 +392,16 @@ namespace Brink.Core
             bool coercive = gov.civicPosture == CivicPosture.Restrictive
                             || !gov.IsElective;
 
-            if (coercive) ConfrontBy(state, country.id);
-            else ConcedeBy(state, country.id);
+            // A government answers with what it can afford (2026-08). A
+            // coercive regime whose Political Capital could not cover a
+            // confrontation (3) never tried the concession (2) it *could* pay
+            // for — so a destitute non-elective state, the case most likely to
+            // face an opposition, never answered one at all.
+            if (coercive)
+            {
+                if (!ConfrontBy(state, country.id)) ConcedeBy(state, country.id);
+            }
+            else if (!ConcedeBy(state, country.id)) ConfrontBy(state, country.id);
         }
 
         static float Approach(float current, float target, float rate)

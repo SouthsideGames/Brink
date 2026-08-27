@@ -50,10 +50,14 @@ namespace Brink.Core
 
         /// <summary>Begin a save from a completed assessment (GDD §5).</summary>
         public void NewGameFromAssessment(Data.AssessmentResult result, int seed,
-            Data.WorldSize size = Data.WorldSize.Standard)
+            Data.WorldSize size = Data.WorldSize.Standard,
+            Data.Difficulty difficulty = Data.Difficulty.Challenging)
         {
-            GameLog.Info("GAME", $"New posting: {result.assignedCountryId}. Seed: {seed}. World: {size}.");
+            GameLog.Info("GAME", $"New posting: {result.assignedCountryId}. Seed: {seed}. World: {size}. Difficulty: {difficulty}.");
             var state = WorldFactory.CreateWorld(seed, result.assignedCountryId, size);
+            // Every balance figure is measured at Challenging (spec 12); a real
+            // game used to open at Standard because nothing ever set this.
+            state.difficulty = difficulty;
             AssessmentSystem.ApplyToWorld(state, result);
             ProgressionSystem.CaptureYearSnapshot(state);
             TutorialSystem.Begin(state);

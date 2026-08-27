@@ -259,10 +259,25 @@ namespace Brink.Tests
             for (int month = 0; month < 48 && !answered; month++)
             {
                 float before = foreignState.government.oppositionCase;
-                turns.EndMonth();
+                bool ended = turns.EndMonth();
                 // Answering shows up as a fall the drift alone cannot produce in
                 // one month against a target this high.
                 if (foreignState.government.oppositionCase < before - 8f) answered = true;
+                if (month < 6 || !ended)
+                {
+                    float pc = -1f; string objectives = ""; int acted = -1;
+                    foreach (var ai in state.aiStates)
+                        if (ai.countryId == foreignState.id)
+                        {
+                            pc = ai.politicalCapital; acted = ai.actionsThisMonth;
+                            foreach (var o in ai.objectives) objectives += $"{o.type}:{o.targetId}:{o.priority:F1} ";
+                        }
+                    TestContext.WriteLine($"m{month} ended={ended} crises={state.activeCrises.Count} " +
+                        $"{foreignState.id} case={foreignState.government.oppositionCase:F1} pc={pc:F1} acted={acted} " +
+                        $"treasury={foreignState.resources.treasury:F0} msg={foreignState.government.publicMessaging:F1} " +
+                        $"backing={(foreignState.government.IsElective ? foreignState.government.legislativeSupport : foreignState.government.eliteCohesion):F0} " +
+                        $"theme={foreignState.government.oppositionTheme} type={foreignState.government.type} obj=[{objectives}]");
+                }
             }
 
             Assert.IsTrue(answered,

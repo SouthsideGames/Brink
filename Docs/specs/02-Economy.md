@@ -56,6 +56,16 @@ gdp       ×= 1 + growth/1200,  floored at 50
 treasury  += gdp × TreasuryIncomeRate (0.03) × (1 − debtToGdp/400)
 ```
 
+**Sanctions adapt (2026-08-28).** `SanctionPressureOn` is net of adaptation: a
+regime's weight falls linearly to half over `SanctionAdaptationMonths = 48`
+(`SanctionAdaptationFloor = 0.5`). Before this a regime bit at full weight
+forever and lapsed only when the *sender* stopped being hostile, so two hostile
+neighbours could hold a great power in a permanent depression — fundamentals
+pinned, `distress` feeding unemployment (28%), living standards (1), unrest
+(77), approval (0), a coup — with nothing the target could do. A passive USA
+was overthrown in 3 of 6 measured decades. New measures still land at full
+weight, so coercion keeps its edge as a move; what it loses is permanence.
+
 **`TreasuryIncomeRate` is the unit every recurring cost is sized against.** It
 shipped at 0.012 (15–40/month for the roster) while war exhaustion, occupation,
 research programmes and endgame authorizations were priced as if income were

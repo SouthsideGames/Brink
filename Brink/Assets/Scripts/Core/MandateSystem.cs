@@ -176,6 +176,67 @@ namespace Brink.Core
             state.AddChronicle(ChronicleCategory.System, player.id,
                 $"Ten-year mandate review: {verdict} ({met}/{total}).", Publicity.Public);
             GameLog.Info("MANDATE", $"Verdict {verdict}: {met}/{total}.");
+            CareerRecord.Record(state);   // spec 24 §2
+        }
+
+        /// <summary>
+        /// A new administration may reissue the brief (spec 24 §3): if more than
+        /// five years remain to the review, the objectives are replaced by a
+        /// fresh derived set weighted to the incoming leader's national priority.
+        /// The review date and the original bases are kept — the clock does not
+        /// restart because the government changed. Within five years the brief
+        /// stands: a government that arrives in year eight inherits it.
+        /// </summary>
+        public const int ReissueWindowMonths = 60;
+
+        public static bool Reissue(GameState state, string cause)
+        {
+            var player = state.PlayerCountry;
+            var mandate = state.mandate;
+            if (player == null || mandate == null || state.mandateRecord != null) return false;
+            int elapsed = state.date.MonthsSince(state.startDate);
+            if (mandate.reviewMonths - elapsed < ReissueWindowMonths) return false;
+
+            var fresh = MandateCatalog.For(state, player);
+            var priority = player.government.leader.priority;
+            var lead = priority switch
+            {
+                NationalPriority.Security => new MandateObjective
+                {
+                    kind = MandateObjectiveKind.PillarAtLeast, param = "Military",
+                    threshold = (float)Math.Min(95, Math.Round(player.pillars.military + 6)),
+                    text = $"Military pillar at {Math.Min(95, Math.Round(player.pillars.military + 6))} or better."
+                },
+                NationalPriority.Prosperity => new MandateObjective
+                {
+                    kind = MandateObjectiveKind.GdpGrowthAtLeast, threshold = 20f,
+                    text = "GDP at least 20 percent larger than when the posting began."
+                },
+                NationalPriority.Influence => new MandateObjective
+                {
+                    kind = MandateObjectiveKind.TreatiesAtLeast, threshold = 4f,
+                    text = "Hold unbroken treaties with at least four states."
+                },
+                _ => new MandateObjective
+                {
+                    kind = MandateObjectiveKind.StabilityAtLeast, threshold = 65f,
+                    text = "Stability at 65 or better."
+                }
+            };
+
+            var objectives = new List<MandateObjective> { lead };
+            foreach (var objective in fresh.objectives)
+                if (objectives.Count < 4 && objective.kind != lead.kind) objectives.Add(objective);
+
+            mandate.title = fresh.title;
+            mandate.brief = fresh.brief + $" Reissued by the new administration ({cause}); the review date stands.";
+            mandate.objectives = objectives;
+
+            state.AddNotification(NotificationClass.Priority, "MANDATE REVISED",
+                $"The incoming administration has reissued the brief under {priority}: " +
+                $"{string.Join(" ", objectives.ConvertAll(o => o.text))} The review date is unchanged.", player.id);
+            state.AddChronicle(ChronicleCategory.System, player.id, "Mandate reissued by a new administration.");
+            return true;
         }
 
         /// <summary>Terminal-voice status block for the views.</summary>

@@ -97,6 +97,7 @@ namespace Brink.Core
             turns.ResolveMonth += ForeignCrisisSystem.MonthlyUpdate;
             turns.ResolveMonth += CrisisSystem.SystemicCheck;
             turns.ResolveMonth += MandateSystem.MonthlyUpdate;
+            turns.ResolveMonth += StandingDirectiveSystem.MonthlyUpdate;
 
             // Last, so the snapshot describes the month as it ended rather than
             // as it was halfway through being resolved.

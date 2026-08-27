@@ -1900,6 +1900,51 @@ three had passed for a long time:
         longer chronicled (the thirty-year growth cap), and `MandateSystem.Assign`
         runs after `HistoryCatalog.Seed` so the record reads forward in time.
 
+- [x] **Overnight features (2026-08-28, spec 24).**
+      - **Standing directives (GDD §29, the last unbuilt §29 item)** —
+        `StandingDirectiveSystem`: the desks suggest an optional undertaking
+        with a deadline when circumstances warrant (ten templates, thresholds
+        set from the current value), at most two standing, judged by the
+        mandate's `IsMet`, rewarded with XP + initiative + up to 18 points of the
+        evaluation's initiative component; ignoring one costs nothing. On
+        STRATEGIST. `GameState.standingDirectives`; no migration.
+      - **Career record** — `CareerRecord` keeps `career.json` beside the save
+        slots: one entry per posting (verdict, years, mean grade, war record,
+        difficulty), written at the verdict, the tenure review and every annual
+        evaluation. A record, not progression — nothing reads it back into a
+        game. Off in batch mode unless a test sets `SaveDirectoryOverride`.
+        Shown under CAREER on STRATEGIST.
+      - **Mandate reissue** — a new administration with more than five years to
+        the review replaces the objectives with a set led by its national
+        priority (`MandateSystem.Reissue`); the review date and bases stand.
+      - **Difficulty is chosen** — `NewGameFromAssessment` never set it, so every
+        real game ran at Standard while every figure was measured at
+        Challenging. The assessment screen offers all three; default Challenging.
+      - Not built, because it already existed: materials regions (five authored),
+        seeded history, crises with foreign effects. **Check the code before
+        trusting the coverage doc's gap list.**
+      - Two pre-existing failures fixed on the way: `HistoryCatalog.Seed` never
+        sorted the history it wrote (the chronicle opened scrambled; that commit's
+        own note says it was never test-run), and the thirty-year chronicle cap
+        was being breached by two lines — a crackdown (1,279×) and a blown network
+        (883×) — that now go through `GameState.ChronicledWithin(country, text, 12)`:
+        **a campaign that repeats every month is one entry.** 4,213 → 2,790 lines.
+      - **The economic death spiral** (spec 02): a sanction regime bit at full
+        weight forever and lapsed only when the *sender* stopped being hostile,
+        so two hostile neighbours held a passive USA in a permanent depression
+        (28% unemployment, living standards 1, unrest 77, approval 0, a coup in 3
+        of 6 measured decades). `SanctionPressureOn` is now net of adaptation
+        (half weight after 48 months) and `distress × 22 → 16` in the
+        unemployment target. Coups on those seeds: 3/6 → 0/6.
+      - **A coercive government that could not afford Confront (3 PC) never
+        tried Concede (2)**, so destitute non-elective states never answered an
+        opposition (`OppositionTests.ForeignGovernmentsAnswerTheirOwnOppositions`
+        had been failing since that system shipped unverified).
+
+**Never put more than ~20 fixtures in one `-runTests` invocation.** The editor
+session ages out inside `VerticalSliceValidationTests`; run that fixture and
+`WorldInvariantTests` in their own partition (`Tools/run-suite.sh` does).
+
 **Not yet verified by a test run** — the environment this was written in has no
 Unity and no C# compiler at all, so nothing above has been compiled or executed.
 Run `bash Tools/run-suite.sh` before trusting any of it, and re-run

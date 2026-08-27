@@ -23,6 +23,7 @@ namespace Brink.UI
         AssessmentResult pendingResult;
         int seed;
         WorldSize chosenSize = WorldSize.Standard;
+        Difficulty chosenDifficulty = Difficulty.Challenging;
 
         public AssessmentScreen(System.Action onComplete)
         {
@@ -42,6 +43,7 @@ namespace Brink.UI
             index = 0;
             pendingResult = null;
             chosenSize = WorldSize.Standard;
+            chosenDifficulty = Difficulty.Challenging;
             seed = System.Environment.TickCount;
             Render();
         }
@@ -151,6 +153,27 @@ namespace Brink.UI
             AddScale(WorldSize.Full,
                 $"FULL WORLD — {WorldFactory.Profiles.Length} STATES");
 
+            // Difficulty is AI reasoning quality, not stat cheats (GDD §24.3).
+            // Every balance figure is measured at CHALLENGING; a real game used
+            // to open at STANDARD because nothing on this screen set it.
+            var difficultyRow = new VisualElement();
+            difficultyRow.AddToClassList("button-row");
+            Root.Add(difficultyRow);
+
+            void AddDifficulty(Difficulty difficulty, string label)
+            {
+                bool current = chosenDifficulty == difficulty;
+                var button = new Button(() => { chosenDifficulty = difficulty; Render(); })
+                { text = (current ? "► " : "") + label };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                difficultyRow.Add(button);
+            }
+
+            AddDifficulty(Difficulty.Standard, "STANDARD — GOVERNMENTS THINK ONE MOVE AHEAD");
+            AddDifficulty(Difficulty.Challenging, "CHALLENGING — THE MEASURED GAME");
+            AddDifficulty(Difficulty.Ruthless, "RUTHLESS — THEY PLAN, AND THEY ACT");
+
             var note = AddLabel("terminal-text-dim");
             note.style.whiteSpace = WhiteSpace.Normal;
             note.text = "\n One reassignment is permitted before your posting is entered into the record.\n";
@@ -184,7 +207,7 @@ namespace Brink.UI
 
             var accept = new Button(() =>
             {
-                GameController.Instance.NewGameFromAssessment(pendingResult, seed, chosenSize);
+                GameController.Instance.NewGameFromAssessment(pendingResult, seed, chosenSize, chosenDifficulty);
                 onComplete?.Invoke();
             })
             { text = "ACCEPT POSTING AND BEGIN" };

@@ -94,6 +94,11 @@ namespace Brink.Data
         public Mandate mandate;
         public MandateRecord mandateRecord;
 
+        /// <summary>Optional strategic directives (GDD §29, spec 24). Empty on an old save is correct.</summary>
+        public List<StandingDirective> standingDirectives = new List<StandingDirective>();
+        public int directivesCompletedThisYear;
+        public int lastDirectiveOfferMonth = -100;
+
         /// <summary>
         /// Smoothed month-over-month change in the player's treasury (EWMA,
         /// ~5-month memory), and the bookkeeping that seeds it. Written by
@@ -493,6 +498,24 @@ namespace Brink.Data
             });
             if (notifications.Count > MaxNotifications)
                 notifications.RemoveRange(0, notifications.Count - MaxNotifications);
+        }
+
+        /// <summary>
+        /// Whether the same line for the same state is already in the record
+        /// within the last <paramref name="months"/>. A campaign that repeats
+        /// every month is one entry, not one per month — the two noisiest lines
+        /// in a thirty-year world were a crackdown (1,279×) and a blown network
+        /// (883×) and between them were half the chronicle.
+        /// </summary>
+        public bool ChronicledWithin(string countryId, string text, int months)
+        {
+            for (int i = chronicle.Count - 1; i >= 0; i--)
+            {
+                var entry = chronicle[i];
+                if (date.MonthsSince(entry.date) > months) return false;
+                if (entry.countryId == countryId && entry.text == text) return true;
+            }
+            return false;
         }
 
         public void AddChronicle(ChronicleCategory category, string countryId, string text,
