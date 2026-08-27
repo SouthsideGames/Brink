@@ -195,7 +195,9 @@ namespace Brink.Core
                 locationsHeld = LocationsHeld(state),
                 relationsTotal = RelationsTotal(state),
                 treatiesHeld = TreatiesHeld(state, out int pacts),
-                defensePactsHeld = pacts
+                defensePactsHeld = pacts,
+                warsWon = player.warsWon,
+                warsLost = player.warsLost
             };
             state.crisesFacedThisYear = 0;
             state.crisesResolvedThisYear = 0;
@@ -254,7 +256,14 @@ namespace Brink.Core
                              + (RelationsTotal(state) - snapshot.relationsTotal) * 0.35f
                              + (treaties - snapshot.treatiesHeld) * 9f
                              + (defensePacts - snapshot.defensePactsHeld) * 7f
-                             + (Deterrent(player) - 0.5f) * 24f;
+                             + (Deterrent(player) - 0.5f) * 24f
+                             // A war won this year is a fact about the nation's
+                             // position; a war lost is too. Ground taken is
+                             // already counted above, so this is the verdict
+                             // itself — a deterrence or policy war won by
+                             // settlement used to be worth exactly nothing here.
+                             + (player.warsWon - snapshot.warsWon) * 14f
+                             - (player.warsLost - snapshot.warsLost) * 10f;
 
             // --- crisis management ---
             // A year with no crises is a year of successful prevention, and must

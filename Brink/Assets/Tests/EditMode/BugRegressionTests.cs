@@ -774,6 +774,37 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void WinningAWar_RalliesTheCountryAndCountsInTheEvaluation()
+        {
+            var confrontation = OpenLaneWar();
+            confrontation.escalation = EscalationState.LimitedConflict;
+            var lane = state.FindLocation("CONTESTED_LANE");
+            var usa = state.PlayerCountry;
+            var china = state.FindCountry("CHN");
+            china.warSupport = 0f; china.pillars.government = 10f;
+            confrontation.defenderWarExhaustion = 90f; confrontation.momentum = 60f;
+            lane.ownerId = "USA";
+
+            usa.governmentApproval = 40f; usa.warExhaustion = 60f;
+            float approval = usa.governmentApproval, exhaustion = usa.warExhaustion;
+            float chinaApproval = china.governmentApproval;
+            ProgressionSystem.CaptureYearSnapshot(state);
+
+            Assert.IsTrue(ConfrontationSystem.ProposeSettlement(state, confrontation));
+            Assert.AreEqual(WarVerdict.InitiatorVictory, confrontation.verdict);
+
+            Assert.Greater(usa.governmentApproval, approval,
+                "A won war used to change a counter and nothing else — the winner paid every "
+                + "month of the war and got no rally for it.");
+            Assert.Less(usa.warExhaustion, exhaustion, "Victory should let the country breathe.");
+            Assert.Less(china.governmentApproval, chinaApproval, "And defeat should cost the loser.");
+
+            var record = ProgressionSystem.EvaluateYear(state, 1984);
+            Assert.Greater(record.positionScore, 50f + 8f,
+                "The evaluation credited the ground and not the verdict.");
+        }
+
+        [Test]
         public void Evaluation_ADeepDeficitCostsTheEconomyGrade()
         {
             var player = state.PlayerCountry;

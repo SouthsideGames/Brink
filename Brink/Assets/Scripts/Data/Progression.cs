@@ -114,5 +114,8 @@ namespace Brink.Data
         public int defensePactsHeld;
         public int crisesFaced;
         public int crisesResolved;
+        /// <summary>War record at the start of the year, so the evaluation can credit the year's wins.</summary>
+        public int warsWon;
+        public int warsLost;
     }
 }

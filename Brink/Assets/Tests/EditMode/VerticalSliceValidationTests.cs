@@ -224,8 +224,19 @@ namespace Brink.Tests
 
             if (confrontation == null)
             {
+                // A war just won or lost is followed by a year of consolidation
+                // (2026-08): the bot used to re-declare the month a settlement
+                // closed, so it was at war for 120 of 120 months and the measured
+                // "military playstyle" was a decade of unbroken warfare that no
+                // human plays. Peacetime work below still runs in that year.
+                bool consolidating = false;
+                foreach (var past in state.confrontations)
+                    if (past.resolved && past.Involves(state.playerCountryId)
+                        && state.date.MonthsSince(past.startDate) - past.monthsActive < 12)
+                        consolidating = true;
+
                 var lane = state.FindLocation("CONTESTED_LANE");
-                if (lane != null && lane.ownerId != state.playerCountryId && state.commandPoints.current >= 3)
+                if (!consolidating && lane != null && lane.ownerId != state.playerCountryId && state.commandPoints.current >= 3)
                 {
                     if (ConfrontationSystem.Begin(state, turns, state.playerCountryId, lane.ownerId,
                             ConfrontationObjective.TerritorialConcession, lane.id, PrimaryStrategy.Military) != null)

@@ -1060,6 +1060,16 @@ settlements are unchanged. The harness bots answer an offer by the player's own
 `WouldAcceptTermsFrom` calculus — the pre-decision behaviour — so balance
 measurements stay comparable.
 
+**A verdict pays** (`RecordWarResult`, 2026-08). Until the playtest a verdict
+changed a counter and nothing else, so the winner had paid every month of the war
+and got no rally for it — across 888 measured decades the military playstyle,
+the only one that gains ground, graded at or below doing nothing. The winner now
+takes approval +8, unity +5, war support +12, stability +3, exhaustion −15 and
+military pillar +2 (`Growth.Apply`); the loser approval −5, war support −8,
+unity −3. One-off store writes, because a verdict is an event. The annual
+evaluation credits wins and lost wars in the position component (spec 07).
+Guarded by `BugRegressionTests.WinningAWar_RalliesTheCountryAndCountsInTheEvaluation`.
+
 **A settlement binds.** `Close` sets `Relationship.settlementTruceMonths =
 SettlementTruceMonths (12)`; `CanOpenAgainst` refuses a new confrontation between
 the pair while it runs, and refuses a territorial demand for ground the defender

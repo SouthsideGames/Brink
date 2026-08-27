@@ -518,15 +518,29 @@ namespace Brink.Core
             if (confrontation.escalation >= EscalationState.LimitedConflict)
             {
                 float drain = confrontation.escalation == EscalationState.TotalWar ? 2.2f : 1.1f;
-                confrontation.initiatorWarExhaustion += drain;
-                confrontation.defenderWarExhaustion += drain;
-                initiator.warExhaustion = Clamp(initiator.warExhaustion + drain * 0.5f);
-                defender.warExhaustion = Clamp(defender.warExhaustion + drain * 0.5f);
+
+                // A war that is being won sustains itself (2026-08). The monthly
+                // bill used to be identical for the side taking ground and the
+                // side losing it, so a decade of victories cost exactly what a
+                // decade of defeats did and the military playstyle graded below
+                // doing nothing while winning 15–1. The side with clear momentum
+                // tires at half the rate and its public does not turn on it.
+                float initiatorFactor = confrontation.momentum >= WinningMomentum ? WinningDrainFactor : 1f;
+                float defenderFactor = confrontation.momentum <= -WinningMomentum ? WinningDrainFactor : 1f;
+
+                confrontation.initiatorWarExhaustion += drain * initiatorFactor;
+                confrontation.defenderWarExhaustion += drain * defenderFactor;
+                initiator.warExhaustion = Clamp(initiator.warExhaustion + drain * 0.5f * initiatorFactor);
+                defender.warExhaustion = Clamp(defender.warExhaustion + drain * 0.5f * defenderFactor);
 
                 // Long wars erode support and approval (GDD §12: historical memory).
-                initiator.warSupport = Clamp(initiator.warSupport - drain * 0.7f);
-                defender.warSupport = Clamp(defender.warSupport - drain * 0.5f);
-                initiator.governmentApproval = Clamp(initiator.governmentApproval - drain * 0.35f);
+                if (initiatorFactor >= 1f)
+                {
+                    initiator.warSupport = Clamp(initiator.warSupport - drain * 0.7f);
+                    initiator.governmentApproval = Clamp(initiator.governmentApproval - drain * 0.35f);
+                }
+                if (defenderFactor >= 1f)
+                    defender.warSupport = Clamp(defender.warSupport - drain * 0.5f);
 
                 initiator.resources.treasury -= 35f * drain;
                 defender.resources.treasury -= 30f * drain;
@@ -1134,18 +1148,55 @@ namespace Brink.Core
             switch (confrontation.verdict)
             {
                 case WarVerdict.InitiatorVictory:
-                    if (initiator != null) initiator.warsWon++;
-                    if (defender != null) defender.warsLost++;
+                    if (initiator != null) { initiator.warsWon++; VictoryDividend(initiator); }
+                    if (defender != null) { defender.warsLost++; DefeatBill(defender); }
                     break;
                 case WarVerdict.DefenderVictory:
-                    if (defender != null) defender.warsWon++;
-                    if (initiator != null) initiator.warsLost++;
+                    if (defender != null) { defender.warsWon++; VictoryDividend(defender); }
+                    if (initiator != null) { initiator.warsLost++; DefeatBill(initiator); }
                     break;
                 default:
                     if (initiator != null) initiator.warsDrawn++;
                     if (defender != null) defender.warsDrawn++;
                     break;
             }
+        }
+
+        /// <summary>
+        /// What winning a war is worth at home. Until the 2026-08 playtest a
+        /// verdict changed a counter and nothing else: the winner had paid every
+        /// month of exhaustion, approval and treasury the war cost and got no
+        /// rally for it, so across 888 measured decades the military playstyle —
+        /// the only one that ever gains ground — graded at or below doing
+        /// nothing. A won war now lifts the public's mood and confidence in the
+        /// government and lets the country breathe; a lost one deepens the
+        /// wound. Both are one-off store writes, not targets, because a verdict
+        /// is an event.
+        /// </summary>
+        /// <summary>Momentum at which a side is clearly winning and its monthly war bill eases.</summary>
+        public const float WinningMomentum = 25f;
+        /// <summary>Exhaustion multiplier for the winning side; its support and approval stop draining.</summary>
+        public const float WinningDrainFactor = 0.5f;
+
+        public const float VictoryApproval = 8f, VictoryUnity = 5f, VictoryWarSupport = 12f,
+            VictoryStability = 3f, VictoryExhaustionRelief = 15f;
+        public const float DefeatApproval = 5f, DefeatWarSupport = 8f, DefeatUnity = 3f;
+
+        static void VictoryDividend(CountryState country)
+        {
+            country.governmentApproval = Clamp(country.governmentApproval + VictoryApproval);
+            country.nationalUnity = Clamp(country.nationalUnity + VictoryUnity);
+            country.warSupport = Clamp(country.warSupport + VictoryWarSupport);
+            country.stability = Clamp(country.stability + VictoryStability);
+            country.warExhaustion = Clamp(country.warExhaustion - VictoryExhaustionRelief);
+            country.pillars.military = Growth.Apply(country.pillars.military, 2f);
+        }
+
+        static void DefeatBill(CountryState country)
+        {
+            country.governmentApproval = Clamp(country.governmentApproval - DefeatApproval);
+            country.warSupport = Clamp(country.warSupport - DefeatWarSupport);
+            country.nationalUnity = Clamp(country.nationalUnity - DefeatUnity);
         }
 
         /// <summary>Does <paramref name="holderId"/> control every location that is originally <paramref name="ownerId"/>'s?</summary>

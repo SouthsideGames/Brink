@@ -253,21 +253,21 @@ Current `Report_MultiSeedBalance` means, 5 seeds × 10 years:
 
 ```
 PLAYSTYLE      MEAN GRADE   VS PASSIVE
-PASSIVE           2.10   —
-DRIFTER           2.66      +0.56
-MILITARY          2.18      +0.08
-ECONOMY           2.60      +0.50
-INTELLIGENCE      2.70      +0.60
-DIPLOMACY         2.90      +0.80
-GOVERNMENT        2.86      +0.76
+PASSIVE           2.18   —
+DRIFTER           2.52      +0.34
+MILITARY          2.36      +0.18
+ECONOMY           2.58      +0.40
+INTELLIGENCE      2.68      +0.50
+DIPLOMACY         2.84      +0.66
+GOVERNMENT        2.76      +0.58
 ```
 
-**This is the one table.** Re-measured 2026-08-26 (evening) after the playtest
+**This is the one table.** Re-measured 2026-08-27 after the playtest
 fixes — hosting and insurgency cost scale (specs 19 §5, 16 §5),
 `TreasuryIncomeRate` 0.012 → 0.03 (spec 02), settlement direction, offered terms
 as a decision and the settlement truce (spec 01 §5), `MinimumReach` 0.2, and the
 `SolvencyPenalty` on the economy grade (spec 07). Every playstyle is still above
-passive; spread widened to 0.72 and MILITARY sits at +0.08 — it wins wars now
+passive; spread 0.48 and MILITARY sits at +0.18 (was +0.08 before the victory dividend, winning-side relief and verdict credit, spec 01 §5 / spec 07) — it wins wars now
 (118–65 across the 16-posting harness, net +18 locations) and is charged for
 them, and the evaluation deliberately gives conquest no credit. Absolute grades
 shifted down ~0.1–0.3 because a deficit now costs the economy component; do not

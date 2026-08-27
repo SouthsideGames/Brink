@@ -142,6 +142,7 @@ stability  = 50 + Δstability × 1.5 + Δapproval × 0.8 + Δunity × 0.8
 position   = 50 + ΔlocationsHeld × 12 + ΔrelationsTotal × 0.35
              + Δtreaties × 9 + ΔdefensePacts × 7
              + (deterrent − 0.5) × 24
+             + warsWonThisYear × 14 − warsLostThisYear × 10     (2026-08: the verdict itself)
 crisis     = 68 if none faced, else 30 + resolved/faced × 45
 initiative = 40 + min(38, initiatives × 2.2)      saturates ≈ 17 decisions/year
 efficiency = 50, or 50 + delivered / (treasurySpent/1000) × 6 when spent > 100, clamped 0..100
