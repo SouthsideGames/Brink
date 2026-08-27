@@ -342,7 +342,7 @@ worth negotiating for, just never quite as good as owning. Tests:
 ```
 if distance ≤ range  →  1.0
 else                 →  max(MinimumReach, range / distance)
-MinimumReach = 0.35
+MinimumReach = 0.2      (0.35 until the 2026-08 playtest: Kazakhstan was occupying the Gulf Coast)
 ```
 
 `ReachFactorFor(state, actorId, location)` is the same call routed through
@@ -665,7 +665,7 @@ both; `BranchPowerFor` remains the pure branch calculation.
 Resolution (`MilitarySystem.ResolveOperation`):
 
 ```
-reach        = GeographySystem.ReachFactorFor(attacker, target)   ← §3b, 0.35..1
+reach        = GeographySystem.ReachFactorFor(attacker, target)   ← §3b, 0.2..1
 attackPower  = OperationPower(attacker, type) × PowerScale × reach
                + max(0, coalitionSupport) × PowerScale
 defensePower = DefensePowerFor(profile, attacker, defender, target)   ← §4b-1
@@ -1052,9 +1052,13 @@ war with Russia over a location Brazil held transferred Brazil's title.)
 
 **A foreign offer is a decision.** When an AI government proposes to the player,
 `ProposeSettlementBy` raises a `TERMS_OFFERED` Crisis Turn (accept / refuse)
-instead of closing the war on the player's computed willingness. A refusal — or
-an unanswered offer — waits `OfferCooldownMonths = 6` before the same government
-asks again. AI-vs-AI settlements are unchanged.
+instead of closing the war on the player's computed willingness. Accepting a
+*demand* is a concession and priced like one (approval −6, stability −2);
+accepting a status-quo offer is free. A refusal — or an unanswered offer — waits
+`OfferCooldownMonths = 6` before the same government asks again. AI-vs-AI
+settlements are unchanged. The harness bots answer an offer by the player's own
+`WouldAcceptTermsFrom` calculus — the pre-decision behaviour — so balance
+measurements stay comparable.
 
 **A settlement binds.** `Close` sets `Relationship.settlementTruceMonths =
 SettlementTruceMonths (12)`; `CanOpenAgainst` refuses a new confrontation between

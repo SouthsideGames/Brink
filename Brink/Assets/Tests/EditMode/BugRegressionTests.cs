@@ -772,5 +772,23 @@ namespace Brink.Tests
             pair.settlementTruceMonths = 0;
             Assert.NotNull(OpenLaneWar(), "And it expires.");
         }
+
+        [Test]
+        public void Evaluation_ADeepDeficitCostsTheEconomyGrade()
+        {
+            var player = state.PlayerCountry;
+            player.resources.treasury = 500f;
+            float solvent = ProgressionSystem.EvaluateYear(state, 1984).economyScore;
+
+            player.resources.treasury = -5000f;
+            float broke = ProgressionSystem.EvaluateYear(state, 1985).economyScore;
+
+            Assert.Less(broke, solvent - 10f,
+                "The evaluation never looked at the balance: every posting was tens of "
+                + "thousands in the red and graded B, which is how a cost 70× income passed "
+                + "every balance measurement this project had taken.");
+            player.resources.treasury = 0f;
+            Assert.AreEqual(0f, ProgressionSystem.SolvencyPenalty(player), "Solvent is free.");
+        }
     }
 }

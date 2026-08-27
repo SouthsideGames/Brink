@@ -62,8 +62,16 @@ namespace Brink.Core
         /// must never make one impossible. Hard geographic gates would repeat the
         /// §18.1 mistake where escalation states blocked operations outright
         /// instead of pricing them.
+        ///
+        /// 0.35 → 0.2 (2026-08 playtest): at 0.35 a landlocked buffer state with
+        /// no navy fought at a third of its strength anywhere on earth, and
+        /// Kazakhstan occupied the Gulf Coast Energy Belt and Mexico held
+        /// Western Siberia in measured decades. At 0.2 the far end of the map is
+        /// still reachable — for a power that has bought the reach — and a state
+        /// that has not is fighting at a fifth of its strength, which is what
+        /// "beyond reach" should mean.
         /// </summary>
-        public const float MinimumReach = 0.35f;
+        public const float MinimumReach = 0.2f;
 
         // ---------- distance ----------
 

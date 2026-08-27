@@ -105,8 +105,8 @@ pacification suppression, treasury, war exhaustion, and national unity for a
 separatist movement.
 
 The treasury line is `intensity × InsurgencyBillPerMonth (24)`, i.e. a
-full-strength insurgency costs roughly one month's income (`gdp × 0.012`,
-15–40 for the roster) per month. It shipped at 210 — 6–12× income — which put a
+full-strength insurgency costs roughly one month's income (`gdp × TreasuryIncomeRate`,
+40–100 for the roster) per month. It shipped at 210 — 6–12× income — which put a
 passive-decade Russia at −11,000 on its own; see spec 19 §5 for the same class of
 scale bug in hosting costs.
 

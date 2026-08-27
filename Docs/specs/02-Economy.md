@@ -53,8 +53,18 @@ unemployment approaches at 0.25, clamped to [1.5, 35]
 
 debtToGdp += (0.9 at war else 0.15) − max(0, growth) × 0.18, clamped [0, 250]
 gdp       ×= 1 + growth/1200,  floored at 50
-treasury  += gdp × 0.012 × (1 − debtToGdp/400)
+treasury  += gdp × TreasuryIncomeRate (0.03) × (1 − debtToGdp/400)
 ```
+
+**`TreasuryIncomeRate` is the unit every recurring cost is sized against.** It
+shipped at 0.012 (15–40/month for the roster) while war exhaustion, occupation,
+research programmes and endgame authorizations were priced as if income were
+several times that; a belligerent mid-tier state ended a passive decade thousands
+in the red and no posting could afford the strategic instruments spec 14 designs
+around. 0.03 puts a great power at ~70–100/month (2026-08-26 playtest; spec 12
+§6 holds the re-measured table). A new monthly cost should be stated as a
+fraction of `gdp × TreasuryIncomeRate`, and `ProgressionSystem.SolvencyPenalty`
+now makes a deficit cost the annual grade (spec 07).
 
 The GDP floor is what makes "coercion never zeroes an economy" (§4) structural
 rather than a matter of tuning.

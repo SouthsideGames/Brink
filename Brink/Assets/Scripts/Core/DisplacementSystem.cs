@@ -56,7 +56,7 @@ namespace Brink.Core
         /// Treasury per point hosted, per month.
         ///
         /// Scaled to what a treasury actually earns: `EconomySystem` pays a great
-        /// power roughly 25–40 a month, so a full load of 100 hosted costs about
+        /// power roughly 70–100 a month, so a full load of 100 hosted costs well under
         /// one month's income — a real burden, not a bankruptcy. At the original
         /// 22 the same load cost 2,200 a month (≈70× income), every AI government
         /// shut its border within four years, the player became the world's only

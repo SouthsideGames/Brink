@@ -617,8 +617,8 @@ namespace Brink.Core
             if (location.IsOccupied)
                 location.pacification = Clamp(location.pacification - intensity * 2.2f);
 
-            // Scaled to what a treasury earns (`EconomySystem`: ~gdp × 0.012 a
-            // month, 15–40 for the authored roster). A full-strength insurgency
+            // Scaled to what a treasury earns (`EconomySystem`: ~gdp × TreasuryIncomeRate a
+            // month, 40–100 for the authored roster). A full-strength insurgency
             // costs roughly one month's income per month — a serious, open-ended
             // drain, not a bankruptcy. At 210 it was 6–12× income: Russia was
             // −11,000 by year ten of a passive decade with nobody choosing anything.

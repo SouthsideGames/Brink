@@ -985,9 +985,14 @@ namespace Brink.Core
                     {
                         label = "ACCEPT THE TERMS",
                         description = proposerIsClaimant
-                            ? "The war ends and they get what they demanded."
+                            ? "The war ends and they get what they demanded. Giving way costs standing."
                             : "The war ends and nothing changes hands.",
-                        resultText = $"Terms accepted. The confrontation with {proposer?.displayName} is over."
+                        resultText = $"Terms accepted. The confrontation with {proposer?.displayName} is over.",
+                        // Yielding to a demand is a concession and priced like
+                        // one (see the concede path); accepting a status-quo
+                        // offer is not.
+                        approvalDelta = proposerIsClaimant ? -6f : 0f,
+                        stabilityDelta = proposerIsClaimant ? -2f : 0f
                     },
                     new CrisisOption
                     {

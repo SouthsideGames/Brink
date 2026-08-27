@@ -76,8 +76,8 @@ neighbour is.
 shows up slowly. Without that the only correct play would be to shut the border
 on day one and the decision would not be a decision.
 
-**The bill is scaled to income.** `EconomySystem` pays roughly `gdp × 0.012` a
-month — 15–40 for the authored roster — so a full load of 100 hosted costs about
+**The bill is scaled to income.** `EconomySystem` pays roughly `gdp × TreasuryIncomeRate` a
+month — 40–100 for the authored roster — so a full load of 100 hosted costs about
 one month's income. It shipped at 22 per point (≈70× income): every AI government
 closed within four years, the player became the world's only open door, and every
 posting under every playstyle was −30,000 to −170,000 by year ten. Because research

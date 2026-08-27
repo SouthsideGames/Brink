@@ -262,7 +262,7 @@ namespace Brink.Tests
         public void HostingIsABurdenNotABankruptcy()
         {
             var player = state.PlayerCountry;
-            float monthlyIncome = player.economy.gdp * 0.012f;
+            float monthlyIncome = player.economy.gdp * EconomySystem.TreasuryIncomeRate;
 
             float fullLoadBill = 100f * DisplacementSystem.HostingCostPerPoint;
             Assert.Less(fullLoadBill, monthlyIncome * 2f,

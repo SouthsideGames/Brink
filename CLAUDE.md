@@ -334,7 +334,7 @@ state reach that path? Nearly every bug in the sweep was one of those two.
         which is what makes a forward position worth taking — and
         `foreignOperatorId` gives the same reach without conquest.
       `ProjectionRange` = 8 + naval×35 + air×20 + logistics×0.15 + CAP_LIFT×10;
-      `ReachFactor` = range/distance, floored at **0.35** — distance makes a far
+      `ReachFactor` = range/distance, floored at **0.2** (was 0.35 until the 2026-08 playtest) — distance makes a far
       campaign hard, never impossible (no hard geographic gates, per the §18.1
       lesson). Multiplies attacker power in `ResolveOperation` only: fighting
       near home is the one advantage a smaller power reliably has. A failed
@@ -1776,7 +1776,7 @@ three had passed for a long time:
       What it found, and what changed:
       - **Every state was bankrupt by year ten under every playstyle, including
         doing nothing.** `DisplacementSystem` billed `hosted × 22`/month against
-        income of ~`gdp × 0.012` ≈ 15–40/month; every AI closed its border, the
+        income of ~`gdp × 0.012` ≈ 15–40/month (now `TreasuryIncomeRate = 0.03`, see below); every AI closed its border, the
         player carried the world at 70–97 hosted, USA passive was −57,000.
         Research is gated on a positive treasury, so **no strategic endgame was
         reachable** in 224 decades. Now `0.4`/point, paid only from what is there
@@ -1784,7 +1784,7 @@ three had passed for a long time:
         (`intensity × 210` → `InsurgencyBillPerMonth = 24`, spec 16 §5).
         **The annual grade never looks at the treasury**, which is why
         `Report_MultiSeedBalance` could not see any of it — any new monthly cost
-        should be sized against `gdp × 0.012`, and
+        should be sized against `gdp × EconomySystem.TreasuryIncomeRate`, and
         `DisplacementTests.ADecadeOfDoingNothingDoesNotEndInTheRed` is the leak
         detector. Wars, occupation and posture still run a belligerent mid-tier
         state several thousand into the red over a decade; that is an income-scale
@@ -1802,7 +1802,7 @@ three had passed for a long time:
       - **Settlements did not bind** — the harness re-declared one war eighteen
         times in a decade. `Relationship.settlementTruceMonths` (12) now blocks a
         new confrontation between the pair; `Begin` checks it before charging CP.
-      - Open, not fixed: `ReachFactor`'s 0.35 floor lets Kazakhstan occupy the
+      - Also done in the follow-up: `TreasuryIncomeRate` 0.012 → 0.03 (spec 02), `MinimumReach` 0.35 → 0.2, and a `SolvencyPenalty` on the economy grade (spec 07). Still a judgement call:
         Gulf Coast; military play is the only ground-gaining playstyle and the
         only one that grades below passive (2.18 vs 2.29) — consistent with "never
         a conquest checklist", but confirm it is the intended reading.

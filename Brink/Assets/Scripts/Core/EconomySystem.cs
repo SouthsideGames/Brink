@@ -15,6 +15,23 @@ namespace Brink.Core
         /// <summary>CP cost to impose or lift a sanctions regime.</summary>
         public const int SanctionCost = 2;
 
+        /// <summary>
+        /// Treasury income per month as a share of GDP (before the debt haircut).
+        ///
+        /// This is the unit every recurring cost in the game should be sized
+        /// against. It shipped at 0.012 — 15–40 a month for the authored roster —
+        /// while war exhaustion (~40–80/month), occupation (~45/month), a research
+        /// programme (40–55/month) and an endgame authorization (120) were all
+        /// priced as if income were several times that: a belligerent mid-tier
+        /// state ended a passive decade several thousand in the red, and the
+        /// strategic instruments spec 14 designs around "~8 authorizations" were
+        /// unaffordable for every posting. 0.03 puts a great power at ~70–100 a
+        /// month, so a war is expensive rather than ruinous and a programme is a
+        /// commitment rather than an impossibility. Measured 2026-08-26 with the
+        /// headless harness; re-measure with `Report_MultiSeedBalance`.
+        /// </summary>
+        public const float TreasuryIncomeRate = 0.03f;
+
         public static void MonthlyUpdate(GameState state)
         {
             foreach (var country in state.countries)
@@ -396,7 +413,7 @@ namespace Brink.Core
             eco.debtToGdp = Clamp(eco.debtToGdp + deficitPressure - Math.Max(0f, eco.growthRate) * 0.18f, 0f, 250f);
 
             eco.gdp = Math.Max(50f, eco.gdp * (1f + eco.growthRate / 1200f));
-            country.resources.treasury += eco.gdp * 0.012f * (1f - eco.debtToGdp / 400f);
+            country.resources.treasury += eco.gdp * TreasuryIncomeRate * (1f - eco.debtToGdp / 400f);
 
             // ---- confidence ----
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f

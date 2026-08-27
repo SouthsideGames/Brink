@@ -235,7 +235,8 @@ namespace Brink.Core
                 ? (player.economy.marketIndex - snapshot.marketIndex) / snapshot.marketIndex * 100f
                 : 0f;
             float economy = 50f + gdpGrowth * 3f + marketMove * 0.6f
-                            - Math.Max(0f, player.economy.inflation - 5f) * 2.5f;
+                            - Math.Max(0f, player.economy.inflation - 5f) * 2.5f
+                            - SolvencyPenalty(player);
 
             // --- stability: the state held together ---
             float stability = 50f
@@ -360,6 +361,24 @@ namespace Brink.Core
 
         /// <summary>Months of service before the career review. Forty years.</summary>
         public const int TenureMonths = 480;
+
+        /// <summary>
+        /// What running the treasury into the red costs the economy component:
+        /// up to 20 points, scaling with the deficit measured in years of income.
+        ///
+        /// The evaluation never looked at the balance. That is how a monthly
+        /// cost 70× income (spec 19 §5) passed every balance measurement this
+        /// project had taken: every posting was −30,000 to −170,000 by year ten
+        /// and graded B. A government that has spent money it does not have is
+        /// not running its economy well, whatever GDP did.
+        /// </summary>
+        public static float SolvencyPenalty(CountryState country)
+        {
+            if (country.resources.treasury >= 0f) return 0f;
+            float annualIncome = Math.Max(50f, country.economy.gdp * EconomySystem.TreasuryIncomeRate * 12f);
+            float yearsInTheRed = -country.resources.treasury / annualIncome;
+            return Math.Min(20f, yearsInTheRed * 8f);
+        }
 
         /// <summary>
         /// The career arc (GDD §9 amendment, user decision). Reported from play:
