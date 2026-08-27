@@ -253,16 +253,16 @@ Current `Report_MultiSeedBalance` means, 5 seeds × 10 years:
 
 ```
 PLAYSTYLE      MEAN GRADE   VS PASSIVE
-PASSIVE           2.18   —
-DRIFTER           2.52      +0.34
-MILITARY          2.36      +0.18
-ECONOMY           2.58      +0.40
-INTELLIGENCE      2.68      +0.50
-DIPLOMACY         2.84      +0.66
-GOVERNMENT        2.76      +0.58
+PASSIVE           2.64   —
+DRIFTER           2.82      +0.18
+MILITARY          2.88      +0.24
+ECONOMY           2.90      +0.26
+INTELLIGENCE      2.98      +0.34
+DIPLOMACY         3.00      +0.36
+GOVERNMENT        2.96      +0.32
 ```
 
-**This is the one table.** Re-measured 2026-08-27 after the playtest
+**This is the one table.** Re-measured 2026-08-28 after sanction adaptation and the conquest credit (spec 07); the previous measurement (2026-08-27: 2.18 / 2.52 / 2.36 / 2.58 / 2.68 / 2.84 / 2.76) followed the playtest
 fixes — hosting and insurgency cost scale (specs 19 §5, 16 §5),
 `TreasuryIncomeRate` 0.012 → 0.03 (spec 02), settlement direction, offered terms
 as a decision and the settlement truce (spec 01 §5), `MinimumReach` 0.2, and the
