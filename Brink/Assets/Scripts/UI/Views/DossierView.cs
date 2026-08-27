@@ -108,6 +108,11 @@ namespace Brink.UI.Views
             // not secrets, whatever our collection looks like.
             sb.AppendLine($" HEAD OF GOVERNMENT: {subject.government.leader.name.ToUpperInvariant()}"
                           + $"   ({subject.government.leader.faction})");
+            // A government's temperament is its public reputation — read from
+            // how it has behaved, not from a hidden number, so it is not a leak.
+            string temperament = AISystem.TemperamentOf(state, subject.id);
+            if (!string.IsNullOrEmpty(temperament))
+                sb.AppendLine($" TEMPERAMENT: {temperament}   PRIORITY: {subject.government.leader.priority.ToString().ToUpperInvariant()}");
             sb.AppendLine($" WAR RECORD: {subject.WarRecordText}"
                           + (subject.foundedDate.year > 0
                               ? $"   FOUNDED {subject.foundedDate.DisplayString}" : ""));

@@ -195,11 +195,14 @@ namespace Brink.Core
                 locationsHeld = LocationsHeld(state),
                 relationsTotal = RelationsTotal(state),
                 treatiesHeld = TreatiesHeld(state, out int pacts),
-                defensePactsHeld = pacts
+                defensePactsHeld = pacts,
+                warsWon = player.warsWon,
+                warsLost = player.warsLost
             };
             state.crisesFacedThisYear = 0;
             state.crisesResolvedThisYear = 0;
             state.initiativesThisYear = 0;
+            state.directivesCompletedThisYear = 0;
 
             // Repetition is measured per year: a lever worn out last year is
             // worth learning from again after a year of doing something else.
@@ -235,7 +238,8 @@ namespace Brink.Core
                 ? (player.economy.marketIndex - snapshot.marketIndex) / snapshot.marketIndex * 100f
                 : 0f;
             float economy = 50f + gdpGrowth * 3f + marketMove * 0.6f
-                            - Math.Max(0f, player.economy.inflation - 5f) * 2.5f;
+                            - Math.Max(0f, player.economy.inflation - 5f) * 2.5f
+                            - SolvencyPenalty(player);
 
             // --- stability: the state held together ---
             float stability = 50f
@@ -249,11 +253,24 @@ namespace Brink.Core
             // even if no border changed.
             int treaties = TreatiesHeld(state, out int defensePacts);
             float position = 50f
-                             + (LocationsHeld(state) - snapshot.locationsHeld) * 12f
+                             // Conquest counts (2026-08-28, a design decision that
+                             // supersedes GDD §25's "never a conquest checklist"):
+                             // ground taken this year at 18, and ground held beyond
+                             // the posting's opening holdings at 4 a year, every
+                             // year — a position, not a one-off bonus.
+                             + (LocationsHeld(state) - snapshot.locationsHeld) * 30f
+                             + Math.Max(0, LocationsHeld(state) - OpeningHoldings(state)) * 8f
                              + (RelationsTotal(state) - snapshot.relationsTotal) * 0.35f
                              + (treaties - snapshot.treatiesHeld) * 9f
                              + (defensePacts - snapshot.defensePactsHeld) * 7f
-                             + (Deterrent(player) - 0.5f) * 24f;
+                             + (Deterrent(player) - 0.5f) * 24f
+                             // A war won this year is a fact about the nation's
+                             // position; a war lost is too. Ground taken is
+                             // already counted above, so this is the verdict
+                             // itself — a deterrence or policy war won by
+                             // settlement used to be worth exactly nothing here.
+                             + (player.warsWon - snapshot.warsWon) * 14f
+                             - (player.warsLost - snapshot.warsLost) * 10f;
 
             // --- crisis management ---
             // A year with no crises is a year of successful prevention, and must
@@ -274,7 +291,8 @@ namespace Brink.Core
             // playstyles grading *below* doing nothing.
             // Saturates around 17 decisions a year — roughly one a month plus
             // change. Beyond that, more clicking is not more statecraft.
-            float initiative = 40f + Math.Min(38f, state.initiativesThisYear * 2.2f);
+            float initiative = 40f + Math.Min(38f, state.initiativesThisYear * 2.2f)
+                               + Math.Min(18f, state.directivesCompletedThisYear * 6f);   // GDD §29, spec 24
 
             // --- efficiency: what the year's spending actually bought (GDD §25.2) ---
             //
@@ -315,6 +333,12 @@ namespace Brink.Core
             // Circumstance and difficulty context: a hard year is graded gently,
             // and a sharper AI is a harder world to perform in (GDD §25.2).
             score += adversity * 6f;
+
+            // Ground held beyond the opening holdings also pays directly (user
+            // decision, 2026-08-28): position is a tenth of the score, so a
+            // decade of conquest moved the grade by a tenth of a letter through
+            // that channel alone. Capped, so a map painter still has to govern.
+            score += Math.Min(12f, Math.Max(0, LocationsHeld(state) - OpeningHoldings(state)) * 1.5f);
             if (state.difficulty == Difficulty.Challenging) score += 3f;
             if (state.difficulty == Difficulty.Ruthless) score += 6f;
 
@@ -337,7 +361,26 @@ namespace Brink.Core
                 summary = BuildSummary(grade, wasAtWar, pillarDelta, gdpGrowth, state)
             };
 
+            // Say *why* (2026-08): the components were computed and shown as
+            // numbers, and the summary said "Economy flat" and nothing else.
+            // Name the strongest and weakest, in the operator's language.
+            var named = new (string name, float score)[]
+            {
+                ("national trajectory", trajectory), ("the economy", economy), ("stability at home", stability),
+                ("the country's position abroad", position), ("crisis handling", crisis),
+                ("initiative shown", initiative), ("value for money spent", efficiency)
+            };
+            var best = named[0]; var worst = named[0];
+            foreach (var component in named)
+            {
+                if (component.score > best.score) best = component;
+                if (component.score < worst.score) worst = component;
+            }
+            record.summary += $" Carried by {best.name} ({best.score:F0}); held back by {worst.name} ({worst.score:F0}).";
+            if (SolvencyPenalty(player) > 0f) record.summary += " The treasury is in the red, and it shows.";
+
             state.evaluations.Add(record);
+            CareerRecord.Record(state);   // spec 24 §2 — refreshed yearly, so an abandoned posting still shows what it was
             state.skillPoints += points;
 
             // Kept modest relative to decision XP, so a decade of engagement
@@ -362,6 +405,24 @@ namespace Brink.Core
         public const int TenureMonths = 480;
 
         /// <summary>
+        /// What running the treasury into the red costs the economy component:
+        /// up to 20 points, scaling with the deficit measured in years of income.
+        ///
+        /// The evaluation never looked at the balance. That is how a monthly
+        /// cost 70× income (spec 19 §5) passed every balance measurement this
+        /// project had taken: every posting was −30,000 to −170,000 by year ten
+        /// and graded B. A government that has spent money it does not have is
+        /// not running its economy well, whatever GDP did.
+        /// </summary>
+        public static float SolvencyPenalty(CountryState country)
+        {
+            if (country.resources.treasury >= 0f) return 0f;
+            float annualIncome = Math.Max(50f, country.economy.gdp * EconomySystem.TreasuryIncomeRate * 12f);
+            float yearsInTheRed = -country.resources.treasury / annualIncome;
+            return Math.Min(20f, yearsInTheRed * 8f);
+        }
+
+        /// <summary>
         /// The career arc (GDD §9 amendment, user decision). Reported from play:
         /// an operator who reaches the top of the world runs out of reasons to
         /// keep ending months — the game is open-ended by design, but open-ended
@@ -382,6 +443,7 @@ namespace Brink.Core
             var player = state.PlayerCountry;
             if (player == null) return;
             state.tenureReviewed = true;
+            CareerRecord.Record(state);   // spec 24 §2
 
             float gradeSum = 0f;
             foreach (var evaluation in state.evaluations) gradeSum += (int)evaluation.grade;
@@ -484,8 +546,12 @@ namespace Brink.Core
         /// </summary>
         public static EvaluationGrade GradeFor(float score)
         {
-            if (score >= 82f) return EvaluationGrade.S;
-            if (score >= 72f) return EvaluationGrade.A;
+            // S and A moved up (2026-08): a first year of answering two crises
+            // and signing what was offered graded S. The top bands are for years
+            // that were actually exceptional; B is still where a well-delegated
+            // year lands (spec 12 §3).
+            if (score >= 88f) return EvaluationGrade.S;
+            if (score >= 76f) return EvaluationGrade.A;
             if (score >= 60f) return EvaluationGrade.B;
             if (score >= 48f) return EvaluationGrade.C;
             if (score >= 38f) return EvaluationGrade.D;
@@ -542,6 +608,12 @@ namespace Brink.Core
             float forces = mil.TotalPower / 3f * 100f;
             return Math.Min(1f, (forces * 0.6f + mil.logistics * 0.4f) / 100f);
         }
+
+        /// <summary>Locations the posting opened with (the mandate's base), or today's count on a save without one.</summary>
+        static int OpeningHoldings(GameState state)
+            => state.mandate != null && state.mandate.startLocationIds.Count > 0
+                ? state.mandate.startLocationIds.Count
+                : LocationsHeld(state);
 
         static int LocationsHeld(GameState state)
         {

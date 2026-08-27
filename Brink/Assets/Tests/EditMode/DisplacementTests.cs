@@ -117,10 +117,14 @@ namespace Brink.Tests
             Assert.Greater(DisplacementSystem.StandardsDrag(player), 1f,
                 "Carrying twenty points of arrivals put no strain on services at all.");
 
-            turns.EndMonth();
-
+            // Measured on the system alone: the bill is now smaller than a
+            // month's income, so the whole-month balance can rise while hosting
+            // still costs exactly what it says.
+            DisplacementSystem.MonthlyUpdate(state);
             Assert.Less(player.resources.treasury, treasury,
                 "Hosting cost the treasury nothing.");
+
+            turns.EndMonth();
             Assert.Greater(player.resources.industrialCapacity, capacity,
                 "People who arrive work. If hosting were pure cost the only correct play "
                 + "would be to shut the border on day one, and the decision would not be "
@@ -243,6 +247,62 @@ namespace Brink.Tests
             Assert.AreEqual(4f, restored.displaced, 0.01f);
             Assert.IsTrue(restored.bordersClosed);
             Assert.AreEqual(9, restored.monthsClosed);
+        }
+
+        // ---------- and it cannot bankrupt a state ----------
+
+        /// <summary>
+        /// The 2026-08 playtest: at 22 treasury per point a full load cost
+        /// ~70× a great power's monthly income, every AI closed its border, the
+        /// player carried the world, and every posting under every playstyle was
+        /// tens of thousands in the red by year ten. Hosting is a burden on the
+        /// order of a month's income, and it is paid from what is there.
+        /// </summary>
+        [Test]
+        public void HostingIsABurdenNotABankruptcy()
+        {
+            var player = state.PlayerCountry;
+            float monthlyIncome = player.economy.gdp * EconomySystem.TreasuryIncomeRate;
+
+            float fullLoadBill = 100f * DisplacementSystem.HostingCostPerPoint;
+            Assert.Less(fullLoadBill, monthlyIncome * 2f,
+                $"A full load of arrivals bills {fullLoadBill:F0} a month against income of " +
+                $"{monthlyIncome:F0}. That is not a burden, it is a bankruptcy.");
+
+            player.displacement.hosted = 100f;
+            player.resources.treasury = 3f;
+            turns.EndMonth();
+            Assert.GreaterOrEqual(player.resources.treasury, -50f,
+                "Hosting drove an empty treasury below zero. People who have arrived cannot " +
+                "un-arrive, so this is the one cost that must be paid from what is there.");
+        }
+
+        [Test]
+        public void ADecadeOfDoingNothingDoesNotEndInTheRed()
+        {
+            var world = WorldFactory.CreateDebugWorld(seed: 7);
+            var sim = new TurnManager(world);
+            SimulationPipeline.Wire(sim, world);
+            for (int month = 0; month < 120; month++)
+            {
+                while (world.HasOpenCrisis)
+                    CrisisSystem.Resolve(world, world.activeCrises[0], 0);
+                sim.EndMonth();
+            }
+
+            // The bug this guards produced −30,000 to −170,000 for every posting.
+            // Wars, occupation and posture still run a belligerent mid-tier state
+            // a few thousand into the red over a decade — a balance question, not
+            // a leak — so the lines are drawn where only a leak can cross them.
+            Assert.Greater(world.PlayerCountry.resources.treasury, -2000f,
+                "A passive operator ended the decade deep in the red with nobody acting. " +
+                "A world that bankrupts itself on its own is not a balance problem, it is a leak.");
+            int bankrupt = 0;
+            foreach (var country in world.countries)
+                if (country.resources.treasury < -15000f) bankrupt++;
+            Assert.AreEqual(0, bankrupt,
+                $"{bankrupt} of {world.countries.Count} states are more than 15,000 in the red after a " +
+                "passive decade — a monthly cost somewhere is out of scale with treasury income.");
         }
     }
 }

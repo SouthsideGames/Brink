@@ -400,13 +400,9 @@ namespace Brink.Core
                 // Delegation slowly builds the relationship.
                 official.trust = Clamp(official.trust + (official.mode == ControlMode.Autonomous ? 0.1f : 0.05f));
 
-                // Directives are a player-only interface, so this only ever fires
-                // for the player's own cabinet.
-                if (official.mode == ControlMode.Directed && country.isPlayer)
-                    state.AddNotification(NotificationClass.Wire,
-                        $"{official.office.ToString().ToUpperInvariant()} DIRECTIVE",
-                        $"{official.displayName} executing {official.directiveId}.", country.id,
-                        desk: ReportingSystem.DeskFor(official.office));
+                // A standing directive is not news every month. It used to be
+                // re-announced on the wire 115 times a decade; the CABINET panel
+                // already shows what each minister is doing.
             }
         }
 
@@ -435,13 +431,18 @@ namespace Brink.Core
                 return;
             }
 
-            // Only a setback abroad is loud enough to travel on its own.
+            // Only a setback abroad is loud enough to travel on its own — and
+            // only from a state we actually watch. Unfiltered, this was a quarter
+            // of all terminal traffic (265 items a decade, the Treasurer of
+            // Australia stumbling every month): a wire nobody reads. A network on
+            // the state or a standing treaty with it earns the item.
             if (success) return;
 
-            state.AddNotification(NotificationClass.Wire, "FOREIGN CABINET SETBACK",
-                $"{official.displayName}, {official.title} of {country.displayName}, " +
-                "is reported to have suffered a public setback.",
-                country.id, desk: ReportingDesk.Intelligence);
+            // A foreign minister's bad month is not news: even gated on states
+            // we watch it was the single largest item on the terminal, and as a
+            // chronicle line it would breach the thirty-year growth cap. The
+            // *change* of a minister still reaches the wire (`CabinetLifecycle`).
+            GameLog.Info("CABINET", $"{country.id}: {official.displayName} setback.");
         }
 
         /// <summary>

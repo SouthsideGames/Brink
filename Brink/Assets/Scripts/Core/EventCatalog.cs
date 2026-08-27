@@ -1183,6 +1183,131 @@ namespace Brink.Core
                 }
             });
 
+            // ---------- 2026-08: four more with foreign consequences ----------
+
+            list.Add(new EventDefinition
+            {
+                id = "ALLY_REQUESTS_ARMS",
+                title = "A PARTNER ASKS FOR ARMS",
+                cooldownMonths = 20,
+                isEligible = s => FirstTreatyPartner(s) != null && s.PlayerCountry.military.ground.supply > 40f,
+                weight = s => AnyNeighborAtAlert(s) ? 1.8f : 1f,
+                body = s => $"{FirstTreatyPartner(s)?.displayName} has asked, formally and in public, for " +
+                            "munitions and spares from our stocks. Their neighbours are watching what we " +
+                            "answer; so is everyone else who holds a treaty with us.",
+                subject = s => FirstTreatyPartner(s)?.id ?? "",
+                lapseEffectId = CrisisEffects.Trust,
+                lapseTargetUsesSubject = true,
+                lapseMagnitude = -10,
+                options = s => new List<CrisisOption>
+                {
+                    Option("SHIP FROM OUR STOCKS", "Costs supply we may want later. Buys a partner who remembers.",
+                        "Consignment dispatched. Our own depots are thinner for it.",
+                        treasury: -80, approval: 1,
+                        effect: CrisisEffects.Trust, target: FirstTreatyPartner(s)?.id ?? "", magnitude: 14),
+                    Option("SELL AT COST", "Help, and be paid for it. Reads as a transaction, because it is one.",
+                        "Contract signed. Delivery over the year.",
+                        treasury: 60,
+                        effect: CrisisEffects.Relations, target: FirstTreatyPartner(s)?.id ?? "", magnitude: 4),
+                    Option("DECLINE", "Keep our stocks. Every treaty partner draws the same conclusion.",
+                        "Request declined. The reply was noted in more than one capital.",
+                        approval: 1,
+                        effect: CrisisEffects.Trust, target: FirstTreatyPartner(s)?.id ?? "", magnitude: -12)
+                }
+            });
+
+            list.Add(new EventDefinition
+            {
+                id = "OFFICER_ARRESTED_ABROAD",
+                title = "OUR OFFICER ARRESTED ABROAD",
+                cooldownMonths = 24,
+                isEligible = s =>
+                {
+                    foreach (var network in s.networks)
+                        if (network.ownerId == s.playerCountryId && network.penetration > 25f) return true;
+                    return false;
+                },
+                weight = s => 1.2f,
+                body = s => $"{ColdestRival(s)?.displayName ?? "A foreign government"} has arrested a national " +
+                            "of ours and named him, on television, as an intelligence officer. They are " +
+                            "not wrong. They have offered to talk.",
+                subject = ColdestRivalId,
+                lapseEffectId = CrisisEffects.ExposeNetwork,
+                lapseTargetUsesSubject = true,
+                options = s => new List<CrisisOption>
+                {
+                    Option("TRADE FOR HIM", "Quiet exchange. They will want something, and they will get it.",
+                        "An exchange was arranged. Nobody announced what we gave.",
+                        treasury: -50, approval: 2,
+                        effect: CrisisEffects.Relations, target: ColdestRivalId(s), magnitude: 3),
+                    Option("DENY EVERYTHING", "He is a businessman. The network he ran is burned either way.",
+                        "Denial issued. The network is being rolled up as we speak.",
+                        approval: -2,
+                        effect: CrisisEffects.ExposeNetwork, target: ColdestRivalId(s), magnitude: 30),
+                    Option("EXPEL THEIRS IN REPLY", "Tit for tat. Public, popular, and it ends the conversation.",
+                        "Diplomats expelled on both sides. The channel is closed for now.",
+                        approval: 4, unity: 2,
+                        effect: CrisisEffects.Threat, target: ColdestRivalId(s), magnitude: 10)
+                }
+            });
+
+            list.Add(new EventDefinition
+            {
+                id = "DISASTER_ABROAD",
+                title = "CATASTROPHE IN A NEIGHBOUR",
+                cooldownMonths = 30,
+                isEligible = s => MostUnstableForeignState(s) != null,
+                weight = s => 1f,
+                body = s => $"An earthquake has flattened a region of {MostUnstableForeignState(s)?.displayName}. " +
+                            "The government there is asking for help and cannot say from whom it would " +
+                            "rather not receive it.",
+                subject = s => MostUnstableForeignState(s)?.id ?? "",
+                options = s => new List<CrisisOption>
+                {
+                    Option("SEND RELIEF", "Airlift, engineers, money. The kind of thing that is remembered.",
+                        "Relief flights under way. Our flag is on the crates.",
+                        treasury: -120, approval: 3,
+                        effect: CrisisEffects.Relations, target: MostUnstableForeignState(s)?.id ?? "", magnitude: 14),
+                    Option("OPEN THE BORDER", "Take the people. It will cost, and it will be argued about.",
+                        "Border opened to those who can reach it.",
+                        approval: -2, stability: -1,
+                        effect: CrisisEffects.Trust, target: MostUnstableForeignState(s)?.id ?? "", magnitude: 8),
+                    Option("EXPRESS SYMPATHY", "Words. Someone else will send the engineers.",
+                        "Condolences conveyed. Another capital's flag is on the crates.",
+                        effect: CrisisEffects.Relations, target: MostUnstableForeignState(s)?.id ?? "", magnitude: -3)
+                }
+            });
+
+            list.Add(new EventDefinition
+            {
+                id = "ULTIMATUM",
+                title = "AN ULTIMATUM",
+                cooldownMonths = 30,
+                isEligible = s => ColdestRival(s) != null && IsActuallyCold(s, 28f) && s.ActiveConfrontation == null,
+                weight = s => AnyNeighborAtAlert(s) ? 2f : 0.8f,
+                body = s => $"{ColdestRival(s)?.displayName} has delivered a note with a date on it: a change " +
+                            "in our posture toward them, or they will \"draw their own conclusions\". " +
+                            "The note has been published.",
+                subject = ColdestRivalId,
+                lapseEffectId = CrisisEffects.SufferConfrontation,
+                lapseTargetUsesSubject = true,
+                options = s => new List<CrisisOption>
+                {
+                    Option("REJECT IT PUBLICLY", "Nobody dictates to this office. They said they would act; now they must.",
+                        "Rejection published. The next move is theirs.",
+                        approval: 4, unity: 3,
+                        effect: CrisisEffects.Threat, target: ColdestRivalId(s), magnitude: 18),
+                    Option("OPEN TALKS", "Take the date off the note. Concede nothing yet.",
+                        "Talks opened. The date has been quietly dropped.",
+                        approval: -2,
+                        effect: CrisisEffects.Relations, target: ColdestRivalId(s), magnitude: 6),
+                    Option("STRIKE FIRST", "If it is coming, choose the hour.",
+                        "We have opened the confrontation on our own terms.",
+                        approval: 2, stability: -2,
+                        effect: CrisisEffects.OpenConfrontation, target: ColdestRivalId(s), magnitude: 1)
+                }
+            });
+
             return list;
         }
 

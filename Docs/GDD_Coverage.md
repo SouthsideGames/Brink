@@ -169,11 +169,13 @@ what is possible in another. Reach is per-operation, not per-theatre.
 
 ## Smaller open items
 
-- No crisis or event can open a confrontation; `CrisisOption` resolves to four
-  player scalars and cannot touch a relationship, market or foreign state.
+- ~~No crisis or event can open a confrontation; `CrisisOption` resolves to four
+  player scalars and cannot touch a relationship, market or foreign state.~~ **Stale (2026-08-27):** `CrisisEffects` has had `OpenConfrontation`, `SufferConfrontation`, `ImposeSanction`, `ForeignUnrest`, `Relations`, `Threat` and `Trust` effects for some time; 35 definitions now.
 - No materials location type — a mining region pays industry or energy.
-- 15 of 16 countries have no national traits, and AI personality is rolled per
-  save rather than authored, so a country's temperament differs between games.
+- ~~15 of 16 countries have no national traits, and AI personality is rolled per
+  save rather than authored.~~ **Stale (2026-08-27):** all 25 profiles carry authored
+  `traitIds` and an authored personality (±8 jitter per save). What a posting lacked
+  was a purpose — see spec 22, the mandate.
 - No authored histories; the chronicle starts empty at month zero.
 - Cabinet **lifecycle is built** — ages, retirement, death, and a shortlist with
   a genuine trade-off when a seat opens (`CabinetLifecycle`). What remains of

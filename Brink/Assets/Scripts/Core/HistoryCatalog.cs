@@ -59,6 +59,21 @@ namespace Brink.Core
                 SeedCountry(state, country);
 
             SeedPairs(state);
+
+            // The record reads forward in time (ChronicleTests). Country by
+            // country the lines are authored out of order — a 1974 line after a
+            // 1977 one — and this system shipped without a test run, so the
+            // chronicle opened scrambled. Stable: same-date lines keep their
+            // authored order.
+            var indexed = new List<(ChronicleEntry entry, int index)>();
+            for (int i = 0; i < state.chronicle.Count; i++) indexed.Add((state.chronicle[i], i));
+            indexed.Sort((a, b) =>
+            {
+                int byDate = a.entry.date.CompareTo(b.entry.date);
+                return byDate != 0 ? byDate : a.index.CompareTo(b.index);
+            });
+            state.chronicle.Clear();
+            foreach (var pair in indexed) state.chronicle.Add(pair.entry);
         }
 
         // ---------- one country's own decade ----------

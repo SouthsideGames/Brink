@@ -31,9 +31,35 @@ namespace Brink.UI.Views
 
             Root.Clear();
             BuildStanding(state);
+            BuildMandate(state);
+            BuildDirectives(state);
+            BuildCareer(state);
             BuildEvaluations(state);
             BuildTreeSelector(state);
             BuildTree(state);
+        }
+
+        /// <summary>
+        /// What this posting is for (GDD §25 amendment). The brief the operator
+        /// arrived with, each undertaking marked as it stands today, and the
+        /// verdict once the ten-year review has been delivered.
+        /// </summary>
+        void BuildMandate(GameState state)
+        {
+            var text = AddText("terminal-text-bright");
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("MANDATE", W));
+            if (state.mandate == null)
+            {
+                sb.AppendLine(" No mandate on file.");
+            }
+            else
+            {
+                sb.AppendLine(" " + state.mandate.brief);
+                foreach (var line in MandateSystem.StatusText(state).Split('\n'))
+                    sb.AppendLine(" " + line);
+            }
+            text.text = sb.ToString();
         }
 
         void BuildStanding(GameState state)
@@ -53,6 +79,29 @@ namespace Brink.UI.Views
             sb.AppendLine("  " + AsciiChart.LabeledBar("NEXT LEVEL", into, span, 12, 24));
             sb.AppendLine($" ADMINISTRATIONS SERVED: {state.administrationsServed}   " +
                           $"YEARS EVALUATED: {state.evaluations.Count}");
+            text.text = sb.ToString();
+        }
+
+        /// <summary>Optional strategic directives (GDD §29, spec 24).</summary>
+        void BuildDirectives(GameState state)
+        {
+            var text = AddText();
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("STANDING DIRECTIVES", W));
+            sb.AppendLine(" Suggested by the desks when circumstances warrant. Optional; nothing is owed.");
+            foreach (var line in StandingDirectiveSystem.StatusText(state).Split('\n'))
+                sb.AppendLine(" " + line);
+            text.text = sb.ToString();
+        }
+
+        /// <summary>The operator's record across postings (spec 24 §2).</summary>
+        void BuildCareer(GameState state)
+        {
+            var text = AddText();
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("CAREER", W));
+            foreach (var line in CareerRecord.StatusText(state).Split('\n'))
+                sb.AppendLine(" " + line);
             text.text = sb.ToString();
         }
 

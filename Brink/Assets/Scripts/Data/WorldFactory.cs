@@ -790,6 +790,8 @@ namespace Brink.Data
                 "Command terminal initialized. Operator access granted.");
             state.AddChronicle(ChronicleCategory.Political, state.playerCountryId,
                 "Cabinet appointed. Five pillar leaders sworn in.");
+            // After the history, so the chronicle reads forward in time.
+            Core.MandateSystem.Assign(state);
             return state;
         }
 

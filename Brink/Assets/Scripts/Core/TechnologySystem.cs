@@ -109,6 +109,34 @@ namespace Brink.Core
             return true;
         }
 
+        /// <summary>
+        /// Actor-generic programme start: the same gates as the player's, no CP.
+        ///
+        /// Until the 2026-08 playtest no AI government ever *held* an instrument
+        /// capability. `ConsiderAiResearch` below did exist — 6% a month, along
+        /// national priority only — but the pre-fix treasury (spec 02) meant
+        /// `CanResearch` almost never passed, and priority-only choice never
+        /// walked a prerequisite chain toward an instrument. Every strategic
+        /// instrument is gated on a researched capability (spec 14), which is why
+        /// the world used one against the player in 4 of 556 measured decades.
+        /// `AISystem.ConsiderResearch` uses this entry point to build toward the
+        /// instrument a government could actually use.
+        /// </summary>
+        public static bool BeginResearchBy(GameState state, string actorId, string capabilityId)
+        {
+            var actor = state.FindCountry(actorId);
+            if (actor == null) return false;
+            if (!CanResearch(state, actor, capabilityId, out _)) return false;
+
+            var definition = CapabilityCatalog.Find(capabilityId);
+            StartProgram(actor, definition);
+            // Not chronicled: sixteen governments starting programmes is a
+            // record nobody reads and it pushed the chronicle past its
+            // thirty-year growth cap. A foreign programme becomes news when
+            // intelligence finds it, not when it is authorized.
+            return true;
+        }
+
         static void StartProgram(CountryState country, CapabilityDef definition)
         {
             country.technology.programs.Add(new ResearchProgram
@@ -261,13 +289,27 @@ namespace Brink.Core
             }
             else if (source == CapabilitySource.Stolen || source == CapabilitySource.Developed)
             {
-                state.AddNotification(NotificationClass.Wire, "FOREIGN CAPABILITY",
-                    $"{country.displayName} is assessed to have fielded {definition.name}.", country.id,
-                    desk: ReportingDesk.Economy);
+                // "Assessed" has to mean assessed. Foreign governments now
+                // research in earnest, and announcing every completion on the
+                // wire told the operator sixteen states' true capability the
+                // month it existed — 83 items a decade, and a breach of the rule
+                // that no view prints a foreign truth without collection. A
+                // network with real penetration on that state earns the item;
+                // otherwise it surfaces where it always could: the dossier.
+                var network = state.FindNetwork(state.playerCountryId, country.id);
+                if (network != null && network.penetration >= 35f)
+                    state.AddNotification(NotificationClass.Wire, "FOREIGN CAPABILITY",
+                        $"{country.displayName} is assessed to have fielded {definition.name}.", country.id,
+                        desk: ReportingDesk.Intelligence);
             }
 
-            state.AddChronicle(ChronicleCategory.System, country.id,
-                $"{definition.name} capability acquired ({source}).");
+            // Only our own acquisitions are chronicled. Sixteen governments now
+            // research in earnest, and a line per foreign capability pushed the
+            // chronicle past its thirty-year growth cap; what we *know* of a
+            // foreign programme is the dossier's business.
+            if (country.isPlayer)
+                state.AddChronicle(ChronicleCategory.System, country.id,
+                    $"{definition.name} capability acquired ({source}).");
             GameLog.Info("TECH", $"{country.id} acquired {capabilityId} ({source}).");
         }
 

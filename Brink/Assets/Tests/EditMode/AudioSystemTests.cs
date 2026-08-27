@@ -20,6 +20,98 @@ namespace Brink.Tests
         [TearDown]
         public void TearDown() => AudioPreferences.ResetToDefaults();
 
+        // ---------- the shipped assets (2026-08 audit) ----------
+
+        static AudioLibrary ShippedLibrary()
+        {
+            var library = Resources.Load<AudioLibrary>(AudioDirector.LibraryResourcePath);
+            Assert.NotNull(library, $"No library at Resources/{AudioDirector.LibraryResourcePath}.");
+            return library;
+        }
+
+        /// <summary>
+        /// Seven of twenty sound ids had no clip, including End Month, the crisis
+        /// sting and both outcome cues. A cue nobody mapped is a cue nobody hears.
+        /// </summary>
+        [Test]
+        public void TheShippedLibrary_MapsEverySound()
+        {
+            var missing = ShippedLibrary().Unmapped();
+            Assert.IsEmpty(missing, "Unmapped sounds: " + string.Join(", ", missing));
+            foreach (MusicState state in Enum.GetValues(typeof(MusicState)))
+                Assert.NotNull(ShippedLibrary().Resolve(state, PillarContext.World)?.clip,
+                    $"No music for {state}.");
+        }
+
+        /// <summary>
+        /// The mixer shipped with **no exposed parameters**, so every
+        /// `SetFloat` in `AudioPreferences.Apply` returned false and no volume or
+        /// mute setting reached the ear. `Apply` now reports it; this makes sure
+        /// the asset never regresses to that.
+        /// </summary>
+        [Test]
+        public void TheShippedMixer_ExposesEveryPreferenceParameter()
+        {
+            var library = ShippedLibrary();
+            Assert.NotNull(library.mixer, "The library has no mixer.");
+            // GetFloat is the exposure check. SetFloat is not asserted: outside
+            // play mode the mixer refuses writes, so `Apply` reports false here
+            // even though every parameter exists — the director's fallback is
+            // exactly for that case.
+            foreach (string parameter in AudioPreferences.MixerParameters)
+                Assert.IsTrue(library.mixer.GetFloat(parameter, out _),
+                    $"The mixer does not expose '{parameter}'. Preferences cannot reach it.");
+        }
+
+        // ---------- the world, as sound ----------
+
+        [Test]
+        public void MusicFollowsTheWorld()
+        {
+            Assert.AreEqual(MusicState.MainMenu, AudioCues.MusicFor(null));
+
+            var state = Brink.Data.WorldFactory.CreateDebugWorld(seed: 11);
+            Assert.AreEqual(MusicState.Peace, AudioCues.MusicFor(state));
+
+            var confrontation = Brink.Core.ConfrontationSystem.BeginBy(state, "USA", "CHN",
+                Brink.Data.ConfrontationObjective.Deterrence, null, Brink.Data.PrimaryStrategy.Military);
+            Assert.AreEqual(MusicState.Tension, AudioCues.MusicFor(state));
+
+            confrontation.escalation = Brink.Data.EscalationState.LimitedConflict;
+            Assert.AreEqual(MusicState.War, AudioCues.MusicFor(state));
+
+            state.activeCrises.Add(new Brink.Data.ActiveCrisis { defId = "TEST", title = "T" });
+            Assert.AreEqual(MusicState.Crisis, AudioCues.MusicFor(state),
+                "A Crisis Turn on screen outranks the war's own temperature.");
+        }
+
+        [Test]
+        public void AlertsFollowTheNotificationHierarchy()
+        {
+            Assert.AreEqual(SfxId.FlashAlert, AudioCues.AlertFor(Brink.Data.NotificationClass.Flash));
+            Assert.AreEqual(SfxId.PriorityAlert, AudioCues.AlertFor(Brink.Data.NotificationClass.Priority));
+            Assert.AreEqual(SfxId.AdvisoryAlert, AudioCues.AlertFor(Brink.Data.NotificationClass.Advisory));
+            Assert.AreEqual(SfxId.None, AudioCues.AlertFor(Brink.Data.NotificationClass.Wire),
+                "World news is read, not announced.");
+
+            var state = Brink.Data.WorldFactory.CreateDebugWorld(seed: 11);
+            int seen = state.notifications.Count;
+            state.AddNotification(Brink.Data.NotificationClass.Advisory, "A", "a", "USA");
+            state.AddNotification(Brink.Data.NotificationClass.Priority, "B", "b", "USA");
+            state.AddNotification(Brink.Data.NotificationClass.Wire, "C", "c", "USA");
+            Assert.AreEqual(SfxId.PriorityAlert, AudioCues.LoudestNewAlert(state, seen),
+                "One cue per month: the loudest of the new traffic, not one per item.");
+            Assert.AreEqual(SfxId.None, AudioCues.LoudestNewAlert(state, state.notifications.Count));
+        }
+
+        [Test]
+        public void ViewsMapToPillarContexts()
+        {
+            Assert.AreEqual(PillarContext.Military, AudioCues.ContextFor("MILITARY"));
+            Assert.AreEqual(PillarContext.Government, AudioCues.ContextFor("GOVERNMENT"));
+            Assert.AreEqual(PillarContext.World, AudioCues.ContextFor("BRIEFING"));
+        }
+
         // ---------- decibels ----------
 
         /// <summary>

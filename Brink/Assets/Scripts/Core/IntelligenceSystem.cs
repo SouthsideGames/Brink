@@ -96,8 +96,11 @@ namespace Brink.Core
                     // the rebuild below — it answers "is this network blown right
                     // now", not "has this government been caught before", and the
                     // second question is the one other governments reason from.
-                    state.AddChronicle(ChronicleCategory.Intelligence, network.ownerId,
-                        $"Network in {target.displayName} compromised.", Publicity.Public);
+                    // Once a year per network: the flag clears and re-trips within
+                    // months, and the record was 883 copies of the same line.
+                    string caught = $"Network in {target.displayName} compromised.";
+                    if (!state.ChronicledWithin(network.ownerId, caught, 12))
+                        state.AddChronicle(ChronicleCategory.Intelligence, network.ownerId, caught, Publicity.Public);
 
                     if (network.ownerId == state.playerCountryId)
                         state.AddNotification(NotificationClass.Priority, "NETWORK COMPROMISED",

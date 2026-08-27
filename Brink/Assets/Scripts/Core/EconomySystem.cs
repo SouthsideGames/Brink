@@ -15,6 +15,23 @@ namespace Brink.Core
         /// <summary>CP cost to impose or lift a sanctions regime.</summary>
         public const int SanctionCost = 2;
 
+        /// <summary>
+        /// Treasury income per month as a share of GDP (before the debt haircut).
+        ///
+        /// This is the unit every recurring cost in the game should be sized
+        /// against. It shipped at 0.012 — 15–40 a month for the authored roster —
+        /// while war exhaustion (~40–80/month), occupation (~45/month), a research
+        /// programme (40–55/month) and an endgame authorization (120) were all
+        /// priced as if income were several times that: a belligerent mid-tier
+        /// state ended a passive decade several thousand in the red, and the
+        /// strategic instruments spec 14 designs around "~8 authorizations" were
+        /// unaffordable for every posting. 0.03 puts a great power at ~70–100 a
+        /// month, so a war is expensive rather than ruinous and a programme is a
+        /// commitment rather than an impossibility. Measured 2026-08-26 with the
+        /// headless harness; re-measure with `Report_MultiSeedBalance`.
+        /// </summary>
+        public const float TreasuryIncomeRate = 0.03f;
+
         public static void MonthlyUpdate(GameState state)
         {
             foreach (var country in state.countries)
@@ -386,8 +403,12 @@ namespace Brink.Core
             // incapable of passing ~12 however comprehensively the economy failed,
             // because growth itself is bounded — so "mass unemployment" was not a
             // state this simulation could represent.
+            // distress × 22 → 16 (2026-08): with sanctions adapting the spiral
+            // no longer locks, but a fully distressed market still put a great
+            // power at 28% unemployment for a decade; 16 keeps "mass
+            // unemployment" representable (≈22% at the floor) with a way back.
             float targetUnemployment = 6.5f - eco.growthRate * 0.9f + sanctionPressure * 0.5f
-                                       + distress * 22f
+                                       + distress * 16f
                                        + (atWar ? -0.8f : 0f);
             eco.unemployment = Clamp(Approach(eco.unemployment, targetUnemployment, 0.25f), 1.5f, 35f);
 
@@ -396,7 +417,7 @@ namespace Brink.Core
             eco.debtToGdp = Clamp(eco.debtToGdp + deficitPressure - Math.Max(0f, eco.growthRate) * 0.18f, 0f, 250f);
 
             eco.gdp = Math.Max(50f, eco.gdp * (1f + eco.growthRate / 1200f));
-            country.resources.treasury += eco.gdp * 0.012f * (1f - eco.debtToGdp / 400f);
+            country.resources.treasury += eco.gdp * TreasuryIncomeRate * (1f - eco.debtToGdp / 400f);
 
             // ---- confidence ----
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f
@@ -649,11 +670,27 @@ namespace Brink.Core
                 link.embargoed = true;
 
             bool playerInvolved = senderId == state.playerCountryId || targetId == state.playerCountryId;
-            state.AddNotification(
-                playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
-                targetId == state.playerCountryId ? "SANCTIONS IMPOSED ON US" : "SANCTIONS IMPOSED",
-                $"{sender.displayName}: {Phrase.Of(severity)} measures against {target.displayName}.", targetId,
-                desk: ReportingDesk.Economy);
+
+            // Say why (2026-08): "coercive measures against United States"
+            // arrived with no reason and no way to ask. The sender's own view
+            // of us is on the relationship; read it back in plain language.
+            string why = "";
+            if (targetId == state.playerCountryId)
+            {
+                var view = state.FindRelationship(senderId, targetId);
+                if (state.FindSanction(targetId, senderId) != null) why = " A reply to our own measures.";
+                else if (view != null && view.ThreatPerceivedBy(senderId) > 55f) why = " It cites the threat our posture presents.";
+                else if (view != null && view.relations < 30f) why = " Relations have been poor for some time; this is the next step.";
+                else if (state.ActiveConfrontationFor(senderId)?.Involves(targetId) == true) why = " Part of the confrontation between us.";
+                else why = " No public justification was offered.";
+            }
+
+            if (playerInvolved || WorldWire.Watches(state, senderId) || WorldWire.Watches(state, targetId))
+                state.AddNotification(
+                    playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
+                    targetId == state.playerCountryId ? "SANCTIONS IMPOSED ON US" : "SANCTIONS IMPOSED",
+                    $"{sender.displayName}: {Phrase.Of(severity)} measures against {target.displayName}.{why}", targetId,
+                    desk: ReportingDesk.Economy);
             // Coercion winds a confrontation up even though nobody fires (GDD §18.1).
             ConfrontationSystem.AddPressure(state, senderId, targetId, 6f);
 
@@ -706,11 +743,35 @@ namespace Brink.Core
         // ---------- queries ----------
 
         /// <summary>Total sanction weight bearing on a country, and ages the regimes.</summary>
+        /// <summary>Months over which a sanctioned economy reroutes around a standing regime.</summary>
+        public const int SanctionAdaptationMonths = 48;
+
+        /// <summary>Share of a regime's bite that adaptation eventually removes.</summary>
+        public const float SanctionAdaptationFloor = 0.5f;
+
+        /// <summary>
+        /// Total sanction weight on a country, **net of adaptation** (2026-08).
+        ///
+        /// A standing regime used to bite at full weight forever, and a regime
+        /// lapses only when the sender stops being hostile — so two hostile
+        /// neighbours could hold a great power in a permanent depression:
+        /// fundamentals pinned, distress feeding unemployment (28%) feeding
+        /// living standards (1) feeding unrest (77) feeding approval (0) and a
+        /// coup, with nothing the target could do and no path back. The
+        /// death-spiral rule: every value that falls needs a reachable recovery
+        /// path. An economy reroutes around measures it has lived under for
+        /// years; a four-year-old regime bites at half weight. New measures still
+        /// land at full weight, so coercion keeps its edge as a *move*.
+        /// </summary>
         public static float SanctionPressureOn(GameState state, string countryId)
         {
             float total = 0f;
             foreach (var sanction in state.sanctions)
-                if (sanction.targetId == countryId) total += sanction.Weight;
+                if (sanction.targetId == countryId)
+                {
+                    float adapted = Math.Min(1f, sanction.monthsActive / (float)SanctionAdaptationMonths);
+                    total += sanction.Weight * (1f - SanctionAdaptationFloor * adapted);
+                }
             return total;
         }
 

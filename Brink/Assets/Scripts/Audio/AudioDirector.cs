@@ -117,16 +117,90 @@ namespace Brink.Audio
         /// </summary>
         void ApplySettings()
         {
-            if (library.mixer != null)
+            // The mixer path only counts if the mixer actually exposes the
+            // parameters. It shipped with none exposed (2026-08 audit): every
+            // SetFloat returned false, the code returned early, and no volume or
+            // mute setting did anything. Now a mixer that cannot be driven is
+            // treated as absent and the sources are scaled directly.
+            if (library.mixer != null && AudioPreferences.Apply(library.mixer))
             {
-                AudioPreferences.Apply(library.mixer);
+                if (music != null) music.SetLevel(1f);
+                if (sfx != null) sfx.SetLevel(1f);
+                if (ambience != null) ambience.volume = library.ambienceVolume;
                 return;
             }
 
             if (ambience != null)
                 ambience.volume = library.ambienceVolume
                                   * AudioPreferences.EffectiveLevel(AudioPreferences.Ambience);
+            if (music != null) music.SetLevel(AudioPreferences.EffectiveLevel(AudioPreferences.Music));
+            if (sfx != null) sfx.SetLevel(AudioPreferences.EffectiveLevel(AudioPreferences.Sfx));
         }
+
+        // ---------- the world, as sound ----------
+
+        int notificationsSeen;
+        int crisesSeen;
+        bool everSynced;
+
+        /// <summary>
+        /// Make the audio match the game: the music the situation calls for, the
+        /// loudest alert owed for traffic since the last sync, and the crisis
+        /// sting when a new Crisis Turn has opened. Called by the shell after End
+        /// Month and whenever the state is replaced; safe to call any time.
+        /// </summary>
+        public static void Sync(Brink.Data.GameState state, bool silentAlerts = false)
+        {
+            if (instance == null || state == null) return;
+            instance.SyncTo(state, silentAlerts);
+        }
+
+        void SyncTo(Brink.Data.GameState state, bool silentAlerts)
+        {
+            SetMusic(AudioCues.MusicFor(state));
+
+            int notifications = state.notifications.Count;
+            int crises = state.activeCrises.Count;
+
+            // A replaced state (new game, load) is a fresh baseline: nothing in
+            // it is "new traffic", and a decade of old items must not fire.
+            if (!everSynced || silentAlerts || notifications < notificationsSeen)
+            {
+                notificationsSeen = notifications;
+                crisesSeen = crises;
+                warsWonSeen = state.PlayerCountry.warsWon;
+                warsLostSeen = state.PlayerCountry.warsLost;
+                evaluationsSeen = state.evaluations.Count;
+                verdictHeard = state.mandateRecord != null;
+                everSynced = true;
+                return;
+            }
+
+            // A war decided this month is an outcome before it is traffic.
+            var player = state.PlayerCountry;
+            if (player.warsWon > warsWonSeen) Play(SfxId.PositiveOutcome);
+            else if (player.warsLost > warsLostSeen) Play(SfxId.NegativeOutcome);
+            else if (state.mandateRecord != null && !verdictHeard)
+                Play(state.mandateRecord.verdict == Brink.Data.MandateVerdict.Failed ? SfxId.NegativeOutcome : SfxId.PositiveOutcome);
+            else if (crises > crisesSeen) Play(SfxId.CrisisStarted);
+            else
+            {
+                var alert = AudioCues.LoudestNewAlert(state, notificationsSeen);
+                if (alert != SfxId.None) Play(alert);
+            }
+
+            if (state.evaluations.Count > evaluationsSeen) Play(SfxId.AnnualEvaluation);
+
+            notificationsSeen = notifications;
+            crisesSeen = crises;
+            warsWonSeen = player.warsWon;
+            warsLostSeen = player.warsLost;
+            evaluationsSeen = state.evaluations.Count;
+            verdictHeard = state.mandateRecord != null;
+        }
+
+        int warsWonSeen, warsLostSeen, evaluationsSeen;
+        bool verdictHeard;
 
         // ---------- what gameplay calls ----------
 

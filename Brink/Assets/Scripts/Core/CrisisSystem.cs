@@ -18,8 +18,13 @@ namespace Brink.Core
     /// </summary>
     public static class CrisisSystem
     {
-        /// <summary>Chance per resolved month that a crisis fires (when none is active).</summary>
-        public const double MonthlyCrisisChance = 0.08;
+        /// <summary>
+        /// Chance per resolved month that a crisis fires (when none is active).
+        /// 0.08 → 0.10 (2026-08): a decade produced ~13 Crisis Turns from a
+        /// thirty-one-entry catalogue, so the same handful recurred and most
+        /// of the authored world never reached the operator.
+        /// </summary>
+        public const double MonthlyCrisisChance = 0.10;
 
         /// <summary>Every authored crisis id.</summary>
         public static string[] CatalogIds
@@ -115,6 +120,10 @@ namespace Brink.Core
                 if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
                     AllianceSystem.ApplyPlayerDecision(state, honored: false);
 
+                // Terms left unanswered are terms refused.
+                if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
+                    ConfrontationSystem.ApplyOfferDecision(state, crisis, accepted: false);
+
                 // If the operator will not decide, the situation decides for
                 // them (GDD §23). Drifting used to cost standing and nothing
                 // else, which made ignoring a crisis the cheapest way to avoid
@@ -153,6 +162,10 @@ namespace Brink.Core
             // Alliance obligations carry consequences far beyond their deltas.
             if (crisis.defId == AllianceSystem.PlayerObligationCrisisId)
                 AllianceSystem.ApplyPlayerDecision(state, honored: optionIndex == 0);
+
+            // Offered terms: option 0 accepts, option 1 refuses.
+            if (crisis.defId == ConfrontationSystem.TermsOfferedCrisisId)
+                ConfrontationSystem.ApplyOfferDecision(state, crisis, accepted: optionIndex == 0);
 
             if (player != null)
             {

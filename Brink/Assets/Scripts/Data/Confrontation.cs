@@ -196,6 +196,12 @@ namespace Brink.Data
         /// <summary>Set once defense commitments have been called upon (GDD §15.2).</summary>
         public bool obligationsInvoked;
 
+        /// <summary>
+        /// Months before a foreign government may put terms to the player again
+        /// (<see cref="Brink.Core.ConfrontationSystem.OfferCooldownMonths"/>).
+        /// </summary>
+        public int monthsUntilNextOffer;
+
         public List<OperationRecord> operations = new List<OperationRecord>();
 
         public string OpponentOf(string countryId) => countryId == initiatorId ? defenderId : initiatorId;

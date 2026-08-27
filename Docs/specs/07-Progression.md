@@ -137,24 +137,49 @@ strength, and never a conquest checklist.
 ```
 trajectory = 50 + pillarDelta × 1.6
 economy    = 50 + gdpGrowth% × 3 + marketMove% × 0.6 − max(0, inflation−5) × 2.5
+             − SolvencyPenalty        (min(20, yearsOfIncomeInTheRed × 8); 0 when treasury ≥ 0)
 stability  = 50 + Δstability × 1.5 + Δapproval × 0.8 + Δunity × 0.8
-position   = 50 + ΔlocationsHeld × 12 + ΔrelationsTotal × 0.35
+position   = 50 + ΔlocationsHeld × 30 + max(0, locationsHeld − openingHoldings) × 8
+             + ΔrelationsTotal × 0.35
              + Δtreaties × 9 + ΔdefensePacts × 7
              + (deterrent − 0.5) × 24
+             + warsWonThisYear × 14 − warsLostThisYear × 10     (2026-08: the verdict itself)
 crisis     = 68 if none faced, else 30 + resolved/faced × 45
 initiative = 40 + min(38, initiatives × 2.2)      saturates ≈ 17 decisions/year
+efficiency = 50, or 50 + delivered / (treasurySpent/1000) × 6 when spent > 100, clamped 0..100
+             (delivered = pillarDelta × 2.5 + gdpGrowth% × 1.5)
 
-score = trajectory×0.20 + economy×0.22 + stability×0.15
-      + position×0.11 + crisis×0.12 + initiative×0.20
+score = trajectory×0.18 + economy×0.20 + stability×0.14
+      + position×0.10 + crisis×0.11 + initiative×0.19 + efficiency×0.08
 
 adversity = (1 if at war) + sanctionPressure×0.25 + (0.5 if exhaustion > 40)
 score += adversity × 6
+score += min(12, max(0, locationsHeld − openingHoldings) × 1.5)   ← conquest, directly
 score += 3 (Challenging) / 6 (Ruthless)
 ```
 
-Every weight above is verified against `ProgressionSystem.EvaluateYear`.
-**`initiative` carries 0.20 and `crisis` carries 0.12** — do not transpose them
-(spec 12 §3 documented the pair the wrong way round for a while).
+Every weight above is verified against `ProgressionSystem.EvaluateYear` (the
+weights were re-transcribed 2026-08-26; this section had drifted from the code
+by the whole `efficiency` component). **`initiative` carries 0.19 and `crisis`
+0.11** — do not transpose them (spec 12 §3 documented the pair the wrong way
+round for a while).
+
+**Conquest counts** (2026-08-28, a design decision that supersedes GDD §25's
+"never a conquest checklist"): ground taken in the year pays 30 in `position`
+(was 12), ground held beyond the posting's opening holdings
+(`Mandate.startLocationIds`) pays 8 a year in `position` for as long as it is
+held, and the same held ground adds up to 12 points to the score directly
+(1.5 per location) — because `position` is a tenth of the score and the first
+two alone moved the grade by a tenth of a letter. Before this the military
+playstyle won 169–14 and took +119 locations across a measured matrix and
+still graded last of the active styles (2.54 vs passive 2.31).
+
+**Solvency** (2026-08 playtest): the evaluation never read the treasury, which is
+how a monthly cost 70× income passed every balance measurement — every posting
+was tens of thousands in the red and graded B. A deficit now costs the economy
+component up to 20 points, scaled in years of income
+(`EconomySystem.TreasuryIncomeRate`). Guarded by
+`BugRegressionTests.Evaluation_ADeepDeficitCostsTheEconomyGrade`.
 
 ### Why `initiative` is weighted as heavily as `trajectory`
 

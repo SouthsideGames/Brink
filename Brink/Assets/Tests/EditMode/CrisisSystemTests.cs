@@ -189,7 +189,7 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void MonthStart_EmitsAdvisoryTraffic()
+        public void MonthStart_EmitsArchiveTraffic()
         {
             GameLog.MirrorToUnityConsole = false;
             var state = WorldFactory.CreateDebugWorld(1);
@@ -197,8 +197,10 @@ namespace Brink.Tests
             GameLog.MirrorToUnityConsole = true;
             GameLog.Clear();
 
+            // ARCHIVE since the 2026-08 wire editor: the date and CP are on the
+            // status bar; the item exists for the record, not the feed.
             var last = state.notifications[state.notifications.Count - 1];
-            Assert.AreEqual(NotificationClass.Advisory, last.priority);
+            Assert.AreEqual(NotificationClass.Archive, last.priority);
             Assert.AreEqual("MONTH START", last.title);
             Assert.AreEqual(state.date, last.date);
         }

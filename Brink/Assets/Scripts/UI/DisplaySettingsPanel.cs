@@ -1,5 +1,6 @@
 using System;
 using Brink.Core;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Brink.UI
@@ -122,6 +123,60 @@ namespace Brink.UI
             { text = "RESET DISPLAY" };
             reset.AddToClassList("cmd-button");
             displayRow.Add(reset);
+
+            // ---- audio (2026-08 audit) ----
+            //
+            // `AudioPreferences` had a full persisted model of master / music /
+            // SFX / ambience / mute and no screen that set any of it. Five steps
+            // per channel rather than a slider: the terminal's controls are
+            // buttons, and a slider is the one widget this shell never draws.
+            var audioTitle = new Label("AUDIO");
+            audioTitle.AddToClassList("terminal-text-bright");
+            reader.Add(audioTitle);
+
+            var levels = new[] { 0f, 0.25f, 0.5f, 0.75f, 1f };
+            string Level(float v) => v <= 0f ? "OFF" : $"{Mathf.RoundToInt(v * 100)}";
+            bool Near(float a, float b) => Mathf.Abs(a - b) < 0.125f;
+
+            BuildRow("MASTER", levels, Level,
+                value => Near(Brink.Audio.AudioPreferences.Master, value),
+                value => { Brink.Audio.AudioPreferences.Master = value; Refresh(); });
+            BuildRow("MUSIC", levels, Level,
+                value => Near(Brink.Audio.AudioPreferences.Music, value),
+                value => { Brink.Audio.AudioPreferences.Music = value; Refresh(); });
+            BuildRow("EFFECTS", levels, Level,
+                value => Near(Brink.Audio.AudioPreferences.Sfx, value),
+                value => { Brink.Audio.AudioPreferences.Sfx = value; Refresh(); });
+            BuildRow("TERMINAL HUM", levels, Level,
+                value => Near(Brink.Audio.AudioPreferences.Ambience, value),
+                value => { Brink.Audio.AudioPreferences.Ambience = value; Refresh(); });
+            BuildRow("MUTE ALL",
+                new[] { false, true },
+                value => value ? "ON" : "OFF",
+                value => Brink.Audio.AudioPreferences.Muted == value,
+                value => { Brink.Audio.AudioPreferences.Muted = value; Refresh(); });
+
+            // ---- saves (2026-08) ----
+            //
+            // Slots existed in `SaveSystem` and had no player-facing control
+            // once the debug console was gated out of release builds. Slot 0 is
+            // the autosave and stays out of reach; three named slots here.
+            if (GameController.Instance != null && GameController.Instance.IsRunning)
+            {
+                var savesTitle = new Label("RECORD");
+                savesTitle.AddToClassList("terminal-text-bright");
+                reader.Add(savesTitle);
+
+                var slots = new[] { 1, 2, 3 };
+                BuildRow("SAVE TO", slots,
+                    slot => $"SLOT {slot}{(SaveSystem.SaveExists(slot) ? " *" : "")}",
+                    slot => false,
+                    slot => { GameController.Instance.SaveToSlot(slot); Brink.Audio.AudioDirector.Play(Brink.Audio.SfxId.SaveComplete); Refresh(); });
+                BuildRow("LOAD FROM", slots,
+                    slot => SaveSystem.SaveExists(slot) ? $"SLOT {slot}" : $"SLOT {slot} (EMPTY)",
+                    slot => false,
+                    slot => { if (SaveSystem.SaveExists(slot)) { GameController.Instance.LoadFromSlot(slot); Hide(); } });
+            }
 
             // The reset sits above the reference prose, not below it: on most
             // screens it is now visible without scrolling at all, which is what

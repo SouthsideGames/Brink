@@ -93,15 +93,15 @@ MonoBehaviour:
     isUi: 0
     maxDuration: 2.5
   - id: 90
-    clip: {fileID: 0}
+    clip: {fileID: 8300000, guid: 2d07624d49b39cd439ed5ec666687456, type: 3}
     volume: 0.35
     isUi: 0
     maxDuration: 0
   - id: 41
-    clip: {fileID: 0}
+    clip: {fileID: 8300000, guid: 98f1e22f236c3134dbaad8e3602de481, type: 3}
     volume: 0.5
     isUi: 0
-    maxDuration: 0
+    maxDuration: 2.5
   - id: 70
     clip: {fileID: 8300000, guid: 3e4e258f1fc48e14fb8d811f11b46753, type: 3}
     volume: 0.7
@@ -112,3 +112,28 @@ MonoBehaviour:
     volume: 0.2
     isUi: 1
     maxDuration: 0
+  - id: 5
+    clip: {fileID: 8300000, guid: 61d6e282e4ea2a44881dd70b3838b60a, type: 3}
+    volume: 0.35
+    isUi: 1
+    maxDuration: 0
+  - id: 20
+    clip: {fileID: 8300000, guid: bf03eff03b57fe94989a044df2701f61, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 0
+  - id: 40
+    clip: {fileID: 8300000, guid: 5388adfcddd1d834389c75df7f3b4d48, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 2.5
+  - id: 60
+    clip: {fileID: 8300000, guid: dd8eea3ce2cedda4190488d5e6e06fa0, type: 3}
+    volume: 0.6
+    isUi: 0
+    maxDuration: 3
+  - id: 80
+    clip: {fileID: 8300000, guid: ec5212905794d7f488db8b61d96126dc, type: 3}
+    volume: 0.5
+    isUi: 0
+    maxDuration: 3

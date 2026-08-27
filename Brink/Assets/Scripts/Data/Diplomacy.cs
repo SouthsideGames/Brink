@@ -72,6 +72,14 @@ namespace Brink.Data
         /// </summary>
         public int sanctionsTruceMonths;
 
+        /// <summary>
+        /// Months remaining in which neither side may open a new confrontation
+        /// against the other, set by any settlement between them
+        /// (`ConfrontationSystem.SettlementTruceMonths`). Zero on old saves is
+        /// correct: nothing was settled.
+        /// </summary>
+        public int settlementTruceMonths;
+
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
 

@@ -342,7 +342,7 @@ worth negotiating for, just never quite as good as owning. Tests:
 ```
 if distance ≤ range  →  1.0
 else                 →  max(MinimumReach, range / distance)
-MinimumReach = 0.35
+MinimumReach = 0.2      (0.35 until the 2026-08 playtest: Kazakhstan was occupying the Gulf Coast)
 ```
 
 `ReachFactorFor(state, actorId, location)` is the same call routed through
@@ -665,7 +665,7 @@ both; `BranchPowerFor` remains the pure branch calculation.
 Resolution (`MilitarySystem.ResolveOperation`):
 
 ```
-reach        = GeographySystem.ReachFactorFor(attacker, target)   ← §3b, 0.35..1
+reach        = GeographySystem.ReachFactorFor(attacker, target)   ← §3b, 0.2..1
 attackPower  = OperationPower(attacker, type) × PowerScale × reach
                + max(0, coalitionSupport) × PowerScale
 defensePower = DefensePowerFor(profile, attacker, defender, target)   ← §4b-1
@@ -1040,6 +1040,41 @@ to audit, and verification is what actually closes a settlement (GDD §11).
 
 **A capital can never be won at the table** (GDD §22) — only by occupation.
 Conceding is always available and costs war support and approval.
+
+**The objective belongs to the initiator** (`ConfrontationSystem.Settle`). Terms
+proposed by the demanding side deliver the demand; terms proposed by the side
+demanded of are the status quo — the claim is withdrawn and nothing changes hands.
+A territorial cession also requires that the ground is currently held by one of
+the two parties; a location a third state has since taken is *renounced*, not
+transferred. (Shipped behaviour handed the objective to whoever *proposed*, so a
+defender suing for peace "ceded" its own ground under the initiator's name, and a
+war with Russia over a location Brazil held transferred Brazil's title.)
+
+**A foreign offer is a decision.** When an AI government proposes to the player,
+`ProposeSettlementBy` raises a `TERMS_OFFERED` Crisis Turn (accept / refuse)
+instead of closing the war on the player's computed willingness. Accepting a
+*demand* is a concession and priced like one (approval −6, stability −2);
+accepting a status-quo offer is free. A refusal — or an unanswered offer — waits
+`OfferCooldownMonths = 6` before the same government asks again. AI-vs-AI
+settlements are unchanged. The harness bots answer an offer by the player's own
+`WouldAcceptTermsFrom` calculus — the pre-decision behaviour — so balance
+measurements stay comparable.
+
+**A verdict pays** (`RecordWarResult`, 2026-08). Until the playtest a verdict
+changed a counter and nothing else, so the winner had paid every month of the war
+and got no rally for it — across 888 measured decades the military playstyle,
+the only one that gains ground, graded at or below doing nothing. The winner now
+takes approval +8, unity +5, war support +12, stability +3, exhaustion −15 and
+military pillar +2 (`Growth.Apply`); the loser approval −5, war support −8,
+unity −3. One-off store writes, because a verdict is an event. The annual
+evaluation credits wins and lost wars in the position component (spec 07).
+Guarded by `BugRegressionTests.WinningAWar_RalliesTheCountryAndCountsInTheEvaluation`.
+
+**A settlement binds.** `Close` sets `Relationship.settlementTruceMonths =
+SettlementTruceMonths (12)`; `CanOpenAgainst` refuses a new confrontation between
+the pair while it runs, and refuses a territorial demand for ground the defender
+does not hold. `Begin` checks both before charging CP. Guarded by the five
+`Settlement_*` / `Confrontation_*` cases in `BugRegressionTests`.
 
 ### Negotiated terms (`Core/PeaceSystem.cs`, GDD §26)
 

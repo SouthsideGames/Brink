@@ -334,7 +334,7 @@ state reach that path? Nearly every bug in the sweep was one of those two.
         which is what makes a forward position worth taking — and
         `foreignOperatorId` gives the same reach without conquest.
       `ProjectionRange` = 8 + naval×35 + air×20 + logistics×0.15 + CAP_LIFT×10;
-      `ReachFactor` = range/distance, floored at **0.35** — distance makes a far
+      `ReachFactor` = range/distance, floored at **0.2** (was 0.35 until the 2026-08 playtest) — distance makes a far
       campaign hard, never impossible (no hard geographic gates, per the §18.1
       lesson). Multiplies attacker power in `ResolveOperation` only: fighting
       near home is the one advantage a smaller power reliably has. A failed
@@ -1769,6 +1769,182 @@ three had passed for a long time:
       every refresh and grown without bound. The panel is now built once and
       rebuilt in place.
 
+- [x] **Sixteen-posting playtest fixes (2026-08-26).** A headless harness
+      (`C:\Temp\brink-harness`, runtime compiled with Unity's Roslyn, ~90 s per
+      16-country × 7-playstyle × 10-year matrix) played every Standard posting
+      under every playstyle bot plus a strategic-instrument bot on two seeds.
+      What it found, and what changed:
+      - **Every state was bankrupt by year ten under every playstyle, including
+        doing nothing.** `DisplacementSystem` billed `hosted × 22`/month against
+        income of ~`gdp × 0.012` ≈ 15–40/month (now `TreasuryIncomeRate = 0.03`, see below); every AI closed its border, the
+        player carried the world at 70–97 hosted, USA passive was −57,000.
+        Research is gated on a positive treasury, so **no strategic endgame was
+        reachable** in 224 decades. Now `0.4`/point, paid only from what is there
+        (spec 19 §5). `InsurgencySystem.Bill` had the same class of bug
+        (`intensity × 210` → `InsurgencyBillPerMonth = 24`, spec 16 §5).
+        **The annual grade never looks at the treasury**, which is why
+        `Report_MultiSeedBalance` could not see any of it — any new monthly cost
+        should be sized against `gdp × EconomySystem.TreasuryIncomeRate`, and
+        `DisplacementTests.ADecadeOfDoingNothingDoesNotEndInTheRed` is the leak
+        detector. Wars, occupation and posture still run a belligerent mid-tier
+        state several thousand into the red over a decade; that is an income-scale
+        question left open, not a leak.
+      - **Settlements ceded the objective to whoever proposed** —
+        `ProposeSettlementBy` called `Cede(loc, proposerId)` regardless of who
+        owned the ground or who was demanding it, and never checked the defender
+        still held it. `Settle` now gives the objective to the initiator only when
+        the initiator proposed; a defender's terms are the status quo; third-party
+        ground is renounced, not transferred. `CanOpenAgainst` refuses a demand
+        for ground the defender does not hold (spec 01 §5).
+      - **The AI could end the player's war without a decision** — its offer
+        auto-closed on the player's *computed* willingness. It now raises a
+        `TERMS_OFFERED` Crisis Turn; refusal or lapse buys six months' quiet.
+      - **Settlements did not bind** — the harness re-declared one war eighteen
+        times in a decade. `Relationship.settlementTruceMonths` (12) now blocks a
+        new confrontation between the pair; `Begin` checks it before charging CP.
+      - Also done in the follow-up: `TreasuryIncomeRate` 0.012 → 0.03 (spec 02), `MinimumReach` 0.35 → 0.2, and a `SolvencyPenalty` on the economy grade (spec 07). Still a judgement call:
+        Gulf Coast; military play is the only ground-gaining playstyle and the
+        only one that grades below passive (2.18 vs 2.29) — consistent with "never
+        a conquest checklist", but confirm it is the intended reading.
+
+- [x] **The mandate, and two dead systems brought to life (2026-08-27).**
+      - **`MandateSystem` — what a posting is for** (spec 22, GDD §25 amendment).
+        The game had annual grades, a forty-year tenure review and five
+        instruments, and nothing that said what the operator was there to do; the
+        playtest had to invent its own definition of winning. Every posting now
+        opens with a mandate — three or four claims about the world drawn from
+        its spec 08 character and vulnerability, **never foreign ground** — and
+        gets a FULFILLED / HELD / FAILED verdict at ten years. The save continues.
+        Sixteen authored in `MandateCatalog`; the expansion roster derives one
+        from its traits. STRATEGIST shows it; `MandateTests` guards it.
+      - **No AI state ever held an instrument capability.**
+        `TechnologySystem.ConsiderAiResearch` existed (6%/month, national
+        priority only, no prerequisite walk) and the pre-fix treasury starved it,
+        so the world used an instrument against the player in 4 of 556 measured
+        decades. `TechnologySystem.BeginResearchBy` + `AISystem.ConsiderResearch`
+        build toward the strongest pillar's instrument, walking prerequisites. A
+        prepared *severe* instrument may now also be used **in a war it is
+        winning** against an enemy at ≤35 relations, not only from desperation —
+        `CanExecuteBy` requires an active confrontation, so a peaceful player is
+        never a target. The "FOREIGN CAPABILITY" wire is gated on a ≥35
+        penetration network: announcing every foreign completion broke the fog
+        rule and added 83 items a decade.
+      - **The AI never assembled a coalition.** `RequestCoalition` was
+        player-only (spec 06 §7). `DiplomacySystem.RequestCoalitionBy` +
+        `AISystem.ConsiderCoalition`, reached once a war is a war. Coalitions
+        went from 12 of 556 decades to a routine feature of every world.
+      - `WorldInvariantTests` gained the playtest's measured gaps as assertions:
+        coalitions form, wars are events (pinned at the measured **92
+        confrontation-months per unattended decade — an open balance item**),
+        delegation is not routinely fatal; the instrument-against-the-player
+        check is `Inconclusive` until it fires, by design.
+      - The coverage audit's "15 of 16 countries have no national traits and AI
+        personality is rolled per save" is **stale**: all 25 profiles carry
+        authored traits and personalities (±8 jitter). What postings lacked was
+        a purpose, which is what the mandate is.
+
+- [x] **Audio audit (2026-08-27, spec 23).** The audio layer was complete and
+      **never driven**: outside `GameBootstrap` and the debug view, nothing in
+      the game called `AudioDirector` — a player heard the ambience loop and
+      nothing else. Also: the mixer exposed **no parameters**, so every
+      preference `SetFloat` failed silently and no volume/mute did anything; no
+      screen set a preference; seven of twenty sounds had no clip; the music
+      fade-out faded source A unconditionally. Now: `AudioCues` (pure, tested)
+      maps world → music / alert; the shell calls `Play`/`SetContext` on view
+      change and `Play(EndMonth)` + `AudioDirector.Sync(state)` after End Month;
+      the mixer exposes all five parameters and `Apply` reports whether they
+      took, falling back to per-source levels; the DSP panel has an AUDIO
+      section; every sound is mapped and `AudioSystemTests` refuses a gap.
+      **Rule:** a new cue is a `SfxId`, a library entry *and* a call site — the
+      first two without the third is how this layer went silent.
+
+- [x] **"Played it as a person" pass (2026-08-27).** A narrated decade from the
+      operator's chair (`C:\Temp\brink-harness`, `BRINK_NARRATE=1`) — 1,088
+      terminal items, of which ~70% were noise — and ten fixes from it:
+      - **Wire editor.** `WorldWire.Watches(state, id)` (network ≥ 20 penetration,
+        defence/intel treaty, or live confrontation) gates foreign cabinet changes,
+        foreign operations and third-party sanctions; foreign cabinet *setbacks*
+        (265 a decade, the single largest item) no longer notify at all; the
+        monthly standing-directive line is gone; `MONTH START` is ARCHIVE.
+        1,088 → ~550 items a decade for a diplomatic posting.
+      - **Things explain themselves.** Sanctions on us say why (their view of us,
+        read off the relationship); treaties list their commitments; the annual
+        evaluation names what carried and what held back the year, and says so
+        when the treasury is in the red.
+      - **Cold open.** `AISystem.TreatyReadiness` ramps AI treaty-signing from 15%
+        to 100% over 36 months — eleven treaties used to be signed in month one.
+      - **Grades.** S ≥ 88, A ≥ 76 (were 82 / 72); a first year of answering two
+        crises graded S.
+      - **War appetite.** `WarRecoveryMonths = 18` of peace after any war of a
+        government's own; base commit chance 0.14 → 0.10; governments seek terms at
+        exhaustion 35 (was 45) and after two years without momentum;
+        `SettlementTruceMonths` 12 → 24. Passive USA: 92 → ~40
+        confrontation-months a decade.
+      - **The record closes on screen.** `TerminalShellController.ShowRecordClosedIfDue`
+        puts the mandate verdict and the tenure review in the briefing overlay,
+        ahead of the briefing.
+      - **Crises.** `MonthlyCrisisChance` 0.08 → 0.10 and four more definitions
+        with foreign consequences (`ALLY_REQUESTS_ARMS`, `OFFICER_ARRESTED_ABROAD`,
+        `DISASTER_ABROAD`, `ULTIMATUM`). Note the catalogue was already 31 entries
+        with `OpenConfrontation` / `ImposeSanction` / `ForeignUnrest` effects —
+        the coverage doc's "no crisis can touch a foreign state" was stale.
+      - **Faces.** `AISystem.TemperamentOf` renders the authored personality as a
+        reputation line on the dossier (HAWKISH, CAUTIOUS, OPPORTUNISTIC …).
+        (The chronicle was already seeded by `HistoryCatalog`; that gap was also
+        stale.)
+      - **Phone chrome.** SAVE TO / LOAD FROM slots 1–3 in the DSP panel; a
+        `YOUR_MANDATE` tutorial step.
+      - **Sound.** War verdicts, the mandate verdict and the annual evaluation now
+        fire their cues from `AudioDirector.Sync`.
+      - Also: foreign capability acquisitions and AI programme starts are no
+        longer chronicled (the thirty-year growth cap), and `MandateSystem.Assign`
+        runs after `HistoryCatalog.Seed` so the record reads forward in time.
+
+- [x] **Overnight features (2026-08-28, spec 24).**
+      - **Standing directives (GDD §29, the last unbuilt §29 item)** —
+        `StandingDirectiveSystem`: the desks suggest an optional undertaking
+        with a deadline when circumstances warrant (ten templates, thresholds
+        set from the current value), at most two standing, judged by the
+        mandate's `IsMet`, rewarded with XP + initiative + up to 18 points of the
+        evaluation's initiative component; ignoring one costs nothing. On
+        STRATEGIST. `GameState.standingDirectives`; no migration.
+      - **Career record** — `CareerRecord` keeps `career.json` beside the save
+        slots: one entry per posting (verdict, years, mean grade, war record,
+        difficulty), written at the verdict, the tenure review and every annual
+        evaluation. A record, not progression — nothing reads it back into a
+        game. Off in batch mode unless a test sets `SaveDirectoryOverride`.
+        Shown under CAREER on STRATEGIST.
+      - **Mandate reissue** — a new administration with more than five years to
+        the review replaces the objectives with a set led by its national
+        priority (`MandateSystem.Reissue`); the review date and bases stand.
+      - **Difficulty is chosen** — `NewGameFromAssessment` never set it, so every
+        real game ran at Standard while every figure was measured at
+        Challenging. The assessment screen offers all three; default Challenging.
+      - Not built, because it already existed: materials regions (five authored),
+        seeded history, crises with foreign effects. **Check the code before
+        trusting the coverage doc's gap list.**
+      - Two pre-existing failures fixed on the way: `HistoryCatalog.Seed` never
+        sorted the history it wrote (the chronicle opened scrambled; that commit's
+        own note says it was never test-run), and the thirty-year chronicle cap
+        was being breached by two lines — a crackdown (1,279×) and a blown network
+        (883×) — that now go through `GameState.ChronicledWithin(country, text, 12)`:
+        **a campaign that repeats every month is one entry.** 4,213 → 2,790 lines.
+      - **The economic death spiral** (spec 02): a sanction regime bit at full
+        weight forever and lapsed only when the *sender* stopped being hostile,
+        so two hostile neighbours held a passive USA in a permanent depression
+        (28% unemployment, living standards 1, unrest 77, approval 0, a coup in 3
+        of 6 measured decades). `SanctionPressureOn` is now net of adaptation
+        (half weight after 48 months) and `distress × 22 → 16` in the
+        unemployment target. Coups on those seeds: 3/6 → 0/6.
+      - **A coercive government that could not afford Confront (3 PC) never
+        tried Concede (2)**, so destitute non-elective states never answered an
+        opposition (`OppositionTests.ForeignGovernmentsAnswerTheirOwnOppositions`
+        had been failing since that system shipped unverified).
+
+**Never put more than ~20 fixtures in one `-runTests` invocation.** The editor
+session ages out inside `VerticalSliceValidationTests`; run that fixture and
+`WorldInvariantTests` in their own partition (`Tools/run-suite.sh` does).
+
 **Not yet verified by a test run** — the environment this was written in has no
 Unity and no C# compiler at all, so nothing above has been compiled or executed.
 Run `bash Tools/run-suite.sh` before trusting any of it, and re-run
@@ -1978,6 +2154,11 @@ pass/fail totals and each failing test's name and assertion message.
   "Contested Sea Lane", **not** any real disputed territory — avoid modeling
   live real-world territorial claims (also an app-store risk in some regions).
 - In-game calendar starts JAN 1984 (placeholder epoch; revisit for real-world roster).
+- **Conquest counts in the annual grade** (user decision, 2026-08-28, supersedes
+  GDD §25's "never a conquest checklist"): `position` pays 30 per location taken
+  in the year and 8 a year per location held beyond the posting's opening
+  holdings, and held ground adds up to 12 points to the score directly
+  (spec 07 §3). Mandates still never ask for foreign ground.
 - Terminal voice: cold governmental language, uppercase headers ("MAR 1984",
   "CP 5", FLASH/PRIORITY/ADVISORY/WIRE/ARCHIVE notification classes).
 - Officials get country-appropriate titles (`Official.title`) from the profile.
