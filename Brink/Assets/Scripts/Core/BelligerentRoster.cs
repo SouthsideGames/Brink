@@ -110,48 +110,39 @@ namespace Brink.Core
             var partners = new List<Entry>();
             if (state == null || string.IsNullOrEmpty(countryId)) return partners;
 
-            foreach (var confrontation in state.confrontations)
+            // Iterate the coalitions, not our own fronts.
+            //
+            // The first version looped confrontations we were part of and looked
+            // for coalitions attached to them, which quietly could not find the
+            // one case this panel exists for. Honouring a pact adds us to the
+            // coalition on the *original* war — the one between our ally and
+            // their attacker, which does not involve us — and then opens a
+            // separate front of our own. So the operator who had just come to a
+            // partner's defence read a screen saying they were fighting alone,
+            // which is precisely the reading the roster was built to prevent.
+            foreach (var coalition in state.coalitions)
             {
-                if (confrontation.resolved || !confrontation.Involves(countryId)) continue;
+                if (coalition.dissolved) continue;
+                if (!coalition.memberIds.Contains(countryId)) continue;
 
-                var ourCoalition = state.FindCoalitionLedBy(confrontation.id, countryId);
-                if (ourCoalition != null && !ourCoalition.dissolved)
-                    foreach (string memberId in ourCoalition.memberIds)
-                    {
-                        if (memberId == countryId) continue;
-                        Add(partners, new Entry
-                        {
-                            countryId = memberId,
-                            confrontationId = confrontation.id,
-                            direct = true,
-                            because = "in our coalition"
-                        });
-                    }
+                var confrontation = state.FindConfrontation(coalition.confrontationId);
+                if (confrontation == null || confrontation.resolved) continue;
 
-                // We may also be a guest in somebody else's coalition — which is
-                // what honouring a pact makes us. Without this the operator who
-                // came to a partner's defence reads a screen that says they are
-                // fighting alone.
-                foreach (var coalition in state.coalitions)
+                bool weLead = coalition.leaderId == countryId;
+                var leader = state.FindCountry(coalition.leaderId);
+
+                foreach (string memberId in coalition.memberIds)
                 {
-                    if (coalition.dissolved || coalition.confrontationId != confrontation.id) continue;
-                    if (coalition.leaderId == countryId) continue;
-                    if (!coalition.memberIds.Contains(countryId)) continue;
-
-                    foreach (string memberId in coalition.memberIds)
+                    if (memberId == countryId) continue;
+                    Add(partners, new Entry
                     {
-                        if (memberId == countryId) continue;
-                        var leader = state.FindCountry(coalition.leaderId);
-                        Add(partners, new Entry
-                        {
-                            countryId = memberId,
-                            confrontationId = confrontation.id,
-                            direct = true,
-                            because = memberId == coalition.leaderId
-                                ? "we came to their defence"
-                                : $"with {leader?.displayName} in the same coalition"
-                        });
-                    }
+                        countryId = memberId,
+                        confrontationId = confrontation.id,
+                        direct = true,
+                        because = weLead ? "in our coalition"
+                            : memberId == coalition.leaderId ? "we came to their defence"
+                            : $"with {leader?.displayName} in the same coalition"
+                    });
                 }
             }
 

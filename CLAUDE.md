@@ -2018,8 +2018,22 @@ measured.
       the identical figure.
       No migration: empty `commitments` on an old save is *correct*, not merely
       blank — blocs that predate this genuinely carried none.
+      **Two defects a review bot caught on the PR, both real, both fixed:**
+      `BelligerentRoster.PartnersOf` walked our own fronts looking for coalitions
+      attached to them — which cannot reach the one case the panel exists for,
+      because honouring adds us to the coalition on the *original* war (between
+      our ally and their attacker, which does not involve us) and then opens a
+      separate front. The guest-coalition branch was unreachable **and carried a
+      comment claiming it handled exactly that case**; it iterates coalitions
+      directly now. And an obligation can be **overtaken before it is answered** —
+      the cascade leaves two open, answering the first dissolves the alliance
+      behind the second — so `ApplyPlayerDecision` returns false and rewrites the
+      `CrisisOption` in place rather than letting `Resolve` report "we have
+      entered the conflict" for a war that never opened. The option is edited
+      rather than the crisis removed because `LapseUnanswered` walks
+      `activeCrises` by index and removes as it goes.
       **Not verified by a test run** — no Unity or C# compiler in the environment
-      this was written in. `MultilateralAllianceTests` (26 tests) is written and
+      this was written in. `MultilateralAllianceTests` (28 tests) is written and
       partitioned; run `bash Tools/run-suite.sh` before trusting any of it, and
       re-run `Report_MultiSeedBalance`: bloc pacts, the cascade and the new
       repudiation costs are all balance-relevant and none are measured.

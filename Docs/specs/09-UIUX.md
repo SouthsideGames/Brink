@@ -692,6 +692,14 @@ states in an opponent's coalition even where no confrontation names the pair: th
 are shooting at us either way, and an operator reading only their own fronts would
 be surprised by exactly the states the cascade brought in.
 
+**`PartnersOf` iterates coalitions, not our own fronts.** This is the one subtlety
+in the file and it was wrong first time round: honouring a pact adds us to the
+coalition on the *original* war — between our ally and their attacker, which does
+not involve us — and then opens a separate front of our own. A roster that walks
+only the confrontations we are party to cannot reach that coalition, so the
+operator who had just come to a partner's defence read a screen saying they were
+fighting alone, which is exactly the reading this panel exists to prevent.
+
 Colour is the second channel as always — `sig-hostile` / `sig-ally` with `-` / `+`
 glyphs, so the reading survives any palette and any colour vision. The name column
 is `AsciiChart.Cell(..., NameWidth(W, 0.42))`, never a hardcoded width.

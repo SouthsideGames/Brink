@@ -366,6 +366,22 @@ fighting — a state in two wars is not eager for a third.
    with every other member** — a public commitment kept is kept in front of
    everyone in the room.
 
+**A decision can be overtaken before it is taken.** The cascade can leave two
+obligations open at once, and answering the first can dissolve the alliance
+behind the second — repudiating expels us from the bloc, and a two-member bloc
+dies with the expulsion. `ApplyPlayerDecision` returns `false` in that case and
+rewrites the chosen `CrisisOption` in place: result text replaced with "the call
+has been overtaken", deltas and `effectId` zeroed, plus an `OBLIGATION OVERTAKEN`
+notification. Without it `CrisisSystem.Resolve` reports "we have entered the
+conflict alongside them" for a war that never opened — an outcome the game cannot
+honour, which is the terminal lying about the world.
+
+The option is edited rather than the crisis removed from `state.activeCrises`
+deliberately: `LapseUnanswered` walks that list by index and removes as it goes,
+so mutating it from inside a decision would make the lapse path drop the wrong
+element. `CrisisOption` is a reference `Resolve` already holds, which makes it the
+one edit safe on both paths.
+
 ### The cascade
 
 Entering a war *is* an attack, so `BeginObligationBy` calls `InvokeObligations`

@@ -268,8 +268,8 @@ namespace Brink.Core
         /// Apply the player's answer. Called by <see cref="CrisisSystem.Resolve"/>
         /// when the crisis is an alliance obligation.
         /// </summary>
-        public static void ApplyPlayerDecision(GameState state, bool honored)
-            => ApplyPlayerDecision(state, honored, null);
+        public static bool ApplyPlayerDecision(GameState state, bool honored)
+            => ApplyPlayerDecision(state, honored, null, null);
 
         /// <summary>
         /// Apply the player's answer to a specific invocation.
@@ -279,16 +279,76 @@ namespace Brink.Core
         /// answering the second by scanning for the first is how an operator ends
         /// up in a war they did not agree to enter.
         /// </summary>
-        public static void ApplyPlayerDecision(GameState state, bool honored, string confrontationId)
+        public static bool ApplyPlayerDecision(GameState state, bool honored, string confrontationId)
+            => ApplyPlayerDecision(state, honored, confrontationId, null);
+
+        /// <summary>
+        /// Apply the player's answer, neutralising the crisis option if the
+        /// obligation has evaporated since it was raised.
+        ///
+        /// **A decision can be overtaken before it is taken.** The cascade can
+        /// leave two obligations open at once, and answering the first can
+        /// dissolve the alliance behind the second — repudiating expels us from
+        /// the bloc, and a two-member bloc dies with the expulsion. The stale
+        /// crisis stays on the table, and `CrisisSystem.Resolve` would then apply
+        /// its deltas and report its `resultText` — telling the operator "we have
+        /// entered the conflict alongside them" when no front opened and nothing
+        /// happened. An outcome the game cannot honour is worse than a refusal:
+        /// it is the terminal lying about the world.
+        ///
+        /// So the option is rewritten in place before `Resolve` reads it. This is
+        /// deliberately *not* done by removing the crisis from
+        /// `state.activeCrises`: `LapseUnanswered` walks that list by index and
+        /// removes as it goes, so mutating it from inside a decision would make
+        /// the lapse path drop the wrong element. `CrisisOption` is a reference
+        /// `Resolve` already holds, which makes this the one edit that is safe on
+        /// both paths.
+        /// </summary>
+        public static bool ApplyPlayerDecision(GameState state, bool honored,
+            string confrontationId, CrisisOption option)
         {
             var confrontation = FindObligationConfrontation(state, confrontationId);
-            if (confrontation == null) return;
+            var guarantor = confrontation == null
+                ? null : GuarantorFor(state, confrontation, state.playerCountryId);
 
-            var guarantor = GuarantorFor(state, confrontation, state.playerCountryId);
-            if (guarantor == null) return;
+            if (confrontation == null || guarantor == null)
+            {
+                ReportOvertaken(state, confrontation, option);
+                return false;
+            }
 
             if (honored) Honor(state, confrontation, guarantor);
             else Repudiate(state, confrontation, guarantor);
+            return true;
+        }
+
+        /// <summary>
+        /// Say that the call no longer stands, and make sure the crisis cannot
+        /// claim otherwise.
+        /// </summary>
+        static void ReportOvertaken(GameState state, Confrontation confrontation, CrisisOption option)
+        {
+            var defender = confrontation == null
+                ? null : state.FindCountry(confrontation.defenderId);
+            string who = defender == null ? "the state that called on us" : defender.displayName;
+
+            string text = $"The call from {who} has been overtaken: we no longer carry that "
+                        + "commitment. Nothing was decided because there was nothing left to "
+                        + "decide.";
+
+            if (option != null)
+            {
+                option.resultText = text;
+                option.treasuryDelta = 0f;
+                option.stabilityDelta = 0f;
+                option.approvalDelta = 0f;
+                option.unityDelta = 0f;
+                option.effectId = "";
+            }
+
+            state.AddNotification(NotificationClass.Priority, "OBLIGATION OVERTAKEN", text,
+                confrontation?.defenderId, desk: ReportingDesk.Diplomacy);
+            GameLog.Warn("ALLIANCE", "An obligation was answered after it had already lapsed.");
         }
 
         /// <summary>The war whose obligation is being answered.</summary>

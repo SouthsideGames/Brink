@@ -612,6 +612,83 @@ namespace Brink.Tests
                 "and the state we abandoned answers");
         }
 
+        // ---------- 7. two defects a review bot caught (PR #6) ----------
+
+        [Test]
+        public void ComingToAnAllysDefencePutsThemOnTheWithUsRoster()
+        {
+            // The roster's whole reason for existing. Honouring adds us to the
+            // coalition on the ORIGINAL war — between our ally and their attacker,
+            // which does not involve us — and then opens a separate front of our
+            // own. A roster that walks only our own fronts cannot see that
+            // coalition, so the operator who had just come to a partner's defence
+            // read a screen saying they were fighting alone.
+            string playerId = state.playerCountryId;
+            MakeBloc(playerId, "IND");
+            OpenWar("CHN", "IND");
+
+            ActiveCrisis obligation = null;
+            foreach (var crisis in state.activeCrises)
+                if (crisis.defId == AllianceSystem.PlayerObligationCrisisId) obligation = crisis;
+            Assert.IsNotNull(obligation);
+
+            CrisisSystem.Resolve(state, obligation, 0);
+            Assert.IsTrue(AtWar(state, playerId, "CHN"), "the fixture must actually honour");
+
+            var partners = BelligerentRoster.PartnersOf(state, playerId);
+
+            var ids = new List<string>();
+            foreach (var entry in partners) ids.Add(entry.countryId);
+            CollectionAssert.Contains(ids, "IND",
+                "the state we went to war for must appear on the WITH US roster");
+
+            foreach (var entry in partners)
+                if (entry.countryId == "IND")
+                    Assert.AreEqual("we came to their defence", entry.because,
+                        "and the roster must say why they are there");
+        }
+
+        [Test]
+        public void AnObligationOvertakenByAnEarlierDecisionDoesNotClaimAWarWeNeverEntered()
+        {
+            // A cascade can leave two obligations open, and answering the first
+            // can dissolve the alliance behind the second. The stale crisis stays
+            // on the table; resolving it used to apply its deltas and report "we
+            // have entered the conflict alongside them" with no front opened.
+            // An outcome the game cannot honour is the terminal lying about the
+            // world.
+            string playerId = state.playerCountryId;
+            var bloc = MakeBloc(playerId, "IND");
+            OpenWar("CHN", "IND");
+
+            ActiveCrisis obligation = null;
+            foreach (var crisis in state.activeCrises)
+                if (crisis.defId == AllianceSystem.PlayerObligationCrisisId) obligation = crisis;
+            Assert.IsNotNull(obligation);
+
+            // Whatever removed us — an earlier repudiation, an expulsion, the
+            // bloc dying with it — the obligation is simply no longer ours.
+            bloc.memberIds.Remove(playerId);
+            Assert.AreEqual(0,
+                AllianceSystem.GuarantorsOf(state, "IND", "CHN").Count,
+                "the fixture must actually destroy the obligation");
+
+            float approvalBefore = state.PlayerCountry.governmentApproval;
+            CrisisSystem.Resolve(state, obligation, 0);   // "HONOR THE COMMITMENT"
+
+            Assert.IsFalse(AtWar(state, playerId, "CHN"),
+                "there was no commitment left to honour");
+            Assert.AreEqual(approvalBefore, state.PlayerCountry.governmentApproval, 0.001f,
+                "and a decision that did nothing must not be charged for");
+
+            bool saidSo = false;
+            foreach (var notification in state.notifications)
+                if (notification.title == "OBLIGATION OVERTAKEN") saidSo = true;
+            Assert.IsTrue(saidSo,
+                "the operator must be told the call no longer stood, not shown a result "
+                + "for a war that never opened");
+        }
+
         [Test]
         public void ALapsedObligationIsARepudiation()
         {
