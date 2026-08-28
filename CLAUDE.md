@@ -428,10 +428,23 @@ state reach that path? Nearly every bug in the sweep was one of those two.
       **The rule the AI is held to is symmetry of *consequence*** — nothing free
       for one side that the other pays for — which the Political Capital economy
       and treasury costs already satisfy. Symmetry of *interface* was never it.
-- [x] **Manual save slots: autosave only** (user decision). Slots exist in code
-      but ship no player-facing UI, per GDD §30's "no reload-because-I-disliked-
-      the-outcome" rule. Consequences stick. Do not add a save/load screen
-      without asking.
+- [x] **Manual save slots: autosave only** (user decision, **reaffirmed
+      2026-08-28**). Slots exist in code but ship no player-facing UI, per GDD
+      §30's "no reload-because-I-disliked-the-outcome" rule. Consequences stick.
+      Do not add a save/load screen without asking.
+      **This rule was broken once and is worth knowing how.** The 2026-08-27
+      phone-chrome pass added SAVE TO / LOAD FROM slots 1–3 to
+      `DisplaySettingsPanel` — which ships in *every* build, precisely because it
+      is where FULL RESET had to live once the SYSTEM console was gated out. It
+      was noticed only because `ActionIndexTests` failed on `LoadFromSlot` having
+      no index entry, and the neighbouring exemption still read "there is no save
+      UI by decision". Removed 2026-08-28. Note the second reason beyond §30: an
+      operator caught running covert action could reload past the world hardening
+      against them, which is the one thing spec 06 §7b's counter-play refuses —
+      **a load button quietly repeals the anti-memorisation design.**
+      `SfxId.SaveComplete` lost its only call site with it and is documented as
+      deliberately unused rather than deleted (the ids are explicitly numbered
+      and the library asset stores them by value).
 
 - [x] **`SimulationPipeline` — one wiring list.** The monthly system order existed
       **twice**: in `GameController.Attach`, and hand-copied inside
@@ -1945,26 +1958,362 @@ three had passed for a long time:
 session ages out inside `VerticalSliceValidationTests`; run that fixture and
 `WorldInvariantTests` in their own partition (`Tools/run-suite.sh` does).
 
-**Not yet verified by a test run** — the environment this was written in has no
-Unity and no C# compiler at all, so nothing above has been compiled or executed.
-Run `bash Tools/run-suite.sh` before trusting any of it, and re-run
-`Report_MultiSeedBalance`: contested ground denying its own owner, a censure in
-`StrategicPressure`, mandated sanctions at 0.55 blowback and an opposition
-dragging the support target are all balance-relevant and none of them are
-measured.
+~~**Not yet verified by a test run**~~ — **verified 2026-08-28.** The suite was
+run for the first time since the previous several commits: 1187 tests, 9
+failures, all now fixed. Six were fixture faults and three were live bugs; the
+findings are below. Balance is **still unmeasured** since that work — re-run
+`Report_MultiSeedBalance` before tuning anything, and note that the economy
+fixes below move sector capacity and `pillars.economy`, which are load-bearing
+for every figure in the table above.
+
+- [x] **The first suite run in several commits — and the collapse under it
+      (2026-08-28).** Nine failures. Six were tests measuring something other
+      than what they claimed, and every one was a repeat of a failure mode
+      already written down in this file:
+      - **A net measured where the claim was a delta**, three times.
+        `LeadingOneIsAMonthlyBill` started Political Capital *at the cap*, so the
+        same month's income clamped straight back to 20 and hid a 0.35 charge;
+        `PreparingForWarOrdersEquipment` read the closing treasury against the
+        opening one over a year in which income exceeds orders. Both are now A/B
+        against a control run — which the neighbouring
+        `DrawingDownSellsEquipmentBackAtALoss` had already learned to do, *in the
+        same file*.
+      - **A fixture that set up a different experiment.**
+        `LosingAVoteYouCalledCostsTheMover` named the first non-player state,
+        which is a great power, so its motion was **vetoed** rather than lost —
+        a different code path, priced differently on purpose — and its first
+        assertion passed on the veto's supporter penalty, for an unrelated
+        reason. It now names a seatless state and asserts `Failed` explicitly.
+      - **An absolute count where the claim was a delta.**
+        `AHealthyStateIsLeftAlone` counted foreign political chronicle entries
+        without a baseline, and `HistoryCatalog.Seed` files one for every cold
+        pair at world creation. Its sibling's `> 0` could pass with no crisis
+        firing at all.
+      - **A stale panel id.** The `YOUR_MANDATE` tutorial step still pointed at
+        `"STRATEGIST"`, renamed `OPERATOR` in the STG/STR disambiguation pass.
+      - **Unity's 180s default timeout**, on three fixtures converted from a
+        hand-wired subset to `SimulationPipeline`. Raised, not shortened: the
+        horizon is the claim in all three.
+      **The measurement lesson.** Two failures resisted four rounds of reading
+      code, and the first inferred culprit was wrong — the re-run came back
+      *byte-identical*, which is how you know a code path never executed. What
+      cracked it was a headless probe (`Tools/syntax-check.sh` builds the runtime
+      in seconds; the probe pattern is `C:\Temp\brink-harness`'s) running one
+      system at a time: `GovernmentSystem.MonthlyUpdate` **alone** lifted unity
+      0.29 → 25.69 over twenty ticks, proving the restoring force worked and
+      something else cancelled it every month. **When a stat is pinned, run its
+      own system in isolation before reading any more code.**
+- [x] **Sector capacity had no anchor — the bug under the entire economy.**
+      `outputTarget = sector.output + …` is not a target: `Approach(v, v+d, 0.5)`
+      is `v + 0.5d`, an accumulating rate wearing a target's clothes. Growth is
+      *derived* from capacity, so zero was an **absorbing state**. On seed 1212
+      six of seven US sectors sat at exactly 0.0 output with **healthy** sector
+      health, market index 7, permanent −4%/yr growth, and no recovery in
+      thirty-six isolated economy ticks. Unemployment 24, living standards 0,
+      unrest and grievance at 100, four coups and recurring civil conflict all
+      followed from it. `EconomySystem.SectorAnchor` shares `WorldFactory`'s
+      authored per-sector baseline as the reversion level — zero by construction
+      at world creation. **Fourteenth instance of the value-versus-target
+      family.** Spec 02 §2.
+- [x] **`StagnationDrag` had no floor**, and `SectorAnchor` reads
+      `pillars.economy` for three sectors, so it closed the same loop one level
+      up. Its own comment promised recovery "the month growth turns positive",
+      which cannot happen once the pillar is gone. `StagnationFloor` bounds only
+      how much long-run *capability* a downturn takes — growth, confidence,
+      employment and the market index still collapse in full.
+      **A floor must only stop a drag taking; it must never give.** Written as a
+      bare `Math.Max(floor, value − drag)` it lifted any pillar already below the
+      floor, and a regression test that drives `pillars.economy = 5` to force a
+      contraction had it silently raised to 36 on the first tick — the recession
+      it was measuring never happened. Caught only because that test asserts its
+      own precondition.
+- [x] **A ceiling is not a ratchet.**
+      `NoSocialValueRunsAwayInEitherDirection` asserted no social value reaches
+      its ceiling. They are target-driven, so a collapsed country *should* read
+      unrest 100 — forbidding that forbids the crisis regime. It now asserts
+      **recoverability**: lift every sanction, war and rising, hold them off for
+      ten years, and the country has to climb out (measured: unrest 100 → 58.8,
+      standards 0 → 17.5, index 8 → 78, growth −2.97 → +1.60). All three bugs
+      above fail the new test; none was visible to the old one. Hold the
+      pressures off **every month** — clearing once measures how long the
+      neighbours take to open the next war.
+- [x] **Being caught spying was filed `Publicity.Secret`.** `AddChronicle`
+      defaults to Secret and the call omitted the argument, so the most
+      attributable act in the pillar was recorded as a secret, beside a
+      notification reading *"others have noticed."* And the reader matched only
+      `"compromised"` — the rolled-up-*network* line — so a caught covert
+      operation and a blown approach to a foreign minister both taught the world
+      nothing. `IntelligenceSystem.CaughtMarkers` / `IsPublicSubversionRecord`
+      is now one list and one predicate. **A new "we were caught" line must add
+      its marker and be filed Public, or the world cannot learn from it.**
+- [x] **Counter-intelligence hardens against *you*, not in general**
+      (`DirectedHardening`, spec 03 §7b). `institutionalHardening` is global, so
+      in a world of sixteen mutually-spying states it saturates from background
+      espionage: 10.5 of a cap of 20 whether or not the operator ran a single
+      network, and *lower* in the careless arm. Derived from the public record
+      through the same function the AI's expectation layer reads, so **no new
+      save state and no migration**, and it decays on the same 120-month window —
+      a permanent reputation would make reloading correct, which this game
+      refuses.
+- [x] **PREPARE FOR WAR bought less than doing nothing.** `ProcureShortfall`
+      ordered `max(0.5, amount/3)` increments while `RestockRoutine` orders
+      `max(0.4, performance)` ≈ 0.8 — and `MonthlyAct` *skips* the routine
+      restock for this directive, so the directive replaced the month's
+      procurement with a smaller one and charged Influence for it. Same class as
+      `MIL_READINESS` being bit-identical to autonomy for eight phases.
+      **`EveryDirectiveChangesSomething` compares directives against each other,
+      never against doing nothing** — worth closing.
+- [x] **`Tools/syntax-check.sh`** — compiles the runtime assembly with Unity's
+      Roslyn in seconds and rebuilds the file list every run, because a
+      checked-in response file goes stale the moment a source file is added.
+      Runtime only; test code still needs Unity, for the CS0012 reason above.
+- [x] **`InsurgencySystem` flat-subtracted `nationalUnity`** four lines below its
+      own comment forbidding exactly that. Real (a separatist rising's damage was
+      the largest term keeping the rising supplied, via `SupportTargetFor`'s
+      `52 − nationalUnity`), now `UnityDrag` on the target — but **not** the cause
+      of the collapse above, which is how the byte-identical re-run proved it.
+- [x] **A test that had never once executed.**
+      `InsurgencyTests.ContestedGroundPaysNobody` opened with
+      `if (industry == null) Assert.Ignore(...)` looking for an industrial centre
+      **owned by the player**. Seven are authored (CHN, IND, DEU, KOR, MEX, ITA,
+      VNM) and **none for the USA**, which is who `CreateDebugWorld` posts the
+      operator to — so it skipped on every run and was counted as a pass. What it
+      guards is `Denies`, this file's own "load-bearing consequence" of the
+      insurgency system. **A skipped test is the quietest member of the
+      not-verified family**: it does not fail, it opts out. The suite was swept —
+      it was the only one, and `WorldInvariantTests`' two `Assert.Inconclusive`
+      guards are currently passing properly.
+
+- [x] **Balance re-measured on the repaired economy (2026-08-28).** **Supersedes
+      the table above.** Same five seeds.
+
+      | Playstyle | Was | Now | Δ |
+      |---|---|---|---|
+      | PASSIVE (baseline) | 2.32 | **2.66** | **+0.34** |
+      | ECONOMY | +0.64 | **+0.38** | −0.26 |
+      | INTELLIGENCE | +0.64 | **+0.34** | −0.30 |
+      | GOVERNMENT | +0.52 | **+0.34** | −0.18 |
+      | DIPLOMACY | +0.70 | **+0.32** | −0.38 |
+      | MILITARY | +0.34 | **+0.20** | −0.14 |
+      | DRIFTER | +0.48 | **+0.16** | −0.32 |
+
+      **The passive baseline moved, and everything else follows from that.** A
+      world that can no longer spiral into permanent collapse pays inattention
+      far better than one that could: most of what the old table scored as "the
+      reward for engagement" was really the cost of an unrecoverable economy that
+      only an active operator could outrun. Every margin roughly halved because
+      the floor rose under all of them, not because any playstyle got worse.
+      Ordering churned (ECONOMY now leads, DRIFTER now sits below MILITARY),
+      which at a 0.22 spread is noise rather than signal.
+
+      **This is the open balance question, and it is a judgement call.** The
+      spread is the tightest ever measured (0.22, was 0.36) — but *tight* was
+      never the goal on its own, and engagement now buys about half what it did.
+      Passive at 2.66 is close to the state this file already rejected once: when
+      the bands were lifted on the theory that a competent decade "read as a C",
+      measurement showed the C belonged to *passive* play, doing nothing moved to
+      a **B**, and the reward for engagement compressed to +0.16. We are now at
+      +0.16 … +0.38 with passive at 2.66 by a different route.
+      **Do not fix this by undoing the economy work** — the death spiral was a
+      bug, and a world where neglect is survivable is the correct world. If the
+      bands move, follow this file's standing rule: check the passive baseline
+      first, and retune `SkillPointsFor` in the same commit, since the band also
+      sets progression pace.
+      Unchanged and still measured-and-closed: MILITARY's ECON component (39.7
+      against 48–58) is the opportunity cost of commitment — 15 player
+      confrontations across five seeds, objective held at the end in 4 of 5, net
+      territory +0. And `CRIS` finally varies: 42.9 for the drifter against
+      ~73 for everyone who answers.
+
+- [x] **Tranche A — fiscal statecraft** (spec 02 §9, spec 25). The economy
+      pillar had six verbs and **no instrument of public finance at all**: no
+      tax, no budget, no borrowing, no reserves, no credit standing.
+      `debtToGdp` was written in one place, read in three, and moved by nothing
+      the operator could do. `FiscalState` + `FiscalSystem`, seven verbs, the AI
+      half in `AISystem.ManageTheBooks`, a PUBLIC FINANCE panel, six index
+      entries, save v6 → **v7** with a real backfill, `FiscalTests`.
+      Three rules carry it:
+      - **The authored defaults are revenue-neutral by construction.** Both
+        multipliers are exactly 1.0 at `BaselineTaxRate = 35` and Balanced, and
+        the drags are exactly 0, so an untouched world raises what it always did
+        and the measured table stays comparable. A test asserts it per country.
+      - **A deficit finances itself into debt.** This is the answer to the
+        playtest's open "several thousand in the red" finding: previously the
+        treasury went negative and *nothing happened*, so the deficit was an
+        observation rather than a consequence.
+      - **`debtToGdp` is derived, never stored** — the `BranchForce.strength`
+        discipline. It used to be a free-floating accumulator (+0.9/month at
+        war) answering to no money anybody spent.
+      **The calibration lesson, learned the expensive way: revenue-neutrality
+      applies to the cost you *replace*, not only to the terms you add.** Income
+      used to be haircut by `(1 − debtToGdp/400)`; the first interest rates
+      charged ~40% of that, so every government in the world quietly got richer.
+      It surfaced two partitions away as a colder world — AI wars under the
+      `WorldHeatTests` floor, wars running longer because states could afford
+      them — and **neither failing test mentions money.** `LegacyDebtHaircut`
+      exists purely so "revenue-neutral" is checkable; an assertion nobody can
+      test is not one.
+      **And: when you give a value a recovery path, check what was reading its
+      absence.** Financing the deficit stopped the treasury falling, which
+      blinded `treasuryTrend` — the operator's only timely bankruptcy warning,
+      added precisely because a campaign hit −4,905 unnoticed. A forced 300/month
+      drain read as −93. It now measures the *fiscal balance* (treasury delta
+      less debt taken on), sampled at the end of `FiscalSystem`.
+
+- [x] **Three self-sustaining loops, one session.** A new bug family worth
+      naming beside the value-versus-target one: **a variable that both gates its
+      own accrual and suppresses the thing that would stop it.** The tell is a
+      value pinned at an extreme while its inputs look survivable.
+      - **grievance → living standards → grievance.** Grievance subtracts 0.12
+        per point from the standards target; standards under 40 feed grievance.
+        At grievance 100 standards top out near 23 however healthy the economy,
+        so the pin was permanent — measured 100.0 → 100.0 across a decade of full
+        relief with the market index recovered to 61.
+      - **grievance → unrest → grievance.** Grievance adds 0.18 per point to
+        unrest pressure, and the accrual read raw unrest. Fixing only the first
+        loop moved a pinned country 100.0 → **99.6**: the echo carried nearly the
+        whole gain by itself. Both coefficients are now named constants
+        (`GrievanceStandardsDrag`, `GrievanceUnrestPressure`) and the accrual
+        subtracts both back out — grievance measures the hardship a country is
+        *actually* living through, not the shadow it casts. Now 100 → 94.7 over
+        the same decade, accelerating.
+      - **distress → inflation → market index → distress.** `distress` comes from
+        the index, feeds inflation ×9, and inflation subtracts ×3.5 from the
+        index's fundamentals — so a depression partly sustains itself with no
+        external pressure. **Not fixed, and probably correct**: a depression
+        should be hard to leave, and it demonstrably has an exit (a probe took a
+        wrecked USA from index 8 to 78). Recorded so the next reader knows it is
+        a known dynamic rather than an unnoticed ratchet.
+
+- [x] **The "hot world" was partly the economy bug** (supersedes the ~3 AI wars
+      per 30 years figure). `TheWorldFightsItsOwnWars` failed after Tranche A, and
+      two measurements cleared the fiscal layer: with `FiscalSystem` on and off
+      the count is **2 either way**. The cause is upstream —
+      `AISystem.ResourcePrize` only makes a neighbour's ground worth taking when
+      the claimant's energy or materials sit **below 40**, and before the
+      sector-capacity and stagnation-floor fixes states were routinely ground to
+      nothing and coveted each other accordingly. **Some of that heat was the
+      bug**, so the old figure is not a baseline to restore and tuning aggression
+      back up would be re-creating a symptom.
+      Measured now across eight 30-year worlds: 1, 1, 4, 0, 0, 3, 1, 0 —
+      **mean 1.25 per world**. The test now samples six seeds (a two-sample floor
+      on a quantity whose standard deviation exceeds its mean measures which
+      seeds it picked) and asserts the *failure mode* — the world must not be
+      scenery, at least half the worlds must see something — rather than the
+      stale number. Three of eight worlds are entirely silent for thirty years.
+      **Decision (user, 2026-08-28): leave it, and re-measure after Tranche C.**
+      Not a gap to close by tuning — diplomacy's episodic layer (mediation,
+      recognition, summits) gives governments reasons to collide that are not
+      resource desperation, and that is the honest way to warm the world back up
+      if it needs it. Do not raise AI war appetite to hit the old number in the
+      meantime, and do not relist the ~3 figure as a target: it was measured on a
+      world whose economy could not recover.
+
+- [x] **`NoSocialValueRunsAwayInEitherDirection`'s relief arm is isolated, and
+      that narrows the claim.** Two attempts to hold a *live* world off a wrecked
+      country failed the same way: the world is hot, a ruined state is a target,
+      and something new always arrives — India stayed pinned by **foreign**
+      crises, which never touch `activeCrises` because `ForeignCrisisSystem`
+      applies them directly. Chasing each source in turn ends with every system
+      suppressed and no statement about anything.
+      The relief run is now a `NARROW PIPELINE` of economy, fiscal and government
+      only. **What it no longer claims:** that a ruined country recovers in the
+      world as it actually runs. **What it claims now:** given no new adversity,
+      the recovery mechanics climb a country out. Narrower, and defensible — and
+      all three of the day's bugs still fail it, which is what keeps it worth
+      having. The broader question is unmeasured; that is a gap, not a pass.
+      **Decision (user, 2026-08-28): accepted as a documented gap.** Revisit if a
+      playtest shows ruined states never climb out from the chair — that is the
+      evidence worth acting on, rather than a second long-run test whose seed
+      sensitivity would make it a coin flip.
+
+- [x] **Tranche B — intelligence products and defensive verbs** (spec 03 §6a,
+      §6b, §7c, §10). Suite 1204 → **1218, green**.
+      - **The Special Estimate** (`IntelProduct`, `IntelProductSystem`): five
+        questions, three months, a graded written judgement. This is what
+        finally makes collection buy *what a rival is for* rather than sharper
+        numbers about its capability — `AIStrategy.StrategicPath`,
+        `AIPrediction.OpponentModel` and `EndgameSystem.KnownPreparation` were
+        computed every month for every government and read by almost nothing,
+        the largest body of unread state in the codebase and in the one pillar
+        whose subject is knowing things.
+        **It can be wrong, and wrong *plausibly*** — a different valid
+        conclusion stated with the same confidence, never noise, because noise
+        would be obviously worthless and free to ignore. Fixed once delivered
+        and deterministic per (observer, target, question, month), including
+        across a save: a reload that shakes a different answer loose is what §30
+        refuses. Does **not** breach spec 15 — that rule forbids a *desk*
+        misstating a figure it was handed; an estimate carries its own grade and
+        has been allowed to be wrong since Phase 6.
+      - **Diminishing returns on covert action** (`IntelNetwork.operationTempo`)
+        — the oldest open item on this list. Deliberately distinct from
+        `DirectedHardening`: that is about being *caught*, this is about being
+        *busy*, so it prices the careful operator too. And it fades, because a
+        penalty with no recovery path is a disqualification rather than a price.
+      - **Three appended covert verbs** with **deniability as the axis**.
+        `AttributionFactor` multiplies the exposure roll: Provocation 0.45,
+        CyberOperation 0.55, and TechnologyTheft **1.25** — the most attributable
+        thing in the list, because they notice the moment we field it. Each buys
+        deniability with a smaller effect.
+      - **The mole hunt** — the defensive pillar's missing question. **A hunt
+        that finds nothing damages the people it searched**; a free scan would be
+        strictly correct every month, which is not a decision.
+      Also closed in passing: the covert-operation buttons were ungated, so
+      pressing one without a network spent nothing and said nothing — the exact
+      failure the `Block` / `ExplainBlockedCommands` pair exists to end.
+      **Deferred, with reasons, in spec 03:** `Exfiltration` (wants agents as
+      losable assets, which `AgentSystem` does not model), `SecurityVetting`
+      (marginal over the existing sweep — two verbs for one effect is the
+      `MIL_READINESS` mistake), and defectors (wants a crisis definition; belongs
+      with Tranche C's event work). **Deception as a standing programme was
+      already built** — spec 25 §5.1 was wrong to list it.
+
+- [x] **Balance after Tranches A and B (2026-08-28). Supersedes the table above.**
+
+      | Playstyle | Post-Tranche-0 | Now | Δ |
+      |---|---|---|---|
+      | PASSIVE (baseline) | 2.66 | **2.52** | −0.14 |
+      | ECONOMY | +0.38 | **+0.52** | +0.14 |
+      | INTELLIGENCE | +0.34 | **+0.50** | +0.16 |
+      | DIPLOMACY | +0.32 | **+0.44** | +0.12 |
+      | MILITARY | +0.20 | **+0.42** | +0.22 |
+      | GOVERNMENT | +0.34 | **+0.40** | +0.06 |
+      | DRIFTER | +0.16 | **+0.18** | +0.02 |
+
+      **The passive baseline fell and every engagement margin widened** — the
+      fiscal layer doing what a pillar's verbs are supposed to do: give an active
+      operator levers a passive one leaves untouched. The five real playstyles
+      sit in a **0.12 band (+0.40 … +0.52)**, the tightest spread ever measured
+      *while all of them clearly beat passive*, and MILITARY is no longer the
+      floor. Drifting costs −0.26 against the same routine that answers.
+      **This substantially answers the grade-band question** raised after
+      Tranche 0, without touching the bands: the compression was the economy
+      repair removing a hazard only an active operator could outrun, and giving
+      the operator real fiscal decisions restored the margin honestly.
+      **Tranche B does not appear in this table and cannot.** Every verb it adds
+      is an operator interface, and no harness bot commissions an estimate or
+      hunts a mole — a clean re-run on a frozen tree came back byte-identical.
+      Anything measuring Tranche B has to come from play, not the harness.
+      MILITARY's ECON component (49.9 against 50–59) remains the documented
+      opportunity cost of commitment: 17 confrontations across five seeds,
+      objective held at the end in 4 of 5, net territory +0.
 
 Recommended next:
-- **Run the suite.** Nine new test classes (`ActionIndexTests`, `InsurgencyTests`,
-  `CouncilTests`, `OppositionTests`, `DisplacementTests`, `BlocTests`,
-  `HoldTests`, `HistoryCatalogTests`, `DossierTests`) and five new monthly
-  systems, none of them compiled. `run-suite.sh` partitions are already updated.
-- **The invariants most likely to complain**, in order: the readiness targets in
-  `WorldInvariantTests` (occupation drag now stacks with `InsurgencySystem.ForceDrag`),
-  the unrest and living-standards invariants (three new pressure terms), and any
-  test that assumed an empty chronicle at month zero (none found, but the sweep
-  was by grep).
-- **Re-measure balance** — see the note above; the last table predates all three
-  new systems.
+- ~~**Run the suite.**~~ Done 2026-08-28: 1187 tests, green.
+- **Re-measure balance before anything else.** `Report_MultiSeedBalance` has not
+  been run since the economy fixes, and sector capacity and `pillars.economy` are
+  inputs to every figure in the table above. Treat that table as measuring a
+  different game until it is re-run.
+- **The content update is planned** in `Docs/specs/25-ContentUpdate.md`: five
+  tranches across economy (a fiscal layer — the pillar has no tax, budget,
+  borrowing, reserves or credit standing), intelligence (standing programmes and
+  a Special Estimate that finally surfaces `AIStrategy`/`OpponentModel`),
+  diplomacy (recognition of `SecessionSystem` successors, mediation, summits),
+  government (a faction ledger, corruption, constitutional change) and research
+  (13 → ~34 capabilities, some unlocking *options* rather than efficiencies).
+  Sequencing and the rules each tranche is held to are in that document.
+- **A directive should be compared against doing nothing**, not only against
+  other directives — see the PREPARE FOR WAR finding above.
 - Diminishing returns on repeated covert ops (long-standing, niche).
 - An AI verb for food-poor states to seek food trade links — authored links
   and player deals are still the only routes to a foreign food ceiling.

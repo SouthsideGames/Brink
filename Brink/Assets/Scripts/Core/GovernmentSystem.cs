@@ -195,6 +195,22 @@ namespace Brink.Core
         /// Unity runs the other way from order. A society held down coheres
         /// less, not more — the appearance of unanimity is not the thing.
         /// </summary>
+        /// <summary>
+        /// How much each point of remembered hardship takes off the
+        /// living-standards target. Named because two places need it: the target
+        /// itself, and the grievance accrual, which has to add it back so that
+        /// grievance is not measuring the hardship it is itself causing.
+        /// </summary>
+        public const float GrievanceStandardsDrag = 0.12f;
+
+        /// <summary>
+        /// What each point of remembered hardship adds to the pressure behind
+        /// organised unrest. Named for the same reason as
+        /// <see cref="GrievanceStandardsDrag"/>: the grievance accrual has to
+        /// subtract it back out, or grievance is fed by its own echo.
+        /// </summary>
+        public const float GrievanceUnrestPressure = 0.18f;
+
         public static float UnityShiftFor(GovernmentState gov)
         {
             switch (gov.civicPosture)
@@ -279,7 +295,7 @@ namespace Brink.Core
                 - Math.Max(0f, eco.inflation - 4f) * 1.5f
                 - Math.Max(0f, eco.unemployment - 6f) * 1.2f
                 - country.warExhaustion * 0.20f
-                - country.publicGrievance * 0.12f
+                - country.publicGrievance * GrievanceStandardsDrag
                 // Hunger — measured against the country's *own normal*, not an
                 // absolute line. An absolute threshold (the first version used
                 // 50) reads an authored dependency as a standing humanitarian
@@ -295,7 +311,11 @@ namespace Brink.Core
                 // Carrying a crisis for somebody else is a strain on services.
                 // Mild per point, and through the target like everything else
                 // here — a host that is otherwise well run absorbs it.
-                - DisplacementSystem.StandardsDrag(country));
+                - DisplacementSystem.StandardsDrag(country)
+                // What the budget posture does to what people can afford
+                // (spec 02 §9). Zero on Balanced, so untouched saves are
+                // unaffected.
+                + FiscalSystem.PostureStandardsShift(country.fiscal.budgetPosture));
 
             // Deliberately slower to rise than to fall. Prosperity is felt as it
             // accumulates; a collapse is felt immediately.
@@ -313,7 +333,7 @@ namespace Brink.Core
                 + Math.Max(0f, eco.inflation - 8f) * 1.6f
                 + Math.Max(0f, eco.unemployment - 10f) * 1.4f
                 + country.warExhaustion * 0.22f
-                + country.publicGrievance * 0.18f
+                + country.publicGrievance * GrievanceUnrestPressure
                 // Hunger organises faster than the living-standards average it
                 // is part of — standards move over years, an empty shelf moves
                 // people this month. Gap against the country's own endowment
@@ -392,9 +412,45 @@ namespace Brink.Core
             // needed unrest above 45, which unrest could not reach without the
             // grievance it was gated behind. A circular deadlock: the memory of
             // hardship required hardship the country was not allowed to suffer.
+            // **Measured against hardship, not against grievance's own shadow.**
+            //
+            // Grievance subtracts `GrievanceStandardsDrag` per point from the
+            // living-standards target, and accrues while standards are under 40.
+            // Read the raw value and those two facts lock together: at grievance
+            // 100 the drag alone is −12, so standards top out around 23 however
+            // healthy the economy gets, standards under 40 feed grievance at
+            // ~0.52/month against 0.445 of decay, and the pin is permanent.
+            //
+            // Measured: a decade after every sanction, war and rising was lifted,
+            // with the market index recovered to 61 and growth positive, grievance
+            // read 100.0 → 100.0. The same deadlock this file already records
+            // fixing once, running the other way — there, the memory of hardship
+            // required hardship the country was not allowed to suffer.
+            //
+            // Adding the drag back gives the hardship the country is *actually*
+            // living through, before its own memory is counted twice. Identical
+            // when grievance is low, which is every ordinary country.
+            float hardshipNow = country.livingStandards
+                                + country.publicGrievance * GrievanceStandardsDrag;
+
+            // Grievance feeds unrest too, so reading raw unrest here counts the
+            // same memory a second time — the identical loop, one step further
+            // round. Correcting only the living-standards term moved a pinned
+            // country from 100.0 to 99.6 across a decade of full relief, because
+            // the unrest echo carried almost the whole gain on its own.
+            //
+            // Approximate on purpose: unrest is target-driven and the pressure
+            // sum is scaled by unity, temperament and civic posture before it
+            // becomes a value, so subtracting the raw contribution slightly
+            // over-corrects in a volatile state. The alternative is threading the
+            // undamped pressure through, for a precision this does not need — the
+            // property that matters is that grievance cannot sustain itself.
+            float unrestNow = Math.Max(0f,
+                country.socialUnrest - country.publicGrievance * GrievanceUnrestPressure);
+
             float grievanceGain =
-                Math.Max(0f, country.socialUnrest - 45f) * 0.010f
-                + Math.Max(0f, 40f - country.livingStandards) * 0.011f
+                Math.Max(0f, unrestNow - 45f) * 0.010f
+                + Math.Max(0f, 40f - hardshipNow) * 0.011f
                 + (state.IsAtWar(country.id) ? country.warExhaustion * 0.004f : 0f);
 
             // Decay is **proportional to what has accumulated**, not a flat
@@ -449,7 +505,10 @@ namespace Brink.Core
             // from ever attending to its own domestic condition again.
             float approvalTarget = Clamp(50f + approvalPull * 6f + ApprovalShiftFor(gov)
                                          - country.socialUnrest * 0.25f
-                                         + gov.publicMessaging * 0.42f);
+                                         + gov.publicMessaging * 0.42f
+                                         // Nobody thanks a government for a tax
+                                         // rise. Zero at the baseline rate.
+                                         - FiscalSystem.TaxApprovalDrag(country));
             country.governmentApproval = Approach(country.governmentApproval, approvalTarget, 0.06f);
 
             // Stability and unity had **no restoring force at all** — the only
@@ -479,6 +538,10 @@ namespace Brink.Core
                 + country.pillars.government * 0.20f
                 + country.stability * 0.25f
                 - country.warExhaustion * 0.20f
+                // A movement demanding to leave is an argument about what the
+                // country is. On the target, beside the stability drag, and for
+                // the same reason both of those exist.
+                - InsurgencySystem.UnityDrag(state, country.id)
                 + UnityShiftFor(gov)
                 // Weighted well below approval on purpose. Talking to the country
                 // can make a government liked; it cannot by itself make a divided

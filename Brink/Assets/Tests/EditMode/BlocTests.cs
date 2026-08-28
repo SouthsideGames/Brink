@@ -59,6 +59,24 @@ namespace Brink.Tests
             relationship.SetThreatPerceivedBy(targetId, 10f);
         }
 
+        /// <summary>
+        /// A second world identical to the fixture's, for measuring a delta
+        /// against a control. `pillars.diplomacy` is raised to match `OurBloc`
+        /// so the only difference between the two runs is the bloc itself.
+        /// </summary>
+        (GameState state, TurnManager turns) Fresh()
+        {
+            var other = WorldFactory.CreateDebugWorld(seed: 3121);
+            other.commandPoints.current = 60;
+            other.politicalCapital = GameState.PoliticalCapitalCap;
+            other.authorizedPillarMask = ~0;
+            other.PlayerCountry.pillars.diplomacy = 80f;
+
+            var otherTurns = new TurnManager(other);
+            SimulationPipeline.Wire(otherTurns, other);
+            return (other, otherTurns);
+        }
+
         Bloc OurBloc()
         {
             state.PlayerCountry.pillars.diplomacy = 80f;
@@ -199,17 +217,31 @@ namespace Brink.Tests
         [Test]
         public void LeadingOneIsAMonthlyBill()
         {
+            // A/B against a control, not a before/after on one run. Upkeep is
+            // 0.35 PC for a two-member bloc and the same month credits PC
+            // income, so a net measurement asks whether income happens to be
+            // smaller than upkeep — and starting at the cap, as this fixture
+            // originally did, hides the charge completely because the credit
+            // clamps straight back to 20. The claim is a delta, so measure one.
+            var control = Fresh();
+
             var bloc = OurBloc();
             var partner = Other();
             MakeThemLikeUs(partner.id);
-            BlocSystem.InviteBy(state, state.playerCountryId, partner.id);
+            Assert.IsTrue(BlocSystem.InviteBy(state, state.playerCountryId, partner.id),
+                "the fixture's partner declined, so there was no bloc to pay for");
+            Assert.AreEqual(2, bloc.memberIds.Count, "the bloc never reached two members");
 
-            state.politicalCapital = GameState.PoliticalCapitalCap;
-            float before = state.politicalCapital;
+            // Both runs start from the same point, below the cap so a credit has
+            // somewhere to go and cannot mask the debit.
+            float start = GameState.PoliticalCapitalCap * 0.5f;
+            control.state.politicalCapital = start;
+            state.politicalCapital = start;
 
+            control.turns.EndMonth();
             turns.EndMonth();
 
-            Assert.Less(state.politicalCapital, before,
+            Assert.Less(state.politicalCapital, control.state.politicalCapital,
                 "Holding a bloc of governments together cost the leader nothing. A free "
                 + "bloc is a free alliance, which is the thing this codebase keeps deleting.");
         }

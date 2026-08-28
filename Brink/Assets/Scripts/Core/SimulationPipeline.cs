@@ -38,9 +38,21 @@ namespace Brink.Core
             turns.ResolveMonth += AcquisitionSystem.MonthlyDeliveries;
             turns.ResolveMonth += AcquisitionSystem.MonthlyUpkeep;
             turns.ResolveMonth += EconomySystem.MonthlyUpdate;
+
+            // Straight after the economy, never before it: the debt is serviced
+            // against the income that month actually produced, and the deficit
+            // that finances itself into more debt has to be the *final* balance
+            // rather than a mid-month figure.
+            turns.ResolveMonth += FiscalSystem.MonthlyUpdate;
             turns.ResolveMonth += IndustrialSystem.MonthlyUpdate;
             turns.ResolveMonth += EconomySystem.AgeSanctions;
             turns.ResolveMonth += IntelligenceSystem.MonthlyCollection;
+
+            // **After collection**, so an assessment delivered this month is
+            // graded on the access the service actually has this month rather
+            // than last month's. The grade is the whole product: a judgement
+            // without one is just an opinion.
+            turns.ResolveMonth += IntelProductSystem.MonthlyUpdate;
             turns.ResolveMonth += IntelligenceSystem.MonthlyDecay;
             turns.ResolveMonth += AgentSystem.MonthlyUpdate;
             turns.ResolveMonth += DiplomacySystem.MonthlyUpdate;

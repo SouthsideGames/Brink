@@ -63,6 +63,18 @@ namespace Brink.Core
     /// </summary>
     public static class ActionCatalog
     {
+        /// <summary>
+        /// Any network at all, uncompromised. A commissioned assessment needs
+        /// collection but not the deep access a personal approach does — the
+        /// grade it comes back with is what thin reporting costs.
+        /// </summary>
+        static bool AnyNetwork(GameState state)
+        {
+            foreach (var network in state.networks)
+                if (network.ownerId == state.playerCountryId && !network.compromised) return true;
+            return false;
+        }
+
         public static List<ActionEntry> All(GameState state)
         {
             var entries = new List<ActionEntry>();
@@ -176,6 +188,43 @@ namespace Brink.Core
                 "New trade builds dependence — theirs on us, and ours on them.",
                 verbs: new[] { nameof(GameController.ProposeTrade), nameof(GameController.WithdrawFromTrade) });
 
+            // ---------- fiscal statecraft ----------
+
+            Add(Pillar.Economy, "ECONOMY", "Set the tax rate", "2 PC",
+                "What share of the economy the state takes. More revenue now against growth, "
+                + "approval and what people can afford.",
+                verbs: new[] { nameof(GameController.SetTaxRate) });
+            Add(Pillar.Economy, "ECONOMY", "Set budget posture", "2 CP + monthly",
+                "Balanced, Austerity or Expansionary. A standing choice, paid for every month "
+                + "it is held: austerity buys solvency with living standards and unrest, "
+                + "expansion the reverse.",
+                verbs: new[] { nameof(GameController.SetBudgetPosture) });
+            Add(Pillar.Economy, "ECONOMY", "Issue sovereign debt", "1 CP",
+                "Money now, serviced every month forever, and the standing falls the moment "
+                + "you ask. What it costs depends on what lenders already think of us.",
+                FiscalSystem.CanIssueDebt(state, state.playerCountryId, out string debtBlock),
+                debtBlock,
+                verbs: new[] { nameof(GameController.IssueSovereignDebt) });
+            Add(Pillar.Economy, "ECONOMY", "Restructure the debt", "4 PC",
+                "Write half of it off. Effective, and every state holding our paper remembers "
+                + "for five years.",
+                player.fiscal.sovereignDebt > 0f, "We carry no debt to restructure.",
+                verbs: new[] { nameof(GameController.RestructureDebt) });
+            Add(Pillar.Economy, "ECONOMY", "Subsidise a sector", "1 CP + monthly treasury",
+                "Hold one sector's functioning up for as long as it is paid for. It fades "
+                + "without renewal.",
+                player.resources.treasury >= FiscalSystem.SubsidyTreasury,
+                "The treasury cannot cover a subsidy.",
+                verbs: new[] { nameof(GameController.SubsidiseSector) });
+            Add(Pillar.Economy, "ECONOMY", "Build strategic reserves", "1 CP + treasury",
+                "Energy, materials or grain put by. Raises the floor a blockade or a sanctions "
+                + "regime can grind us down to — and it depletes while doing it.",
+                player.resources.treasury
+                    >= FiscalSystem.ReserveOrderPoints * FiscalSystem.ReserveCostPerPoint,
+                "The treasury cannot cover a reserve order.",
+                verbs: new[] { nameof(GameController.BuildReserves),
+                               nameof(GameController.ReleaseReserves) });
+
             Add(Pillar.Economy, "ECONOMY", "Invest in a sector", "2 CP + monthly treasury",
                 "Repair, expand or modernise one of the seven sectors. Years of money now for "
                 + "capacity later, and the treasury has to carry it every month or the work stops.",
@@ -197,6 +246,22 @@ namespace Brink.Core
             Add(Pillar.Intelligence, "INTELLIGENCE", "Run a covert operation", "2 CP",
                 "Sabotage, influence or theft. Exposure costs standing with everyone.",
                 verbs: new[] { nameof(GameController.RunCovertOperation) });
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Commission an assessment",
+                $"{IntelProductSystem.CommissionCost} CP",
+                "Set the service one question about one state — what they are building toward, "
+                + "whether they will honour a pact, how they read us. Months of work, and the "
+                + "answer carries a confidence grade because it can be wrong.",
+                deepNetwork || AnyNetwork(state),
+                "No network anywhere. Analysis is a product of collection, not a substitute.",
+                verbs: new[] { nameof(GameController.CommissionEstimate) });
+
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Mole hunt",
+                $"{IntelligenceSystem.MoleHuntCost} CP",
+                "Search our own service for a foreign one. A hunt that finds nothing still "
+                + "investigated people: it costs elite cohesion and the standing of whoever it "
+                + "fell on, so asking is never free.",
+                verbs: new[] { nameof(GameController.MoleHunt) });
+
             Add(Pillar.Intelligence, "INTELLIGENCE", "Counterintelligence sweep", "1 CP",
                 "Harden the state against penetration.",
                 verbs: new[] { nameof(GameController.StrengthenCounterIntelligence) });

@@ -672,7 +672,15 @@ namespace Brink.Tests
             Assert.AreEqual(state.administrationsServed, loaded.administrationsServed);
         }
 
-        [Test]
+        // Two 240-month runs of the *full* pipeline plus two whole-world save
+        // serialisations, against Unity's 180s default per-test timeout. The
+        // cost is expected: this fixture was one of the eight converted from a
+        // hand-wired subset to `SimulationPipeline`, which is the whole point of
+        // it — sixteen AI governments now actually deliberate for forty years of
+        // simulated time. Raised rather than shortened, because "two decades" is
+        // the claim; trimming the horizon would weaken the invariant to fit the
+        // clock.
+        [Test, Timeout(600000)]
         public void LongRun_RemainsStableAndDeterministic()
         {
             GameState Run(int seed)

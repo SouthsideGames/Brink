@@ -106,6 +106,7 @@ namespace Brink.Core
                 ConsiderDetente(state, ai, country, rng);
                 ConsiderResearch(state, ai, country, rng);
                 ConsiderCoalition(state, ai, country, rng);
+                ManageTheBooks(state, ai, country, rng);
             }
         }
 
@@ -1511,6 +1512,81 @@ namespace Brink.Core
 
             var chosen = PreferredInstrument(state, country);
             if (chosen.HasValue) EndgameSystem.PrepareBy(state, country.id, chosen.Value);
+        }
+
+        /// <summary>
+        /// Public finance, run from the desk (spec 02 §9).
+        ///
+        /// **Outside the objective budget, deliberately** — the `ConsiderDetente`
+        /// and routine-restocking precedent. Funding the state is governance, not
+        /// a strategy competing with starting a war for this month's actions; put
+        /// it in the action cut and it goes silent for thirty years the moment
+        /// the world gets busy, which is exactly how no foreign government
+        /// ordered equipment for an entire measured decade.
+        ///
+        /// Deliberately dull. A government borrows when it is running out of
+        /// money, retires debt and lays in reserves when it is not, and tightens
+        /// or loosens the budget according to whether the books or the public are
+        /// the more pressing problem. Nothing here is a clever play; the point is
+        /// that the AI pays the same prices the operator does.
+        /// </summary>
+        static void ManageTheBooks(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            var fiscal = country.fiscal;
+            bool broke = country.resources.treasury < DiscretionaryReserve;
+            bool flush = country.resources.treasury > DiscretionaryReserve * 6f;
+
+            // Borrow before the lights go out, not after: research, procurement
+            // and every strategic instrument are treasury-gated, and a state that
+            // spends its last coin can fund nothing with a lead time.
+            if (broke && rng.NextDouble() < 0.35
+                && FiscalSystem.CanIssueDebt(state, country.id, out _))
+            {
+                FiscalSystem.IssueSovereignDebtBy(state, country.id);
+                return;
+            }
+
+            // Debt that has run away gets written down, at the same reputational
+            // price the operator pays for it.
+            if (FiscalSystem.DebtToGdp(country) > 150f && fiscal.creditStanding < 30f
+                && !fiscal.HasRestructured && rng.NextDouble() < 0.06)
+            {
+                FiscalSystem.RestructureDebtBy(state, country.id);
+                return;
+            }
+
+            // Lay in what a blockade would take away, and only what this country
+            // is actually short of — an energy-rich state stockpiling energy is
+            // the sort of busywork that reads as the AI not understanding itself.
+            if (flush && rng.NextDouble() < 0.10)
+            {
+                var resources = country.resources;
+                TradeFocus wanted =
+                    resources.foodSecurity < resources.energy
+                    && resources.foodSecurity < resources.strategicMaterials ? TradeFocus.Food
+                    : resources.energy <= resources.strategicMaterials ? TradeFocus.Energy
+                    : TradeFocus.Materials;
+                FiscalSystem.BuildReservesBy(state, country.id, wanted);
+                return;
+            }
+
+            // The standing choice, reviewed rarely. A government that re-plans
+            // its budget every month reads as noise, the same reason
+            // `AIStrategy` holds a path for thirty months.
+            if (rng.NextDouble() >= 0.04) return;
+
+            bool booksInTrouble = FiscalSystem.DebtToGdp(country) > 95f
+                                  || fiscal.creditStanding < 40f;
+            bool publicInTrouble = country.livingStandards < 38f || country.socialUnrest > 55f;
+
+            BudgetPosture wantedPosture =
+                booksInTrouble && !publicInTrouble ? BudgetPosture.Austerity
+                : publicInTrouble && !booksInTrouble ? BudgetPosture.Expansionary
+                : BudgetPosture.Balanced;
+
+            if (wantedPosture != fiscal.budgetPosture
+                && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Budget posture"))
+                FiscalSystem.SetBudgetPostureBy(state, country.id, wantedPosture);
         }
 
         /// <summary>

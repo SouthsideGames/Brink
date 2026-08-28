@@ -258,6 +258,39 @@ namespace Brink.Core
             }
         }
 
+        /// <summary>
+        /// Take a capability the target holds and we do not (spec 03 §6).
+        ///
+        /// Actor-generic, and it arrives `Stolen` — 25 maturity against the 70 a
+        /// programme of our own delivers, which is the existing rule that stolen
+        /// knowledge is shallower. Returns the capability taken, or null when
+        /// there was nothing worth taking.
+        ///
+        /// Deliberately cannot take what we could not have built: the industrial
+        /// and pillar floors still apply, so espionage is a shortcut through the
+        /// *years*, never through the prerequisites.
+        /// </summary>
+        public static string StealCapability(GameState state, string thiefId, string targetId)
+        {
+            var thief = state.FindCountry(thiefId);
+            var target = state.FindCountry(targetId);
+            if (thief == null || target == null) return null;
+
+            foreach (var held in target.technology.capabilities)
+            {
+                if (thief.technology.Has(held.capabilityId)) continue;
+
+                var definition = CapabilityCatalog.Find(held.capabilityId);
+                if (definition == null) continue;
+                if (thief.resources.industrialCapacity < definition.requiredIndustry) continue;
+                if (thief.pillars.Get(definition.pillar) < definition.requiredPillar) continue;
+
+                Grant(state, thief, held.capabilityId, CapabilitySource.Stolen);
+                return definition.name;
+            }
+            return null;
+        }
+
         static void Grant(GameState state, CountryState country, string capabilityId, CapabilitySource source)
         {
             var definition = CapabilityCatalog.Find(capabilityId);

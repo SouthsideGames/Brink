@@ -392,6 +392,151 @@ namespace Brink.Core
             return ok;
         }
 
+        // ---------- fiscal statecraft (spec 02 §9, spec 25 Tranche A) ----------
+        //
+        // Each of these spends the operator's resource, delegates to the
+        // actor-generic verb, and records the initiative. That last line is not
+        // optional: a pillar whose actions do not call `RecordInitiative` grades
+        // *worse than doing nothing* (spec 07).
+
+        /// <summary>Set the share of the economy the state takes.</summary>
+        public bool SetTaxRate(float rate)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (State.PlayerCountry == null) return false;
+            if (System.Math.Abs(rate - State.PlayerCountry.fiscal.taxRate) < 0.5f) return false;
+
+            if (!GovernmentSystem.SpendPoliticalCapital(State, FiscalSystem.SetTaxRateCost, "Set tax rate"))
+                return false;
+
+            bool ok = FiscalSystem.SetTaxRateBy(State, State.playerCountryId, rate);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Tax rate set");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Balanced, Austerity or Expansionary. A standing choice.</summary>
+        public bool SetBudgetPosture(Data.BudgetPosture posture)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (State.PlayerCountry == null || State.PlayerCountry.fiscal.budgetPosture == posture)
+                return false;
+
+            if (!Turns.SpendCommandPoints(FiscalSystem.SetBudgetPostureCost, "Set budget posture"))
+                return false;
+
+            bool ok = FiscalSystem.SetBudgetPostureBy(State, State.playerCountryId, posture);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 12, "Budget posture set");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Raise money on the state's paper. Serviced forever after.</summary>
+        public bool IssueSovereignDebt()
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (!FiscalSystem.CanIssueDebt(State, State.playerCountryId, out string reason))
+            {
+                GameLog.Warn("FISCAL", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(FiscalSystem.IssueDebtCost, "Issue sovereign debt")) return false;
+
+            bool ok = FiscalSystem.IssueSovereignDebtBy(State, State.playerCountryId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Sovereign debt issued");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Prop one sector up for as long as it is paid for.</summary>
+        public bool SubsidiseSector(EconomicSector sector)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (State.PlayerCountry.resources.treasury < FiscalSystem.SubsidyTreasury)
+            {
+                GameLog.Warn("FISCAL", "The treasury cannot cover a subsidy.");
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(FiscalSystem.SubsidiseCost, "Subsidise a sector")) return false;
+
+            bool ok = FiscalSystem.SubsidiseSectorBy(State, State.playerCountryId, sector);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Sector subsidised");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Buy down the bite of a future blockade or sanctions regime.</summary>
+        public bool BuildReserves(Data.TradeFocus resource)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            float cost = FiscalSystem.ReserveOrderPoints * FiscalSystem.ReserveCostPerPoint;
+            if (State.PlayerCountry.resources.treasury < cost)
+            {
+                GameLog.Warn("FISCAL", $"The treasury cannot cover a reserve order ({cost:F0}).");
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(FiscalSystem.ReservesCost, "Build strategic reserves")) return false;
+
+            bool ok = FiscalSystem.BuildReservesBy(State, State.playerCountryId, resource);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Reserves built");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Spend the buffer now rather than holding it.</summary>
+        public bool ReleaseReserves(Data.TradeFocus resource)
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (!Turns.SpendCommandPoints(FiscalSystem.ReservesCost, "Release strategic reserves")) return false;
+
+            bool ok = FiscalSystem.ReleaseReservesBy(State, State.playerCountryId, resource);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 8, "Reserves released");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Write the debt down. Remembered for five years.</summary>
+        public bool RestructureDebt()
+        {
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            if (State.PlayerCountry.fiscal.sovereignDebt <= 0f) return false;
+            if (!GovernmentSystem.SpendPoliticalCapital(State, FiscalSystem.RestructureCost, "Restructure debt"))
+                return false;
+
+            bool ok = FiscalSystem.RestructureDebtBy(State, State.playerCountryId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 16, "Debt restructured");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool RunCovertOperation(string targetId, CovertOperation operation, float deceptionBias = 1f,
             Data.IntelDomain deceptionDomain = Data.IntelDomain.Military)
         {
@@ -399,6 +544,46 @@ namespace Brink.Core
             bool ok = IntelligenceSystem.RunCovertOperation(State, Turns, targetId, operation, deceptionBias, deceptionDomain);
             SaveSystem.Save(State, AutosaveSlot); // save regardless: CP was spent, consequences applied
             return ok;
+        }
+
+        /// <summary>
+        /// Set the service a question (spec 03 §10). Months of work, and the
+        /// answer comes back with a grade — and can be wrong.
+        /// </summary>
+        public bool CommissionEstimate(string targetId, Data.EstimateQuestion question)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            if (!IntelProductSystem.CanCommission(State, State.playerCountryId, targetId,
+                    question, out string reason))
+            {
+                GameLog.Warn("INTEL", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(IntelProductSystem.CommissionCost,
+                    $"Commission {question} assessment")) return false;
+
+            var product = IntelProductSystem.CommissionBy(
+                State, State.playerCountryId, targetId, question);
+            if (product != null)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Assessment commissioned");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return product != null;
+        }
+
+        /// <summary>Hunt for a foreign service inside our own (spec 03 §7c).</summary>
+        public bool MoleHunt()
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            if (!Turns.SpendCommandPoints(IntelligenceSystem.MoleHuntCost, "Mole hunt")) return false;
+
+            bool found = IntelligenceSystem.MoleHuntBy(State, State.playerCountryId);
+            ProgressionSystem.RecordInitiative(State);
+            ProgressionSystem.AwardXP(State, found ? 18 : 6, "Mole hunt");
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return found;
         }
 
         public bool StrengthenCounterIntelligence()

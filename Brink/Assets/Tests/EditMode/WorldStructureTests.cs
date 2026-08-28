@@ -122,7 +122,12 @@ namespace Brink.Tests
                 "whole catalogue inside three years and repeats forever after.");
         }
 
-        [Test]
+        // Three 240-month full-pipeline worlds — 60 simulated years — against
+        // Unity's 180s default. It sat just under the line and now sits just
+        // over it, which makes it a coin flip rather than a test; the horizon is
+        // the claim ("checked across many worlds and a long one"), so raise the
+        // clock rather than trim the evidence.
+        [Test, Timeout(600000)]
         public void EveryEventIsReachable()
         {
             // An event whose eligibility can never be true is content that does
@@ -422,15 +427,171 @@ namespace Brink.Tests
                 "or a restrictive posture would be free order.");
         }
 
-        [Test]
+        // 240 months, plus a 120-month relief run per collapsed country.
+        [Test, Timeout(600000)]
         public void NoSocialValueRunsAwayInEitherDirection()
         {
             var world = Run(1212, 240);
+
+            // Count what is actually shooting on a country's own ground, so the
+            // message can distinguish "a rising is dividing them" from "nothing
+            // is, and the drain is somewhere else". The first read of this
+            // failure blamed a separatist rising; the fix changed the result by
+            // literally nothing, because there is no rising here at all.
+            int RisingsOn(CountryState c)
+            {
+                int n = 0;
+                foreach (var insurgency in world.insurgencies)
+                {
+                    var location = world.FindLocation(insurgency.locationId);
+                    if (location != null && location.ownerId == c.id) n++;
+                }
+                return n;
+            }
+
+            // The message carries the inputs, not just the verdict. Every one of
+            // these values is a term in `GovernmentSystem`'s social tick, so a
+            // failure here names the condition that pinned it instead of leaving
+            // the next reader to re-derive a twenty-year run by hand. Same
+            // reasoning as the after-action reports: an outcome the game cannot
+            // explain is indistinguishable from unfair dice.
+            string Why(CountryState c)
+                => $"\n  {c.id}: standards {c.livingStandards:F1}, unrest {c.socialUnrest:F1}, "
+                 + $"grievance {c.publicGrievance:F1}, unity {c.nationalUnity:F1}"
+                 + $"\n  economy: inflation {c.economy.inflation:F1}, unemployment {c.economy.unemployment:F1}, "
+                 + $"index {c.economy.marketIndex:F1}, growth {c.economy.growthRate:F2}"
+                 + $"\n  pressure: war exhaustion {c.warExhaustion:F1}, "
+                 + $"food {c.resources.foodSecurity:F1}/{c.resources.foodEndowment:F1}, "
+                 + $"energy {c.resources.energy:F1}, opposition {c.government.oppositionCase:F1}, "
+                 + $"posture {c.government.civicPosture}"
+                 // The unity target's own terms, so a pinned value can be told
+                 // apart from a low target. Target is
+                 // 42 + gov*0.20 + stability*0.25 - warExhaustion*0.20
+                 //    - separatist drag + posture shift + messaging*0.16,
+                 // so anything below ~36 with no rising means something is
+                 // subtracting the value faster than 0.04/mo can pull it back.
+                 + $"\n  unity terms: stability {c.stability:F1}, gov pillar {c.pillars.government:F1}, "
+                 + $"messaging {c.government.publicMessaging:F1}, "
+                 + $"emergency {c.government.emergencyPowers}, "
+                 + $"civil conflict {c.government.inCivilConflict}, "
+                 + $"coups {c.government.coupsExperienced}, risings {RisingsOn(c)}, "
+                 + $"mobilized {c.endgames.totalMobilization}";
+
+            // **A ceiling is not a ratchet.** These three are target-driven, so a
+            // country whose market has collapsed, whose people are out of work
+            // and who is fighting a rising *should* read unrest 100 — that is the
+            // model describing a real condition, and forbidding it would be
+            // forbidding the crisis regime the economy was given on purpose.
+            //
+            // What must never happen is the value being unable to come back when
+            // the conditions lift. So a country still under the conditions is
+            // exempt from the ceiling check and tested for *recovery* below
+            // instead, which is what "runs away" actually means and what every
+            // bug this test has caught actually was.
+            // "Under conditions the relief run will lift", not "economically
+            // collapsed". The first version tested only the market index, and a
+            // country turned up pinned with a *healthy* economy — index 65.8,
+            // growth +0.61 — held there by war exhaustion at 100 and an ongoing
+            // civil conflict. Ruin does not have to arrive through the economy,
+            // and an exemption that only knows one route to it will keep
+            // reporting the others as ratchets.
+            bool UnderRuin(CountryState c)
+                => c.economy.marketIndex < 20f
+                   || c.warExhaustion > 70f
+                   || c.government.inCivilConflict;
+
+            var collapsed = new List<CountryState>();
             foreach (var country in world.countries)
             {
-                Assert.Less(country.livingStandards, 99.5f, $"{country.id} living standards pinned high.");
-                Assert.Less(country.socialUnrest, 99.5f, $"{country.id} unrest pinned high.");
-                Assert.Less(country.publicGrievance, 99.5f, $"{country.id} grievance pinned high.");
+                if (UnderRuin(country)) { collapsed.Add(country); continue; }
+
+                Assert.Less(country.livingStandards, 99.5f,
+                    $"{country.id} living standards pinned high." + Why(country));
+                Assert.Less(country.socialUnrest, 99.5f,
+                    $"{country.id} unrest pinned high." + Why(country));
+                Assert.Less(country.publicGrievance, 99.5f,
+                    $"{country.id} grievance pinned high." + Why(country));
+            }
+
+            // Lift what was doing the damage and the country has to climb out.
+            //
+            // This is the assertion with teeth, and all three bugs found the day
+            // it was written would fail it: sector capacity reverting to nothing
+            // (`SectorAnchor`), the stagnation drag running national economic
+            // capability to zero (`StagnationFloor`), and the insurgency's flat
+            // monthly subtraction on a drifting `nationalUnity` (`UnityDrag`).
+            // Each of those made a collapse permanent rather than expensive, and
+            // none of them would have been visible to a ceiling check on a
+            // healthy world.
+            foreach (var country in collapsed)
+            {
+                float unrestBefore = country.socialUnrest;
+                float standardsBefore = country.livingStandards;
+                float grievanceBefore = country.publicGrievance;
+
+                world.insurgencies.RemoveAll(i =>
+                {
+                    var location = world.FindLocation(i.locationId);
+                    return location != null && location.ownerId == country.id;
+                });
+
+                // NARROW PIPELINE: the recovery mechanics only — economy, public
+                // finance and the social/political layer. Everything that
+                // *generates* new adversity is omitted: crises and foreign
+                // crises, the AI, insurgency, regime change, confrontations.
+                //
+                // **The isolation is the instrument**, exactly as in
+                // `ForeignCrisisTests.RunForeignCrisesOnly`. Two rounds of
+                // trying to hold a live world off a wrecked country failed for
+                // the same reason each time: this world is hot, a ruined state
+                // is a target, and something new always arrives. Clearing
+                // sanctions and wars each month left India pinned by *foreign*
+                // crises — which never touch `activeCrises` at all, because
+                // `ForeignCrisisSystem` applies them directly — and chasing each
+                // new source in turn would end with every system suppressed and
+                // no statement about anything.
+                //
+                // The claim being tested is narrow and worth stating exactly:
+                // *given no new adversity, do the recovery mechanics climb a
+                // country out?* All three bugs found the day this was written
+                // live in these systems and still fail it — `SectorAnchor`,
+                // `StagnationFloor`, and grievance feeding on its own shadow —
+                // so the omission does not weaken what it detects.
+                var relief = new TurnManager(world);
+                relief.ResolveMonth += EconomySystem.MonthlyUpdate;
+                relief.ResolveMonth += FiscalSystem.MonthlyUpdate;
+                relief.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+
+                world.sanctions.RemoveAll(s => s.targetId == country.id);
+                foreach (var confrontation in world.confrontations)
+                    if (confrontation.Involves(country.id)) confrontation.resolved = true;
+                country.warExhaustion = 0f;
+                country.government.inCivilConflict = false;
+                country.government.civilConflictMonthsRemaining = 0;
+
+                for (int month = 0; month < 120; month++) relief.EndMonth();
+
+                Assert.Less(country.socialUnrest, unrestBefore - 5f,
+                    $"{country.id}: ten years after every sanction, war and rising was lifted, "
+                    + $"unrest had not come down ({unrestBefore:F1} to {country.socialUnrest:F1}). "
+                    + "A collapse the world cannot climb out of is a ratchet with extra steps."
+                    + Why(country));
+                Assert.Greater(country.livingStandards, standardsBefore + 2f,
+                    $"{country.id}: living standards did not recover after every pressure was "
+                    + $"removed ({standardsBefore:F1} to {country.livingStandards:F1})."
+                    + Why(country));
+
+                // Grievance is the memory of hardship and is *meant* to fade on a
+                // decade scale rather than a quarterly one — so a decade is
+                // exactly the right window to insist it fades at all. It is also
+                // the value that actually failed here, and skipping the ceiling
+                // check for a ruined country would otherwise stop checking it
+                // entirely.
+                Assert.Less(country.publicGrievance, grievanceBefore - 2f,
+                    $"{country.id}: a decade after every pressure lifted, the memory of it had "
+                    + $"not faded at all ({grievanceBefore:F1} to {country.publicGrievance:F1}). "
+                    + "Grievance decays slowly by design; never is a ratchet."
+                    + Why(country));
             }
         }
 
