@@ -2019,7 +2019,7 @@ measured.
       No migration: empty `commitments` on an old save is *correct*, not merely
       blank — blocs that predate this genuinely carried none.
       **Not verified by a test run** — no Unity or C# compiler in the environment
-      this was written in. `MultilateralAllianceTests` (25 tests) is written and
+      this was written in. `MultilateralAllianceTests` (26 tests) is written and
       partitioned; run `bash Tools/run-suite.sh` before trusting any of it, and
       re-run `Report_MultiSeedBalance`: bloc pacts, the cascade and the new
       repudiation costs are all balance-relevant and none are measured.
