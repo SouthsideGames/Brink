@@ -86,3 +86,75 @@ leaves dissolves it.
 — an alignment with members is worth more to the world than another banner with
 one state under it — and otherwise the most capable unaligned diplomat founds one
 for 2 PC. A bloc with nobody in it after twelve months dissolves.
+
+## 4a. Commitments — the multilateral alliance (user decision, 2026-08-27)
+
+**This supersedes the original rule that a bloc carries no commitments.** That
+rule was written when a bloc was read in two places and it was right about what
+it protected: acceptance logic and the reputational cost of breaking a promise
+live in `Treaty`, and duplicating them would have been a second treaty system.
+
+What it could not express is what an alliance actually is. A mutual defence pact
+between eight states is not twenty-eight bilateral treaties — it is one signature
+that obliges you to everybody at once. Building NATO out of `Treaty` meant N²
+agreements *and* fought `PactAnxiety`, which makes every pact past the fourth
+harder to sign. The multilateral layer had to live somewhere, and this object
+already had a leader, a membership, a cohesion figure and a way in and out.
+
+The division of labour is now:
+
+| | `Treaty` | `Bloc` |
+|---|---|---|
+| Parties | exactly two | any number |
+| Terms | negotiated per clause, `ClauseSide` allows asymmetry | **uniform** — every member carries all of them |
+| Edited after signing | yes, via `DeepenTreatyBy` | **never** |
+| What it is | the bilateral bargain | the multilateral alliance |
+
+`Bloc.commitments` is a `List<TreatyCommitment>`; `Guarantees(commitment)` is the
+predicate. **Empty on an old save is correct rather than merely blank** — blocs
+that predate this genuinely carried no commitments, so they load as the
+declarations of alignment they were and no migration is owed.
+
+Three rules keep it from becoming a second treaty system:
+
+1. **Uniform, with no `ClauseSide`.** A bloc in which some members are guaranteed
+   and others only guarantee is not an alliance, it is a protectorate with extra
+   steps. Asymmetric bargains stay in `Treaty`, which is what `ClauseSide` is for.
+2. **Fixed at founding, never amended.** A leader who could add a defence
+   obligation later would be binding members to something they never agreed to.
+   Widening the terms means founding a new bloc — the same principle
+   `DeepenTreatyBy` follows by making every addition answer to acceptance again.
+3. **Joining is priced on the terms.** `JoinWillingness` subtracts
+   `DiplomacySystem.BurdenOf(commitment) × 0.45` per term, through the same
+   function the bilateral acceptance logic uses, so the two routes to an alliance
+   cannot disagree about what a promise is worth. It is divided down because a
+   burden owed to a group is shared with that group — which is the honest reason
+   multilateral alliances are easier to build than N bilateral ones, and the whole
+   reason to have this object. A defence bloc then adds back
+   `min(24, (members − 1) × 6)`: the same terms are worth more the more states
+   already carry them.
+
+`Bloc.repudiatedBy` records anyone expelled for refusing a call (`BlocSystem.Expel`,
+−30 to any later `JoinWillingness`). Distinct from `LeaveBy` because leaving is a
+policy and being expelled for refusing a call is a disgrace.
+
+### What it is worth, and what it costs
+
+The alliance is invoked through `AllianceSystem.GuarantorsOf` — see **spec 04 §8**
+for the call-in, the cascade, and what honouring and repudiating cost. Two
+consequences worth naming here:
+
+- **`PactAnxiety` counts bloc guarantees**, or the multilateral route would pay
+  no encirclement anxiety and strictly dominate the bilateral one.
+- **Honouring is seen by the whole room**: cohesion +5 and trust +7 with every
+  other member. Repudiating is cohesion −14 and expulsion.
+
+The player founds one of three shapes from DIPLOMACY — **defence pact**
+(`MutualDefense`), **economic union** (`TradePreference`), or **alignment** (no
+terms, the original behaviour). Three buttons rather than a clause editor: what a
+bloc obliges its members to is the decision, and it is worth making it legible
+rather than configurable. `AISystem`/`ConsiderBlocs` founds a defence pact when the
+founder has somebody to be frightened of and an economic union otherwise, plus
+`IntelligenceSharing` at intelligence ≥ 60 — without which every foreign bloc
+would be a talking shop while the player's was an alliance, which is this
+codebase's most-repeated bug in a new coat.

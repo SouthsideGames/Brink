@@ -75,6 +75,13 @@ namespace Brink.UI.Views
                               + $"   COHESION {bloc.cohesion:F0}"
                               + $"   {bloc.memberIds.Count} STATE(S)");
 
+                // What the bloc actually obliges its members to. Without this a
+                // defence alliance and a talking shop read identically, and the
+                // operator cannot tell which of the world's sides would fight.
+                sb.AppendLine(bloc.commitments.Count == 0
+                    ? "   TERMS: none — an alignment, not an alliance."
+                    : "   TERMS: " + BlocSystem.TermsLine(bloc));
+
                 var names = new System.Text.StringBuilder();
                 foreach (string memberId in bloc.memberIds)
                 {
@@ -96,10 +103,41 @@ namespace Brink.UI.Views
 
             if (ours == null)
             {
-                var found = AddButton(row, $"FOUND A BLOC [{BlocSystem.FoundCost} CP]", "primary",
-                    () => { GameController.Instance.FoundBloc(null); Refresh(); });
-                if (!BlocSystem.CanFound(state, player.id, out string blocked))
-                    Block(found, blocked);
+                // Three shapes rather than a clause editor. What a bloc obliges
+                // its members to is fixed at founding — a leader who could add a
+                // defence obligation later would be binding members to something
+                // they never agreed to — so this is the decision, and it is worth
+                // making it legible rather than configurable.
+                bool canFound = BlocSystem.CanFound(state, player.id, out string blocked);
+
+                var pact = AddButton(row, $"FOUND A DEFENCE PACT [{BlocSystem.FoundCost} CP]",
+                    "primary", () =>
+                    {
+                        GameController.Instance.FoundBloc(null,
+                            new System.Collections.Generic.List<TreatyCommitment>
+                            { TreatyCommitment.MutualDefense });
+                        Refresh();
+                    });
+                if (!canFound) Block(pact, blocked);
+
+                var union = AddButton(row, $"FOUND AN ECONOMIC UNION [{BlocSystem.FoundCost} CP]",
+                    null, () =>
+                    {
+                        GameController.Instance.FoundBloc(null,
+                            new System.Collections.Generic.List<TreatyCommitment>
+                            { TreatyCommitment.TradePreference });
+                        Refresh();
+                    });
+                if (!canFound) Block(union, blocked);
+
+                var understanding = AddButton(row, $"FOUND AN ALIGNMENT [{BlocSystem.FoundCost} CP]",
+                    null, () => { GameController.Instance.FoundBloc(null); Refresh(); });
+                if (!canFound) Block(understanding, blocked);
+
+                AddText("terminal-text-dim").text =
+                    " A DEFENCE PACT obliges every member to every other — one signature "
+                    + "instead of a treaty with each. It is harder to recruit into, and it "
+                    + "will be invoked. AN ALIGNMENT obliges nobody to anything.";
             }
             else
             {

@@ -1953,7 +1953,98 @@ Run `bash Tools/run-suite.sh` before trusting any of it, and re-run
 dragging the support target are all balance-relevant and none of them are
 measured.
 
+- [x] **Multi-party alliances, and the wars they cascade into** (specs 04 §8,
+      20 §4a, 01 §5b, 09 §8; user decisions 2026-08-27). Reported as three
+      questions — can we build NATO, do we get to choose when a pact is invoked,
+      can we fight a bloc — and the honest answers were *no*, *yes but it does
+      nothing*, and *the war can never widen*.
+      - **A bloc carries commitments now**, superseding `Data/Bloc.cs`'s own
+        "it carries no commitments" rule. That rule was right about what it
+        protected and wrong about what it excluded: `Treaty` is hard-coded
+        bilateral (`countryA`/`countryB`), so an eight-member alliance was
+        twenty-eight treaties *and* fought `PactAnxiety`, which penalises every
+        pact past the fourth. The division is now **`Treaty` = the bilateral
+        bargain** (negotiated per clause, `ClauseSide` allows asymmetry, amendable)
+        and **`Bloc` = the multilateral alliance** (uniform terms, fixed at
+        founding, never amended — a leader who could add a defence obligation
+        later would be binding members to something they never agreed to).
+        Joining is priced through the same `DiplomacySystem.BurdenOf` the
+        bilateral acceptance logic uses, so the two routes cannot disagree about
+        what a promise is worth.
+      - **`AllianceSystem.GuarantorsOf` is the one definition of who is obliged**,
+        reading treaties *and* blocs. The call-in, the UI roster and `PactAnxiety`
+        all go through it, because a guarantee the game honours and a guarantee
+        the game displays must be the same guarantee.
+      - **Honouring opens a real war.** It used to add the ally to a coalition and
+        stop — a strength multiplier on somebody else's defence — so the operator
+        was told they had entered a conflict with no front, no objective and no
+        order they could give. `ConfrontationSystem.BeginObligationBy` **bypasses
+        `MaxCommitment` and the settlement truce by design**: those gates stop a
+        state *choosing* more war than it can fight and have no business refusing
+        a war somebody else started. A ceiling that could block a call-in would
+        make the game forbid the operator from keeping their word. The cost stays
+        real but priced, through `TheatreSystem.FocusFactor` — the same "priced,
+        never gated" rule escalation and geography already follow.
+      - **It cascades.** `InvokeObligations` walked only the *defender's*
+        treaties, so an aggressor's own alliance was never called and a
+        bloc-versus-bloc war was impossible by construction. Entering a war *is*
+        an attack, so each entry invokes the newly-attacked party's guarantors —
+        three states and three states become one war between six, each government
+        deciding for itself. Terminates on finite pairs plus `obligationsInvoked`;
+        `MaxCascadeDepth = 4` is belt and braces. `ActiveCrisis.contextId` names
+        which war an obligation is about, because a cascade can put two in front
+        of the operator in one month.
+      - **Walking away costs more than a number.** The `-8 pillars.diplomacy` is
+        **removed** — the spying-exposure lesson, a capability hit with no
+        recovery path is a slow disqualification rather than a price. Replaced by
+        sanctions from everyone who was counting on us (severity scaled by their
+        closeness to the abandoned state), preferential trade withdrawn (the
+        clause, not the whole treaty — non-aggression between two states that no
+        longer trust each other is exactly the clause worth keeping), expulsion
+        with the id kept in `Bloc.repudiatedBy`, and threat perception +10 so the
+        AI's *own* rivalry reasoning can carry it to a war later. Nothing scripted.
+      - **`BelligerentRoster` + the MILITARY "THE WAR" panel** — derived never
+        stored, and belligerency is public while strength stays behind
+        `IntelReadout`, so it cannot become a back door around the fog rule. Rows
+        say *why* each state is in, offer `COMMAND THIS FRONT`, and a STILL OWED
+        line names who we would have to defend.
+      **Balance hole caught while writing it:** `PactAnxiety` walked
+      `state.treaties`, so a twelve-member defence bloc registered as **zero**
+      pacts — the multilateral route would have paid no encirclement anxiety at
+      all, strictly dominated the bilateral one, and let the operator quietly
+      collect the map again, which is the exact failure the world-heat work
+      closed. It counts `GuarantorsOf` now: **states lined up, not documents
+      signed.** A test asserts six bilateral pacts and one six-member bloc produce
+      the identical figure.
+      No migration: empty `commitments` on an old save is *correct*, not merely
+      blank — blocs that predate this genuinely carried none.
+      **Two defects a review bot caught on the PR, both real, both fixed:**
+      `BelligerentRoster.PartnersOf` walked our own fronts looking for coalitions
+      attached to them — which cannot reach the one case the panel exists for,
+      because honouring adds us to the coalition on the *original* war (between
+      our ally and their attacker, which does not involve us) and then opens a
+      separate front. The guest-coalition branch was unreachable **and carried a
+      comment claiming it handled exactly that case**; it iterates coalitions
+      directly now. And an obligation can be **overtaken before it is answered** —
+      the cascade leaves two open, answering the first dissolves the alliance
+      behind the second — so `ApplyPlayerDecision` returns false and rewrites the
+      `CrisisOption` in place rather than letting `Resolve` report "we have
+      entered the conflict" for a war that never opened. The option is edited
+      rather than the crisis removed because `LapseUnanswered` walks
+      `activeCrises` by index and removes as it goes.
+      **Not verified by a test run** — no Unity or C# compiler in the environment
+      this was written in. `MultilateralAllianceTests` (28 tests) is written and
+      partitioned; run `bash Tools/run-suite.sh` before trusting any of it, and
+      re-run `Report_MultiSeedBalance`: bloc pacts, the cascade and the new
+      repudiation costs are all balance-relevant and none are measured.
+
 Recommended next:
+- **Measure the cascade.** Bloc pacts plus the alliance cascade can produce
+  multi-belligerent wars the harness has never seen, and `MaxCommitment` no
+  longer caps a state's total fronts (only the ones it opens itself). Watch
+  `TheatreSystem.TotalCommitment` and the confrontation-months figure in
+  `Report_MultiSeedBalance` — the pinned **92 confrontation-months per unattended
+  decade** is the number to compare against.
 - **Run the suite.** Nine new test classes (`ActionIndexTests`, `InsurgencyTests`,
   `CouncilTests`, `OppositionTests`, `DisplacementTests`, `BlocTests`,
   `HoldTests`, `HistoryCatalogTests`, `DossierTests`) and five new monthly
