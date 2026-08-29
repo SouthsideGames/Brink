@@ -1093,20 +1093,27 @@ namespace Brink.Data
                 eco.unemployment = Roll(4f, 9f);
                 eco.debtToGdp = Roll(28f, 75f);
                 eco.confidence = Roll(45f, 68f);
+
+                // The authored ratio is the *input*; the stock is what the
+                // simulation now works from. Seeded here rather than rolled
+                // separately so the two cannot disagree at month zero, and so
+                // this consumes no additional random draw — the standard world
+                // must stay bit-identical to the one every balance figure was
+                // measured on (`WorldSizeTests`).
+                country.fiscal.sovereignDebt = eco.gdp * eco.debtToGdp / 100f;
+                country.fiscal.creditStanding = Clamp(
+                    78f - Math.Max(0f, eco.debtToGdp - 55f) * 0.55f + eco.growthRate * 2.2f);
                 eco.marketIndex = 100f;
                 eco.RecordMarket();
 
                 foreach (EconomicSector sector in Enum.GetValues(typeof(EconomicSector)))
                 {
-                    float baseOutput;
-                    switch (sector)
-                    {
-                        case EconomicSector.Energy: baseOutput = country.resources.energy; break;
-                        case EconomicSector.Agriculture: baseOutput = country.resources.foodSecurity; break;
-                        case EconomicSector.Industry: baseOutput = country.resources.industrialCapacity; break;
-                        case EconomicSector.Defense: baseOutput = country.pillars.military * 0.8f; break;
-                        default: baseOutput = country.pillars.economy; break;
-                    }
+                    // Shared with `EconomySystem.SectorAnchor`, which is the level
+                    // capacity reverts toward every month. The two must be one
+                    // definition: a world that generates at one level and reverts
+                    // to another does not look like a bug, it looks like slow
+                    // economic decline.
+                    float baseOutput = Brink.Core.EconomySystem.SectorAnchor(country, sector);
                     eco.sectors.Add(new SectorState
                     {
                         sector = sector,

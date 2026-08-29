@@ -41,6 +41,7 @@ namespace Brink.UI.Views
             AddAuthorityBadge(state, Pillar.Economy);
             AddCabinetAdvice(state, Pillar.Economy);
             BuildMacro(state, player);
+            BuildFiscal(state, player);
             BuildMarketIndex(state, player);
             BuildSectors(player);
             BuildTrade(state);
@@ -68,6 +69,92 @@ namespace Brink.UI.Views
             if (blowback > 0f) sb.AppendLine($"  SELF-INFLICTED BLOWBACK:  {blowback:F2}");
             if (eco.InRecession) sb.AppendLine("  ** ECONOMY IN CONTRACTION **");
             text.text = sb.ToString();
+        }
+
+        /// <summary>
+        /// Public finance (spec 02 §9). The readouts come first and the orders
+        /// after, because the whole point of the layer is that borrowing is a
+        /// trade — an operator who cannot see the service bill and the standing
+        /// is being asked to guess.
+        /// </summary>
+        void BuildFiscal(GameState state, CountryState player)
+        {
+            var fiscal = player.fiscal;
+
+            // A figure, not prose: it is built to an exact grid, so the text
+            // policy's wrapper must leave it alone.
+            var text = AddFigure("terminal-text-bright");
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("PUBLIC FINANCE", W));
+            sb.AppendLine(" " + AsciiChart.Row("TAX RATE", $"{fiscal.taxRate:F0}%", W - 2));
+            sb.AppendLine(" " + AsciiChart.Row("BUDGET POSTURE",
+                FiscalSystem.PostureText(fiscal.budgetPosture), W - 2));
+            sb.AppendLine(" " + AsciiChart.Row("SOVEREIGN DEBT",
+                $"{fiscal.sovereignDebt:F0} ({FiscalSystem.DebtToGdp(player):F0}% GDP)", W - 2));
+            sb.AppendLine(" " + AsciiChart.Row("DEBT SERVICE",
+                $"{FiscalSystem.MonthlyDebtService(player):F0}/MO", W - 2));
+            sb.AppendLine(" " + AsciiChart.Row("CREDIT STANDING",
+                $"{FiscalSystem.CreditText(fiscal.creditStanding)} ({fiscal.creditStanding:F0})", W - 2));
+
+            if (fiscal.energyReserve > 0f || fiscal.materialsReserve > 0f || fiscal.foodReserve > 0f)
+                sb.AppendLine(" " + AsciiChart.Row("RESERVES (ENR/MAT/FOOD)",
+                    $"{fiscal.energyReserve:F0} / {fiscal.materialsReserve:F0} / {fiscal.foodReserve:F0}",
+                    W - 2));
+
+            if (fiscal.HasRestructured)
+                sb.AppendLine($"  ** DEBT RESTRUCTURED — remembered for "
+                              + $"{fiscal.restructuringMemoryMonths} more months **");
+
+            text.text = sb.ToString();
+
+            // ---- orders ----
+            var postures = MakeRow();
+            foreach (BudgetPosture posture in System.Enum.GetValues(typeof(BudgetPosture)))
+            {
+                var captured = posture;
+                var button = AddButton(postures,
+                    FiscalSystem.PostureText(posture) + $" [{FiscalSystem.SetBudgetPostureCost} CP]",
+                    null, () => { GameController.Instance.SetBudgetPosture(captured); Refresh(); });
+                if (fiscal.budgetPosture == posture)
+                    Block(button, "ALREADY THE STANDING POSTURE");
+            }
+
+            var taxes = MakeRow();
+            foreach (float step in new[] { -10f, -5f, 5f, 10f })
+            {
+                float target = fiscal.taxRate + step;
+                var button = AddButton(taxes,
+                    $"TAX {step:+0;-0}% [{FiscalSystem.SetTaxRateCost} PC]", null,
+                    () => { GameController.Instance.SetTaxRate(target); Refresh(); });
+                if (target < 0f || target > 100f) Block(button, "TAX RATE IS 0–100%");
+            }
+
+            var money = MakeRow();
+            var issue = AddButton(money, $"ISSUE DEBT [{FiscalSystem.IssueDebtCost} CP]", null,
+                () => { GameController.Instance.IssueSovereignDebt(); Refresh(); });
+            if (!FiscalSystem.CanIssueDebt(state, player.id, out string debtBlock))
+                Block(issue, debtBlock);
+
+            var restructure = AddButton(money, $"RESTRUCTURE [{FiscalSystem.RestructureCost} PC]", null,
+                () => { GameController.Instance.RestructureDebt(); Refresh(); });
+            if (fiscal.sovereignDebt <= 0f) Block(restructure, "WE CARRY NO DEBT");
+
+            var reserves = MakeRow();
+            foreach (var resource in new[] { TradeFocus.Energy, TradeFocus.Materials, TradeFocus.Food })
+            {
+                var captured = resource;
+                float cost = FiscalSystem.ReserveOrderPoints * FiscalSystem.ReserveCostPerPoint;
+                var button = AddButton(reserves,
+                    $"STOCKPILE {resource.ToString().ToUpperInvariant()} [{FiscalSystem.ReservesCost} CP]",
+                    null, () => { GameController.Instance.BuildReserves(captured); Refresh(); });
+                if (player.resources.treasury < cost)
+                    Block(button, $"NEEDS {cost:F0} TREASURY");
+            }
+
+            ExplainBlockedCommands(postures);
+            ExplainBlockedCommands(taxes);
+            ExplainBlockedCommands(money);
+            ExplainBlockedCommands(reserves);
         }
 
         void BuildMarketIndex(GameState state, CountryState player)

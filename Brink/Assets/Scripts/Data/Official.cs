@@ -69,6 +69,21 @@ namespace Brink.Data
         public string directiveId = "";
 
         /// <summary>
+        /// A state this official is posted to as standing envoy (spec 04 §5e),
+        /// or empty.
+        ///
+        /// Only the diplomatic desk is ever posted. It is what makes
+        /// `competence` matter in a *fifth* place — until now it decided
+        /// autonomous execution, what reached the terminal, the advice a
+        /// minister gives, and how much a directive achieved, all of which are
+        /// about the pillar rather than about a relationship.
+        ///
+        /// Empty on an old save is correct: nobody was posted anywhere in a
+        /// world with no way to post them. No migration.
+        /// </summary>
+        public string envoyToCountryId = "";
+
+        /// <summary>
         /// Whether we have already told the operator this instruction was met.
         ///
         /// Without it the completion notice would fire every month the goal is

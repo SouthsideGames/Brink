@@ -26,7 +26,13 @@ namespace Brink.Data
         Transit,
         JointPlanning,
         NonAggression,
-        TradePreference
+        TradePreference,
+
+        /// <summary>
+        /// Caps what either side may field and how far either may escalate
+        /// against the other (spec 04 §5f). Appended — ordinals are persisted.
+        /// </summary>
+        ArmsControl = 6
     }
 
     /// <summary>
@@ -47,6 +53,19 @@ namespace Brink.Data
         public float threatPerceptionOfA;      // how dangerous A looks to B
         public float threatPerceptionOfB;      // how dangerous B looks to A
         public float strategicAlignment = 50f; // do current interests point the same way
+
+        /// <summary>
+        /// Whether this pair have recognised each other as sovereign (spec 04
+        /// §5b). Only ever read for a **successor state** — one founded after
+        /// world creation by `SecessionSystem`, which until now was the single
+        /// thing in the game that creates a country and had no verb about it.
+        ///
+        /// `false` by default, and that is correct rather than merely empty: a
+        /// breakaway starts unrecognised by everybody, which is the whole
+        /// situation it has to work its way out of. Nothing asks the question
+        /// about a state that was there at world creation, so no migration.
+        /// </summary>
+        public bool recognised;
 
         /// <summary>Ability to operate together, built by joint exercises (GDD §15.3).</summary>
         public float interoperability;
@@ -79,6 +98,18 @@ namespace Brink.Data
         /// correct: nothing was settled.
         /// </summary>
         public int settlementTruceMonths;
+
+        /// <summary>
+        /// Months of preparation left before a convened summit meets (spec 04
+        /// §5g), or zero.
+        ///
+        /// A summit is **preparation, not a button**: the months are the point,
+        /// they are visible to anyone collecting on us, and the world can move
+        /// underneath them — which is what makes convening one a commitment
+        /// rather than an instant relationship purchase. Zero on old saves is
+        /// correct; no migration.
+        /// </summary>
+        public int summitMonthsRemaining;
 
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;

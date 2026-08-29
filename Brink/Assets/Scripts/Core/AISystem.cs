@@ -106,6 +106,8 @@ namespace Brink.Core
                 ConsiderDetente(state, ai, country, rng);
                 ConsiderResearch(state, ai, country, rng);
                 ConsiderCoalition(state, ai, country, rng);
+                ManageTheBooks(state, ai, country, rng);
+                ConsiderRecognition(state, ai, country, rng);
             }
         }
 
@@ -1511,6 +1513,127 @@ namespace Brink.Core
 
             var chosen = PreferredInstrument(state, country);
             if (chosen.HasValue) EndgameSystem.PrepareBy(state, country.id, chosen.Value);
+        }
+
+        /// <summary>
+        /// Whether to admit a breakaway state exists (spec 04 §5b).
+        ///
+        /// Outside the objective budget, like détente and the books: taking a
+        /// position on somebody else's civil war is a diplomatic fact a
+        /// government has to face, not a strategy competing for this month's
+        /// actions. If it sat in the action cut a busy world would leave every
+        /// successor permanently unrecognised, and the whole mechanism would be
+        /// a player privilege with no world behind it.
+        ///
+        /// **The calculation is whose friendship is worth more.** A state close
+        /// to the parent will not recognise; one that dislikes the parent will,
+        /// and quickly. That is the same reasoning an operator does, which is
+        /// what makes the decision legible from the outside.
+        /// </summary>
+        static void ConsiderRecognition(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (rng.NextDouble() >= 0.20) return;
+
+            foreach (var successor in state.countries)
+            {
+                if (!DiplomacySystem.IsSuccessor(state, successor)) continue;
+                if (!DiplomacySystem.CanRecognise(state, country.id, successor.id, out _)) continue;
+
+                string parentId = DiplomacySystem.ParentOf(state, successor);
+                var withParent = state.FindRelationship(country.id, parentId);
+                var withSuccessor = state.FindRelationship(country.id, successor.id);
+                if (withSuccessor == null) continue;
+
+                // Warmth toward the new state against warmth toward the old one.
+                // A treaty with the parent counts heavily: recognising a
+                // breakaway from an ally is close to a betrayal.
+                float parentTie = withParent == null ? 0f : withParent.relations * 0.5f;
+                if (withParent != null && state.FindTreaty(country.id, parentId) != null)
+                    parentTie += 25f;
+
+                float appetite = withSuccessor.relations * 0.4f
+                                 + (100f - parentTie) * 0.35f
+                                 + ai.profile.opportunism * 0.15f;
+
+                if (appetite < 55f) continue;
+                DiplomacySystem.RecogniseBy(state, country.id, successor.id);
+                return;   // one position a month is plenty
+            }
+        }
+
+        /// <summary>
+        /// Public finance, run from the desk (spec 02 §9).
+        ///
+        /// **Outside the objective budget, deliberately** — the `ConsiderDetente`
+        /// and routine-restocking precedent. Funding the state is governance, not
+        /// a strategy competing with starting a war for this month's actions; put
+        /// it in the action cut and it goes silent for thirty years the moment
+        /// the world gets busy, which is exactly how no foreign government
+        /// ordered equipment for an entire measured decade.
+        ///
+        /// Deliberately dull. A government borrows when it is running out of
+        /// money, retires debt and lays in reserves when it is not, and tightens
+        /// or loosens the budget according to whether the books or the public are
+        /// the more pressing problem. Nothing here is a clever play; the point is
+        /// that the AI pays the same prices the operator does.
+        /// </summary>
+        static void ManageTheBooks(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            var fiscal = country.fiscal;
+            bool broke = country.resources.treasury < DiscretionaryReserve;
+            bool flush = country.resources.treasury > DiscretionaryReserve * 6f;
+
+            // Borrow before the lights go out, not after: research, procurement
+            // and every strategic instrument are treasury-gated, and a state that
+            // spends its last coin can fund nothing with a lead time.
+            if (broke && rng.NextDouble() < 0.35
+                && FiscalSystem.CanIssueDebt(state, country.id, out _))
+            {
+                FiscalSystem.IssueSovereignDebtBy(state, country.id);
+                return;
+            }
+
+            // Debt that has run away gets written down, at the same reputational
+            // price the operator pays for it.
+            if (FiscalSystem.DebtToGdp(country) > 150f && fiscal.creditStanding < 30f
+                && !fiscal.HasRestructured && rng.NextDouble() < 0.06)
+            {
+                FiscalSystem.RestructureDebtBy(state, country.id);
+                return;
+            }
+
+            // Lay in what a blockade would take away, and only what this country
+            // is actually short of — an energy-rich state stockpiling energy is
+            // the sort of busywork that reads as the AI not understanding itself.
+            if (flush && rng.NextDouble() < 0.10)
+            {
+                var resources = country.resources;
+                TradeFocus wanted =
+                    resources.foodSecurity < resources.energy
+                    && resources.foodSecurity < resources.strategicMaterials ? TradeFocus.Food
+                    : resources.energy <= resources.strategicMaterials ? TradeFocus.Energy
+                    : TradeFocus.Materials;
+                FiscalSystem.BuildReservesBy(state, country.id, wanted);
+                return;
+            }
+
+            // The standing choice, reviewed rarely. A government that re-plans
+            // its budget every month reads as noise, the same reason
+            // `AIStrategy` holds a path for thirty months.
+            if (rng.NextDouble() >= 0.04) return;
+
+            bool booksInTrouble = FiscalSystem.DebtToGdp(country) > 95f
+                                  || fiscal.creditStanding < 40f;
+            bool publicInTrouble = country.livingStandards < 38f || country.socialUnrest > 55f;
+
+            BudgetPosture wantedPosture =
+                booksInTrouble && !publicInTrouble ? BudgetPosture.Austerity
+                : publicInTrouble && !booksInTrouble ? BudgetPosture.Expansionary
+                : BudgetPosture.Balanced;
+
+            if (wantedPosture != fiscal.budgetPosture
+                && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Budget posture"))
+                FiscalSystem.SetBudgetPostureBy(state, country.id, wantedPosture);
         }
 
         /// <summary>

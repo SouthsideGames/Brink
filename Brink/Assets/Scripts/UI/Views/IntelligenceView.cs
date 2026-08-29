@@ -42,9 +42,85 @@ namespace Brink.UI.Views
             AddAuthorityBadge(state, Pillar.Intelligence);
             AddCabinetAdvice(state, Pillar.Intelligence);
             BuildEstimateBoard(state);
+            BuildFinishedIntelligence(state);
             BuildDefensivePosture(state, player);
             BuildNetworkControls(state);
             BuildInsurgencySupport(state, player);
+        }
+
+        /// <summary>
+        /// Finished intelligence: what the service has been asked, and what it
+        /// came back with (spec 03 §10).
+        ///
+        /// The delivered judgement is shown with its grade and **never with
+        /// whether it was right** — an operator who could see that would not need
+        /// the assessment. Weighing a confident answer from a thin network is the
+        /// decision this panel exists to put in front of them.
+        /// </summary>
+        void BuildFinishedIntelligence(GameState state)
+        {
+            var mine = IntelProductSystem.For(state, state.playerCountryId);
+
+            var text = AddFigure("terminal-text-bright");
+            var sb = new StringBuilder();
+            sb.AppendLine(AsciiChart.BoxHeader("FINISHED INTELLIGENCE", W));
+
+            if (mine.Count == 0)
+            {
+                sb.AppendLine("  NOTHING WITH THE ANALYSTS.");
+                sb.AppendLine("  Collection reports capability. An assessment answers a question.");
+            }
+            else
+            {
+                foreach (var product in mine)
+                {
+                    var subject = state.FindCountry(product.targetId);
+                    string who = subject?.displayName ?? product.targetId;
+
+                    if (!product.delivered)
+                    {
+                        sb.AppendLine($"  {who}: {IntelProductSystem.QuestionText(product.question)}");
+                        sb.AppendLine($"    WITH THE ANALYSTS — {product.monthsRemaining} MONTH(S)");
+                        continue;
+                    }
+
+                    sb.AppendLine($"  {who}: {IntelProductSystem.QuestionText(product.question)}");
+                    foreach (string line in AsciiChart.WrapBlock(product.answer, W - 6)
+                                 .Split('\n'))
+                        sb.AppendLine("    " + line.TrimEnd());
+                    sb.AppendLine($"    CONFIDENCE: {product.confidence.ToString().ToUpperInvariant()}");
+                }
+            }
+            text.text = sb.ToString();
+
+            var target = state.FindCountry(selectedTargetId);
+            if (target == null) return;
+
+            var row = MakeRow();
+            foreach (EstimateQuestion question in System.Enum.GetValues(typeof(EstimateQuestion)))
+            {
+                var captured = question;
+                var button = AddButton(row,
+                    ShortQuestion(question) + $" [{IntelProductSystem.CommissionCost} CP]", null,
+                    () => { GameController.Instance.CommissionEstimate(target.id, captured); Refresh(); });
+
+                if (!IntelProductSystem.CanCommission(state, state.playerCountryId, target.id,
+                        captured, out string block))
+                    Block(button, block);
+            }
+            ExplainBlockedCommands(row);
+        }
+
+        static string ShortQuestion(EstimateQuestion question)
+        {
+            switch (question)
+            {
+                case EstimateQuestion.StrategicIntent: return "THEIR INTENT";
+                case EstimateQuestion.StrategicProgramme: return "THEIR PROGRAMME";
+                case EstimateQuestion.TreatyReliability: return "THEIR RELIABILITY";
+                case EstimateQuestion.TheirReadOfUs: return "THEIR READ OF US";
+                default: return "WHO ARMS THEM";
+            }
         }
 
         /// <summary>
@@ -210,6 +286,11 @@ namespace Brink.UI.Views
             AddButton(row, "COUNTERINTEL SWEEP [1 CP]", "primary", () =>
             {
                 GameController.Instance.StrengthenCounterIntelligence();
+                Refresh();
+            });
+            AddButton(row, $"MOLE HUNT [{IntelligenceSystem.MoleHuntCost} CP]", "danger", () =>
+            {
+                GameController.Instance.MoleHunt();
                 Refresh();
             });
             if (IntelligenceSystem.CanRunCovertOperation(state, null, CovertOperation.Deception,
@@ -473,12 +554,24 @@ namespace Brink.UI.Views
                 {
                     if (operation == CovertOperation.Deception) continue;
                     var captured = operation;
-                    AddButton(actionRow, $"{Phrase.Caps(operation)} [{IntelligenceSystem.CovertOperationCost} CP]", "danger", () =>
-                    {
-                        GameController.Instance.RunCovertOperation(selectedTargetId, captured);
-                        Refresh();
-                    });
+                    var button = AddButton(actionRow,
+                        $"{Phrase.Caps(operation)} [{IntelligenceSystem.CovertOperationCost} CP]",
+                        "danger", () =>
+                        {
+                            GameController.Instance.RunCovertOperation(selectedTargetId, captured);
+                            Refresh();
+                        });
+
+                    // One gate, shared with the verb. These buttons were
+                    // ungated: `RunCovertOperation` refuses without a network,
+                    // and the operator got a bright button that spent nothing
+                    // and said nothing — the failure mode the `Block` /
+                    // `ExplainBlockedCommands` pair exists to end.
+                    if (!IntelligenceSystem.CanRunCovertOperation(
+                            state, selectedTargetId, captured, out string covertBlock))
+                        Block(button, covertBlock);
                 }
+                ExplainBlockedCommands(actionRow);
             }
 
             var hint = AddText("terminal-text-dim");

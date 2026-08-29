@@ -535,6 +535,23 @@ two-step (FULL RESET → CONFIRM — ERASE EVERYTHING / CANCEL) because there is
 no undo. `MapAndLayoutTests.SettingsPanel_FullResetIsReachable` guards the
 scroller, its height cap, the pinned CLOSE, and the two-step confirm.
 
+**There are no save or load rows in this panel, and there must not be**
+(user decision, 2026-08-28). A 2026-08-27 pass added SAVE TO / LOAD FROM slots
+1–3 here; they were removed. This panel ships in *every* build — that is the
+whole reason FULL RESET lives in it — so a load control here is exactly GDD
+§30's "reload because I disliked the outcome" loop, in the one screen the player
+can always reach.
+
+The second reason is less obvious and matters more: reloading would let an
+operator caught running covert action step back past the world hardening against
+them, which **repeals spec 06 §7b's counter-play design** — the property that a
+signature move teaches the world to answer it, and that resetting does not help
+because the answer is a function of what you did rather than of the seed.
+
+`SaveSystem`'s slots stay in code (tests use them; cloud sync would need them)
+and `SaveToSlot` / `LoadFromSlot` remain on `GameController`, named in
+`ActionIndexTests.NotOperatorActions` as session lifecycle.
+
 ---
 
 ## 8. View catalogue

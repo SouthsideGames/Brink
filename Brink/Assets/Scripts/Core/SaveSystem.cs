@@ -12,7 +12,7 @@ namespace Brink.Core
     /// </summary>
     public static class SaveSystem
     {
-        public const int CurrentSaveVersion = 6;
+        public const int CurrentSaveVersion = 7;
 
         /// <summary>Override for tests; null = Application.persistentDataPath/saves.</summary>
         public static string SaveDirectoryOverride;

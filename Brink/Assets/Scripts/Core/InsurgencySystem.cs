@@ -166,6 +166,32 @@ namespace Brink.Core
             => Math.Min(18f, PressureOn(state, countryId) * 0.09f);
 
         /// <summary>
+        /// How much a rising divides the country, as a shift in the **unity
+        /// target**. Read by `GovernmentSystem`.
+        ///
+        /// Separatism only: a movement demanding to leave is an argument about
+        /// what the country is, which is what unity measures. A rising over an
+        /// occupation or over hardship is an argument with the government, and
+        /// that already reaches unrest, stability and war exhaustion.
+        ///
+        /// Capped at 20 — well inside the target's ~42-point base — because a
+        /// state fighting separatists is divided, not dissolved. Dissolution has
+        /// its own system, and `SecessionSystem` is the only thing allowed to
+        /// perform it.
+        /// </summary>
+        public static float UnityDrag(GameState state, string countryId)
+        {
+            float total = 0f;
+            foreach (var insurgency in state.insurgencies)
+            {
+                if (insurgency.cause != InsurgencyCause.Separatism) continue;
+                var location = state.FindLocation(insurgency.locationId);
+                if (location != null && location.ownerId == countryId) total += insurgency.strength;
+            }
+            return Math.Min(20f, total * 0.10f);
+        }
+
+        /// <summary>
         /// What an armed movement does to how stable the country can be, as a
         /// shift in the stability **target**. Same rule, same reason.
         /// </summary>
@@ -625,8 +651,19 @@ namespace Brink.Core
             holder.resources.treasury -= intensity * InsurgencyBillPerMonth;
             holder.warExhaustion = Clamp(holder.warExhaustion + intensity * 0.24f);
 
-            if (insurgency.cause == InsurgencyCause.Separatism)
-                holder.nationalUnity = Clamp(holder.nationalUnity - intensity * 0.22f);
+            // National unity used to be billed here too, flatly, at
+            // `intensity * 0.22` a month — directly against the rule stated four
+            // lines above this one. It drifts toward a target at 0.04, so at any
+            // real intensity the drain outran the restoring force by an order of
+            // magnitude and unity sat at zero for as long as the rising lasted.
+            //
+            // That closed a loop rather than merely mispricing something: unity
+            // at zero maximises `unrestPressure`'s resilience multiplier, unrest
+            // feeds grievance, and `SupportTargetFor` reads `52 - nationalUnity`
+            // — so the rising's own damage was the largest term keeping the
+            // rising supplied. A separatist movement became permanent by
+            // existing. It is `UnityDrag` now, on the target, like the other
+            // three. See `GovernmentSystem`'s unity target.
         }
 
         // ---------- being found out ----------

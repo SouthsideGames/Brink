@@ -249,6 +249,195 @@ it existed to protect. Covered by
 (two-seed averaged — in a world that fights its own wars, single-seed decade
 comparisons measure the seed's luck).
 
+## 7b. Directed hardening — the world learns to catch *you* (2026-08-28)
+
+§7a was necessary and not sufficient. `institutionalHardening` is **global**: a
+service that catches anyone hardens against everyone. In a sixteen-state world
+where every government runs networks it saturates from background espionage —
+measured at 10.5 of a cap of 20 whether or not the operator ran a single network,
+and *marginally lower* in the careless arm than the careful one. The player was
+one sixteenth of the signal, so the anti-memorisation property was diluted to
+nothing (+0.5 counter-intelligence points against a required +1.0).
+
+The claim was never "the world gets better at counter-intelligence". It is **"the
+world gets better at catching *you*"**.
+
+```
+DirectedHardening(defender, actor)
+    = MaxDirectedHardening (14)
+      × clamp01(ObservedSubversion(actor) / 100)
+      × (0.35 + 0.65 × defender's estimate confidence about actor)
+
+EffectiveCounterIntelligence(defender, actor)
+    = clamp(counterIntelligence + DirectedHardening, 0, 100)
+```
+
+Every read that resists a **named** actor goes through
+`EffectiveCounterIntelligence` — network roll-up, estimate access, and covert
+operation success and exposure. The bare field remains the service's general
+condition and is what the operator is shown.
+
+Three properties are load-bearing:
+
+- **Derived, so there is no new save state and no migration.** It reads the
+  chronicle through the same function the AI's expectation layer uses, so the
+  structural layer and the policy layer cannot disagree about who has been doing
+  what.
+- **It decays on the same 120-month window.** That is the design, not a
+  shortcut: a permanent reputation would make reloading the correct play, which
+  this game refuses. Stop, and the world eventually stops watching for it.
+- **Symmetric by construction.** It takes a country and an actor id, so it
+  protects the operator from a serial infiltrator exactly as it protects the
+  world from the operator.
+
+### The reader was blind to most of what it was meant to see
+
+Two bugs underneath, and together they mattered more than global-versus-directed.
+
+1. **A caught covert operation was filed `Publicity.Secret`.**
+   `GameState.AddChronicle` defaults to Secret and the call omitted the argument,
+   so the single most attributable act in the pillar was recorded as a secret —
+   beside a notification whose own text reads *"others have noticed."* Nothing
+   reasoning from the public record could see it.
+2. **The reader matched only the string `"compromised"`**, which is the
+   rolled-up-*network* line. A caught covert operation ("exposed") and a blown
+   approach to a foreign official ("was caught") — the two loudest, most
+   attributable things an operator can be caught at — taught the world nothing.
+
+`IntelligenceSystem.CaughtMarkers` is now the single list, with
+`IsPublicSubversionRecord` the single predicate shared by every reader.
+**A new "we were caught" chronicle line must add its marker there and be filed
+`Publicity.Public`, or the world cannot learn from it.**
+
+`AIPrediction.ObservedSubversion` is memoised per month on the state instance
+(`GameState.subversionMemo`, `[NonSerialized]`), because it is wanted once per
+network per month against a record that reaches a few thousand lines. The memo
+must **never** be keyed on the seed: two worlds built from the same seed and
+played differently are exactly what the counter-play tests compare.
+
+## 6a. Diminishing returns on working a network (2026-08-28)
+
+`IntelNetwork.operationTempo`, 0..100. Every covert operation adds
+`TempoPerOperation = 14`; it decays `×0.93` a month and subtracts
+`tempo × TempoResistance (0.55)` from the operation's effective access.
+
+A deep network used to be an unlimited supply of sabotage — nothing about the
+tenth operation against a state differed from the first except whatever had been
+caught in between. This was the oldest open item on the project's own list.
+
+**Distinct from `DirectedHardening` on purpose.** That one is about being
+*caught*; this is about being *busy*. A target's services notice a tempo even
+when they attribute nothing, so it prices the careful operator too. And it
+**fades**, because a penalty with no recovery path is a disqualification rather
+than a price: the answer to a burned-out network is patience. Zero on old saves;
+no migration.
+
+## 6b. Three appended covert verbs
+
+Ordinals preserved — the enum is persisted in `ActiveCrisis` and in telemetry
+buckets.
+
+| Verb | What it does | Attribution |
+|---|---|---|
+| `Provocation` | Sets the target against a *third* state: relations −12, trust −9, threat both ways, and a diplomatic memory | **0.45** |
+| `TechnologyTheft` | Takes a capability the target holds via `TechnologySystem.StealCapability`, at `Stolen` maturity (25 against a programme's 70) | **1.25** |
+| `CyberOperation` | −5 health across every sector and −7 confidence, shielded by `CAP_SECCOMMS` up to 60% | **0.55** |
+
+**Deniability is the axis, and it is what makes them worth reaching for.**
+`AttributionFactor` multiplies the exposure roll: a provocation is meant to be
+blamed on somebody else, and a cyber operation leaves no hand to shake. Both buy
+that with a smaller effect — a provocation touches no statistic of the target's
+at all, and cyber damage is *functioning* rather than capacity, repaired within
+the year. Technology theft is the inverse and the most attributable thing in the
+list, because they notice the moment they see us fielding it.
+
+`Provocation` needs an existing quarrel to widen (`ColdestRivalOf` requires
+relations below 55). It cannot invent an enemy — the same rule that stops a
+covert operation conjuring a conspiracy where there is no grievance.
+
+`StealCapability` still applies the industrial and pillar floors, so espionage is
+a shortcut through the *years*, never through the prerequisites.
+
+## 7c. The mole hunt
+
+`MoleHuntBy(state, actorId)`, 2 CP, actor-generic. Finds the deepest
+uncompromised foreign network inside us at
+`0.20 + counterIntelligence/100 × 0.55 + penetration/260` — a deep network is
+*easier* to find, the same footprint reasoning the monthly roll-up uses.
+
+**A hunt that finds nothing damages the people it searched**: −4 elite cohesion,
+and −6 competence / −8 trust on a randomly chosen minister, who knows they were
+investigated. That is the whole design. A free scan would be strictly correct to
+run every month, which is not a decision; a government that hunts constantly
+hollows out its own cabinet.
+
+A catch here files the same public `compromised` record as the monthly roll-up,
+so the counter-play chain sees it — this session found two separate places where
+a "we were caught" line never reached the public record, and a new catch path
+must not become the third. A test asserts it.
+
+## 10. Finished intelligence — the Special Estimate
+
+`IntelProduct`, `IntelProductSystem`, `GameState.intelProducts`, 2 CP, three
+months, at most two outstanding.
+
+**This is what collection is for.** Networks and estimates buy sharper numbers
+about foreign *capability*; nothing in the game told the operator what a rival
+was trying to achieve, whether it would honour a pact, or how it read them —
+despite `AIStrategy.StrategicPath`, `AIPrediction.OpponentModel` and
+`EndgameSystem.KnownPreparation` being computed every month for every
+government. The largest body of unread state in the codebase, in the one pillar
+whose subject is knowing things.
+
+| Question | Reads |
+|---|---|
+| What are they building toward? | `AIStrategy.StrategicPath` |
+| Are they preparing an instrument? | `EndgameSystem.KnownPreparation` |
+| Will they honour their commitments? | Treaties, broken-treaty record, trust |
+| How do they read us? | `OpponentModel.predictedMove` |
+| Who is arming the rising on our ground? | Insurgency sponsorship |
+
+Three rules:
+
+1. **It can be wrong, and wrong plausibly.** Accuracy is
+   `0.30 + 0.62 × confidence`, and a wrong answer is a *different valid
+   conclusion* — a real strategic path, a real predicted move — stated with the
+   same confidence as a right one. Noise would be obviously worthless and
+   therefore free to ignore; an operator who can spot the bad assessments is not
+   being asked to trust anybody.
+2. **The answer is fixed when delivered.** Deterministic per (observer, target,
+   question, commissioned month), stored, never recomputed. A judgement that
+   flickered on refresh would be unusable and averaging repeated reads would leak
+   the truth — the `MilitaryAdvice` precedent. Tested across a save round-trip
+   too, because a reload that shakes a different answer loose is the thing GDD
+   §30 refuses.
+3. **It needs collection.** Commissioning requires a network; the grade is what
+   thin reporting costs.
+
+**This does not breach spec 15's reporting rule.** That rule forbids a *desk*
+misstating a figure it was handed. An estimate is uncertain by construction,
+already carries a grade and a margin, and has been allowed to be wrong since
+Phase 6. This is the fog system working, not a distorted report.
+
+Delivered assessments are pruned after 60 months. Empty on an old save is
+correct, so no migration.
+
+### Deferred from this tranche
+
+- **`Exfiltration`** — needs a model of agents as losable assets that
+  `AgentSystem` does not currently have. Building one to hang a single verb on
+  would be the tail wagging the dog.
+- **`SecurityVetting`** — marginal over the existing counterintelligence sweep,
+  which already feeds the same reservoir. Two verbs for one effect is the
+  `MIL_READINESS` mistake.
+- **Defectors as a pull channel** — wants a crisis definition and a
+  `CrisisEffects` id; real work, and better done alongside the Tranche C event
+  expansion than bolted on here.
+- **Deception as a standing programme** — **already built**, and spec 25 §5.1 was
+  wrong to list it. `RunCovertOperation`'s `Deception` branch sets strength,
+  bias and domain and decays 1.2/month; the AI's `MountDeception` is the mirror.
+  Nothing to do.
+
 ## 8. Extension points
 
 - **Named assets** — GDD §14 allows high-value sources to become named characters.

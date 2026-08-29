@@ -106,10 +106,84 @@ healthTarget = 88 − sanctionPressure × 9 − blowback × 5
                − max(0, debtToGdp − 90) × 0.15  (Finance)
 health approaches at 0.2, clamped 0..100
 
-outputTarget = output + growth × 0.08 − sanctionPressure × 0.35
+outputTarget = output
+               + (SectorAnchor − output) × CapacityReversion   (0.06)
+               + growth × 0.08 − sanctionPressure × 0.35 − importDisplacement
                + 0.5  (Defense, at war)
 output approaches at 0.5, clamped 0..100
 ```
+
+### Capacity reverts to the nation's fundamentals (2026-08-28)
+
+`SectorAnchor(country, sector)` is the level capacity returns toward, and it is
+**`WorldFactory`'s authored baseline, shared rather than retyped** — Energy to
+national energy, Agriculture to food security, Industry to industrial capacity,
+Defense to `military × 0.8`, the rest to `pillars.economy`. Every one of those
+has its own recovery path, so capacity inherits one instead of having none.
+
+Zero by construction at world creation: at month zero output *is* this value
+(±the authoring jitter), so the term contributes nothing to a healthy country.
+
+**Why it exists.** The line read `outputTarget = output + …`, which is not a
+target at all: `Approach(v, v + d, 0.5)` is `v + 0.5d`, an accumulating rate
+wearing a target's clothes, with no anchor and no restoring force. Because
+growth is *derived* from capacity (`SectorStrength` feeds `targetGrowth`), zero
+was an absorbing state — output 0 gives deep negative growth, which drives
+output further down.
+
+Measured on seed 1212: six of the seven US sectors sat at exactly 0.0 output
+with **healthy** sector health, a market index of 7, permanent −4%/yr growth,
+and no recovery across thirty-six isolated economy ticks. Everything downstream
+followed from it — unemployment 24, living standards 0, unrest and grievance
+pinned at 100, four coups and recurring civil conflict. **The whole collapse was
+this one line.** Fourteenth instance of the value-versus-target family, and the
+one sitting under the entire economy.
+
+### `StagnationFloor` — how far a depression can erode capability
+
+`StagnationDrag` subtracts from `pillars.economy` every month. It had no floor,
+while `SectorAnchor` reads that pillar for Technology, Finance and Consumer — so
+it closed the same loop one level up. Its own comment claimed recovery was
+"reachable the month growth turns positive", which cannot happen once the pillar
+is gone. Measured at 0.27/month (≈3.2 a year, against the ~1.4 the comment
+estimated from milder figures): a great power's entire economic capability
+inside twenty years.
+
+```
+StagnationFloor = 12 + industrialCapacity × 0.35
+```
+
+Anchored to the physical base the country still holds rather than to a bare
+constant — a state whose plant survives keeps the capability to use it. It is
+**never a bound on how bad the economy gets**: growth, confidence, employment
+and the market index still collapse in full and the crisis regime is unchanged.
+It bounds only how much long-run *capability* a downturn takes with it.
+
+The floor **only stops the drag taking; it never gives.** Written as a bare
+`Math.Max(floor, value − stagnation)` it lifted any pillar already below the
+floor for some other reason — a regression test that drives `pillars.economy = 5`
+to force a contraction had it silently raised to 36 on the first tick, and the
+recession it was measuring never happened.
+
+### The invariant that guards all of this
+
+`WorldStructureTests.NoSocialValueRunsAwayInEitherDirection` no longer asserts
+that no social value reaches its ceiling. These values are target-driven, so a
+country whose market has collapsed *should* read unrest 100 — that is the model
+describing a real condition, and forbidding it would forbid the crisis regime
+the economy was given on purpose. **A ceiling is not a ratchet.**
+
+It now asserts **recoverability**: lift every sanction, war and rising, hold them
+off for ten years, and the country has to climb out. Measured after these fixes
+on seed 1212 — unrest 100 → 58.8, living standards 0 → 17.5, index 8 → 78,
+`pillars.economy` 29 → 51, growth −2.97 → +1.60. Before them it stayed at 0/100,
+so all three bugs above fail the new test and none of them was visible to the
+old one.
+
+The pressures are held off **every month**, not cleared once: a wrecked great
+power in a hot world is a target, and clearing them a single time measures how
+long the neighbours take to open the next war rather than whether a collapse can
+be recovered from.
 
 ## 3. Trade
 
@@ -415,6 +489,110 @@ reversion is what makes that read as sentiment catching up.
 
 History is capped at 60 entries (`EconomyState.MaxHistory`) and rendered by
 `AsciiChart.LineChart` in the ECONOMY view.
+
+## 9. Public finance (spec 25 Tranche A, 2026-08-28)
+
+**Status: as-built.** `Data/FiscalState.cs`, `Core/FiscalSystem.cs`,
+`Tests/EditMode/FiscalTests.cs`, the PUBLIC FINANCE panel in ECONOMY.
+
+The pillar had six operator verbs and **no instrument of public finance at
+all**: no tax, no budget, no borrowing, no reserves, no credit standing.
+`debtToGdp` was written in one place, read in three, and moved by nothing the
+operator could do. That is also why the playtest's fiscal finding could only be
+recorded as an open question — a belligerent mid-tier state ended a decade
+several thousand in the red and there was no lever to answer with.
+
+### The three rules the layer rests on
+
+**1. The authored defaults are revenue-neutral by construction.**
+`TaxMultiplier` and `PostureIncomeMultiplier` are exactly 1.0 at
+`BaselineTaxRate = 35` and `BudgetPosture.Balanced`, and `TaxGrowthDrag` /
+`TaxApprovalDrag` are exactly 0. An untouched world raises precisely what it
+raised before this existed, so the measured balance table stays comparable.
+`FiscalTests.TheAuthoredDefaultsAreRevenueNeutral` asserts it for every country
+— without that, a "harmless" addition is a silent rebalance.
+
+**2. A deficit finances itself into debt.** Governments do not stop paying the
+army because the account is empty. Before this, treasury went negative and
+*nothing happened*, which is why "several thousand in the red" was a number
+rather than a consequence. Now the shortfall is added to `sovereignDebt` and the
+treasury floors at zero; a surplus above `SurplusBuffer` retires 10% of the
+stock a month, so the stock is not one-way.
+
+**3. `debtToGdp` is derived, never stored.** It used to be a free-floating
+accumulator (+0.9/month at war, +0.15 otherwise, minus growth) answering to no
+money anyone spent. `FiscalState.sovereignDebt` is now the authority and
+`FiscalSystem` recomputes the ratio each month, so the six existing readers keep
+working — the `BranchForce.strength` discipline: a mirror, never a competitor.
+
+### Constants
+
+```
+BaselineTaxRate      35      revenue-neutral
+TaxMultiplier        0.5 + taxRate/70            (1.0 at baseline)
+TaxGrowthDrag        (taxRate − 35) × 0.030      annualized growth points
+TaxApprovalDrag      (taxRate − 35) × 0.060
+
+posture              income   growth   living standards
+  Balanced            1.00     +0.0      +0
+  Austerity           1.14     −0.7      −5
+  Expansionary        0.84     +0.8      +4
+
+MonthlyInterestRate  0.0018 + (100 − credit)/100 × 0.0042
+                     → 2.2%/yr at credit 100, 7.2%/yr at credit 0
+CreditTarget         78 − max(0, debtToGdp − 55) × 0.55 + growth × 2.2
+                        + (confidence − 50) × 0.16 − 9 (at war)
+                        − 34 × (restructuring memory remaining)
+IssueShareOfGdp      0.12    per issue, and −6 credit on asking
+MinimumCreditToIssue 18      below this nobody lends
+IssueDebtCeiling     200%    of GDP
+RestructuringMemory  60 months
+```
+
+Austerity is not extra revenue in reality — it is spending forgone — but the
+simulation has no general outlay model, so the net effect on the treasury is the
+honest equivalent and is documented as such rather than dressed up.
+
+### Reserves
+
+`ReserveFloorBonus` (0..0.35) raises the floor that sanctions and war can push
+the energy, materials and food **targets** to, and the reserve depletes while it
+is doing that work. Pressure moves the target, never the value — the rule this
+file has now applied to food, energy, materials and sector capacity. A reserve
+nobody needs keeps; one under real pressure drains at 0.6/month.
+
+### The AI half
+
+`AISystem.ManageTheBooks`, **outside the objective budget** — the
+`ConsiderDetente` and routine-restocking precedent. Funding the state is
+governance, not a strategy competing with starting a war for this month's
+actions; put it in the action cut and it goes silent the moment the world gets
+busy, which is exactly how no foreign government ordered equipment for an entire
+measured decade. A government borrows below `DiscretionaryReserve`, stockpiles
+what it is short of when flush, restructures when the debt has run away, and
+reviews its posture at 4%/month so it does not re-plan the budget every month.
+
+### The trend readout had to change with it
+
+`treasuryTrend` exists because deficit consequences arrive years late, and it is
+the operator's only timely warning. Financing the deficit **stopped the treasury
+falling**, so a government living entirely on borrowed money read as roughly
+breaking even — a forced 300/month drain reported −93. It now measures the
+*fiscal balance*: the treasury delta less the debt taken on, sampled at the end
+of `FiscalSystem` rather than mid-month in `EconomySystem`.
+
+**The general hazard, worth remembering: when you give a value a recovery path,
+check what was reading its absence.** The same change that fixes a leak can
+blind the instrument that detected it.
+
+### Save
+
+`SaveVersion` 6 → **7**. A zeroed `FiscalState` is *wrong* rather than empty: it
+would silently forgive whatever debt the save was already carrying, since
+`debtToGdp` was a real number in those saves and is now derived from a stock
+that would not exist. The step seeds the stock from the save's own ratio and
+GDP, so a migrated world lands where it stood and migrating twice gives the same
+answer.
 
 ## 7. Extension points
 
