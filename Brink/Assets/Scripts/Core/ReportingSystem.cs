@@ -76,6 +76,15 @@ namespace Brink.Core
 
             float chance = shortfall * 0.55f;
 
+            // Knowing our own condition before it becomes news (`CAP_STATISTICS`,
+            // spec 13 §6). A weak desk still buries things — this does not repeal
+            // spec 15's rule that competence decides what is surfaced — but a
+            // state that measures itself properly loses less of what should have
+            // reached the terminal.
+            // This desk is the operator's own (`OfficialFor` reads the player's
+            // cabinet), so the programme that matters is ours.
+            chance *= 1f - TechnologySystem.Effectiveness(state.PlayerCountry, "CAP_STATISTICS") * 0.45f;
+
             // A stated priority focuses a desk on what the operator asked about,
             // so Directed reporting is better than Autonomous but still filtered.
             if (official.mode == ControlMode.Directed) chance *= 0.5f;

@@ -53,6 +53,25 @@ namespace Brink.Tests
             return null;
         }
 
+        /// <summary>
+        /// A non-player state holding no permanent seat. Anything aimed at a
+        /// permanent member resolves as `Vetoed` whatever the count, so a test
+        /// about winning or losing a vote has to name an ordinary state or it is
+        /// silently testing the veto instead. Seats are established in `SetUp`.
+        /// </summary>
+        CountryState SomeoneWithoutASeat(params string[] excluding)
+        {
+            foreach (var country in state.countries)
+            {
+                if (country.isPlayer) continue;
+                if (state.council.IsPermanent(country.id)) continue;
+                bool skip = false;
+                foreach (string id in excluding) if (country.id == id) skip = true;
+                if (!skip) return country;
+            }
+            return null;
+        }
+
         /// <summary>Make the world want to condemn one state, and able to.</summary>
         void MakeAPariah(CountryState pariah)
         {
@@ -281,22 +300,33 @@ namespace Brink.Tests
         [Test]
         public void LosingAVoteYouCalledCostsTheMover()
         {
-            var subject = SomeoneElse();
+            // Must be a state with no seat. Against a permanent member the
+            // motion is *vetoed*, not lost, and the two are priced differently
+            // on purpose — a veto spends the blocker's standing, a defeat spends
+            // the mover's. This fixture originally took the first non-player
+            // state, which is a great power, so it measured the veto path and
+            // its relations assertion passed on the veto's supporter penalty
+            // rather than on anything this test is about.
+            var subject = SomeoneWithoutASeat();
+            Assert.NotNull(subject, "the roster seated everybody; there is no ordinary state to name");
 
-            // Nobody agrees with us: warm to the subject, cold to us.
+            // An indifferent chamber, not a hostile one. Making everybody warm
+            // to the subject and cold to us is what put a permanent member's NO
+            // on the board, and a permanent NO is a veto whatever the count.
+            // Neutral on every term instead: `VoteScore` returns ~0 for each
+            // voter, so they abstain, the mover votes for its own motion, the
+            // subject votes against, and the motion fails 1-1 on the `yes >= 3`
+            // bar — a real defeat, decided by nobody caring.
+            state.treaties.Clear();
             foreach (var relationship in state.relationships)
             {
-                if (relationship.Involves(subject.id))
-                {
-                    relationship.relations = 90f;
-                    relationship.trust = 90f;
-                }
-                if (relationship.Involves(state.playerCountryId))
-                {
-                    relationship.relations = 12f;
-                    relationship.strategicAlignment = 10f;
-                    relationship.trust = 15f;
-                }
+                relationship.relations = 45f;
+                relationship.trust = 50f;
+                relationship.strategicAlignment = 50f;
+                relationship.dependenceAOnB = 0f;
+                relationship.dependenceBOnA = 0f;
+                relationship.SetThreatPerceivedBy(relationship.countryA, 20f);
+                relationship.SetThreatPerceivedBy(relationship.countryB, 20f);
             }
 
             var withSubject = state.FindRelationship(state.playerCountryId, subject.id);
@@ -306,8 +336,9 @@ namespace Brink.Tests
             var motion = CouncilSystem.RaiseBy(state, state.playerCountryId,
                 Motion(MotionKind.Condemnation, subject.id));
 
-            Assert.AreNotEqual(MotionOutcome.Passed, motion.outcome,
-                "the fixture's hopeless motion carried anyway");
+            Assert.AreEqual(MotionOutcome.Failed, motion.outcome,
+                "the fixture's hopeless motion did not lose a vote — a veto or a pass "
+                + "measures a different code path than the one this test names");
             Assert.Less(withSubject.relations, before,
                 "Naming a state in a motion that then failed cost nothing. The correct play "
                 + "would be to table one every month and see what sticks.");

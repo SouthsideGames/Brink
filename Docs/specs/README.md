@@ -34,6 +34,10 @@ crises against fifteen) both drifted because that rule was skipped.
 | 19 | [Displacement](19-Displacement.md) | Who leaves, where they go, what hosting costs, the border | As-built |
 | 20 | [Blocs](20-Blocs.md) | Standing sides with names: joining, cohesion, upkeep, defection | As-built |
 | 21 | [Dossier & Hold](21-DossierAndHold.md) | The per-country deep terminal, and standing back through quiet months | As-built |
+| 22 | [The Mandate](22-Mandate.md) | What a posting is for: objectives, the ten-year verdict, reissue | As-built |
+| 23 | [Audio](23-Audio.md) | Cues, music contexts, the mixer, and what drives them | As-built |
+| 24 | [Directives & Career](24-DirectivesAndCareer.md) | Standing directives, the career record across postings | As-built |
+| 25 | [Content Update](25-ContentUpdate.md) | Fiscal statecraft, intel products, episodic diplomacy, government content, research expansion | **PLANNED** |
 
 Coverage of the GDD as a whole — what is done, partial, missing and
 contradicted, section by section — is tracked separately in

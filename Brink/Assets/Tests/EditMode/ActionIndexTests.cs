@@ -45,7 +45,14 @@ namespace Brink.Tests
             { "NewGameFromAssessment", "Session lifecycle." },
             { "ResetGame", "Session lifecycle; reached from Settings, deliberately." },
             { "EndMonth", "The turn itself. It is the one control that is never hidden." },
-            { "SaveToSlot", "Autosave plumbing; there is no save UI by decision (GDD §30)." },
+            // Reached from the settings panel's RECORD block, like ResetGame —
+            // session lifecycle the operator gets to on purpose, not a move they
+            // make in a month. (The reason here used to read "there is no save
+            // UI by decision"; the 2026-08 phone-chrome pass added one, which
+            // sits awkwardly against GDD §30 and the recorded autosave-only
+            // decision. That is a design question, not an index question.)
+            { "SaveToSlot", "Session lifecycle; reached from Settings." },
+            { "LoadFromSlot", "Session lifecycle; reached from Settings." },
             { "RefreshTutorial", "Orientation, not an action." },
             { "SkipTutorial", "Orientation, not an action." },
             { "AcknowledgeTutorialStep", "Orientation, not an action." },

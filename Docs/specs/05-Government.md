@@ -716,6 +716,106 @@ budgets: loyalty +12, conspiracy −8, approval −3, government pillar −1.
 conspiracy ≥ 55 — blind services see nothing coming. A foreign one needs a
 Political estimate at Moderate confidence or better, and conspiracy ≥ 45.
 
+## 2e–2g. Government content (spec 25 Tranche D, 2026-08-28)
+
+**Status: as-built.** `Tests/EditMode/CorruptionTests.cs`. The pillar had
+plenty of verbs — 22 of them — and the *world behind them* was one leader, one
+support float and one cohesion float. These three give it a shape.
+
+### 2e. Corruption
+
+`GovernmentState.corruption`, 0..100.
+
+`DistributePatronage` has said in its own comment since it shipped that it
+"hollows the state out if it becomes the habitual instrument", and **nothing in
+the simulation recorded that it had** — the cost was 1.4 points off a pillar
+that regrows, so the habit was effectively free. Separately,
+`OppositionTheme.Corruption` existed and was proxied by a weak government pillar
+plus conspiracy plus poor elite cohesion: a measure of the state being *feeble*,
+which is not the same as the state being *bought*. A capable, united,
+unplotted-against government running entirely on favours could never draw that
+campaign.
+
+```
+patronage        +7
+inquiry          −11        (more than one round, less than two)
+decay            0.20 + corruption × 0.012      per month
+RevenueLeakage   min(0.33, corruption / 300)
+```
+
+**Proportional decay**, so every level has a resting point — the
+`publicGrievance` lesson applied before it could become the same bug. A flat
+rate means any sustained inflow above it pins at the cap forever.
+
+Four read sites, so it is not decoration: the opposition's case (×0.75, ahead of
+the three proxy terms), the **stability target** (−0.12/point), treasury revenue
+leakage, and the existing pillar hit. The money one is the most concrete — an
+operator feels it without being told.
+
+Relief is deliberately smaller than two rounds of patronage, so buy-then-audit
+is a losing cycle rather than a way to launder support into permanence.
+
+### 2f. Constitutional change
+
+`GovernmentType` decides how power works — elective vs internal succession, term
+limits, what emergency powers cost, whether an early election is possible — and
+it was **fixed for the whole of a decades-long save**. The pillar's largest
+missing verb, and the natural large purchase for a PC economy whose only sink
+above 7 was `ConsolidateAuthority` at 12.
+
+```
+opening      6 PC
+upkeep       1.2 PC every month it runs
+duration     30 months
+threshold    60 support at the end
+drift/mo     (backing − 50) × 0.06 − unrest × 0.020 − corruption × 0.015
+```
+
+**The route differs by what you already are**, which is §13's requirement that
+the type change *how power works* rather than hand out a modifier: an elective
+system needs the chamber (45 legislative support to begin), a non-elective one
+needs the elite (45 cohesion).
+
+**Genuinely losable, and the loss is the point.** Running out of PC collapses
+the process; ending below the threshold abandons it at −6 approval and −7 elite
+cohesion, because it was public and it told everyone what this government
+wanted. Succeeding resets the old settlement: emergency powers lapse, brokered
+support halves, and becoming elective schedules an election that did not
+previously exist. Corruption feeds the drift, so a state that runs on favours
+finds it harder to rewrite its own rules.
+
+### 2g. The faction ledger
+
+`GovernmentState.factions` — three named blocs with a `share`, a `disposition`
+and an `OppositionTheme`.
+
+**A lens on `legislativeSupport`, not a replacement for it.** Spec 25 proposed
+making that field the derived total of the blocs; it has **36 sites across
+eleven systems, eight of them writes** (elections, coups, inquiries, emergency
+powers, the assessment, authority checks). Turning it into a computed sum would
+have broken every writer for no behaviour — a large diff in exchange for a
+data-model preference. The ledger instead contributes a term to the *support
+target*, exactly as `brokeredSupport` already does.
+
+```
+FactionSupport = Σ (disposition − 50) × share / Σ share × 0.4,  clamped ±20
+```
+
+Zero by construction at indifference, so it retunes nothing until somebody is
+courted — the same discipline as the fiscal multipliers.
+
+What makes it a decision rather than a readout is that **instruments reach
+specific people**. Patronage courts the hardship bloc, because money speaks
+loudest where people are short of it. Courting a named bloc is worth 9 to that
+bloc; the undirected bargain is worth 2 to everyone. Knowing who you are talking
+to is the value. Blocs drift back toward indifference at 0.02/month, so a
+coalition is *maintained* rather than bought once — `brokeredSupport`'s rule
+applied to people.
+
+Seeded lazily by `EnsureFactions` and deterministically from the country id, so
+an old save gains a coalition on load — **no migration** — and gains the same
+one every time.
+
 ## 8. Extension points
 
 - **Adding a government verb.** Write the `…By(state, countryId)` implementation,
