@@ -791,6 +791,143 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Admit a breakaway state exists (spec 04 §5b). Buys a grateful new
+        /// state and an angry old one.
+        /// </summary>
+        public bool RecogniseState(string successorId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomacySystem.CanRecognise(State, State.playerCountryId, successorId,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomacySystem.RecogniseCost, "Recognise a state"))
+                return false;
+
+            bool ok = DiplomacySystem.RecogniseBy(State, State.playerCountryId, successorId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 14, "State recognised");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Offer to mediate a war we are not in (spec 04 §5c). Failing is public
+        /// and costs standing with both sides.
+        /// </summary>
+        public bool OfferMediation(Data.Confrontation confrontation)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomacySystem.CanMediate(State, State.playerCountryId, confrontation,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomacySystem.MediationCost, "Offer mediation"))
+                return false;
+
+            bool settled = DiplomacySystem.OfferMediationBy(State, State.playerCountryId, confrontation);
+            ProgressionSystem.RecordInitiative(State);
+            ProgressionSystem.AwardXP(State, settled ? 26 : 8, "Mediation offered");
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return settled;
+        }
+
+        /// <summary>
+        /// Put a war behind us (spec 04 §5d). The one verb that reduces
+        /// historical memory — unpopular with the people who fought it.
+        /// </summary>
+        public bool BeginNormalisation(string partnerId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomacySystem.CanNormalise(State, State.playerCountryId, partnerId,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomacySystem.NormalisationCost, "Normalise relations"))
+                return false;
+
+            bool ok = DiplomacySystem.BeginNormalisationBy(State, State.playerCountryId, partnerId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 16, "Relations normalised");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Post the foreign minister to one capital, or recall them by passing
+        /// an empty id (spec 04 §5e). One posting at a time.
+        /// </summary>
+        public bool AssignEnvoy(string postingId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+
+            var official = State.PlayerCountry?.FindOfficial(Data.Pillar.Diplomacy);
+            if (official == null)
+            {
+                GameLog.Warn("DIPLO", "There is no foreign minister to post.");
+                return false;
+            }
+            if (official.envoyToCountryId == (postingId ?? "")) return false;
+
+            // Influence, not Command Points: this is the operator asking an
+            // official to do something they would not have chosen, which is
+            // exactly what Influence prices (spec 15).
+            if (State.influence < 1)
+            {
+                GameLog.Warn("DIPLO", "No Influence to spend on the posting.");
+                return false;
+            }
+            State.influence--;
+
+            bool ok = DiplomacySystem.AssignEnvoyBy(State, State.playerCountryId, postingId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 8, "Envoy posted");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>
+        /// Announce a summit (spec 04 §5g). Four months of preparation, and it
+        /// is judged on the relationship as it stands when it meets.
+        /// </summary>
+        public bool ConveneSummit(string partnerId)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomacySystem.CanConveneSummit(State, State.playerCountryId, partnerId,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomacySystem.SummitCost, "Convene a summit"))
+                return false;
+
+            bool ok = DiplomacySystem.ConveneSummitBy(State, State.playerCountryId, partnerId);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 14, "Summit convened");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool BreakTreaty(string partnerId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;

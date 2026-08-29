@@ -530,6 +530,11 @@ namespace Brink.Core
                 - country.warExhaustion * 0.25f
                 - (gov.inCivilConflict ? 22f : 0f)
                 - InsurgencySystem.StabilityDrag(state, country.id)
+                // A state most of the world refuses to admit exists is harder to
+                // govern (spec 04 §5b). Exactly 1.0 for every country that was
+                // there at world creation, so this is zero by construction
+                // outside the one case it is about.
+                - (1f - DiplomacySystem.Legitimacy(state, country)) * 18f
                 + StabilityShiftFor(gov));
             country.stability = Approach(country.stability, stabilityTarget, 0.05f);
 

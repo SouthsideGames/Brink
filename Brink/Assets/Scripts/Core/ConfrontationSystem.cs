@@ -272,6 +272,27 @@ namespace Brink.Core
                 if (target >= EscalationState.LimitedConflict)
                     player.military.alertPosture = true;
 
+                // **Breaking an arms-control agreement** (spec 04 §5f). Priced,
+                // never blocked — §18.1's rule that escalation states must not
+                // hard-gate what an operator may do. Going to open conflict with
+                // a partner we signed a cap with is a treaty violation, and it
+                // is treated as one: the agreement breaks, and everyone watching
+                // adjusts what our signature is worth.
+                if (target >= EscalationState.LimitedConflict)
+                {
+                    string other = confrontation.initiatorId == player.id
+                        ? confrontation.defenderId : confrontation.initiatorId;
+                    var pact = state.FindTreaty(player.id, other);
+                    if (pact != null && !pact.broken && pact.Has(TreatyCommitment.ArmsControl))
+                    {
+                        DiplomacySystem.BreakTreatyBy(state, player.id, other);
+                        state.AddNotification(NotificationClass.Priority, "ARMS CONTROL BROKEN",
+                            "Opening hostilities against a state we signed a limitation with "
+                            + "has voided the agreement, and everyone watching noticed.",
+                            other, desk: ReportingDesk.Diplomacy);
+                    }
+                }
+
                 // Crossing into open conflict calls in defense commitments.
                 if (target >= EscalationState.LimitedConflict)
                     AllianceSystem.InvokeObligations(state, confrontation);

@@ -107,6 +107,7 @@ namespace Brink.Core
                 ConsiderResearch(state, ai, country, rng);
                 ConsiderCoalition(state, ai, country, rng);
                 ManageTheBooks(state, ai, country, rng);
+                ConsiderRecognition(state, ai, country, rng);
             }
         }
 
@@ -1512,6 +1513,52 @@ namespace Brink.Core
 
             var chosen = PreferredInstrument(state, country);
             if (chosen.HasValue) EndgameSystem.PrepareBy(state, country.id, chosen.Value);
+        }
+
+        /// <summary>
+        /// Whether to admit a breakaway state exists (spec 04 §5b).
+        ///
+        /// Outside the objective budget, like détente and the books: taking a
+        /// position on somebody else's civil war is a diplomatic fact a
+        /// government has to face, not a strategy competing for this month's
+        /// actions. If it sat in the action cut a busy world would leave every
+        /// successor permanently unrecognised, and the whole mechanism would be
+        /// a player privilege with no world behind it.
+        ///
+        /// **The calculation is whose friendship is worth more.** A state close
+        /// to the parent will not recognise; one that dislikes the parent will,
+        /// and quickly. That is the same reasoning an operator does, which is
+        /// what makes the decision legible from the outside.
+        /// </summary>
+        static void ConsiderRecognition(GameState state, AIState ai, CountryState country, Random rng)
+        {
+            if (rng.NextDouble() >= 0.20) return;
+
+            foreach (var successor in state.countries)
+            {
+                if (!DiplomacySystem.IsSuccessor(state, successor)) continue;
+                if (!DiplomacySystem.CanRecognise(state, country.id, successor.id, out _)) continue;
+
+                string parentId = DiplomacySystem.ParentOf(state, successor);
+                var withParent = state.FindRelationship(country.id, parentId);
+                var withSuccessor = state.FindRelationship(country.id, successor.id);
+                if (withSuccessor == null) continue;
+
+                // Warmth toward the new state against warmth toward the old one.
+                // A treaty with the parent counts heavily: recognising a
+                // breakaway from an ally is close to a betrayal.
+                float parentTie = withParent == null ? 0f : withParent.relations * 0.5f;
+                if (withParent != null && state.FindTreaty(country.id, parentId) != null)
+                    parentTie += 25f;
+
+                float appetite = withSuccessor.relations * 0.4f
+                                 + (100f - parentTie) * 0.35f
+                                 + ai.profile.opportunism * 0.15f;
+
+                if (appetite < 55f) continue;
+                DiplomacySystem.RecogniseBy(state, country.id, successor.id);
+                return;   // one position a month is plenty
+            }
         }
 
         /// <summary>

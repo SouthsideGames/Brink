@@ -299,6 +299,64 @@ namespace Brink.Core
                 "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
                 + "blowback and warmth persuade; the threat they still see does not.",
                 verbs: new[] { nameof(GameController.SeekSanctionsRelief) });
+            // Only offered where there is a state to recognise. A breakaway is
+            // rare, and an index entry that is nearly always refused teaches the
+            // operator to stop reading the index.
+            bool anySuccessor = false;
+            foreach (var country in state.countries)
+                if (DiplomacySystem.IsSuccessor(state, country)
+                    && DiplomacySystem.CanRecognise(state, state.playerCountryId, country.id, out _))
+                { anySuccessor = true; break; }
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Recognise a state",
+                $"{DiplomacySystem.RecogniseCost} CP",
+                "Admit a breakaway exists. It buys a grateful new state and an angry old one — "
+                + "and withholding is not neutrality, it is a position they notice for as long "
+                + "as it lasts.",
+                anySuccessor,
+                "No state has declared itself that we have not already answered on.",
+                verbs: new[] { nameof(GameController.RecogniseState) });
+
+            bool anyToMediate = false;
+            foreach (var other in state.confrontations)
+                if (DiplomacySystem.CanMediate(state, state.playerCountryId, other, out _))
+                { anyToMediate = true; break; }
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Offer to mediate",
+                $"{DiplomacySystem.MediationCost} CP",
+                "Bring two other states out of a war we are not in. Both sides have to be "
+                + "willing to have us in the room, and being refused is public.",
+                anyToMediate,
+                "No war we could stand outside of, with both sides willing to have us.",
+                verbs: new[] { nameof(GameController.OfferMediation) });
+
+            bool anyTruce = false;
+            foreach (var country in state.countries)
+                if (DiplomacySystem.CanNormalise(state, state.playerCountryId, country.id, out _))
+                { anyTruce = true; break; }
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Normalise relations",
+                $"{DiplomacySystem.NormalisationCost} CP",
+                "Put a war behind us. The only thing that reduces what two countries remember "
+                + "about each other — and it is unpopular with the people who did the fighting.",
+                anyTruce, "No recent war to put behind us.",
+                verbs: new[] { nameof(GameController.BeginNormalisation) });
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Post an envoy", "1 INF",
+                "Station the foreign minister in one capital. It holds that relationship warm "
+                + "without a Command Point every month, and it is worth exactly what they are "
+                + "worth — a weak appointment posted abroad is close to nobody being there.",
+                player.FindOfficial(Pillar.Diplomacy) != null,
+                "There is no foreign minister to post.",
+                verbs: new[] { nameof(GameController.AssignEnvoy) });
+
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Convene a summit",
+                $"{DiplomacySystem.SummitCost} CP + {DiplomacySystem.SummitPreparation} months",
+                "Announce talks. The months are the point: it is judged on the relationship as "
+                + "it stands when it meets, so a summit called in a warm month and met in a "
+                + "cold one produces a communiqué and a public failure.",
+                verbs: new[] { nameof(GameController.ConveneSummit) });
+
             Add(Pillar.Diplomacy, "DIPLOMACY", "Break a treaty", "1 CP",
                 "Immediate freedom, lasting reputational damage with everyone watching.",
                 verbs: new[] { nameof(GameController.BreakTreaty) });

@@ -412,6 +412,131 @@ Post-fix measurement: a bot doing nothing but diplomacy for twenty years tops
 out at **11–12 friendships with at least one state going hostile**. Covered by
 `WorldHeatTests`.
 
+## 5b–5g. The episodic layer (spec 25 Tranche C, 2026-08-28)
+
+**Status: as-built.** Diplomacy had strong *standing* structure — treaties,
+blocs, the chamber, accession — and almost nothing that happened *between*
+states. Six verbs, `Tests/EditMode/RecognitionAndMediationTests.cs`.
+
+### 5b. Recognition of successor states
+
+`SecessionSystem` is the only thing in the game that constructs a `CountryState`
+at runtime, and diplomacy had **no verb about one**: a state could come into
+existence and the world had no way to take a position on whether it existed.
+
+`Relationship.recognised`, and `Legitimacy(state, country)` = the share of
+sovereign states that accept it. Read in two places, which is what stops
+recognition being a line on a screen:
+
+- **stability target** — `−(1 − legitimacy) × 18`
+- **treaty willingness** — `−(1 − legitimacy) × 45`
+
+So a breakaway has to win recognition before it can win anything else. Both
+terms are exactly zero for any country present at world creation.
+
+The cost lands on the parent (−14 relations, −10 trust, a memory at full
+weight), and that is the decision: recognising buys a grateful new state and an
+angry old one, and withholding is not neutrality — it is a position the
+successor notices for as long as it lasts.
+
+`AISystem.ConsiderRecognition` runs **outside the objective budget** (the
+`ConsiderDetente` precedent), weighing warmth toward the newcomer against ties
+to the parent; a treaty with the parent adds 25 to that tie, because recognising
+a breakaway from an ally is close to a betrayal.
+
+**No new collection and no migration.** `foundedDate` already identifies a
+successor, `Relationship` is already per-pair, and `ParentOf` derives the parent
+from the `PARENT_S` id convention `SecessionSystem` already uses.
+
+### 5c. Mediation — `MediationCost = 2`
+
+The world fights ~3 of its own wars per thirty years and the operator could only
+watch. A mediator must be outside the war, and above `MediationFloor = 35`
+relations with **both** sides.
+
+```
+odds = (relationsA + relationsB) × 0.25
+     + diplomacy pillar × 0.35
+     + mean war exhaustion × 0.45
+     + CAP_VERIFICATION × 18
+     − momentum × 0.30
+```
+
+Success closes the confrontation and buys +12 relations / +14 trust with both.
+**Failing costs 5 relations and 3 trust with each** — or tabling an offer every
+month and seeing what sticks is the correct play, the same reasoning that prices
+a lost chamber motion.
+
+### 5d. Normalisation — `NormalisationCost = 2`
+
+**The only verb that reduces `memoryWeight`.** Historical memory is read by
+treaty acceptance, sanctions relief and alliance willingness, and until now it
+only ever accumulated: a pair who fought in 1986 carried it identically in 2020
+whatever either did about it — the one-way-value family, living in the
+diplomatic model.
+
+Requires a standing `settlementTruceMonths`, which is what marks two states as
+having just stopped fighting. Takes a third of the weight, once, and costs the
+mover 4 approval and 6 war support: reconciling with a recent enemy is unpopular
+with the people who fought them.
+
+### 5e. Standing envoys
+
+`Official.envoyToCountryId` on the **diplomatic desk only**, one posting at a
+time — an envoy who is everywhere is a modifier, not an allocation. Costs 1
+Influence, because it is the operator asking an official to do something they
+would not have chosen, which is exactly what Influence prices (spec 15).
+
+`EnvoyWeight` = `competence / 100`, and it is the **first place the diplomatic
+minister's quality shows up in a relationship rather than in a pillar**. Read
+monthly (+0.9 relations, +0.5 trust) and in treaty willingness (+12). Direct
+Control zeroes it, on the `CabinetAdvice` rule: an official is either running the
+pillar or representing us abroad, never both.
+
+### 5f. Arms control — `TreatyCommitment.ArmsControl = 6`
+
+Burden 16, value 4. **`CAP_VERIFICATION` adds up to +26 willingness** on a
+limitation clause — "monitoring that lets rivals believe each other" is what
+that capability's description has always promised, and it had exactly one read
+site before this tranche. It now has three.
+
+Escalating to Limited Conflict against a partner **voids the agreement** through
+`BreakTreatyBy`, with the full reputational cost. Priced, never blocked — GDD
+§18.1's rule that escalation must not hard-gate what an operator may do.
+
+**Found doing it: `BreakTreaty` was player-only.** It read `playerCountryId`
+throughout, so no foreign government could ever be *seen* breaking its word
+through that path — while `AIPrediction`'s counter-play reasons from exactly that
+public record. Two more player-only leftovers in its tail: the notification fired
+unconditionally, and the chronicle was attributed to the player whoever broke the
+treaty. Now `BreakTreatyBy`, wire-gated, correctly attributed.
+
+### 5g. Summits — `SummitCost = 3`, `SummitPreparation = 4`
+
+**A summit is preparation, not a button.** `Relationship.summitMonthsRemaining`
+counts down, and the meeting is judged on the relationship **as it stands the
+month it meets** — so one announced in a warm month and met in a cold one
+produces a communiqué and a public failure (−4 relations). A confrontation
+between the pair collapses it outright.
+
+Success: +14 relations, +16 trust, +9 alignment, a memory. Requires
+`SummitFloor = 30` relations and no live confrontation — settling or mediating
+one is what those verbs are for.
+
+### The defector, deferred out of Tranche B and landed here
+
+`CrisisEffects.ACCEPT_DEFECTOR` and the `A_WALK_IN` event. It needed a crisis
+effect id and an event definition, which is why it belonged with this tranche
+rather than with the intelligence verbs.
+
+**The only intelligence windfall that arrives rather than being taken.** Every
+other route into a foreign service is something the operator does to somebody.
+Eligible only from a state whose `socialUnrest` is above 40 — people defect from
+governments that are failing them, and like an insurgency it arises from
+conditions rather than being commissioned. Grants +35 penetration, costs −12
+relations / −15 trust with the source and **+3 to their `institutionalHardening`**,
+which is the cost that outlives the windfall. Refusable; lapsing sends him home.
+
 ## 10. Extension points
 
 - **Treaty expiry / renegotiation** — treaties are permanent until broken. Note
