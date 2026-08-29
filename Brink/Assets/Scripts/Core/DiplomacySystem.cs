@@ -1071,16 +1071,23 @@ namespace Brink.Core
         /// encirclement to whoever is not inside the web — each pact past the
         /// fourth raises it. This is what makes hegemony a held position rather
         /// than a finish line.
+        ///
+        /// **Counted through `AllianceSystem.GuarantorsOf`, so a bloc counts.**
+        /// This used to walk `state.treaties` alone, which was correct while
+        /// every alliance was bilateral and became a hole the moment a bloc could
+        /// carry `MutualDefense`: a twelve-member defence bloc registered as zero
+        /// pacts, so the multilateral route paid no anxiety at all and strictly
+        /// dominated the bilateral one — and the operator could quietly collect
+        /// the map again, which is the exact failure the heat work was built to
+        /// close.
+        ///
+        /// What is counted is **states lined up with them**, not documents
+        /// signed. Encirclement is a fact about how many governments would come,
+        /// and it does not care how the promise was papered.
         /// </summary>
         public static float PactAnxiety(GameState state, string countryId)
         {
-            int pacts = 0;
-            foreach (var treaty in state.treaties)
-            {
-                if (treaty.broken) continue;
-                if (treaty.countryA != countryId && treaty.countryB != countryId) continue;
-                if (treaty.Has(TreatyCommitment.MutualDefense)) pacts++;
-            }
+            int pacts = AllianceSystem.GuarantorsOf(state, countryId, null).Count;
             return Math.Min(1f, Math.Max(0f, pacts - 4) / 6f);
         }
 

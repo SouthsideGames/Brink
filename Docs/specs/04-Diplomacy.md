@@ -303,11 +303,22 @@ player. Forces that have trained together contribute materially more — see §9
 ## 8. Alliance obligations (`Core/AllianceSystem.cs`)
 
 A defense commitment is only meaningful if it is called upon. When a
-confrontation first reaches **Limited Conflict**, every unbroken `MutualDefense`
-treaty held by the defender is invoked exactly once
-(`Confrontation.obligationsInvoked` guards re-entry). The aggressor is never
-called to defend against itself. Signatories are collected into a list *before*
-any are resolved, because honoring mutates `state.coalitions`.
+confrontation first reaches **Limited Conflict**, every guarantee held by the
+defender is invoked exactly once (`Confrontation.obligationsInvoked` guards
+re-entry). The aggressor is never called to defend against itself. Signatories
+are collected into a list *before* any are resolved, because honoring mutates
+`state.coalitions` — and each is re-checked against `StillObliged` as the loop
+runs, since an earlier repudiation can dissolve the very bloc a later guarantee
+came from.
+
+**`GuarantorsOf(state, defenderId, aggressorId)` is the one definition of who is
+obliged**, and it reads two sources: unbroken bilateral `MutualDefense` treaties,
+and membership of a `Bloc` that carries `MutualDefense` (spec 20 §4a). Where a
+state is bound both ways the **bloc wins**: it is the public commitment, owed to
+everyone at once, and walking away from it is seen by every other member. The
+call-in, the UI roster and `PactAnxiety` all read this one function, because a
+guarantee the game honours and a guarantee the game displays must be the same
+guarantee.
 
 ```
 honorWillingness = 30
@@ -320,24 +331,113 @@ honorWillingness = 30
                  − max(0, 55 − ourStability) × 0.5
                  − max(0, 45 − ourWarSupport) × 0.3
                  + memoryWeightWithDefender × 1.2
+                 + (8 + blocCohesion × 0.18)         ← if the call is a bloc's
+                 − totalCommitment × 9               ← what we are already carrying
 honors if ≥ 50
 ```
 
-**Honoring** joins — and creates, if this is the first ally — a coalition led by
-the *defender* (`COAL_DEF_{confrontationId}`), sets alert posture, costs the ally
-5 war support, and starts a de facto war with the aggressor: relations −30, trust
-−15, memory −5. With the defender: relations +12, trust +15, memory +6.
+The bloc term is why a public alliance holds better than a private one: every
+other member is watching, and the stronger the bloc believes in itself the more
+it costs to be the one who would not come. The commitment term is where
+multi-front pressure reaches the *diplomacy* of a war rather than only the
+fighting — a state in two wars is not eager for a third.
 
-**Repudiating** marks the treaty broken and is far more damaging than an ordinary
-treaty breach: −35 relations, −45 trust and a −10 memory entry with the abandoned
-partner, −8 diplomacy, and **−12 trust plus a −2.5 memory entry with every third
-party** who now discounts that state's guarantees.
+**Honoring** does three things, and the first one is new (user decision,
+2026-08-27):
+
+1. **`ConfrontationSystem.BeginObligationBy` opens a real confrontation** against
+   the aggressor, at `LimitedConflict`, with a `Deterrence` objective. Honouring
+   used to add the ally to a coalition and stop there — a strength multiplier on
+   somebody else's defence — so the operator was told they had entered a war in
+   which they had no front, no objective, and no order they could give. It
+   **deliberately bypasses `CanOpenAnother` and the settlement truce**: those
+   gates stop a state *choosing* more war than it can fight and have no business
+   refusing a war somebody else started. A `MaxCommitment` ceiling that could
+   block a call-in would make the game forbid the operator from keeping their
+   word. The cost of a wider war stays real but priced —
+   `TheatreSystem.FocusFactor` drags every operation by commitment elsewhere.
+2. Joins — and creates, if this is the first ally — a coalition led by the
+   *defender* (`COAL_DEF_{confrontationId}`), so the alliance still coordinates
+   on the defender's own front. Both, because one without the other is either a
+   war nobody helps with or help in a war nobody is having.
+3. Sets alert posture, costs the ally 5 war support, and moves standing:
+   aggressor relations −30, trust −15, memory −5; defender relations +12, trust
+   +15, memory +6. If the call came through a bloc, **cohesion +5 and trust +7
+   with every other member** — a public commitment kept is kept in front of
+   everyone in the room.
+
+**A decision can be overtaken before it is taken.** The cascade can leave two
+obligations open at once, and answering the first can dissolve the alliance
+behind the second — repudiating expels us from the bloc, and a two-member bloc
+dies with the expulsion. `ApplyPlayerDecision` returns `false` in that case and
+rewrites the chosen `CrisisOption` in place: result text replaced with "the call
+has been overtaken", deltas and `effectId` zeroed, plus an `OBLIGATION OVERTAKEN`
+notification. Without it `CrisisSystem.Resolve` reports "we have entered the
+conflict alongside them" for a war that never opened — an outcome the game cannot
+honour, which is the terminal lying about the world.
+
+The option is edited rather than the crisis removed from `state.activeCrises`
+deliberately: `LapseUnanswered` walks that list by index and removes as it goes,
+so mutating it from inside a decision would make the lapse path drop the wrong
+element. `CrisisOption` is a reference `Resolve` already holds, which makes it the
+one edit safe on both paths.
+
+### The cascade
+
+Entering a war *is* an attack, so `BeginObligationBy` calls `InvokeObligations`
+on the confrontation it just opened — where the original aggressor is now the
+defender, and **their** guarantors are asked in turn. This is how a pact between
+three states and a pact between three others becomes one war between six, each
+government having decided for itself.
+
+It terminates because a pair may hold only one confrontation and
+`obligationsInvoked` fires once per confrontation; `MaxCascadeDepth = 4` is belt
+and braces against an authoring mistake, not the mechanism. Before the cascade,
+`InvokeObligations` walked only the *defender's* treaties, so an aggressor's own
+alliance was never called and a bloc-versus-bloc war was impossible by
+construction.
+
+**Repudiating** marks the treaty broken and costs, in this order:
+
+- **Standing, never capability.** −35 relations, −45 trust and a −10 memory entry
+  with the abandoned partner, plus **−12 trust and a −2.5 memory entry with every
+  third party** who now discounts that state's guarantees. The old `−8
+  pillars.diplomacy` is **removed**: a national capability hit has no recovery
+  path for the operator who incurred it, so it functioned as a slow
+  disqualification rather than a price — the same fix already made for
+  intelligence exposure (spec 03).
+- **Sanctions**, from the abandoned state and from anyone who shared the
+  guarantee, at a severity scaled by `ClosenessTo` the abandoned party —
+  `Coercive` ≥ 70, `Pressure` ≥ 40, else `Routine`. Routed through
+  `EconomySystem.ImposeSanctionsBy`, so the truce rule still owns itself.
+- **Preferential trade withdrawn** — the `TradePreference` commitment and its
+  clause are removed (the treaty is *not* broken outright: the non-aggression
+  clause between two states that no longer trust each other is exactly the clause
+  worth keeping), trade volume × 0.65, tariff +15. Not embargoed — that is what
+  the sanctions above are for, and doubling the consequence would price one act
+  twice.
+- **Expulsion from the bloc**, cohesion −14, and the id recorded in
+  `Bloc.repudiatedBy` (−30 to any later `JoinWillingness`). A member who would
+  not come when the bloc was called is not a member.
+- **Threat perception +10 + closeness × 0.10 and alignment −18** with everyone
+  let down. This is the term the AI's own rivalry reasoning reads, so an
+  abandoned ally can become an enemy **in its own time and on its own judgement**
+  — nothing here is scripted revenge.
 
 When **the player** is the signatory, this becomes a blocking Crisis Turn
 (`AllianceSystem.PlayerObligationCrisisId` = `"ALLIANCE_OBLIGATION"`) with two
 options — honor or repudiate. `CrisisSystem.Resolve` routes option 0/1 to
 `AllianceSystem.ApplyPlayerDecision` before applying the option's own (small)
-deltas. This crisis is built directly rather than drawn from `EventCatalog`; see
+deltas. **A lapse is a repudiation**: saying nothing to a partner who asked for
+help is an answer.
+
+The crisis body names the guarantee being invoked *and* lists the aggressor's own
+guarantors, because with the cascade in place the answer is no longer obvious —
+entering this war puts the same question to them. `ActiveCrisis.contextId`
+carries the confrontation id: a cascade can put two obligations in front of the
+operator in the same month, and answering the second by scanning for the first is
+how somebody ends up in a war they declined to enter. Empty on an old save falls
+back to that scan. This crisis is built directly rather than drawn from `EventCatalog`; see
 spec 11 §1.
 
 ## 9. Joint exercises (GDD §15.3)
@@ -412,130 +512,17 @@ Post-fix measurement: a bot doing nothing but diplomacy for twenty years tops
 out at **11–12 friendships with at least one state going hostile**. Covered by
 `WorldHeatTests`.
 
-## 5b–5g. The episodic layer (spec 25 Tranche C, 2026-08-28)
+### `PactAnxiety` counts states, not documents
 
-**Status: as-built.** Diplomacy had strong *standing* structure — treaties,
-blocs, the chamber, accession — and almost nothing that happened *between*
-states. Six verbs, `Tests/EditMode/RecognitionAndMediationTests.cs`.
-
-### 5b. Recognition of successor states
-
-`SecessionSystem` is the only thing in the game that constructs a `CountryState`
-at runtime, and diplomacy had **no verb about one**: a state could come into
-existence and the world had no way to take a position on whether it existed.
-
-`Relationship.recognised`, and `Legitimacy(state, country)` = the share of
-sovereign states that accept it. Read in two places, which is what stops
-recognition being a line on a screen:
-
-- **stability target** — `−(1 − legitimacy) × 18`
-- **treaty willingness** — `−(1 − legitimacy) × 45`
-
-So a breakaway has to win recognition before it can win anything else. Both
-terms are exactly zero for any country present at world creation.
-
-The cost lands on the parent (−14 relations, −10 trust, a memory at full
-weight), and that is the decision: recognising buys a grateful new state and an
-angry old one, and withholding is not neutrality — it is a position the
-successor notices for as long as it lasts.
-
-`AISystem.ConsiderRecognition` runs **outside the objective budget** (the
-`ConsiderDetente` precedent), weighing warmth toward the newcomer against ties
-to the parent; a treaty with the parent adds 25 to that tie, because recognising
-a breakaway from an ally is close to a betrayal.
-
-**No new collection and no migration.** `foundedDate` already identifies a
-successor, `Relationship` is already per-pair, and `ParentOf` derives the parent
-from the `PARENT_S` id convention `SecessionSystem` already uses.
-
-### 5c. Mediation — `MediationCost = 2`
-
-The world fights ~3 of its own wars per thirty years and the operator could only
-watch. A mediator must be outside the war, and above `MediationFloor = 35`
-relations with **both** sides.
-
-```
-odds = (relationsA + relationsB) × 0.25
-     + diplomacy pillar × 0.35
-     + mean war exhaustion × 0.45
-     + CAP_VERIFICATION × 18
-     − momentum × 0.30
-```
-
-Success closes the confrontation and buys +12 relations / +14 trust with both.
-**Failing costs 5 relations and 3 trust with each** — or tabling an offer every
-month and seeing what sticks is the correct play, the same reasoning that prices
-a lost chamber motion.
-
-### 5d. Normalisation — `NormalisationCost = 2`
-
-**The only verb that reduces `memoryWeight`.** Historical memory is read by
-treaty acceptance, sanctions relief and alliance willingness, and until now it
-only ever accumulated: a pair who fought in 1986 carried it identically in 2020
-whatever either did about it — the one-way-value family, living in the
-diplomatic model.
-
-Requires a standing `settlementTruceMonths`, which is what marks two states as
-having just stopped fighting. Takes a third of the weight, once, and costs the
-mover 4 approval and 6 war support: reconciling with a recent enemy is unpopular
-with the people who fought them.
-
-### 5e. Standing envoys
-
-`Official.envoyToCountryId` on the **diplomatic desk only**, one posting at a
-time — an envoy who is everywhere is a modifier, not an allocation. Costs 1
-Influence, because it is the operator asking an official to do something they
-would not have chosen, which is exactly what Influence prices (spec 15).
-
-`EnvoyWeight` = `competence / 100`, and it is the **first place the diplomatic
-minister's quality shows up in a relationship rather than in a pillar**. Read
-monthly (+0.9 relations, +0.5 trust) and in treaty willingness (+12). Direct
-Control zeroes it, on the `CabinetAdvice` rule: an official is either running the
-pillar or representing us abroad, never both.
-
-### 5f. Arms control — `TreatyCommitment.ArmsControl = 6`
-
-Burden 16, value 4. **`CAP_VERIFICATION` adds up to +26 willingness** on a
-limitation clause — "monitoring that lets rivals believe each other" is what
-that capability's description has always promised, and it had exactly one read
-site before this tranche. It now has three.
-
-Escalating to Limited Conflict against a partner **voids the agreement** through
-`BreakTreatyBy`, with the full reputational cost. Priced, never blocked — GDD
-§18.1's rule that escalation must not hard-gate what an operator may do.
-
-**Found doing it: `BreakTreaty` was player-only.** It read `playerCountryId`
-throughout, so no foreign government could ever be *seen* breaking its word
-through that path — while `AIPrediction`'s counter-play reasons from exactly that
-public record. Two more player-only leftovers in its tail: the notification fired
-unconditionally, and the chronicle was attributed to the player whoever broke the
-treaty. Now `BreakTreatyBy`, wire-gated, correctly attributed.
-
-### 5g. Summits — `SummitCost = 3`, `SummitPreparation = 4`
-
-**A summit is preparation, not a button.** `Relationship.summitMonthsRemaining`
-counts down, and the meeting is judged on the relationship **as it stands the
-month it meets** — so one announced in a warm month and met in a cold one
-produces a communiqué and a public failure (−4 relations). A confrontation
-between the pair collapses it outright.
-
-Success: +14 relations, +16 trust, +9 alignment, a memory. Requires
-`SummitFloor = 30` relations and no live confrontation — settling or mediating
-one is what those verbs are for.
-
-### The defector, deferred out of Tranche B and landed here
-
-`CrisisEffects.ACCEPT_DEFECTOR` and the `A_WALK_IN` event. It needed a crisis
-effect id and an event definition, which is why it belonged with this tranche
-rather than with the intelligence verbs.
-
-**The only intelligence windfall that arrives rather than being taken.** Every
-other route into a foreign service is something the operator does to somebody.
-Eligible only from a state whose `socialUnrest` is above 40 — people defect from
-governments that are failing them, and like an insurgency it arises from
-conditions rather than being commissioned. Grants +35 penetration, costs −12
-relations / −15 trust with the source and **+3 to their `institutionalHardening`**,
-which is the cost that outlives the windfall. Refusable; lapsing sends him home.
+`PactAnxiety` (spec 04 §8a) now counts `AllianceSystem.GuarantorsOf(state, id,
+null)` rather than walking `state.treaties`. While every alliance was bilateral
+the two were the same number; the moment a bloc could carry `MutualDefense` the
+old form became a hole — a twelve-member defence bloc registered as **zero**
+pacts, so the multilateral route paid no encirclement anxiety at all, strictly
+dominated the bilateral one, and let the operator quietly collect the map again.
+That is the exact failure the world-heat work was built to close. What is counted
+is how many governments would come, which does not care how the promise was
+papered.
 
 ## 10. Extension points
 

@@ -677,6 +677,50 @@ cheap and it eliminates a whole class of stale-state bugs.
 
 ---
 
+### MILITARY — THE WAR (belligerent roster)
+
+Once honouring a pact can open a front and that front can call in the aggressor's
+own guarantors (spec 04 §8), the operator is no longer in *a* war — they are in
+several, with partners who joined for their own reasons and enemies they never
+declared against. The front selector names the opponent of each front and nothing
+else, so the one question a coalition war actually raises had no answer anywhere
+in the game.
+
+`Core/BelligerentRoster.cs` answers it. Two rules:
+
+- **Derived, never stored.** Sides are read from live confrontations and
+  coalitions each time, on the `StatusOf` / `VoteScore` precedent. A cached
+  roster would be a second opinion about who is at war and would be wrong within
+  a month.
+- **Belligerency is public; strength is not.** Who has declared against whom is
+  an observable fact and is reported plainly and completely. Nothing in the
+  roster returns a capability figure — BALANCE OF FORCES still owns that, through
+  `IntelReadout` — so this cannot become a back door around §10's fog rule. A
+  state we have never collected on appears here by name and nowhere near a
+  number.
+
+The panel prints AGAINST US and WITH US, each row carrying **why** that state is
+in the war ("they opened this front (Indo-Pacific)", "stands with China", "we came
+to their defence"), a `COMMAND THIS FRONT` button for anyone we face directly, and
+a STILL OWED line naming the states we would be obliged to defend — an alliance
+earns its price mostly in the war that does not happen, and an operator who cannot
+see what they hold cannot judge whether it was worth buying. `EnemiesOf` includes
+states in an opponent's coalition even where no confrontation names the pair: they
+are shooting at us either way, and an operator reading only their own fronts would
+be surprised by exactly the states the cascade brought in.
+
+**`PartnersOf` iterates coalitions, not our own fronts.** This is the one subtlety
+in the file and it was wrong first time round: honouring a pact adds us to the
+coalition on the *original* war — between our ally and their attacker, which does
+not involve us — and then opens a separate front of our own. A roster that walks
+only the confrontations we are party to cannot reach that coalition, so the
+operator who had just come to a partner's defence read a screen saying they were
+fighting alone, which is exactly the reading this panel exists to prevent.
+
+Colour is the second channel as always — `sig-hostile` / `sig-ally` with `-` / `+`
+glyphs, so the reading survives any palette and any colour vision. The name column
+is `AsciiChart.Cell(..., NameWidth(W, 0.42))`, never a hardcoded width.
+
 ## 9. ASCII primitives
 
 `UI/AsciiChart.cs` — plain C#, unit-tested, all exact-width. Use these instead of

@@ -342,10 +342,22 @@ namespace Brink.Core
         }
 
         /// <summary>Found a standing bloc and lead it (GDD §15.2).</summary>
-        public bool FoundBloc(string name)
+        public bool FoundBloc(string name) => FoundBloc(name, null);
+
+        /// <summary>
+        /// Found a bloc carrying explicit commitments — the multilateral alliance
+        /// (GDD §15.2, user decision 2026-08-27).
+        ///
+        /// A defence bloc obliges every member to every other, so it is one
+        /// signature where the bilateral route needs N² treaties and pays
+        /// `PactAnxiety` on each. The terms are fixed here and never edited: a
+        /// leader who could add an obligation later would be binding members to
+        /// something they never agreed to.
+        /// </summary>
+        public bool FoundBloc(string name, System.Collections.Generic.List<Data.TreatyCommitment> commitments)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            var bloc = BlocSystem.Found(State, Turns, name);
+            var bloc = BlocSystem.Found(State, Turns, name, commitments);
             SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
             return bloc != null;
         }

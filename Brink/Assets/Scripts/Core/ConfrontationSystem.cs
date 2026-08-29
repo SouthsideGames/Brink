@@ -215,6 +215,95 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// Enter a war because a defence commitment was honoured (GDD §15.2).
+        ///
+        /// **Deliberately bypasses `CanOpenAnother` and the settlement truce.**
+        /// Those gates exist to stop a state *choosing* more war than it can
+        /// fight; they have no business refusing a war somebody else has started.
+        /// A `MaxCommitment` ceiling that can block an alliance call-in would make
+        /// the game forbid the operator from keeping their word — a refusal they
+        /// could not see, which this project has already learned reads as a broken
+        /// control rather than as a rule.
+        ///
+        /// The cost of a wider war is still real; it is simply priced rather than
+        /// prohibited. `TheatreSystem.FocusFactor` drags every operation by how
+        /// much of the force is committed elsewhere, so a state that honours three
+        /// pacts at once fights badly on all three fronts. That is the same
+        /// "priced, never gated" rule escalation and geography already follow.
+        ///
+        /// Opens at Limited Conflict because that is what it is: honouring a
+        /// mutual defence commitment is entering a war already being fought, not
+        /// opening a period of tension.
+        /// </summary>
+        public static Confrontation BeginObligationBy(GameState state, string allyId,
+            string aggressorId, string onBehalfOfId)
+        {
+            if (allyId == aggressorId) return null;
+
+            // Already fighting them: the obligation is discharged by the war we
+            // are in. There is no second war between the same pair.
+            var existing = ExistingBetween(state, allyId, aggressorId);
+            if (existing != null) return existing;
+
+            var ally = state.FindCountry(allyId);
+            var aggressor = state.FindCountry(aggressorId);
+            if (ally == null || aggressor == null) return null;
+
+            var confrontation = new Confrontation
+            {
+                id = $"CONF_{state.date.SortKey}_{state.confrontations.Count}",
+                initiatorId = allyId,
+                defenderId = aggressorId,
+                objective = ConfrontationObjective.Deterrence,
+                objectiveLocationId = "",
+                primaryStrategy = PrimaryStrategy.Military,
+                escalation = EscalationState.LimitedConflict,
+                startDate = state.date,
+                theatre = TheatreSystem.Of(aggressorId)
+            };
+            state.confrontations.Add(confrontation);
+
+            var pair = state.FindRelationship(allyId, aggressorId);
+            if (pair != null)
+            {
+                pair.sanctionsTruceMonths = 0;
+                pair.settlementTruceMonths = 0;
+            }
+
+            ally.military.alertPosture = true;
+
+            var onBehalfOf = state.FindCountry(onBehalfOfId);
+            string because = onBehalfOf == null ? "" : $" in defence of {onBehalfOf.displayName}";
+
+            if (aggressorId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Flash, "A NEW BELLIGERENT AGAINST US",
+                    $"{ally.displayName} has entered the war against us{because}. "
+                    + "We are now fighting on another front.", allyId, desk: ReportingDesk.Military);
+            else if (allyId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "WE ARE AT WAR",
+                    $"Honouring our commitment{because} has put us at war with "
+                    + $"{aggressor.displayName}. The front is open and orders may be given.",
+                    aggressorId, desk: ReportingDesk.Military);
+            else
+                state.AddNotification(NotificationClass.Wire, "THE WAR WIDENS",
+                    $"{ally.displayName} enters the war against {aggressor.displayName}{because}.",
+                    allyId, desk: ReportingDesk.Military);
+
+            state.AddChronicle(ChronicleCategory.Military, allyId,
+                $"Entered the war against {aggressor.displayName}{because}.", Publicity.Public);
+            GameLog.Info("CONFRONT", $"{allyId} enters war vs {aggressorId} on obligation.");
+
+            // And this is itself an attack, so whoever guaranteed the aggressor is
+            // now being asked the same question. This is the cascade: each entry
+            // creates a newly-attacked party, and that party's guarantors answer
+            // for themselves. It is how a pact between three states and a pact
+            // between three others becomes one war between six.
+            AllianceSystem.InvokeObligations(state, confrontation);
+
+            return confrontation;
+        }
+
+        /// <summary>
         /// Change escalation level. Jumping multiple levels is permitted when
         /// capability allows, but each skipped level adds an Escalation Premium
         /// in CP and political cost (GDD §18.1). De-escalation is free of premium.
