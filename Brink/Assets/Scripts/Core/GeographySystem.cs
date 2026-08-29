@@ -142,11 +142,6 @@ namespace Brink.Core
                    + mil.air.EffectivePower * 20f
                    + mil.logistics * 0.15f
                    + TechnologySystem.Effectiveness(country, "CAP_LIFT") * 10f
-                   // Dual-use (spec 13 §6): moving an army the way we move cargo
-                   // (`CAP_STRATLOG`), and our own launch, which reaches
-                   // everywhere by definition (`CAP_SPACE`).
-                   + TechnologySystem.Effectiveness(country, "CAP_STRATLOG") * 14f
-                   + TechnologySystem.Effectiveness(country, "CAP_SPACE") * 12f
                    // A nation whose front door is the sea gets further with the
                    // same fleet than one that merely owns some coast.
                    + NationalTraitCatalog.ProjectionBonus(country);

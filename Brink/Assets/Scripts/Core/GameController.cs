@@ -342,22 +342,10 @@ namespace Brink.Core
         }
 
         /// <summary>Found a standing bloc and lead it (GDD §15.2).</summary>
-        public bool FoundBloc(string name) => FoundBloc(name, null);
-
-        /// <summary>
-        /// Found a bloc carrying explicit commitments — the multilateral alliance
-        /// (GDD §15.2, user decision 2026-08-27).
-        ///
-        /// A defence bloc obliges every member to every other, so it is one
-        /// signature where the bilateral route needs N² treaties and pays
-        /// `PactAnxiety` on each. The terms are fixed here and never edited: a
-        /// leader who could add an obligation later would be binding members to
-        /// something they never agreed to.
-        /// </summary>
-        public bool FoundBloc(string name, System.Collections.Generic.List<Data.TreatyCommitment> commitments)
+        public bool FoundBloc(string name)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            var bloc = BlocSystem.Found(State, Turns, name, commitments);
+            var bloc = BlocSystem.Found(State, Turns, name);
             SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
             return bloc != null;
         }
@@ -404,151 +392,6 @@ namespace Brink.Core
             return ok;
         }
 
-        // ---------- fiscal statecraft (spec 02 §9, spec 25 Tranche A) ----------
-        //
-        // Each of these spends the operator's resource, delegates to the
-        // actor-generic verb, and records the initiative. That last line is not
-        // optional: a pillar whose actions do not call `RecordInitiative` grades
-        // *worse than doing nothing* (spec 07).
-
-        /// <summary>Set the share of the economy the state takes.</summary>
-        public bool SetTaxRate(float rate)
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (State.PlayerCountry == null) return false;
-            if (System.Math.Abs(rate - State.PlayerCountry.fiscal.taxRate) < 0.5f) return false;
-
-            if (!GovernmentSystem.SpendPoliticalCapital(State, FiscalSystem.SetTaxRateCost, "Set tax rate"))
-                return false;
-
-            bool ok = FiscalSystem.SetTaxRateBy(State, State.playerCountryId, rate);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Tax rate set");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Balanced, Austerity or Expansionary. A standing choice.</summary>
-        public bool SetBudgetPosture(Data.BudgetPosture posture)
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (State.PlayerCountry == null || State.PlayerCountry.fiscal.budgetPosture == posture)
-                return false;
-
-            if (!Turns.SpendCommandPoints(FiscalSystem.SetBudgetPostureCost, "Set budget posture"))
-                return false;
-
-            bool ok = FiscalSystem.SetBudgetPostureBy(State, State.playerCountryId, posture);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 12, "Budget posture set");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Raise money on the state's paper. Serviced forever after.</summary>
-        public bool IssueSovereignDebt()
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (!FiscalSystem.CanIssueDebt(State, State.playerCountryId, out string reason))
-            {
-                GameLog.Warn("FISCAL", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(FiscalSystem.IssueDebtCost, "Issue sovereign debt")) return false;
-
-            bool ok = FiscalSystem.IssueSovereignDebtBy(State, State.playerCountryId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Sovereign debt issued");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Prop one sector up for as long as it is paid for.</summary>
-        public bool SubsidiseSector(EconomicSector sector)
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (State.PlayerCountry.resources.treasury < FiscalSystem.SubsidyTreasury)
-            {
-                GameLog.Warn("FISCAL", "The treasury cannot cover a subsidy.");
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(FiscalSystem.SubsidiseCost, "Subsidise a sector")) return false;
-
-            bool ok = FiscalSystem.SubsidiseSectorBy(State, State.playerCountryId, sector);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Sector subsidised");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Buy down the bite of a future blockade or sanctions regime.</summary>
-        public bool BuildReserves(Data.TradeFocus resource)
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            float cost = FiscalSystem.ReserveOrderPoints * FiscalSystem.ReserveCostPerPoint;
-            if (State.PlayerCountry.resources.treasury < cost)
-            {
-                GameLog.Warn("FISCAL", $"The treasury cannot cover a reserve order ({cost:F0}).");
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(FiscalSystem.ReservesCost, "Build strategic reserves")) return false;
-
-            bool ok = FiscalSystem.BuildReservesBy(State, State.playerCountryId, resource);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Reserves built");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Spend the buffer now rather than holding it.</summary>
-        public bool ReleaseReserves(Data.TradeFocus resource)
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (!Turns.SpendCommandPoints(FiscalSystem.ReservesCost, "Release strategic reserves")) return false;
-
-            bool ok = FiscalSystem.ReleaseReservesBy(State, State.playerCountryId, resource);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 8, "Reserves released");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>Write the debt down. Remembered for five years.</summary>
-        public bool RestructureDebt()
-        {
-            if (!MayCommand(Data.Pillar.Economy)) return false;
-            if (State.PlayerCountry.fiscal.sovereignDebt <= 0f) return false;
-            if (!GovernmentSystem.SpendPoliticalCapital(State, FiscalSystem.RestructureCost, "Restructure debt"))
-                return false;
-
-            bool ok = FiscalSystem.RestructureDebtBy(State, State.playerCountryId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 16, "Debt restructured");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
         public bool RunCovertOperation(string targetId, CovertOperation operation, float deceptionBias = 1f,
             Data.IntelDomain deceptionDomain = Data.IntelDomain.Military)
         {
@@ -556,46 +399,6 @@ namespace Brink.Core
             bool ok = IntelligenceSystem.RunCovertOperation(State, Turns, targetId, operation, deceptionBias, deceptionDomain);
             SaveSystem.Save(State, AutosaveSlot); // save regardless: CP was spent, consequences applied
             return ok;
-        }
-
-        /// <summary>
-        /// Set the service a question (spec 03 §10). Months of work, and the
-        /// answer comes back with a grade — and can be wrong.
-        /// </summary>
-        public bool CommissionEstimate(string targetId, Data.EstimateQuestion question)
-        {
-            if (!MayCommand(Data.Pillar.Intelligence)) return false;
-            if (!IntelProductSystem.CanCommission(State, State.playerCountryId, targetId,
-                    question, out string reason))
-            {
-                GameLog.Warn("INTEL", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(IntelProductSystem.CommissionCost,
-                    $"Commission {question} assessment")) return false;
-
-            var product = IntelProductSystem.CommissionBy(
-                State, State.playerCountryId, targetId, question);
-            if (product != null)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Assessment commissioned");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return product != null;
-        }
-
-        /// <summary>Hunt for a foreign service inside our own (spec 03 §7c).</summary>
-        public bool MoleHunt()
-        {
-            if (!MayCommand(Data.Pillar.Intelligence)) return false;
-            if (!Turns.SpendCommandPoints(IntelligenceSystem.MoleHuntCost, "Mole hunt")) return false;
-
-            bool found = IntelligenceSystem.MoleHuntBy(State, State.playerCountryId);
-            ProgressionSystem.RecordInitiative(State);
-            ProgressionSystem.AwardXP(State, found ? 18 : 6, "Mole hunt");
-            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
-            return found;
         }
 
         public bool StrengthenCounterIntelligence()
@@ -671,23 +474,6 @@ namespace Brink.Core
             if (!MayCommand(Data.Pillar.Government)) return false;
             bool ok = GovernmentSystem.SetNationalPriority(State, priority);
             if (ok) SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>
-        /// Bargain with a **named bloc** (spec 05 §2g). Knowing who you are
-        /// talking to is worth more than an undirected approach.
-        /// </summary>
-        public bool CourtFaction(Data.OppositionTheme bloc)
-        {
-            if (!MayCommand(Data.Pillar.Government)) return false;
-            bool ok = GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Bloc courted");
-                SaveSystem.Save(State, AutosaveSlot);
-            }
             return ok;
         }
 
@@ -777,31 +563,6 @@ namespace Brink.Core
         /// amended, or a parliamentary operator — the one who most needs it —
         /// could never reach it. Same reasoning as emergency powers.
         /// </summary>
-        /// <summary>
-        /// Begin rewriting what this state is (spec 05 §2f). Thirty months, paid
-        /// for every one of them, and genuinely losable.
-        /// </summary>
-        public bool BeginConstitutionalChange(Data.GovernmentType target)
-        {
-            if (!MayCommand(Data.Pillar.Government)) return false;
-            if (!GovernmentSystem.CanChangeConstitution(State, State.playerCountryId, target,
-                    out string reason))
-            {
-                GameLog.Warn("GOV", reason);
-                return false;
-            }
-
-            bool ok = GovernmentSystem.BeginConstitutionalChangeBy(
-                State, State.playerCountryId, target);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 30, "Constitutional process opened");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
         public bool ConsolidateAuthority(Data.Pillar pillar)
         {
             if (!IsRunning) return false;
@@ -842,143 +603,6 @@ namespace Brink.Core
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
             bool ok = DiplomacySystem.ProposeTreaty(State, Turns, targetId, commitments);
             SaveSystem.Save(State, AutosaveSlot); // CP was spent either way
-            return ok;
-        }
-
-        /// <summary>
-        /// Admit a breakaway state exists (spec 04 §5b). Buys a grateful new
-        /// state and an angry old one.
-        /// </summary>
-        public bool RecogniseState(string successorId)
-        {
-            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomacySystem.CanRecognise(State, State.playerCountryId, successorId,
-                    out string reason))
-            {
-                GameLog.Warn("DIPLO", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(DiplomacySystem.RecogniseCost, "Recognise a state"))
-                return false;
-
-            bool ok = DiplomacySystem.RecogniseBy(State, State.playerCountryId, successorId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 14, "State recognised");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>
-        /// Offer to mediate a war we are not in (spec 04 §5c). Failing is public
-        /// and costs standing with both sides.
-        /// </summary>
-        public bool OfferMediation(Data.Confrontation confrontation)
-        {
-            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomacySystem.CanMediate(State, State.playerCountryId, confrontation,
-                    out string reason))
-            {
-                GameLog.Warn("DIPLO", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(DiplomacySystem.MediationCost, "Offer mediation"))
-                return false;
-
-            bool settled = DiplomacySystem.OfferMediationBy(State, State.playerCountryId, confrontation);
-            ProgressionSystem.RecordInitiative(State);
-            ProgressionSystem.AwardXP(State, settled ? 26 : 8, "Mediation offered");
-            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
-            return settled;
-        }
-
-        /// <summary>
-        /// Put a war behind us (spec 04 §5d). The one verb that reduces
-        /// historical memory — unpopular with the people who fought it.
-        /// </summary>
-        public bool BeginNormalisation(string partnerId)
-        {
-            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomacySystem.CanNormalise(State, State.playerCountryId, partnerId,
-                    out string reason))
-            {
-                GameLog.Warn("DIPLO", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(DiplomacySystem.NormalisationCost, "Normalise relations"))
-                return false;
-
-            bool ok = DiplomacySystem.BeginNormalisationBy(State, State.playerCountryId, partnerId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 16, "Relations normalised");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>
-        /// Post the foreign minister to one capital, or recall them by passing
-        /// an empty id (spec 04 §5e). One posting at a time.
-        /// </summary>
-        public bool AssignEnvoy(string postingId)
-        {
-            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-
-            var official = State.PlayerCountry?.FindOfficial(Data.Pillar.Diplomacy);
-            if (official == null)
-            {
-                GameLog.Warn("DIPLO", "There is no foreign minister to post.");
-                return false;
-            }
-            if (official.envoyToCountryId == (postingId ?? "")) return false;
-
-            // Influence, not Command Points: this is the operator asking an
-            // official to do something they would not have chosen, which is
-            // exactly what Influence prices (spec 15).
-            if (State.influence < 1)
-            {
-                GameLog.Warn("DIPLO", "No Influence to spend on the posting.");
-                return false;
-            }
-            State.influence--;
-
-            bool ok = DiplomacySystem.AssignEnvoyBy(State, State.playerCountryId, postingId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 8, "Envoy posted");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
-            return ok;
-        }
-
-        /// <summary>
-        /// Announce a summit (spec 04 §5g). Four months of preparation, and it
-        /// is judged on the relationship as it stands when it meets.
-        /// </summary>
-        public bool ConveneSummit(string partnerId)
-        {
-            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomacySystem.CanConveneSummit(State, State.playerCountryId, partnerId,
-                    out string reason))
-            {
-                GameLog.Warn("DIPLO", reason);
-                return false;
-            }
-            if (!Turns.SpendCommandPoints(DiplomacySystem.SummitCost, "Convene a summit"))
-                return false;
-
-            bool ok = DiplomacySystem.ConveneSummitBy(State, State.playerCountryId, partnerId);
-            if (ok)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 14, "Summit convened");
-            }
-            SaveSystem.Save(State, AutosaveSlot);
             return ok;
         }
 

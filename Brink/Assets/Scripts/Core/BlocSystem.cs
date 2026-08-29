@@ -16,13 +16,10 @@ namespace Brink.Core
     ///
     /// Four rules keep it from being a second treaty system:
     ///
-    /// 1. **Its commitments are uniform, and joining is judged on them.** A bloc
-    ///    may carry `MutualDefense`, `Transit`, `IntelligenceSharing` or
-    ///    `TradePreference`, and every member carries all of them toward every
-    ///    other. It does not reimplement the bilateral bargain: acceptance still
-    ///    prices burden through `DiplomacySystem.BurdenOf`, so a defence bloc is
-    ///    genuinely harder to get somebody into than a talking shop. Asymmetric
-    ///    clauses stay in `Treaty`, which is what `ClauseSide` is for.
+    /// 1. **It carries no commitments.** Defence, transit and trade preference
+    ///    stay in `Treaty`, where the acceptance logic and the reputational cost
+    ///    of breaking them already live. A bloc is not a promise; it is a
+    ///    declaration of who you are with.
     /// 2. **It is read in two places, both already load-bearing.** Members drift
     ///    into `strategicAlignment` with one another, and `CouncilSystem.VoteScore`
     ///    gains a term for following the bloc — so a bloc is worth having in the
@@ -133,20 +130,6 @@ namespace Brink.Core
 
         /// <summary>Actor-generic. Founds a bloc of one; it needs a second member to survive.</summary>
         public static Bloc FoundBy(GameState state, string leaderId, string name)
-            => FoundBy(state, leaderId, name, null);
-
-        /// <summary>
-        /// Actor-generic, with the terms every member will carry.
-        ///
-        /// The commitments are fixed at founding and never edited afterwards: a
-        /// bloc whose leader can add a defence obligation to it later is a bloc
-        /// whose members did not agree to what they are now bound by. Widening
-        /// the terms means founding a new one, which is the same rule
-        /// `Treaty`/`DeepenTreatyBy` follows by making every addition answer to
-        /// acceptance again.
-        /// </summary>
-        public static Bloc FoundBy(GameState state, string leaderId, string name,
-            List<TreatyCommitment> commitments)
         {
             if (!CanFound(state, leaderId, out _)) return null;
 
@@ -160,31 +143,21 @@ namespace Brink.Core
                 cohesion = 55f
             };
             bloc.memberIds.Add(leaderId);
-            if (commitments != null)
-                foreach (var commitment in commitments)
-                    if (!bloc.commitments.Contains(commitment)) bloc.commitments.Add(commitment);
-
             state.blocs.Add(bloc);
 
             state.AddChronicle(ChronicleCategory.Diplomatic, leaderId,
-                $"{leader.displayName} founds {bloc.name}{DescribeTerms(bloc)}.", Publicity.Public);
+                $"{leader.displayName} founds {bloc.name}.", Publicity.Public);
 
             if (leader.isPlayer)
                 state.AddNotification(NotificationClass.Priority, "BLOC FOUNDED",
-                    $"{bloc.name} exists{DescribeTerms(bloc)}. It is one state until somebody "
-                    + "joins it, and it dissolves if nobody does.", leaderId,
-                    desk: ReportingDesk.Diplomacy);
+                    $"{bloc.name} exists. It is one state until somebody joins it, and it "
+                    + "dissolves if nobody does.", leaderId, desk: ReportingDesk.Diplomacy);
 
             return bloc;
         }
 
         /// <summary>Player order: spends CP and records the initiative.</summary>
         public static Bloc Found(GameState state, TurnManager turns, string name)
-            => Found(state, turns, name, null);
-
-        /// <summary>Player order, with the terms the bloc will carry.</summary>
-        public static Bloc Found(GameState state, TurnManager turns, string name,
-            List<TreatyCommitment> commitments)
         {
             if (!AuthoritySystem.EnsureAuthority(state, Pillar.Diplomacy)) return null;
             if (!CanFound(state, state.playerCountryId, out string reason))
@@ -195,32 +168,12 @@ namespace Brink.Core
 
             if (!turns.SpendCommandPoints(FoundCost, "Found a bloc")) return null;
 
-            var bloc = FoundBy(state, state.playerCountryId, name, commitments);
+            var bloc = FoundBy(state, state.playerCountryId, name);
             if (bloc == null) return null;
 
             ProgressionSystem.AwardXP(state, 24, "Founded a bloc");
             ProgressionSystem.RecordInitiative(state);
             return bloc;
-        }
-
-        /// <summary>
-        /// The bloc's terms, bare: `MUTUAL DEFENSE, TRADE PREFERENCE`. Empty when
-        /// it carries none.
-        /// </summary>
-        public static string TermsLine(Bloc bloc)
-        {
-            if (bloc == null || bloc.commitments.Count == 0) return "";
-
-            var parts = new List<string>();
-            foreach (var commitment in bloc.commitments) parts.Add(Phrase.Caps(commitment));
-            return string.Join(", ", parts);
-        }
-
-        /// <summary>The same, parenthesised for appending to a sentence.</summary>
-        public static string DescribeTerms(Bloc bloc)
-        {
-            string terms = TermsLine(bloc);
-            return terms.Length == 0 ? "" : $" ({terms})";
         }
 
         static string DefaultName(CountryState leader)
@@ -290,64 +243,7 @@ namespace Brink.Core
             if (treaty != null) willingness += 10f;
             if (treaty != null && treaty.Has(TreatyCommitment.MutualDefense)) willingness += 12f;
 
-            // What the bloc actually asks of them.
-            //
-            // Priced through the same `BurdenOf` the bilateral acceptance logic
-            // uses, so a defence bloc is genuinely a harder sell than a talking
-            // shop and the two routes to an alliance cannot disagree about what a
-            // promise is worth. Divided down because a burden owed to a group is
-            // shared with that group — which is the honest reason multilateral
-            // alliances are easier to build than N bilateral ones, and the whole
-            // reason to have this object at all.
-            foreach (var commitment in bloc.commitments)
-                willingness -= DiplomacySystem.BurdenOf(commitment) * 0.45f;
-
-            // But the same terms are worth more the more states already carry
-            // them: a guarantee from seven governments is a different proposition
-            // from a guarantee from one.
-            if (bloc.commitments.Contains(TreatyCommitment.MutualDefense))
-                willingness += Math.Min(24f, Math.Max(0, bloc.memberIds.Count - 1) * 6f);
-
-            // Nobody walks back into a room they walked out of.
-            if (bloc.repudiatedBy.Contains(targetId)) willingness -= 30f;
-
             return Clamp(willingness);
-        }
-
-        /// <summary>
-        /// Put a member out, or record that they took themselves out.
-        ///
-        /// Distinct from <see cref="LeaveBy"/> because the two are not the same
-        /// act and should not read the same: leaving is a policy, and being
-        /// expelled for refusing a call is a disgrace. The expelled state is
-        /// remembered in <see cref="Bloc.repudiatedBy"/> so the door does not
-        /// simply reopen next month.
-        /// </summary>
-        public static bool Expel(GameState state, Bloc bloc, string countryId, string why)
-        {
-            if (bloc == null || !bloc.Has(countryId)) return false;
-
-            var expelled = state.FindCountry(countryId);
-            if (expelled == null) return false;
-
-            bool wasLeader = bloc.leaderId == countryId;
-            bloc.memberIds.Remove(countryId);
-            if (!bloc.repudiatedBy.Contains(countryId)) bloc.repudiatedBy.Add(countryId);
-
-            state.AddChronicle(ChronicleCategory.Diplomatic, countryId,
-                $"{expelled.displayName} is out of {bloc.name}: {why}.", Publicity.Public);
-
-            if (expelled.isPlayer)
-                state.AddNotification(NotificationClass.Priority, "EXPELLED FROM THE BLOC",
-                    $"We are out of {bloc.name} — {why}. Its remaining members will not "
-                    + "readmit us on the strength of an apology.", bloc.leaderId,
-                    desk: ReportingDesk.Diplomacy);
-
-            if (wasLeader) Dissolve(state, bloc, "its leader would not honour it");
-            else if (bloc.memberIds.Count < MinimumMembers)
-                Dissolve(state, bloc, "there was nobody left in it");
-
-            return true;
         }
 
         /// <summary>Actor-generic. They accept on their own interests or they do not.</summary>
@@ -672,28 +568,7 @@ namespace Brink.Core
             if (!GovernmentSystem.SpendPoliticalCapitalBy(
                     state, founder.id, 2f, "Found a bloc")) return;
 
-            // A government founds the bloc its own situation argues for. Without
-            // this every foreign bloc is a talking shop while the player's is an
-            // alliance, which is the most-repeated bug in this codebase wearing a
-            // new coat: a verb the AI can technically call but never calls with
-            // the arguments that make it matter.
-            var terms = new List<TreatyCommitment>();
-            if (FeelsThreatened(state, founder.id)) terms.Add(TreatyCommitment.MutualDefense);
-            else terms.Add(TreatyCommitment.TradePreference);
-            if (founder.pillars.intelligence >= 60f) terms.Add(TreatyCommitment.IntelligenceSharing);
-
-            FoundBy(state, founder.id, null, terms);
-        }
-
-        /// <summary>Whether this state has somebody to be frightened of.</summary>
-        static bool FeelsThreatened(GameState state, string countryId)
-        {
-            foreach (var relationship in state.relationships)
-            {
-                if (!relationship.Involves(countryId)) continue;
-                if (relationship.ThreatPerceivedBy(countryId) > 58f) return true;
-            }
-            return false;
+            FoundBy(state, founder.id, null);
         }
 
         static float Approach(float current, float target, float rate)

@@ -1251,54 +1251,6 @@ namespace Brink.Core
                 }
             });
 
-            // The one intelligence windfall that arrives rather than being taken
-            // (spec 03 §11). Every other route into a foreign service is
-            // something the operator does to somebody; this is somebody walking
-            // in, and it can be refused.
-            list.Add(new EventDefinition
-            {
-                id = "A_WALK_IN",
-                title = "A WALK-IN",
-                cooldownMonths = 36,
-                // Only from a state in genuine trouble: people defect from
-                // governments that are failing them, not from contented ones.
-                // Same rule as insurgency — this arises from conditions the
-                // simulation already computes and cannot be commissioned.
-                isEligible = s => MostUnstableForeignState(s) != null
-                                  && MostUnstableForeignState(s).socialUnrest > 40f,
-                weight = s => 0.9f,
-                body = s => $"An official of {MostUnstableForeignState(s)?.displayName} has "
-                            + "presented himself at one of our embassies and asked to stay. He "
-                            + "has brought papers. Our people believe him, and say the papers "
-                            + "are worth having. His government will know inside a week where "
-                            + "he went.",
-                subject = s => MostUnstableForeignState(s)?.id,
-                // Saying nothing sends him home, and that is an answer too.
-                lapseEffectId = CrisisEffects.Relations,
-                lapseTargetUsesSubject = true,
-                options = s => new List<CrisisOption>
-                {
-                    Option("TAKE HIM IN",
-                        "Deep access into one state, and that state will know exactly why.",
-                        "He is in our hands, and his service is already tightening up.",
-                        approval: -2,
-                        effect: CrisisEffects.AcceptDefector,
-                        target: MostUnstableForeignState(s)?.id, magnitude: 35),
-                    Option("HEAR HIM OUT, THEN DECLINE",
-                        "Read the papers, return the man. We learn less and they learn nothing.",
-                        "He was turned away at the door. What he brought was read first.",
-                        effect: CrisisEffects.AcceptDefector,
-                        target: MostUnstableForeignState(s)?.id, magnitude: 12),
-                    Option("SEND HIM BACK",
-                        "We are not in that business this month. They will be told we were "
-                        + "correct about it.",
-                        "He was handed back. His government has noticed the courtesy.",
-                        approval: 1,
-                        effect: CrisisEffects.Relations,
-                        target: MostUnstableForeignState(s)?.id, magnitude: 8)
-                }
-            });
-
             list.Add(new EventDefinition
             {
                 id = "DISASTER_ABROAD",

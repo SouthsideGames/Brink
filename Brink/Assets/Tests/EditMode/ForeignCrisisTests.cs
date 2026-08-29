@@ -24,9 +24,6 @@ namespace Brink.Tests
         {
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 5309);
-
-            baselineForeignEntries = 0;
-            baselineForeignEntries = ForeignChronicleEntries();
         }
 
         [TearDown]
@@ -68,26 +65,13 @@ namespace Brink.Tests
             }
         }
 
-        /// <summary>
-        /// Foreign political entries written *since the world was created*.
-        ///
-        /// The absolute count is not usable: `HistoryCatalog.Seed` files a
-        /// Political entry against `countryA` for every pair world generation
-        /// made cold, so a brand-new world already carries several before a
-        /// single month is run. Reading the raw count made
-        /// `AHealthyStateIsLeftAlone` fail on seeded backstory and let
-        /// `AWorldOfProblemsProducesForeignCrises` pass without any crisis
-        /// firing at all. Measure the delta, not the total.
-        /// </summary>
-        int baselineForeignEntries;
-
         int ForeignChronicleEntries()
         {
             int count = 0;
             foreach (var entry in state.chronicle)
                 if (entry.countryId != state.playerCountryId
                     && entry.category == ChronicleCategory.Political) count++;
-            return count - baselineForeignEntries;
+            return count;
         }
 
         /// <summary>Put one state in a condition that qualifies for several situations.</summary>

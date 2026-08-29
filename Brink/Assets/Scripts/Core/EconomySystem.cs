@@ -32,52 +32,12 @@ namespace Brink.Core
         /// </summary>
         public const float TreasuryIncomeRate = 0.03f;
 
-        /// <summary>
-        /// How fast a sector's capacity returns toward what the nation's
-        /// fundamentals can hold. Halved again by the `Approach` rate at the call
-        /// site, so the effective coefficient is 0.03/month — a gutted sector
-        /// takes years to come back, and a country that has been wrecked is not
-        /// whole again inside a term of office.
-        /// </summary>
-        public const float CapacityReversion = 0.06f;
-
-        /// <summary>
-        /// What one sector's capacity is worth in a country whose fundamentals
-        /// are healthy — the level `MonthlyUpdate` pulls output back toward.
-        ///
-        /// **This is `WorldFactory`'s authored baseline, shared rather than
-        /// retyped.** Each sector is anchored to the national quantity it is
-        /// actually made of, and every one of those has its own recovery path
-        /// (the resource ceilings; the pillars through `Growth.Apply`), so
-        /// capacity inherits one instead of having none. Zero by construction at
-        /// world creation: at month zero output *is* this value, ±the authoring
-        /// jitter, so the new term contributes nothing to a healthy country and
-        /// only bites where something has torn capacity away from what the
-        /// country could support.
-        ///
-        /// Two definitions of this would drift, and the drift would be invisible
-        /// — a world that generates at one level and reverts to another looks
-        /// like slow economic decline rather than like a bug.
-        /// </summary>
-        public static float SectorAnchor(CountryState country, EconomicSector sector)
-        {
-            switch (sector)
-            {
-                case EconomicSector.Energy: return Clamp(country.resources.energy, 0f, 100f);
-                case EconomicSector.Agriculture: return Clamp(country.resources.foodSecurity, 0f, 100f);
-                case EconomicSector.Industry: return Clamp(country.resources.industrialCapacity, 0f, 100f);
-                case EconomicSector.Defense: return Clamp(country.pillars.military * 0.8f, 0f, 100f);
-                default: return Clamp(country.pillars.economy, 0f, 100f);
-            }
-        }
-
         public static void MonthlyUpdate(GameState state)
         {
             foreach (var country in state.countries)
                 UpdateCountry(state, country);
 
-            // The trend is sampled by `FiscalSystem` at the end of the month —
-            // see `TrackTreasuryTrend`.
+            TrackTreasuryTrend(state);
         }
 
         /// <summary>
@@ -90,16 +50,7 @@ namespace Brink.Core
         /// entitled to hear "we spend more than we make" while it is still an
         /// arithmetic fact rather than a collapsed market.
         /// </summary>
-        /// <summary>
-        /// Called from `FiscalSystem` at the *end* of the month, not from here.
-        ///
-        /// It has to run after the deficit has been financed. A deficit now
-        /// becomes debt rather than a falling balance, so a reading taken from
-        /// the treasury alone reports a government living entirely on borrowed
-        /// money as roughly breaking even — the warning would go silent at
-        /// precisely the point it exists to sound.
-        /// </summary>
-        public static void TrackTreasuryTrend(GameState state)
+        static void TrackTreasuryTrend(GameState state)
         {
             var player = state.PlayerCountry;
             if (player == null) return;
@@ -108,17 +59,11 @@ namespace Brink.Core
             {
                 state.treasuryTrendSeeded = true;
                 state.lastMonthTreasury = player.resources.treasury;
-                state.lastMonthSovereignDebt = player.fiscal.sovereignDebt;
                 return;
             }
 
-            // The fiscal balance: what the account did, less what was borrowed
-            // to make it do that. Debt taken on is spending; debt retired is
-            // saving.
-            float delta = (player.resources.treasury - state.lastMonthTreasury)
-                          - (player.fiscal.sovereignDebt - state.lastMonthSovereignDebt);
+            float delta = player.resources.treasury - state.lastMonthTreasury;
             state.lastMonthTreasury = player.resources.treasury;
-            state.lastMonthSovereignDebt = player.fiscal.sovereignDebt;
 
             // ~5-month memory: quick enough to notice a new programme's bill,
             // slow enough that one bad month is not a klaxon.
@@ -229,11 +174,7 @@ namespace Brink.Core
             => Clamp(country.resources.materialsEndowment
                      + TradeSystem.Supply(state, country.id, TradeFocus.Materials)
                      + TerritorySystem.MaterialsSwing(state, country.id)
-                     + NationalTraitCatalog.ResourceCeilingBonus(country)
-                     // Alloys and recycling: industry needs less of what we have
-                     // to import (`CAP_SUBSTITUTION`).
-                     + TechnologySystem.Effectiveness(country, "CAP_SUBSTITUTION") * 18f,
-                     0f, 100f);
+                     + NationalTraitCatalog.ResourceCeilingBonus(country), 0f, 100f);
 
         /// <summary>
         /// The most food security this country can hold: what its own land
@@ -244,15 +185,7 @@ namespace Brink.Core
         /// </summary>
         public static float FoodCeilingFor(GameState state, CountryState country)
             => Clamp(country.resources.foodEndowment
-                     + TradeSystem.Supply(state, country.id, TradeFocus.Food)
-                     // **The route a food-poor state never had** (spec 13 §6).
-                     // Until this, only authored trade links and the player's own
-                     // deals could raise a foreign food ceiling — so an AI
-                     // government born short of food stayed short of it for the
-                     // whole of a fifty-year save, whatever it did. Yield,
-                     // storage and distribution are something a country can
-                     // decide to be good at.
-                     + TechnologySystem.Effectiveness(country, "CAP_AGRI") * 22f, 0f, 100f);
+                     + TradeSystem.Supply(state, country.id, TradeFocus.Food), 0f, 100f);
 
         /// <summary>
         /// How much domestic capacity a sector is losing to imports.
@@ -367,22 +300,10 @@ namespace Brink.Core
 
             float targetGrowth = 1.6f + structural + industryPull + confidencePull + sectorPull
                                  + (tradeHealth - 50f) * 0.014f
-                                 // Ports, rail and the paperwork between them:
-                                 // trade carries more for the same relationships
-                                 // (`CAP_LOGNET`).
-                                 + TechnologySystem.Effectiveness(country, "CAP_LOGNET")
-                                   * Math.Max(0f, tradeHealth - 40f) * 0.012f
-                                 // Everyone settles in our paper, so coercion
-                                 // aimed at us lands softer (`CAP_RESERVECURR`).
                                  - sanctionPressure * 0.55f
-                                   * (1f - TechnologySystem.Effectiveness(country, "CAP_RESERVECURR") * 0.35f)
                                  - blowback * 0.2f
                                  - energyDrag
-                                 - (atWar ? 1.3f : 0f)
-                                 // Fiscal choices (spec 02 §9). Both are zero by
-                                 // construction at the authored defaults.
-                                 - FiscalSystem.TaxGrowthDrag(country)
-                                 + FiscalSystem.PostureGrowthShift(country.fiscal.budgetPosture);
+                                 - (atWar ? 1.3f : 0f);
 
             eco.growthRate = Approach(eco.growthRate, targetGrowth, 0.35f);
             TrackContraction(state, country, eco);
@@ -458,33 +379,9 @@ namespace Brink.Core
             // is the same one that produced the capability — a working ministry
             // and industrial programmes — and it is reachable the month growth
             // turns positive.
-            // **Floored.** The comment above says a bad decade "stops the pillar
-            // growing rather than destroying it", and that the recovery path is
-            // "reachable the month growth turns positive". Neither was true: the
-            // drag ran to zero, and growth cannot turn positive once the pillar
-            // is gone, because `SectorAnchor` reads this pillar for Technology,
-            // Finance and Consumer and growth is derived from sector capacity. So
-            // it closed a loop with an absorbing state at zero — measured on seed
-            // 1212 at 0.27/month, roughly 3.2 a year against the ~1.4 the comment
-            // estimated from milder figures, which is a great power's entire
-            // economic capability inside twenty years.
-            //
-            // A depression takes the margin above what the country physically
-            // still has; it does not unbuild the plant or unlearn the workforce.
             float stagnation = StagnationDrag(eco);
             if (stagnation > 0.001f)
-            {
-                // The floor stops this drag taking more; it never *gives*. Written
-                // as a bare `Math.Max(floor, value - stagnation)` it lifted any
-                // pillar already below the floor for some other reason — a test
-                // that drives the economy to `pillars.economy = 5` to force a
-                // contraction had it silently raised to 36 on the first tick, and
-                // the recession it was measuring never happened.
-                float floor = StagnationFloor(country);
-                if (country.pillars.economy > floor)
-                    country.pillars.economy = Math.Max(floor,
-                        Clamp(country.pillars.economy - stagnation, 0f, 100f));
-            }
+                country.pillars.economy = Clamp(country.pillars.economy - stagnation, 0f, 100f);
 
             // ---- inflation ----
             // Coercion is a supply shock: scarcity raises prices even as demand
@@ -516,36 +413,11 @@ namespace Brink.Core
             eco.unemployment = Clamp(Approach(eco.unemployment, targetUnemployment, 0.25f), 1.5f, 35f);
 
             // ---- debt & treasury ----
-            //
-            // `debtToGdp` used to be a free-floating accumulator here: +0.9 a
-            // month at war, +0.15 otherwise, minus growth. It answered to
-            // nothing the operator did and to no money that was actually spent.
-            // It is now **derived** from `FiscalState.sovereignDebt`, a real
-            // stock that a deficit adds to and a surplus retires, and
-            // `FiscalSystem` recomputes this field each month so the six
-            // existing readers keep working. Same discipline as
-            // `BranchForce.strength` mirroring the inventory rather than
-            // competing with it.
+            float deficitPressure = atWar ? 0.9f : 0.15f;
+            eco.debtToGdp = Clamp(eco.debtToGdp + deficitPressure - Math.Max(0f, eco.growthRate) * 0.18f, 0f, 250f);
 
             eco.gdp = Math.Max(50f, eco.gdp * (1f + eco.growthRate / 1200f));
-
-            // Revenue is now something the government decides (spec 02 §9). Both
-            // multipliers are 1.0 at the authored defaults — baseline tax rate,
-            // Balanced posture — so an untouched world raises exactly what it
-            // raised before the fiscal layer existed and the measured balance
-            // table stays comparable.
-            //
-            // The debt haircut is gone from here: servicing the stock is an
-            // explicit monthly expense in `FiscalSystem`, which is what lets
-            // credit standing price it. Two deductions for the same debt would
-            // have charged it twice.
-            country.resources.treasury += eco.gdp * TreasuryIncomeRate
-                                          * FiscalSystem.TaxMultiplier(country)
-                                          * FiscalSystem.PostureIncomeMultiplier(country.fiscal.budgetPosture)
-                                          // Money that never arrives (spec 05 §2e).
-                                          // Zero for a government that has not
-                                          // been buying support.
-                                          * (1f - GovernmentSystem.RevenueLeakage(country));
+            country.resources.treasury += eco.gdp * TreasuryIncomeRate * (1f - eco.debtToGdp / 400f);
 
             // ---- confidence ----
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f
@@ -557,8 +429,7 @@ namespace Brink.Core
             // ---- sectors ----
             foreach (var sector in eco.sectors)
             {
-                float healthTarget = 88f - sanctionPressure * 9f - blowback * 5f
-                                     + FiscalSystem.SubsidyHealthBonus(country, sector.sector);
+                float healthTarget = 88f - sanctionPressure * 9f - blowback * 5f;
                 if (sector.sector == EconomicSector.Energy && country.resources.energy < 45f) healthTarget -= 12f;
                 if (sector.sector == EconomicSector.Defense && atWar) healthTarget += 8f;
                 if (sector.sector == EconomicSector.Finance) healthTarget -= Math.Max(0f, eco.debtToGdp - 90f) * 0.15f;
@@ -586,33 +457,7 @@ namespace Brink.Core
                 // pillar was missing.
                 float displacement = ImportDisplacement(state, country, sector.sector);
 
-                // **Capacity reverts to what the nation's fundamentals can hold.**
-                //
-                // This line read `outputTarget = sector.output + ...`, which is
-                // not a target at all: `Approach(v, v + d, 0.5)` is `v + 0.5d`,
-                // an accumulating rate wearing a target's clothes, with no anchor
-                // and no restoring force. So capacity fell forever under
-                // recession, sanctions or import displacement — and because
-                // growth is *derived* from capacity (`ProductiveCapacity` above),
-                // zero was an absorbing state: output 0 gives deep negative
-                // growth, which drives output further down.
-                //
-                // Measured on seed 1212: six of the seven US sectors sat at
-                // exactly 0.0 output with *healthy* sector health, a market index
-                // of 7, permanent −4%/yr growth, and no recovery in thirty-six
-                // isolated economy ticks. Everything downstream followed from it
-                // — unemployment 24, living standards 0, unrest and grievance
-                // pinned at 100, four coups and recurring civil conflict. The
-                // whole collapse was this one line.
-                //
-                // Fourteenth instance of the value-versus-target family, and the
-                // one sitting under the entire economy. The pressures now move
-                // the *target*, exactly as they already do for food, energy and
-                // materials.
-                float anchor = SectorAnchor(country, sector.sector);
-                float outputTarget = sector.output
-                                     + (anchor - sector.output) * CapacityReversion
-                                     + eco.growthRate * 0.08f
+                float outputTarget = sector.output + eco.growthRate * 0.08f
                                      - sanctionPressure * 0.35f
                                      - displacement;
                 if (sector.sector == EconomicSector.Defense && atWar) outputTarget += 0.5f;
@@ -655,18 +500,13 @@ namespace Brink.Core
             // so the ×0.55 on what remains is disruption of domestic output —
             // painful, and with a resting point a producer can live at.
             float energyCeiling = EnergyCeilingFor(state, country);
-            // A strategic reserve raises the floor pressure can push the target
-            // to (spec 02 §9), and depletes while it is doing that work. Zero
-            // without one, so a country that has bought none is unaffected.
-            float energyFloor = Math.Min(1f, 0.55f + FiscalSystem.ReserveFloorBonus(country, TradeFocus.Energy));
-            float energyTarget = sanctionPressure > 0.8f ? energyCeiling * energyFloor : energyCeiling;
+            float energyTarget = sanctionPressure > 0.8f ? energyCeiling * 0.55f : energyCeiling;
             float energyDrift = Math.Max(-0.8f, Math.Min(0.35f,
                 (energyTarget - country.resources.energy) * 0.03f));
             country.resources.energy = Clamp(country.resources.energy + energyDrift, 0f, 100f);
 
             float materialsCeiling = MaterialsCeilingFor(state, country);
-            float materialsFloor = Math.Min(1f, 0.55f + FiscalSystem.ReserveFloorBonus(country, TradeFocus.Materials));
-            float materialsTarget = sanctionPressure > 1.2f ? materialsCeiling * materialsFloor : materialsCeiling;
+            float materialsTarget = sanctionPressure > 1.2f ? materialsCeiling * 0.55f : materialsCeiling;
             float materialsDrift = Math.Max(-0.7f, Math.Min(0.25f,
                 (materialsTarget - country.resources.strategicMaterials) * 0.03f));
             country.resources.strategicMaterials =
@@ -692,8 +532,7 @@ namespace Brink.Core
             float foodCeiling = FoodCeilingFor(state, country);
             float foodTarget = foodCeiling;
             if (atWar) foodTarget = Math.Min(foodTarget, foodCeiling * 0.75f);
-            float foodFloor = Math.Min(1f, 0.5f + FiscalSystem.ReserveFloorBonus(country, TradeFocus.Food));
-            if (sanctionPressure > 1.0f) foodTarget = Math.Min(foodTarget, foodCeiling * foodFloor);
+            if (sanctionPressure > 1.0f) foodTarget = Math.Min(foodTarget, foodCeiling * 0.5f);
             float foodDrift = Math.Max(-0.6f, Math.Min(0.3f,
                 (foodTarget - country.resources.foodSecurity) * 0.03f));
             country.resources.foodSecurity =
@@ -945,21 +784,6 @@ namespace Brink.Core
         public static float StagnationDrag(EconomyState eco)
             => Math.Max(0f, -eco.growthRate) * 0.020f
              + Math.Max(0f, eco.unemployment - 9f) * 0.012f;
-
-        /// <summary>
-        /// How far a depression can erode national economic capability before it
-        /// stops taking anything more.
-        ///
-        /// Anchored to the physical base the country still holds, which has its
-        /// own recovery path (industrial programmes, `CAP_ADVMFG`), rather than
-        /// to a bare constant — a state whose plant survives keeps the capability
-        /// to use it. Never a bound on how *bad* the economy gets, only on how
-        /// much of the nation's long-run capability a downturn can take with it:
-        /// growth, confidence, employment and the market index are all free to
-        /// collapse, and the crisis regime still expresses that in full.
-        /// </summary>
-        public static float StagnationFloor(CountryState country)
-            => Clamp(12f + country.resources.industrialCapacity * 0.35f, 0f, 100f);
 
         public static float SanctionBlowbackFor(GameState state, string countryId)
         {

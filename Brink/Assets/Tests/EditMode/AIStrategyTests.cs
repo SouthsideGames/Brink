@@ -262,15 +262,6 @@ namespace Brink.Tests
             // runs covert networks at all. Exposure is left to the simulation —
             // setting `compromised` by hand would skip the code that writes the
             // public record, which is the thing the world actually reads.
-            // Hardening is reported alongside the headline so a failure says
-            // which of the two layers went quiet: the *policy* layer is
-            // `HardenSecurity` winning the AI's action cut, the *structural*
-            // layer is `institutionalHardening`, the reservoir that survives the
-            // monthly reversion to a pillar-derived baseline. A weak signal with
-            // a full reservoir means the AI stopped acting; a weak signal with an
-            // empty one means nothing is being caught in the first place.
-            float meanHardeningCareless = 0f, meanHardeningCareful = 0f;
-
             float SecurityAfterDecade(int seed, bool operatorRunsNetworks)
             {
                 var state = World(seed);
@@ -280,34 +271,14 @@ namespace Brink.Tests
 
                 for (int month = 0; month < 120; month++) turns.EndMonth();
 
-                // Measured **against the operator**, not as the world's general
-                // standard. `counterIntelligence` and `institutionalHardening`
-                // are both global — a service that catches anyone hardens
-                // against everyone — and in a sixteen-state world where every
-                // government runs networks, they saturate from background
-                // espionage: the reservoir read 10.5 of a cap of 20 whether or
-                // not the operator ran a single network, so the player was one
-                // sixteenth of the signal and the anti-memorisation property was
-                // diluted to nothing. The claim was never "the world gets better
-                // at counter-intelligence"; it is "the world gets better at
-                // catching *you*". `EffectiveCounterIntelligence` is what every
-                // read that resists a named actor now goes through.
                 float total = 0f;
-                float hardening = 0f;
                 int counted = 0;
                 foreach (var country in state.countries)
                 {
                     if (country.id == state.playerCountryId) continue;
-                    total += IntelligenceSystem.EffectiveCounterIntelligence(
-                        state, country, state.playerCountryId);
-                    hardening += IntelligenceSystem.DirectedHardening(
-                        state, country, state.playerCountryId);
+                    total += country.counterIntel.counterIntelligence;
                     counted++;
                 }
-
-                if (operatorRunsNetworks) meanHardeningCareless += hardening / counted / 2f;
-                else meanHardeningCareful += hardening / counted / 2f;
-
                 return total / counted;
             }
 
@@ -321,9 +292,7 @@ namespace Brink.Tests
                 $"An operator who ran covert networks for a decade left the world's " +
                 $"counterintelligence at {careless:F1}, against {careful:F1} for one who ran " +
                 "none. The world has to learn from what it sees, or the same opening works " +
-                "in every playthrough forever.\n" +
-                $"  directed hardening (cap {IntelligenceSystem.MaxDirectedHardening:F0}): " +
-                $"{meanHardeningCareless:F2} careless, {meanHardeningCareful:F2} careful");
+                "in every playthrough forever.");
         }
 
         [Test]

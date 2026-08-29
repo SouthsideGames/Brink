@@ -164,15 +164,6 @@ namespace Brink.Data
         /// them — so it needs no migration step.
         /// </summary>
         public DisplacementState displacement = new DisplacementState();
-
-        /// <summary>
-        /// Public finance (spec 25 Tranche A). **Needs a migration step**, unlike
-        /// `displacement` above: a zeroed `FiscalState` is not merely empty, it
-        /// is wrong — a country with no tax rate, no credit and no record of the
-        /// debt it already carries. `SaveMigration` seeds it from the save's own
-        /// `debtToGdp` and GDP.
-        /// </summary>
-        public FiscalState fiscal = new FiscalState();
     }
 
     /// <summary>Chronicle categories for the world archive (GDD §31.3).</summary>

@@ -63,18 +63,6 @@ namespace Brink.Core
     /// </summary>
     public static class ActionCatalog
     {
-        /// <summary>
-        /// Any network at all, uncompromised. A commissioned assessment needs
-        /// collection but not the deep access a personal approach does — the
-        /// grade it comes back with is what thin reporting costs.
-        /// </summary>
-        static bool AnyNetwork(GameState state)
-        {
-            foreach (var network in state.networks)
-                if (network.ownerId == state.playerCountryId && !network.compromised) return true;
-            return false;
-        }
-
         public static List<ActionEntry> All(GameState state)
         {
             var entries = new List<ActionEntry>();
@@ -188,43 +176,6 @@ namespace Brink.Core
                 "New trade builds dependence — theirs on us, and ours on them.",
                 verbs: new[] { nameof(GameController.ProposeTrade), nameof(GameController.WithdrawFromTrade) });
 
-            // ---------- fiscal statecraft ----------
-
-            Add(Pillar.Economy, "ECONOMY", "Set the tax rate", "2 PC",
-                "What share of the economy the state takes. More revenue now against growth, "
-                + "approval and what people can afford.",
-                verbs: new[] { nameof(GameController.SetTaxRate) });
-            Add(Pillar.Economy, "ECONOMY", "Set budget posture", "2 CP + monthly",
-                "Balanced, Austerity or Expansionary. A standing choice, paid for every month "
-                + "it is held: austerity buys solvency with living standards and unrest, "
-                + "expansion the reverse.",
-                verbs: new[] { nameof(GameController.SetBudgetPosture) });
-            Add(Pillar.Economy, "ECONOMY", "Issue sovereign debt", "1 CP",
-                "Money now, serviced every month forever, and the standing falls the moment "
-                + "you ask. What it costs depends on what lenders already think of us.",
-                FiscalSystem.CanIssueDebt(state, state.playerCountryId, out string debtBlock),
-                debtBlock,
-                verbs: new[] { nameof(GameController.IssueSovereignDebt) });
-            Add(Pillar.Economy, "ECONOMY", "Restructure the debt", "4 PC",
-                "Write half of it off. Effective, and every state holding our paper remembers "
-                + "for five years.",
-                player.fiscal.sovereignDebt > 0f, "We carry no debt to restructure.",
-                verbs: new[] { nameof(GameController.RestructureDebt) });
-            Add(Pillar.Economy, "ECONOMY", "Subsidise a sector", "1 CP + monthly treasury",
-                "Hold one sector's functioning up for as long as it is paid for. It fades "
-                + "without renewal.",
-                player.resources.treasury >= FiscalSystem.SubsidyTreasury,
-                "The treasury cannot cover a subsidy.",
-                verbs: new[] { nameof(GameController.SubsidiseSector) });
-            Add(Pillar.Economy, "ECONOMY", "Build strategic reserves", "1 CP + treasury",
-                "Energy, materials or grain put by. Raises the floor a blockade or a sanctions "
-                + "regime can grind us down to — and it depletes while doing it.",
-                player.resources.treasury
-                    >= FiscalSystem.ReserveOrderPoints * FiscalSystem.ReserveCostPerPoint,
-                "The treasury cannot cover a reserve order.",
-                verbs: new[] { nameof(GameController.BuildReserves),
-                               nameof(GameController.ReleaseReserves) });
-
             Add(Pillar.Economy, "ECONOMY", "Invest in a sector", "2 CP + monthly treasury",
                 "Repair, expand or modernise one of the seven sectors. Years of money now for "
                 + "capacity later, and the treasury has to carry it every month or the work stops.",
@@ -246,22 +197,6 @@ namespace Brink.Core
             Add(Pillar.Intelligence, "INTELLIGENCE", "Run a covert operation", "2 CP",
                 "Sabotage, influence or theft. Exposure costs standing with everyone.",
                 verbs: new[] { nameof(GameController.RunCovertOperation) });
-            Add(Pillar.Intelligence, "INTELLIGENCE", "Commission an assessment",
-                $"{IntelProductSystem.CommissionCost} CP",
-                "Set the service one question about one state — what they are building toward, "
-                + "whether they will honour a pact, how they read us. Months of work, and the "
-                + "answer carries a confidence grade because it can be wrong.",
-                deepNetwork || AnyNetwork(state),
-                "No network anywhere. Analysis is a product of collection, not a substitute.",
-                verbs: new[] { nameof(GameController.CommissionEstimate) });
-
-            Add(Pillar.Intelligence, "INTELLIGENCE", "Mole hunt",
-                $"{IntelligenceSystem.MoleHuntCost} CP",
-                "Search our own service for a foreign one. A hunt that finds nothing still "
-                + "investigated people: it costs elite cohesion and the standing of whoever it "
-                + "fell on, so asking is never free.",
-                verbs: new[] { nameof(GameController.MoleHunt) });
-
             Add(Pillar.Intelligence, "INTELLIGENCE", "Counterintelligence sweep", "1 CP",
                 "Harden the state against penetration.",
                 verbs: new[] { nameof(GameController.StrengthenCounterIntelligence) });
@@ -299,64 +234,6 @@ namespace Brink.Core
                 "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
                 + "blowback and warmth persuade; the threat they still see does not.",
                 verbs: new[] { nameof(GameController.SeekSanctionsRelief) });
-            // Only offered where there is a state to recognise. A breakaway is
-            // rare, and an index entry that is nearly always refused teaches the
-            // operator to stop reading the index.
-            bool anySuccessor = false;
-            foreach (var country in state.countries)
-                if (DiplomacySystem.IsSuccessor(state, country)
-                    && DiplomacySystem.CanRecognise(state, state.playerCountryId, country.id, out _))
-                { anySuccessor = true; break; }
-
-            Add(Pillar.Diplomacy, "DIPLOMACY", "Recognise a state",
-                $"{DiplomacySystem.RecogniseCost} CP",
-                "Admit a breakaway exists. It buys a grateful new state and an angry old one — "
-                + "and withholding is not neutrality, it is a position they notice for as long "
-                + "as it lasts.",
-                anySuccessor,
-                "No state has declared itself that we have not already answered on.",
-                verbs: new[] { nameof(GameController.RecogniseState) });
-
-            bool anyToMediate = false;
-            foreach (var other in state.confrontations)
-                if (DiplomacySystem.CanMediate(state, state.playerCountryId, other, out _))
-                { anyToMediate = true; break; }
-
-            Add(Pillar.Diplomacy, "DIPLOMACY", "Offer to mediate",
-                $"{DiplomacySystem.MediationCost} CP",
-                "Bring two other states out of a war we are not in. Both sides have to be "
-                + "willing to have us in the room, and being refused is public.",
-                anyToMediate,
-                "No war we could stand outside of, with both sides willing to have us.",
-                verbs: new[] { nameof(GameController.OfferMediation) });
-
-            bool anyTruce = false;
-            foreach (var country in state.countries)
-                if (DiplomacySystem.CanNormalise(state, state.playerCountryId, country.id, out _))
-                { anyTruce = true; break; }
-
-            Add(Pillar.Diplomacy, "DIPLOMACY", "Normalise relations",
-                $"{DiplomacySystem.NormalisationCost} CP",
-                "Put a war behind us. The only thing that reduces what two countries remember "
-                + "about each other — and it is unpopular with the people who did the fighting.",
-                anyTruce, "No recent war to put behind us.",
-                verbs: new[] { nameof(GameController.BeginNormalisation) });
-
-            Add(Pillar.Diplomacy, "DIPLOMACY", "Post an envoy", "1 INF",
-                "Station the foreign minister in one capital. It holds that relationship warm "
-                + "without a Command Point every month, and it is worth exactly what they are "
-                + "worth — a weak appointment posted abroad is close to nobody being there.",
-                player.FindOfficial(Pillar.Diplomacy) != null,
-                "There is no foreign minister to post.",
-                verbs: new[] { nameof(GameController.AssignEnvoy) });
-
-            Add(Pillar.Diplomacy, "DIPLOMACY", "Convene a summit",
-                $"{DiplomacySystem.SummitCost} CP + {DiplomacySystem.SummitPreparation} months",
-                "Announce talks. The months are the point: it is judged on the relationship as "
-                + "it stands when it meets, so a summit called in a warm month and met in a "
-                + "cold one produces a communiqué and a public failure.",
-                verbs: new[] { nameof(GameController.ConveneSummit) });
-
             Add(Pillar.Diplomacy, "DIPLOMACY", "Break a treaty", "1 CP",
                 "Immediate freedom, lasting reputational damage with everyone watching.",
                 verbs: new[] { nameof(GameController.BreakTreaty) });
@@ -409,12 +286,6 @@ namespace Brink.Core
                 player.government.IsElective ? "Bargain with the chamber" : "Accommodate the elite", "2 PC",
                 "Support bought rather than earned. It decays, so it has to be kept up.",
                 verbs: new[] { nameof(GameController.BuildPoliticalSupport) });
-            Add(Pillar.Government, "GOVERNMENT", "Court a bloc", "2 PC",
-                "Bargain with one named part of the coalition rather than with the chamber in "
-                + "general. Worth more than an undirected approach, because each bloc wants a "
-                + "different thing and only one of them wants what you are offering.",
-                verbs: new[] { nameof(GameController.CourtFaction) });
-
             Add(Pillar.Government, "GOVERNMENT", "Distribute patronage", "1 PC + treasury",
                 "The same support, bought with money instead of standing — and it hollows the state.",
                 player.resources.treasury >= GovernmentSystem.PatronageTreasury,
@@ -430,18 +301,6 @@ namespace Brink.Core
             Add(Pillar.Government, "GOVERNMENT", "Set civic posture", "3 PC",
                 "Open or restrictive. Order against legitimacy, and it decides how fast plots form.",
                 verbs: new[] { nameof(GameController.SetCivicPosture) });
-            Add(Pillar.Government, "GOVERNMENT", "Change the constitution",
-                $"{GovernmentSystem.ConstitutionalOpeningCost:F0} PC + "
-                + $"{GovernmentSystem.ConstitutionalUpkeep:F1} PC/mo for "
-                + $"{GovernmentSystem.ConstitutionalMonths} months",
-                "Become a different kind of state. It changes how power works here — succession, "
-                + "term limits, what emergency powers cost — and it can fail, publicly, after "
-                + "years of paying for it.",
-                !player.government.ChangingConstitution,
-                $"A constitutional process is already under way "
-                + $"({player.government.constitutionalMonthsRemaining} month(s)).",
-                verbs: new[] { nameof(GameController.BeginConstitutionalChange) });
-
             Add(Pillar.Government, "GOVERNMENT", "Consolidate authority", "12 PC",
                 "Permanently make one pillar the operator's to command. The one large purchase.",
                 verbs: new[] { nameof(GameController.ConsolidateAuthority) });

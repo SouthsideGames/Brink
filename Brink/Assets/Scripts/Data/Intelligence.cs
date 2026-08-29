@@ -44,22 +44,6 @@ namespace Brink.Data
         public bool compromised;
 
         public int monthsActive;
-
-        /// <summary>
-        /// How hard this network has been worked lately, 0..100 (spec 03 §6a).
-        ///
-        /// Every covert operation raises it and it decays monthly, so running
-        /// the same network against the same state again and again gets steadily
-        /// harder — the target's services notice a tempo even when they never
-        /// catch anybody. This is the diminishing-returns rule that stops one
-        /// deep network being an unlimited supply of sabotage, and it is
-        /// deliberately separate from `DirectedHardening`, which is about being
-        /// *caught*: activity draws attention whether or not it is attributed.
-        ///
-        /// Zero on an old save is correct — no operations recorded, no attention
-        /// drawn — so no migration.
-        /// </summary>
-        public float operationTempo;
     }
 
     /// <summary>

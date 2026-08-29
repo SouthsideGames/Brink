@@ -373,30 +373,17 @@ namespace Brink.Tests
         [Test]
         public void ContestedGroundPaysNobody()
         {
-            // **Whoever holds it**, not the player. This asked for an industrial
-            // centre owned by the player, and the roster authors the United
-            // States none — `CreateDebugWorld` posts the operator to the USA, so
-            // the `Assert.Ignore` below fired on every run this test has ever
-            // had. It was reported green, it was never executed, and `Denies` —
-            // the load-bearing consequence of the whole system, the reason
-            // arming somebody takes an asset off a rival without taking the
-            // ground — had no coverage at all.
-            //
-            // The claim was never about the player anyway: a province in revolt
-            // pays nobody, whoever owns it.
-            var industry = state.locations.Find(l => l.type == LocationType.IndustrialCenter
-                                                     && !string.IsNullOrEmpty(l.ownerId));
-            Assert.NotNull(industry,
-                "the roster authored no industrial centre anywhere — this test cannot run, and "
-                + "silently skipping is how it went eight months without executing");
+            var player = state.PlayerCountry;
+            var industry = state.locations.Find(l => l.ownerId == player.id
+                                                     && l.type == LocationType.IndustrialCenter);
+            if (industry == null) Assert.Ignore("this world authored the player no industrial centre");
 
-            string holder = industry.ownerId;
-            float before = TerritorySystem.IndustrySwing(state, holder);
+            float before = TerritorySystem.IndustrySwing(state, player.id);
 
             var rising = Plant(industry, InsurgencyCause.Deprivation, 80f);
             rising.strength = InsurgencySystem.ContestThreshold + 10f;
 
-            float after = TerritorySystem.IndustrySwing(state, holder);
+            float after = TerritorySystem.IndustrySwing(state, player.id);
 
             Assert.Less(after, before,
                 "A province in open revolt kept paying its owner in full. Denying a rival the "

@@ -79,12 +79,7 @@ namespace Brink.Core
                 ? country.warExhaustion * 0.75f + Math.Max(0f, 50f - country.warSupport) * 0.55f
                 : country.warExhaustion * 0.30f;
 
-            // **The recorded thing first** (spec 05 §2e). The three terms below
-            // measure the state being *feeble* — a weak pillar, plots, a divided
-            // elite — which is not the same as the state being bought, and was
-            // all this had to go on before `gov.corruption` existed.
-            float corruption = gov.corruption * 0.75f
-                             + Math.Max(0f, 55f - country.pillars.government) * 0.60f
+            float corruption = Math.Max(0f, 55f - country.pillars.government) * 0.60f
                              + gov.conspiracyLevel * 0.25f
                              + Math.Max(0f, 50f - gov.eliteCohesion) * 0.20f;
 
@@ -289,19 +284,7 @@ namespace Brink.Core
             // dead code. Grievance is a genuine store with its own proportional
             // decay, and it is the right currency anyway: what a country
             // remembers about being told it was wrong.
-            //
-            // **Scaled by the headroom left**, so repetition cannot pin it. A
-            // flat +6 per failed confrontation against a decay of ~0.445 means a
-            // government that denies an opposition more than once a year sits at
-            // the cap forever — and confronting a hardship or war theme
-            // *backfires by design*, so a government with a case it cannot beat
-            // does exactly that. Measured: Russia at grievance 100.0 with a
-            // healthy economy, 92 market index and +2.15 growth, held there by
-            // nothing but its own repeated denials. Same diminishing idiom as
-            // patronage and brokered support.
-            float headroom = 1f - country.publicGrievance / 100f;
-            country.publicGrievance =
-                Clamp(country.publicGrievance + 3f * (1f - effectiveness) * 2f * headroom);
+            country.publicGrievance = Clamp(country.publicGrievance + 3f * (1f - effectiveness) * 2f);
 
             // **Denying something everybody can see makes it worse.** Below a
             // third effective, the attempt itself becomes part of the case.

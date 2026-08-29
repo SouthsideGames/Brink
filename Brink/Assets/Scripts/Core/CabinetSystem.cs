@@ -573,18 +573,7 @@ namespace Brink.Core
             var worst = AcquisitionSystem.WorstShortfall(country, out float ratio);
             if (worst == null || ratio > 1.05f) return;
 
-            // **Must out-buy the routine restock it replaces.** A directed
-            // minister does not also run `RestockRoutine` — `MonthlyAct` skips it
-            // for exactly this directive — so whatever is ordered here is the
-            // *whole* of the month's procurement. At `max(0.5, amount/3)` that
-            // was around half an increment against routine restocking's
-            // `max(0.4, performance)`, which is ~0.8 for a competent minister:
-            // PREPARE FOR WAR left the force holding measurably less than
-            // leaving the same official alone, and charged Influence for it. The
-            // looser shortfall threshold above meant it fired more often and
-            // bought less each time, which reads as a directive that does
-            // nothing rather than one that is subtly worse than nothing.
-            float wanted = worst.orderIncrement * Math.Max(1.2f, amount / 3f);
+            float wanted = worst.orderIncrement * Math.Max(0.5f, amount / 3f);
             float affordable = country.resources.treasury * 0.25f
                                / Math.Max(0.0001f, worst.unitCost);
 

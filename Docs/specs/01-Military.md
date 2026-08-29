@@ -1098,35 +1098,6 @@ signed a two-term one.
 
 Signed settlements are archived in `GameState.settlements` with their terms.
 
-## 5b. Entering somebody else's war (GDD §15.2, user decision 2026-08-27)
-
-`ConfrontationSystem.BeginObligationBy(state, allyId, aggressorId, onBehalfOfId)`
-is how honouring a defence commitment produces a front. It differs from `BeginBy`
-in exactly three ways, and each is deliberate:
-
-1. **It bypasses `CanOpenAnother`.** `MaxCommitment = 2.2` exists to stop a state
-   *choosing* more war than it can fight. It has no business refusing a war
-   somebody else started — a ceiling that could block an alliance call-in would
-   make the game forbid the operator from keeping their word, and a refusal the
-   operator cannot see reads as a broken control (spec 09 §12). The cost of a
-   wider war stays real but **priced**: `TheatreSystem.FocusFactor` drags every
-   operation by commitment elsewhere, so a state honouring three pacts at once
-   fights badly on all three fronts. Same "priced, never gated" rule escalation
-   (§18.1) and geography (§16) already follow.
-2. **It bypasses the settlement truce** and clears both truce counters on the
-   pair. A truce is a promise between two states about what *they* will start.
-3. **It opens at `LimitedConflict`, not `Tension`.** Entering a war already being
-   fought is not a period of tension.
-
-It returns the existing confrontation unchanged if the pair are already at war —
-the obligation is discharged by the war they are in — and it calls
-`AllianceSystem.InvokeObligations` on the confrontation it opened, which is what
-continues the cascade. See spec 04 §8.
-
-`BelligerentRoster` (spec 09 §8) is the operator-facing side: once a cascade can
-hand you belligerents you never declared against, "who am I fighting" stops being
-answerable from the front selector alone.
-
 ## 6. Joint exercises (GDD §15.3)
 
 Requires a partner at `Cooperative` or better, not currently an opponent, and off

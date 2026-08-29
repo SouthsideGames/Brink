@@ -156,23 +156,27 @@ namespace Brink.UI
                 value => Brink.Audio.AudioPreferences.Muted == value,
                 value => { Brink.Audio.AudioPreferences.Muted = value; Refresh(); });
 
-            // ---- no save/load rows here, deliberately ----
+            // ---- saves (2026-08) ----
             //
-            // A 2026-08 phone-chrome pass added SAVE TO / LOAD FROM slots 1–3 to
-            // this panel. Removed 2026-08-28 (user decision, reaffirming the
-            // original): **the game autosaves and there is no way to reload a
-            // month you disliked.** GDD §30's rule is that consequences stick,
-            // and a load button in the always-shipping settings panel is exactly
-            // the loop the rule exists to close — it would also make an operator
-            // caught running covert action able to reload past the world
-            // hardening against them, which is the one thing spec 06 §7b's
-            // counter-play design refuses.
-            //
-            // `SaveSystem`'s slots stay in code (tests use them, and cloud sync
-            // would need them), and `SaveToSlot` / `LoadFromSlot` remain on
-            // `GameController`; they are named in
-            // `ActionIndexTests.NotOperatorActions` as session lifecycle.
-            // **Do not add a save/load screen without asking.**
+            // Slots existed in `SaveSystem` and had no player-facing control
+            // once the debug console was gated out of release builds. Slot 0 is
+            // the autosave and stays out of reach; three named slots here.
+            if (GameController.Instance != null && GameController.Instance.IsRunning)
+            {
+                var savesTitle = new Label("RECORD");
+                savesTitle.AddToClassList("terminal-text-bright");
+                reader.Add(savesTitle);
+
+                var slots = new[] { 1, 2, 3 };
+                BuildRow("SAVE TO", slots,
+                    slot => $"SLOT {slot}{(SaveSystem.SaveExists(slot) ? " *" : "")}",
+                    slot => false,
+                    slot => { GameController.Instance.SaveToSlot(slot); Brink.Audio.AudioDirector.Play(Brink.Audio.SfxId.SaveComplete); Refresh(); });
+                BuildRow("LOAD FROM", slots,
+                    slot => SaveSystem.SaveExists(slot) ? $"SLOT {slot}" : $"SLOT {slot} (EMPTY)",
+                    slot => false,
+                    slot => { if (SaveSystem.SaveExists(slot)) { GameController.Instance.LoadFromSlot(slot); Hide(); } });
+            }
 
             // The reset sits above the reference prose, not below it: on most
             // screens it is now visible without scrolling at all, which is what

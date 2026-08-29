@@ -764,13 +764,7 @@ namespace Brink.Core
             float intensity = profile?.intensity ?? 1f;
             float casualtyAppetite = 0.6f + directive.casualtyTolerance / 100f * 0.8f;
 
-            // Machines where people used to be: our own casualties fall for the
-            // same effect (`CAP_AUTONOMY`, spec 13 §6). It buys nothing on the
-            // other side of the ledger — the enemy's losses and the civilian
-            // harm below are untouched, which is what makes it a capability
-            // about *us* rather than a general force multiplier.
             record.attackerLosses = intensity * casualtyAppetite * ownLossModifier
-                                    * (1f - TechnologySystem.Effectiveness(attacker, "CAP_AUTONOMY") * 0.30f)
                                     * (record.success ? 3.5f : 6.5f) * (0.7f + (float)rng.NextDouble() * 0.6f);
             record.defenderLosses = intensity * enemyLossModifier
                                     * (record.success ? 7f : 3.5f) * (0.7f + (float)rng.NextDouble() * 0.6f);
@@ -1071,13 +1065,7 @@ namespace Brink.Core
 
                 case DefenseModel.AirDefenses:
                     // Air power is not stopped by infantry, only by air defence.
-                    // Layered interception is the capability that makes the
-                    // difference (`CAP_AIRDEFENSE`) — and hypersonics are what
-                    // nothing currently fielded can intercept, so they read
-                    // straight through it.
-                    power = target.garrison * 0.12f * (1f + target.defenseValue / 90f)
-                            * (1f + TechnologySystem.Effectiveness(defender, "CAP_AIRDEFENSE") * 0.7f);
-                    if (TechnologySystem.Has(attacker, "CAP_HYPERSONIC")) power *= 0.55f;
+                    power = target.garrison * 0.12f * (1f + target.defenseValue / 90f);
                     break;
 
                 case DefenseModel.EnemyAir:
@@ -1087,12 +1075,8 @@ namespace Brink.Core
                     break;
 
                 case DefenseModel.EnemyNavy:
-                    // Quiet hulls and the sensors to hunt them: naval fighting
-                    // resolves on capability rather than on tonnage
-                    // (`CAP_UNDERSEA`).
                     power = defender != null
                         ? defender.military.naval.EffectivePower * PowerScale * 1.1f
-                          * (1f + TechnologySystem.Effectiveness(defender, "CAP_UNDERSEA") * 0.45f)
                         : target.garrison * 0.2f;
                     break;
 

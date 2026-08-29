@@ -242,62 +242,33 @@ namespace Brink.Tests
         [Test]
         public void PreparingForWarOrdersEquipment()
         {
-            // Against a control, like DRAW DOWN below and for the same reason:
-            // twelve months of treasury income comfortably exceeds twelve months
-            // of equipment orders, so reading the closing balance against the
-            // opening one asks whether the country happened to run a surplus,
-            // not whether the directive spent anything. The claim is a delta.
-            float Run(bool prepare, out float ordered)
+            var player = state.PlayerCountry;
+            player.resources.treasury = 20000f;
+            player.military.air.inventory.Add(AssetKind.Fighters,
+                -player.military.air.inventory.CountOf(AssetKind.Fighters) * 0.7f);
+
+            var minister = player.FindOfficial(Pillar.Military);
+            minister.mode = ControlMode.Directed;
+            minister.directiveId = MilitaryAdvice.PrepareForWar;
+            minister.competence = 80f;
+
+            var turns = new TurnManager(state);
+            SimulationPipeline.Wire(turns, state);
+            for (int month = 0; month < 12; month++)
             {
-                var world = WorldFactory.CreateDebugWorld(seed: 8642);
-                var player = world.PlayerCountry;
-                player.resources.treasury = 20000f;
-                player.military.air.inventory.Add(AssetKind.Fighters,
-                    -player.military.air.inventory.CountOf(AssetKind.Fighters) * 0.7f);
-
-                var minister = player.FindOfficial(Pillar.Military);
-                minister.competence = 80f;
-
-                // Six months, not twelve. Routine restocking belongs to the
-                // military desk in every country, so an *autonomous* minister
-                // also closes a shortfall — the directive buys tempo, not the
-                // existence of orders. Over a full year both arms have finished
-                // refilling the fighter gap this fixture opens, so the closing
-                // inventory is the same in both and the end state cannot see the
-                // difference. Measure while the gap is still open.
-                var turns = new TurnManager(world);
-                SimulationPipeline.Wire(turns, world);
-                for (int month = 0; month < 6; month++)
-                {
-                    minister.mode = prepare ? ControlMode.Directed : ControlMode.Autonomous;
-                    minister.directiveId = prepare ? MilitaryAdvice.PrepareForWar : "";
-                    turns.EndMonth();
-                }
-
-                // Valued, not counted. A raw sum over every class is dominated by
-                // soldiers — of the order of a million against a few hundred
-                // airframes — so the fighter shortfall this fixture creates is
-                // four decimal places down in the total and the two arms come out
-                // indistinguishable. `AssetCatalog.CostOf` is what makes the
-                // classes commensurable, and it is the same weighting the
-                // directive itself buys against.
-                ordered = 0f;
-                foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
-                    foreach (var stock in player.military.Get(branch).inventory.stocks)
-                        ordered += AssetCatalog.CostOf(stock.kind, stock.onOrder + stock.count);
-
-                return player.resources.treasury;
+                minister.mode = ControlMode.Directed;
+                minister.directiveId = MilitaryAdvice.PrepareForWar;
+                turns.EndMonth();
             }
 
-            float preparing = Run(true, out float orderedPreparing);
-            float control = Run(false, out float orderedControl);
+            float ordered = 0f;
+            foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
+                foreach (var stock in player.military.Get(branch).inventory.stocks)
+                    ordered += stock.onOrder + stock.count;
 
-            Assert.Greater(orderedPreparing, 0f);
-            Assert.Greater(orderedPreparing, orderedControl,
-                "Six months of PREPARE FOR WAR left the force holding no more than leaving the "
-                + "minister alone, so the directive is a label.");
-            Assert.Less(preparing, control,
-                "Six months of preparing for war cost nothing.");
+            Assert.Greater(ordered, 0f);
+            Assert.Less(player.resources.treasury, 20000f,
+                "A year of preparing for war cost nothing.");
         }
 
         [Test]

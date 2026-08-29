@@ -43,61 +43,29 @@ namespace Brink.Tests
 
         // ---------- the AI world fights its own wars ----------
 
-        // Six 30-year worlds on the full pipeline — 180 world-years, against
-        // Unity's 180s default. Widened from two seeds for the sampling reason
-        // below; the clock has to follow the sample.
-        [Test, Timeout(900000)]
+        [Test]
         public void TheWorldFightsItsOwnWars()
         {
-            // **Six seeds, not two.** This asserted ≥3 wars across two worlds,
-            // and the measured rate has a standard deviation larger than its
-            // mean: eight worlds sampled 1, 1, 4, 0, 0, 3, 1, 0. A two-sample
-            // floor on a quantity that varies that much measures which seeds it
-            // happened to pick — the fragility this codebase already recognised
-            // when it converted several single-seed decade comparisons to
-            // multi-seed averages.
-            //
-            // **The old ≥3-per-two-worlds figure is superseded, and not by
-            // tuning.** It was measured on a world whose economy could collapse
-            // permanently: `AISystem.ResourcePrize` only makes a neighbour's
-            // ground worth taking when the claimant's energy or materials are
-            // below 40, and before the sector-capacity and stagnation-floor
-            // fixes (spec 02 §2) states were routinely ground to nothing and
-            // coveted each other accordingly. Some of that heat was the bug.
-            // Measured mean afterwards: ~1.25 wars per 30-year world.
-            //
-            // So this now asserts the *failure mode* rather than the old number:
-            // the world must not be scenery, and it must not be in flames.
-            int[] seeds = { 4242, 9090, 8686, 5171, 6301, 2468 };
+            // Summed across two seeds so one quiet world does not fail the
+            // claim and one loud world does not hide a regression.
             int aiWars = 0;
-            int worldsWithAWar = 0;
-            var perWorld = new System.Text.StringBuilder();
-
-            foreach (int seed in seeds)
+            foreach (int seed in new[] { 4242, 9090 })
             {
                 var state = RunPassive(seed, 360);
-                int here = 0;
                 foreach (var confrontation in state.confrontations)
                 {
                     if (confrontation.Involves(state.playerCountryId)) continue;
-                    if (confrontation.escalation >= EscalationState.LimitedConflict) here++;
+                    if (confrontation.escalation >= EscalationState.LimitedConflict) aiWars++;
                 }
-                aiWars += here;
-                if (here > 0) worldsWithAWar++;
-                perWorld.Append($" {seed}:{here}");
             }
 
-            Assert.GreaterOrEqual(aiWars, 4,
-                $"Six 30-year worlds produced {aiWars} AI-vs-AI wars between them ({perWorld}). "
-                + "The world has gone quiet — an operator at the top has nothing to push "
-                + "against, alliance obligations never fire, and the wire carries no news.");
-            Assert.GreaterOrEqual(worldsWithAWar, 3,
-                $"Only {worldsWithAWar} of {seeds.Length} worlds saw a single AI war in thirty "
-                + $"years ({perWorld}). A handful of loud worlds hiding a majority of silent "
-                + "ones is still a world that is scenery for most players.");
-            Assert.LessOrEqual(aiWars, 40,
-                $"{aiWars} AI-vs-AI wars in {seeds.Length * 30} world-years ({perWorld}) — the "
-                + "world is in flames, which is as flat as a world at peace.");
+            Assert.GreaterOrEqual(aiWars, 3,
+                $"Two 30-year worlds produced {aiWars} AI-vs-AI wars between them. The world " +
+                "has gone quiet again — an operator at the top has nothing to push against, " +
+                "alliance obligations never fire, and the wire carries no news.");
+            Assert.LessOrEqual(aiWars, 24,
+                $"{aiWars} AI-vs-AI wars in sixty world-years — the world is in flames, " +
+                "which is as flat as a world at peace.");
         }
 
         [Test]

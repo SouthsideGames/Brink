@@ -180,43 +180,6 @@ namespace Brink.Core
                     }
                 }
             },
-
-            new Step
-            {
-                fromVersion = 6,
-                description = "Fiscal state: tax rate, debt stock, credit standing",
-                apply = state =>
-                {
-                    // Zero is wrong rather than empty, for the third time. A
-                    // migrated `FiscalState` left at its defaults would give
-                    // every country in the world a tax rate of 35 (fine — that is
-                    // the revenue-neutral baseline) but **no debt at all**, which
-                    // silently forgives whatever the save was already carrying:
-                    // `debtToGdp` was a real number in those saves and is now
-                    // derived from a stock that would not exist.
-                    //
-                    // Seeded from the save's own ratio and GDP, so a migrated
-                    // world lands exactly where it stood rather than at a
-                    // constant, and migrating twice gives the same answer.
-                    foreach (var country in state.countries)
-                    {
-                        var fiscal = country.fiscal;
-                        if (fiscal.taxRate <= 0f) fiscal.taxRate = FiscalState.BaselineTaxRate;
-
-                        if (fiscal.sovereignDebt <= 0f && country.economy.debtToGdp > 0f)
-                            fiscal.sovereignDebt =
-                                country.economy.gdp * country.economy.debtToGdp / 100f;
-
-                        // Derived the same way the live system derives it, so a
-                        // migrated government is priced like one that had been
-                        // running all along.
-                        if (fiscal.creditStanding <= 0f)
-                            fiscal.creditStanding = Clamp(
-                                78f - Math.Max(0f, country.economy.debtToGdp - 55f) * 0.55f
-                                + country.economy.growthRate * 2.2f);
-                    }
-                }
-            },
         };
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

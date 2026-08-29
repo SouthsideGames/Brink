@@ -414,46 +414,20 @@ namespace Brink.Tests
                 return;
             }
 
-            // **Work the quietest network, not the first one.** This used to take
-            // whichever network came first in the list and run `TheftOfPlans`
-            // against it every single month. Once covert action gained
-            // diminishing returns (`IntelNetwork.operationTempo`, spec 03 §6a)
-            // that is precisely the degenerate habit the mechanic exists to
-            // punish, and the bot's success rate collapsed — INTELLIGENCE play
-            // fell *below passive* on experience, which reads as a balance
-            // regression and is actually a bot that stopped playing well.
-            //
-            // The harness bots are meant to represent competent play of a
-            // playstyle. When the game changes what competent looks like, they
-            // have to change with it, or every measurement afterwards is of an
-            // operator doing something the game now explicitly discourages.
-            IntelNetwork shallowest = null, quietest = null;
             foreach (var network in state.networks)
             {
                 if (network.ownerId != state.playerCountryId) continue;
                 if (network.penetration < 70f)
                 {
-                    if (shallowest == null || network.penetration < shallowest.penetration)
-                        shallowest = network;
+                    if (state.commandPoints.current >= 1 &&
+                        IntelligenceSystem.ExpandNetwork(state, turns, network.targetId)) result.decisionsTaken++;
+                    return;
                 }
-                else if (quietest == null || network.operationTempo < quietest.operationTempo)
-                {
-                    quietest = network;
-                }
-            }
-
-            if (shallowest != null)
-            {
-                if (state.commandPoints.current >= 1 &&
-                    IntelligenceSystem.ExpandNetwork(state, turns, shallowest.targetId))
+                if (state.commandPoints.current >= 2 &&
+                    IntelligenceSystem.RunCovertOperation(state, turns, network.targetId, CovertOperation.TheftOfPlans))
                     result.decisionsTaken++;
                 return;
             }
-
-            if (quietest != null && state.commandPoints.current >= 2 &&
-                IntelligenceSystem.RunCovertOperation(state, turns, quietest.targetId,
-                    CovertOperation.TheftOfPlans))
-                result.decisionsTaken++;
         }
 
         static void DiplomaticPlay(GameState state, TurnManager turns, PlaythroughResult result)

@@ -67,14 +67,6 @@ namespace Brink.UI.Views
             // on a second front is a decision the game should let you consider
             // while you are already in one.
             var active = state.ActiveConfrontationsFor(state.playerCountryId);
-
-            // Who we are actually fighting, before which front we are commanding.
-            // In a cascading alliance war the operator can acquire belligerents
-            // they never declared against, and the front selector names only the
-            // opponent of each front — so the one question a coalition war raises
-            // had no answer on this screen.
-            if (active.Count > 0) BuildBelligerents(state);
-
             if (active.Count > 1) BuildFrontSelector(state, active);
 
             var confrontation = state.ActiveConfrontation;
@@ -219,99 +211,6 @@ namespace Brink.UI.Views
                     + $"  {TheatreSystem.Name(theatre)}"
                     + (covered ? "" : $"  (we would fight here at {focus * 100f:F0}% weight)");
             }
-        }
-
-        /// <summary>
-        /// THE WAR — every belligerent, on both sides, and why each of them is in
-        /// it (GDD §18, §15.2).
-        ///
-        /// **Belligerency is public; strength is not.** Who has declared against
-        /// whom is an observable fact, so it is stated plainly and completely.
-        /// Nothing here prints a capability figure — BALANCE OF FORCES above still
-        /// owns that, through `IntelReadout`, so a state we have never collected
-        /// on appears in this roster by name and nowhere near a number.
-        ///
-        /// Colour is the second channel, never the only one: `sig-hostile` and
-        /// `sig-ally` carry standing, and the `-` / `+` prefixes carry the same
-        /// reading for anyone the palette does not reach.
-        /// </summary>
-        void BuildBelligerents(GameState state)
-        {
-            var enemies = BelligerentRoster.EnemiesOf(state, state.playerCountryId);
-            var partners = BelligerentRoster.PartnersOf(state, state.playerCountryId);
-            if (enemies.Count == 0 && partners.Count == 0) return;
-
-            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("THE WAR", W);
-
-            AddText("terminal-text-dim").text =
-                $"   AGAINST US {enemies.Count,-3}      WITH US {partners.Count}";
-
-            if (enemies.Count > 0)
-            {
-                AddText("terminal-text").text = "\n AGAINST US";
-                foreach (var entry in enemies) AddBelligerent(state, entry, "sig-hostile", "-");
-            }
-
-            if (partners.Count > 0)
-            {
-                AddText("terminal-text").text = "\n WITH US";
-                foreach (var entry in partners) AddBelligerent(state, entry, "sig-ally", "+");
-            }
-
-            // The guarantees that have not been called. An alliance earns its
-            // price mostly in the war that does not happen, and an operator who
-            // cannot see what they are holding cannot judge what it was worth.
-            var owed = BelligerentRoster.ObligationsOwedBy(state, state.playerCountryId);
-            if (owed.Count > 0)
-            {
-                var names = new System.Collections.Generic.List<string>();
-                foreach (string id in owed)
-                {
-                    var country = state.FindCountry(id);
-                    if (country != null) names.Add(country.displayName);
-                }
-                AddText("terminal-text-dim").text =
-                    "\n STILL OWED: we are obliged to defend "
-                    + string.Join(", ", names) + ".";
-            }
-        }
-
-        /// <summary>
-        /// One belligerent: name, why they are here, and — for a state we face
-        /// directly — a jump to that front, so the roster is a way of commanding
-        /// the war rather than a thing to read beside it.
-        /// </summary>
-        void AddBelligerent(GameState state, BelligerentRoster.Entry entry, string signal, string glyph)
-        {
-            var country = state.FindCountry(entry.countryId);
-            if (country == null) return;
-
-            // Never a hardcoded column count: the name column is a share of the
-            // real panel width, truncated with an ellipsis rather than pushed off
-            // the right edge of a phone.
-            string name = AsciiChart.Cell(country.displayName.ToUpperInvariant(),
-                AsciiChart.NameWidth(W, 0.42f));
-
-            var line = AddText(signal);
-            line.text = $"  {glyph} {name} {entry.because}";
-
-            if (!entry.direct || string.IsNullOrEmpty(entry.confrontationId)) return;
-
-            var target = state.FindConfrontation(entry.confrontationId);
-            if (target == null || target.resolved) return;
-            if (state.ActiveConfrontation != null
-                && state.ActiveConfrontation.id == entry.confrontationId) return;
-
-            var row = new VisualElement();
-            row.AddToClassList("button-row");
-            Root.Add(row);
-
-            string captured = entry.confrontationId;
-            AddButton(row, $"COMMAND THIS FRONT — {country.displayName.ToUpperInvariant()}", null, () =>
-            {
-                state.commandingConfrontationId = captured;
-                Refresh();
-            });
         }
 
         /// <summary>

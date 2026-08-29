@@ -97,18 +97,6 @@ namespace Brink.Data
         public string subjectCountryId = "";
 
         /// <summary>
-        /// The object this crisis is about, when naming a country is not enough —
-        /// today, the confrontation whose alliance obligation is being answered.
-        ///
-        /// A cascading war can put two obligations in front of the operator in
-        /// the same month, and answering the second by scanning for the first is
-        /// how somebody ends up in a war they declined to enter. Empty on an old
-        /// save is correct: the scan that shipped before the cascade is still
-        /// there as the fallback.
-        /// </summary>
-        public string contextId = "";
-
-        /// <summary>
         /// What happens in the world if nobody decides (GDD §23).
         ///
         /// Drifting used to cost only standing, which made ignoring a crisis a
