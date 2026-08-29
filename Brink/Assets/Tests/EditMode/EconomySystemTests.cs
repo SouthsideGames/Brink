@@ -255,6 +255,18 @@ namespace Brink.Tests
                 // widen the war the two arms would stop differing only by the
                 // war, and the assertion is EconomySystem's war-cost arithmetic.
                 simTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
+                // `FiscalSystem` is required, not optional: `debtToGdp` is now
+                // *derived* from the debt stock and this is the only system that
+                // recomputes it. Without it the field never moves and the debt
+                // assertion below compares the authored figure against itself —
+                // which is exactly how it failed when the fiscal layer landed.
+                //
+                // It also changes what the assertion means, for the better. War
+                // used to add a flat +0.9/month to the ratio by fiat; now it
+                // raises debt because a war costs money the treasury cannot
+                // cover, which is a fact about the war rather than a rule about
+                // the word.
+                simTurns.ResolveMonth += FiscalSystem.MonthlyUpdate;
                 simTurns.ResolveMonth += ConfrontationSystem.MonthlyTick;
                 if (war)
                 {

@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
@@ -6,6 +9,54 @@ namespace Brink.Tests
 {
     public class TechnologySystemTests
     {
+        /// <summary>
+        /// Where the runtime sources live, relative to the project root Unity
+        /// runs tests from.
+        /// </summary>
+        const string SourceDirectory = "Assets/Scripts";
+
+        [Test]
+        public void EveryCapabilityIsReadSomewhere()
+        {
+            // **The guard that makes the catalogue content rather than a list.**
+            // A capability nobody reads grants nothing: the operator funds it for
+            // years, it completes, and the world is identical. That is the
+            // "written but never read" family — which this project has shipped
+            // repeatedly — and at 33 entries it would be shipped at scale.
+            //
+            // Checked against the sources rather than by reflection because the
+            // ids are strings passed to `TechnologySystem.Has` / `Effectiveness`,
+            // so there is no symbol to reflect over.
+            string root = Path.Combine(Directory.GetCurrentDirectory(), SourceDirectory);
+            Assert.IsTrue(Directory.Exists(root), $"Cannot find sources at {root}.");
+
+            var mentions = new Dictionary<string, int>();
+            foreach (string path in Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories))
+            {
+                bool isCatalogue = Path.GetFileName(path) == "CapabilityCatalog.cs";
+                string source = File.ReadAllText(path);
+
+                foreach (Match match in Regex.Matches(source, "CAP_[A-Z]+"))
+                {
+                    string id = match.Value;
+                    if (!mentions.ContainsKey(id)) mentions[id] = 0;
+                    // The catalogue declaring and cross-referencing an id is not
+                    // somebody reading it.
+                    if (!isCatalogue) mentions[id]++;
+                }
+            }
+
+            var unread = new List<string>();
+            foreach (var definition in CapabilityCatalog.Definitions)
+                if (!mentions.TryGetValue(definition.id, out int count) || count == 0)
+                    unread.Add($"{definition.id} ({definition.name})");
+
+            CollectionAssert.IsEmpty(unread,
+                "These capabilities are funded for years, complete, and change nothing — no "
+                + "system reads them:\n  " + string.Join("\n  ", unread)
+                + "\nGive each one a read site or take it out of the catalogue.");
+        }
+
         GameState state;
         TurnManager turns;
 

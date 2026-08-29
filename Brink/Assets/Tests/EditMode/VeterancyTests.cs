@@ -193,8 +193,23 @@ namespace Brink.Tests
 
             var turns = new TurnManager(state);
             SimulationPipeline.Wire(turns, state);
-            for (int month = 0; month < 60; month++) turns.EndMonth();
 
+            // **Peacetime has to be enforced, not assumed.** The training
+            // ceiling only applies when the country is not at war, and it tops
+            // out at 48 (`18 + readiness × 0.22 + logistics × 0.08`) — so an army
+            // still at 88 after five years means it spent them fighting, not that
+            // the decay is broken. Running the live pipeline for sixty months and
+            // hoping nobody declares war is a fact about the AI's mood on this
+            // seed, which is not what this test is named after.
+            for (int month = 0; month < 60; month++)
+            {
+                foreach (var confrontation in state.confrontations)
+                    if (confrontation.Involves(state.playerCountryId)) confrontation.resolved = true;
+                turns.EndMonth();
+            }
+
+            Assert.IsFalse(state.IsAtWar(state.playerCountryId),
+                "the fixture failed to hold the peace, so this measured a war");
             Assert.Less(ground.experience, 80f,
                 $"Five peacetime years left the army at {ground.experience:F0}. An army that " +
                 "neither fights nor trains has to forget, or veterancy is permanent.");

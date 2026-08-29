@@ -34,10 +34,22 @@ crises against fifteen) both drifted because that rule was skipped.
 | 19 | [Displacement](19-Displacement.md) | Who leaves, where they go, what hosting costs, the border | As-built |
 | 20 | [Blocs](20-Blocs.md) | Standing sides with names: joining, cohesion, upkeep, defection | As-built |
 | 21 | [Dossier & Hold](21-DossierAndHold.md) | The per-country deep terminal, and standing back through quiet months | As-built |
+| 22 | [The Mandate](22-Mandate.md) | What a posting is for: objectives, the ten-year verdict, reissue | As-built |
+| 23 | [Audio](23-Audio.md) | Cues, music contexts, the mixer, and what drives them | As-built |
+| 24 | [Directives & Career](24-DirectivesAndCareer.md) | Standing directives, the career record across postings | As-built |
+| 25 | [Content Update](25-ContentUpdate.md) | Fiscal statecraft, intel products, episodic diplomacy, government content, research expansion | Built; plan of record |
+
+Spec 25 is a special case: **all its tranches are built** (2026-08-29) and the
+as-built detail lives in the pillar specs it fed — A in 02 §9, B in 03 §6a–§10,
+C in 04 §5b–5g, D in 05 §2e–2g, E in 13 §6. It is kept as the record of the plan
+and of what was deliberately *not* followed. **Where spec 25 and a pillar spec
+disagree, the pillar spec is right.**
 
 Coverage of the GDD as a whole — what is done, partial, missing and
 contradicted, section by section — is tracked separately in
-[`../GDD_Coverage.md`](../GDD_Coverage.md).
+[`../GDD_Coverage.md`](../GDD_Coverage.md), which was last audited 2026-08-22
+and now predates a good deal of the code. Returning to the project after a
+break: start from [`../PickUpHere.md`](../PickUpHere.md).
 
 ## Conventions used throughout
 

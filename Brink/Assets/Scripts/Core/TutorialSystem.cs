@@ -262,16 +262,16 @@ namespace Brink.Core
                 {
                     id = "YOUR_MANDATE",
                     title = "YOUR MANDATE",
-                    targetViewId = "STRATEGIST",
+                    targetViewId = "OPERATOR",
                     body =
-                        "You arrived with a brief. It is on the STRATEGIST panel under MANDATE: " +
+                        "You arrived with a brief. It is on the OPERATOR panel under MANDATE: " +
                         "three or four things the government expects to be true about this " +
                         "country in ten years. None of them asks you to take anything from " +
                         "anyone; all of them ask you to leave the state stronger than you found it.\n\n" +
                         "At ten years the record is reviewed and a verdict delivered — FULFILLED, " +
                         "HELD or FAILED. The posting continues either way. The annual grade says " +
                         "how a year went; the mandate says whether the years added up.",
-                    instruction = "Read the mandate on STRATEGIST.",
+                    instruction = "Read the mandate on OPERATOR.",
                     isSatisfied = s => true
                 }
             };

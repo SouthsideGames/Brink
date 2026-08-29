@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 
 namespace Brink.Data
@@ -33,6 +34,29 @@ namespace Brink.Data
     /// leaders are replaced, what emergency authority costs — not flavor labels
     /// or judgments about any real government.
     /// </summary>
+    /// <summary>
+    /// One bloc inside the government's own coalition (spec 05 §2g).
+    ///
+    /// The point of naming them is that **they do not all want the same thing**:
+    /// a bloc's `theme` says what would win it over, and it is the same
+    /// vocabulary the opposition campaigns in, so the case being made against a
+    /// government and the constituencies inside it are described in one language.
+    /// </summary>
+    [Serializable]
+    public class Faction
+    {
+        public string name;
+
+        /// <summary>What this bloc cares about. Drives which instrument moves it.</summary>
+        public OppositionTheme theme;
+
+        /// <summary>Share of the chamber or the elite, 0..1. Sums to ~1 across the list.</summary>
+        public float share;
+
+        /// <summary>How well disposed to the government, 0..100.</summary>
+        public float disposition = 50f;
+    }
+
     public enum GovernmentType
     {
         PresidentialRepublic,  // fixed terms, separate legislature
@@ -239,6 +263,65 @@ namespace Brink.Data
         // ---- regime security (GDD §22) ----
 
         /// <summary>0..100 loyalty of the officer corps to the civil authority.</summary>
+        /// <summary>
+        /// How much of the state runs on favours rather than on rules, 0..100
+        /// (spec 05 §2e).
+        ///
+        /// `DistributePatronage` has always said in its own comment that it
+        /// "hollows the state out if it becomes the habitual instrument", and
+        /// nothing recorded that it had. `OppositionTheme.Corruption` existed and
+        /// was proxied by a weak government pillar plus conspiracy plus poor
+        /// cohesion — which measures *the state being feeble*, not the state
+        /// being bought.
+        ///
+        /// A store with **proportional decay**, like `publicGrievance`: every
+        /// level of it has a resting point, so a government that stops buying
+        /// support recovers and one that never starts is unaffected. Zero on an
+        /// old save is correct — nothing had been recorded — so no migration.
+        /// </summary>
+        public float corruption;
+
+        /// <summary>
+        /// The blocs whose support this government actually rests on (spec 05
+        /// §2g).
+        ///
+        /// **A lens on `legislativeSupport`, not a replacement for it.** That
+        /// field has 36 read and write sites across eleven systems; turning it
+        /// into a derived sum would break all eight writers for no behaviour.
+        /// Instead the ledger contributes a term to the *support target* the way
+        /// `brokeredSupport` already does, so courting a particular bloc is what
+        /// moves the number rather than an abstract "build support" that lands
+        /// nowhere in particular.
+        ///
+        /// Empty on an old save is correct — `GovernmentSystem.EnsureFactions`
+        /// seeds them lazily on first use, so there is no migration.
+        /// </summary>
+        public List<Faction> factions = new List<Faction>();
+
+        // ---- constitutional change (spec 05 §2f) ----
+        //
+        // `GovernmentType` decides how power works — elective or internal
+        // succession, term limits, what emergency powers cost, whether an early
+        // election is even possible — and it was fixed for the whole of a
+        // decades-long save. The pillar's largest missing verb, and the natural
+        // large purchase for a Political Capital economy whose only sink above
+        // 7 was `ConsolidateAuthority` at 12.
+
+        /// <summary>What we are trying to become, or the current type if nothing is under way.</summary>
+        public GovernmentType constitutionalTarget;
+
+        /// <summary>Months left in the attempt. Zero when nothing is under way.</summary>
+        public int constitutionalMonthsRemaining;
+
+        /// <summary>
+        /// Accumulated backing for the change, 0..100. Built by the monthly
+        /// spend and eroded by whoever loses from it; the attempt succeeds or
+        /// fails on where this stands when the clock runs out.
+        /// </summary>
+        public float constitutionalSupport;
+
+        public bool ChangingConstitution => constitutionalMonthsRemaining > 0;
+
         public float militaryLoyalty = 65f;
 
         /// <summary>

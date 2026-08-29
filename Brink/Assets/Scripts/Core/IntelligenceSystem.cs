@@ -9,7 +9,19 @@ namespace Brink.Core
         Sabotage,          // damage industry/sector health
         PoliticalInfluence,// destabilize the target government
         TheftOfPlans,      // deepen penetration, sharpen estimates
-        Deception          // shape what others believe about us
+        Deception,         // shape what others believe about us
+
+        // Appended (spec 03 §6, spec 25 Tranche B). Ordinals preserved: these
+        // are persisted in `ActiveCrisis` and the telemetry buckets.
+
+        /// <summary>Set two other states against each other. Deniable by design.</summary>
+        Provocation = 4,
+
+        /// <summary>Take a capability rather than a plan. Shallow, and years saved.</summary>
+        TechnologyTheft = 5,
+
+        /// <summary>Damage without a hand to shake. Hard to attribute, easy to repair.</summary>
+        CyberOperation = 6
     }
 
     /// <summary>
@@ -26,6 +38,22 @@ namespace Brink.Core
         public const int EstablishNetworkCost = 2;
         public const int ExpandNetworkCost = 1;
         public const int CovertOperationCost = 2;
+
+        /// <summary>
+        /// How much each point of recent operational tempo costs a network's
+        /// effective access. At `TempoPerOperation` a run of four operations in
+        /// quick succession costs roughly what a competent counterintelligence
+        /// service does — noticeable, and recoverable by waiting.
+        /// </summary>
+        public const float TempoResistance = 0.55f;
+
+        public const float TempoPerOperation = 14f;
+
+        /// <summary>
+        /// Monthly fade. Slower than a network rebuilds, so the answer to a
+        /// burned-out network is patience rather than another operation.
+        /// </summary>
+        public const float TempoDecay = 0.93f;
 
         // ---------- truth access (internal only) ----------
 
@@ -51,6 +79,13 @@ namespace Brink.Core
             foreach (var network in state.networks)
             {
                 network.monthsActive++;
+
+                // Attention fades. Without this the tempo penalty would be the
+                // one-way value this codebase has shipped more than any other,
+                // and a network that had ever been used hard would never be
+                // usable again.
+                network.operationTempo *= TempoDecay;
+
                 var target = state.FindCountry(network.targetId);
                 if (target == null) continue;
 
@@ -67,7 +102,8 @@ namespace Brink.Core
                 // became permanently un-rollable, which it reliably did within
                 // about a decade: fog of war simply ended in the late game.
                 float footprint = 0.30f + network.penetration / 160f;
-                float exposure = target.counterIntel.counterIntelligence * footprint / 100f;
+                float exposure = EffectiveCounterIntelligence(state, target, network.ownerId)
+                                 * footprint / 100f;
                 if (!network.compromised && exposure > 0f && rng.NextDouble() < exposure * 0.06)
                 {
                     network.compromised = true;
@@ -137,7 +173,58 @@ namespace Brink.Core
                 }
             }
 
+            CollectFromOverhead(state);
             DecayStaleEstimates(state);
+        }
+
+        /// <summary>
+        /// Reporting on states we have nobody in (`CAP_OVERHEAD`, spec 13 §6).
+        ///
+        /// **The capability that changes what the map looks like rather than how
+        /// sharp it is.** Without a network the operator has NO ASSESSMENT and
+        /// nothing else — an honest fog, and for most of a save an empty one.
+        /// Overhead gives thin, unreliable reporting on everybody: enough to know
+        /// roughly where a state stands, never enough to replace somebody on the
+        /// ground.
+        ///
+        /// Deliberately capped at Low confidence and a wide margin. It must not
+        /// make networks redundant — it makes the *decision* about where to put
+        /// them better informed, which is the opposite thing.
+        /// </summary>
+        static void CollectFromOverhead(GameState state)
+        {
+            foreach (var observer in state.countries)
+            {
+                float reach = TechnologySystem.Effectiveness(observer, "CAP_OVERHEAD");
+                if (reach <= 0f) continue;
+
+                foreach (var target in state.countries)
+                {
+                    if (target.id == observer.id) continue;
+                    // Somebody on the ground is always better; this is only for
+                    // the states we have nobody in.
+                    if (state.FindNetwork(observer.id, target.id) != null) continue;
+
+                    foreach (IntelDomain domain in Enum.GetValues(typeof(IntelDomain)))
+                    {
+                        var estimate = state.FindEstimate(observer.id, target.id, domain);
+                        if (estimate == null)
+                        {
+                            estimate = new IntelEstimate
+                            {
+                                observerId = observer.id, targetId = target.id, domain = domain
+                            };
+                            state.estimates.Add(estimate);
+                        }
+
+                        estimate.reportedValue = TrueValue(target, domain);
+                        estimate.margin = 30f - reach * 8f;   // wide, and stays wide
+                        estimate.confidence = ConfidenceGrade.Low;
+                        estimate.asOf = state.date;
+                        estimate.everCollected = true;
+                    }
+                }
+            }
         }
 
         static void UpdateEstimate(GameState state, IntelNetwork network, CountryState target,
@@ -159,7 +246,7 @@ namespace Brink.Core
             // whatever hardening the target has fielded (GDD §11).
             float hardening = 1f + TechnologySystem.Effectiveness(target, "CAP_SECCOMMS") * 0.5f;
             float access = network.penetration * focusFactor
-                           - target.counterIntel.counterIntelligence * 0.55f * hardening;
+                           - EffectiveCounterIntelligence(state, target, network.ownerId) * 0.55f * hardening;
             if (network.compromised) access *= 0.3f;
             access = Math.Max(0f, access);
 
@@ -355,6 +442,19 @@ namespace Brink.Core
                 return true;
             }
 
+            // **A capability that unlocks an option** (spec 13 §6). Cyber
+            // operations need the apparatus to run them, the way deception needs
+            // deep cover — the difference being that this one is national
+            // ability rather than operator capability, so it is researched
+            // rather than learned.
+            if (operation == CovertOperation.CyberOperation
+                && !TechnologySystem.Has(state.PlayerCountry, "CAP_CYBER"))
+            {
+                reason = "No offensive cyber capability — requires the Offensive Cyber "
+                         + "Capability programme.";
+                return false;
+            }
+
             if (state.FindNetwork(state.playerCountryId, targetId) == null)
             {
                 reason = "No collection network in place to work through.";
@@ -396,6 +496,20 @@ namespace Brink.Core
                 return true;
             }
 
+            // **One gate, shared.** `CanRunCovertOperation` was called only on
+            // the Deception path, so every other verb reached the network lookup
+            // without consulting it — which meant the `CAP_CYBER` requirement
+            // was enforced in the view and nowhere else, and anything calling
+            // the verb directly (a bot, the AI, a test) walked straight past it.
+            // What a view offers and what the system accepts must be the same
+            // function; this is the `OperationCatalog.CanOrder` precedent, and I
+            // broke it adding the gate.
+            if (!CanRunCovertOperation(state, targetId, operation, out string refused))
+            {
+                GameLog.Warn("INTEL", refused);
+                return false;
+            }
+
             var network = state.FindNetwork(state.playerCountryId, targetId);
             var target = state.FindCountry(targetId);
             if (network == null || target == null)
@@ -414,6 +528,10 @@ namespace Brink.Core
             // the target's services know something is being done to them.
             ConfrontationSystem.AddPressure(state, state.playerCountryId, targetId, 8f);
 
+            // Raised here, before the roll, so the operation being resolved pays
+            // for its own tempo as well as everything that came before it.
+            network.operationTempo = Clamp(network.operationTempo + TempoPerOperation);
+
             int monthIndex = state.date.MonthsSince(state.startDate);
             // Mix in the target and a per-action counter: two operations in one
             // month must be two independent gambles. Sharing a stream made a
@@ -426,11 +544,24 @@ namespace Brink.Core
                 + Hash.Of(targetId) * 17
                 + state.NextActionSequence() * 104729));
 
-            float access = network.penetration - target.counterIntel.counterIntelligence * 0.6f;
+            // Against *us* specifically: a service that has caught this operator
+            // before is watching for them. See `DirectedHardening`.
+            float effectiveCi = EffectiveCounterIntelligence(state, target, state.playerCountryId);
+            // **Diminishing returns on working the same network** (spec 03 §6a).
+            // A deep network was an unlimited supply of sabotage: nothing about
+            // the tenth operation against a state differed from the first except
+            // whatever had been caught in between. Tempo is what the target's
+            // services notice even when they never attribute anything, so this
+            // is separate from `DirectedHardening` and applies to the careful
+            // operator as well as the careless one.
+            float access = network.penetration
+                           - effectiveCi * 0.6f
+                           - network.operationTempo * TempoResistance;
             float successChance = Clamp01(0.2f + access / 90f);
             bool success = rng.NextDouble() < successChance;
 
-            float exposureChance = Clamp01(0.18f + target.counterIntel.counterIntelligence / 260f)
+            float exposureChance = Clamp01(0.18f + effectiveCi / 260f)
+                                   * AttributionFactor(operation)
                                    * Math.Max(0.1f, 1f - ProgressionSystem.EffectValue(state, SkillEffect.Compartmentation));
             bool exposed = rng.NextDouble() < exposureChance;
 
@@ -471,6 +602,54 @@ namespace Brink.Core
                         player.pillars.intelligence =
                             Growth.Apply(player.pillars.intelligence, 2f);
                         break;
+
+                    // ---- appended verbs (spec 03 §6) ----
+
+                    case CovertOperation.TechnologyTheft:
+                    {
+                        // Years saved, not prerequisites skipped: `StealCapability`
+                        // still applies the industrial and pillar floors, so this
+                        // is a shortcut through the *waiting* and nothing else.
+                        string taken = TechnologySystem.StealCapability(state, player.id, targetId);
+                        if (string.IsNullOrEmpty(taken))
+                            GameLog.Info("INTEL", "Nothing in their programme we could use.");
+                        break;
+                    }
+
+                    case CovertOperation.Provocation:
+                    {
+                        // **The only covert verb aimed at somebody who is not the
+                        // target.** It costs the target a relationship with a
+                        // third state rather than costing them a statistic — the
+                        // instrument for an operator who wants two rivals looking
+                        // at each other instead of at them.
+                        string third = ColdestRivalOf(state, targetId, player.id);
+                        if (third == null) { GameLog.Info("INTEL", "They have nobody to set them against."); break; }
+
+                        var pair = state.FindRelationship(targetId, third);
+                        if (pair != null)
+                        {
+                            pair.relations = Clamp(pair.relations - 12f);
+                            pair.trust = Clamp(pair.trust - 9f);
+                            pair.SetThreatPerceivedBy(third, Clamp(pair.ThreatPerceivedBy(third) + 14f));
+                            pair.SetThreatPerceivedBy(targetId, Clamp(pair.ThreatPerceivedBy(targetId) + 10f));
+                            pair.AddMemory(state.date, "An incident neither government has explained.", 0.6f);
+                        }
+                        break;
+                    }
+
+                    case CovertOperation.CyberOperation:
+                    {
+                        // Damage with no hand to shake: it hits functioning
+                        // rather than capacity, so it is felt now and repaired
+                        // within the year. Secure communications are the defence,
+                        // which is what `CAP_SECCOMMS` has always been for.
+                        float shielded = 1f - TechnologySystem.Effectiveness(target, "CAP_SECCOMMS") * 0.6f;
+                        foreach (var sector in target.economy.sectors)
+                            sector.health = Clamp(sector.health - 5f * shielded);
+                        target.economy.confidence = Clamp(target.economy.confidence - 7f * shielded);
+                        break;
+                    }
                 }
 
                 state.AddNotification(NotificationClass.Priority, $"{operation.ToString().ToUpperInvariant()} — SUCCESS",
@@ -559,8 +738,15 @@ namespace Brink.Core
                     $"{target.displayName} has attributed the operation. Our standing with them " +
                     "has suffered, and others have noticed.", targetId,
                     desk: ReportingDesk.Intelligence);
+                // **Public.** `AddChronicle` defaults to Secret, so this filed
+                // the single most attributable act in the pillar as a secret —
+                // beside a notification whose own text reads "others have
+                // noticed." Nothing that reasons from the public record could
+                // see it: not `AIPrediction.ObservedSubversion`, not the
+                // counter-play the whole system exists to produce.
                 state.AddChronicle(ChronicleCategory.Intelligence, player.id,
-                    $"Covert operation against {target.displayName} exposed.");
+                    $"Covert operation against {target.displayName} exposed.",
+                    Publicity.Public);
             }
 
             return success;
@@ -595,6 +781,265 @@ namespace Brink.Core
                 }
             }
             return true;
+        }
+
+        /// <summary>
+        /// The words that mean "this state was caught doing something to
+        /// somebody" in the public record.
+        ///
+        /// Everything that reasons about a state's reputation for subversion —
+        /// `AIPrediction.ObservedSubversion`, and through it the AI's
+        /// expectations and `DirectedHardening` — reads the chronicle and
+        /// matches on prose. That is fragile, so the list lives in one place
+        /// rather than being retyped at each reader.
+        ///
+        /// It matters more than it looks. The reader used to match "compromised"
+        /// alone, which is the *rolled-up network* line, so a caught covert
+        /// operation and a blown approach to a foreign official — the two
+        /// loudest, most attributable things an operator can be caught at —
+        /// taught the world nothing at all.
+        ///
+        /// **A new "we were caught" chronicle line must add its marker here, and
+        /// must be filed `Publicity.Public`**, or the world cannot learn from it.
+        /// </summary>
+        public static readonly string[] CaughtMarkers = { "compromised", "exposed", "was caught" };
+
+        /// <summary>
+        /// True when this entry is a public record of the named state being
+        /// caught at subversion. One definition, shared by every reader.
+        /// </summary>
+        public static bool IsPublicSubversionRecord(ChronicleEntry entry, string subjectId)
+        {
+            if (entry == null) return false;
+            if (entry.category != ChronicleCategory.Intelligence) return false;
+            if (entry.countryId != subjectId) return false;
+            if (entry.publicity != Publicity.Public) return false;
+
+            foreach (string marker in CaughtMarkers)
+                if (entry.text != null
+                    && entry.text.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Cap on how much a service can harden against one specific actor.
+        /// Large enough to be the difference between a burned operator and a
+        /// careful one; small enough that it never closes a country outright.
+        /// </summary>
+        public const float MaxDirectedHardening = 14f;
+
+        /// <summary>
+        /// How much harder this service is *for one particular state* than for
+        /// everyone else, from that state's public record of being caught.
+        ///
+        /// **This is the anti-memorisation property.** `institutionalHardening`
+        /// is global — a service that catches anyone hardens against everyone —
+        /// and in a world where fifteen governments run networks on each other it
+        /// saturates from background espionage: measured at 10.5 of a cap of 20
+        /// whether or not the operator ran a single network. The player was one
+        /// sixteenth of the signal, so an operator with a signature move taught
+        /// the world essentially nothing and the same opening worked in every
+        /// playthrough — the exact failure spec 06 §7b exists to prevent.
+        ///
+        /// Directed rather than stored, so there is **no new save state**: it is
+        /// derived from the chronicle through the same function the AI's
+        /// expectation layer reads, and therefore decays on the same 120-month
+        /// window. That decay is the design, not a shortcut — a permanent
+        /// reputation would make reloading the correct play, which this game
+        /// refuses. Stop, and the world eventually stops watching for it.
+        ///
+        /// Scaled by what the defender can actually see, so a state with no
+        /// collection does not counter as well as one with good reporting, and
+        /// buying intelligence stays worth doing. Symmetric by construction: it
+        /// reads a country and an actor id, so it protects the operator from a
+        /// serial infiltrator exactly as it protects the world from the operator.
+        /// </summary>
+        /// <summary>
+        /// `AIPrediction.ObservedSubversion` behind a per-month memo on the
+        /// state instance. Scanning the chronicle once per network per month is
+        /// what this would otherwise cost; see `GameState.subversionMemo`.
+        /// </summary>
+        static float ObservedSubversionMemo(GameState state, string actorId)
+        {
+            int monthIndex = state.date.MonthsSince(state.startDate);
+            if (state.subversionMemo == null || state.subversionMemoMonth != monthIndex)
+            {
+                state.subversionMemo = new System.Collections.Generic.Dictionary<string, float>();
+                state.subversionMemoMonth = monthIndex;
+            }
+
+            if (state.subversionMemo.TryGetValue(actorId, out float cached)) return cached;
+
+            float observed = AIPrediction.ObservedSubversion(state, "", actorId);
+            state.subversionMemo[actorId] = observed;
+            return observed;
+        }
+
+        public static float DirectedHardening(GameState state, CountryState defender, string actorId)
+        {
+            if (state == null || defender == null
+                || string.IsNullOrEmpty(actorId) || actorId == defender.id) return 0f;
+
+            float observed = ObservedSubversionMemo(state, actorId);
+            if (observed <= 0f) return 0f;
+
+            float confidence = AISystem.EstimateConfidence(
+                state, defender.id, actorId, IntelDomain.Political);
+
+            return MaxDirectedHardening * Clamp01(observed / 100f)
+                   * (0.35f + 0.65f * Clamp01(confidence));
+        }
+
+        /// <summary>
+        /// The counterintelligence this service brings to bear against one actor:
+        /// its general standard plus whatever it has learned to watch for from
+        /// that particular state. Every read that resists a *named* actor's
+        /// network or operation goes through here — the bare field is the
+        /// service's general condition and is what the operator is shown.
+        /// </summary>
+        public static float EffectiveCounterIntelligence(
+            GameState state, CountryState defender, string actorId)
+            => defender == null ? 0f
+                : Clamp(defender.counterIntel.counterIntelligence
+                        + DirectedHardening(state, defender, actorId));
+
+        public const int MoleHuntCost = 2;
+
+        /// <summary>
+        /// Look for a foreign service inside our own (spec 03 §7c).
+        ///
+        /// The defensive pillar had one verb — a counterintelligence sweep that
+        /// raises a number — and no way to answer the question an operator
+        /// actually has: *are we penetrated right now?* This answers it, and the
+        /// price is that asking is not free.
+        ///
+        /// **A hunt that finds nothing damages the people it searched.** That is
+        /// the whole design: a free scan would be strictly correct to run every
+        /// month, which is not a decision. Suspicion turned inward costs elite
+        /// cohesion and the competence of whoever it fell on, so the operator has
+        /// to weigh a real fear against a real cost — and a government that hunts
+        /// constantly hollows out its own cabinet.
+        ///
+        /// Actor-generic, so a foreign service can clean its own house.
+        /// </summary>
+        public static bool MoleHuntBy(GameState state, string actorId)
+        {
+            var country = state.FindCountry(actorId);
+            if (country == null) return false;
+
+            int monthIndex = state.date.MonthsSince(state.startDate);
+            var rng = new Random(unchecked(
+                state.rngSeed * 26591 + monthIndex * 613
+                + Hash.Of(actorId) * 29 + state.NextActionSequence() * 104729));
+
+            // The deepest foreign network actually inside us.
+            IntelNetwork deepest = null;
+            foreach (var network in state.networks)
+            {
+                if (network.targetId != actorId || network.compromised) continue;
+                if (deepest == null || network.penetration > deepest.penetration) deepest = network;
+            }
+
+            float skill = country.counterIntel.counterIntelligence / 100f;
+
+            if (deepest != null)
+            {
+                // A deep network is easier to find, not harder: more officers,
+                // more traffic, more to trip over. The same footprint reasoning
+                // the monthly roll-up uses.
+                float odds = Clamp01(0.20f + skill * 0.55f + deepest.penetration / 260f);
+                if (rng.NextDouble() < odds)
+                {
+                    deepest.compromised = true;
+                    deepest.penetration *= 0.35f;
+                    country.counterIntel.institutionalHardening =
+                        Math.Min(20f, country.counterIntel.institutionalHardening + 4f);
+
+                    var owner = state.FindCountry(deepest.ownerId);
+                    string caught = $"Network in {country.displayName} compromised.";
+                    if (!state.ChronicledWithin(deepest.ownerId, caught, 12))
+                        state.AddChronicle(ChronicleCategory.Intelligence, deepest.ownerId,
+                            caught, Publicity.Public);
+
+                    if (country.isPlayer)
+                        state.AddNotification(NotificationClass.Priority, "PENETRATION FOUND",
+                            $"A {owner?.displayName ?? deepest.ownerId} network inside our own "
+                            + "service has been rolled up.", deepest.ownerId,
+                            desk: ReportingDesk.Intelligence);
+                    return true;
+                }
+            }
+
+            // Nothing found — either there was nothing, or we missed it. The
+            // hunt still happened, and people were still investigated.
+            FalsePositive(state, country, rng);
+            return false;
+        }
+
+        static void FalsePositive(GameState state, CountryState country, Random rng)
+        {
+            country.government.eliteCohesion =
+                Clamp(country.government.eliteCohesion - 4f);
+
+            // It falls on somebody, and it is not always the right somebody.
+            if (country.cabinet.Count > 0)
+            {
+                var official = country.cabinet[rng.Next(country.cabinet.Count)];
+                official.competence = Clamp(official.competence - 6f);
+                official.trust = Clamp(official.trust - 8f);
+
+                if (country.isPlayer)
+                    state.AddNotification(NotificationClass.Advisory, "HUNT FINDS NOTHING",
+                        $"The search turned up no foreign service. {official.title} "
+                        + $"{official.displayName} was among those investigated, and knows it.",
+                        country.id, desk: ReportingDesk.Intelligence);
+            }
+        }
+
+        /// <summary>
+        /// The state this one is coldest toward, excluding the operator. What a
+        /// provocation needs is an existing quarrel to widen — it cannot invent
+        /// an enemy, on the same reasoning that stops a covert operation
+        /// conjuring a conspiracy where there is no grievance.
+        /// </summary>
+        /// <summary>
+        /// How readily this kind of operation is traced back to us.
+        ///
+        /// **Deniability is what distinguishes the appended verbs**, and it is
+        /// the reason to reach for them: a provocation is meant to be blamed on
+        /// somebody else, and a cyber operation leaves no hand to shake. Both
+        /// buy that with a smaller effect — provocation touches no statistic of
+        /// the target's at all, and cyber damage is functioning rather than
+        /// capacity, repaired within the year.
+        /// </summary>
+        static float AttributionFactor(CovertOperation operation)
+        {
+            switch (operation)
+            {
+                case CovertOperation.Provocation: return 0.45f;
+                case CovertOperation.CyberOperation: return 0.55f;
+
+                // Taking a capability is noticed the moment they see us fielding
+                // it, so this is the *most* attributable thing in the list.
+                case CovertOperation.TechnologyTheft: return 1.25f;
+                default: return 1f;
+            }
+        }
+
+        static string ColdestRivalOf(GameState state, string countryId, string excludeId)
+        {
+            string coldest = null;
+            float worst = 55f;   // has to be a genuine quarrel, not mild indifference
+            foreach (var other in state.countries)
+            {
+                if (other.id == countryId || other.id == excludeId) continue;
+                var relationship = state.FindRelationship(countryId, other.id);
+                if (relationship == null || relationship.relations >= worst) continue;
+                worst = relationship.relations;
+                coldest = other.id;
+            }
+            return coldest;
         }
 
         /// <summary>Deception and counterintelligence decay without maintenance.</summary>

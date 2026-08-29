@@ -125,6 +125,14 @@ namespace Brink.Data
         /// <summary>Unresolved Crisis Turns (GDD §6, §23).</summary>
         public List<ActiveCrisis> activeCrises = new List<ActiveCrisis>();
 
+        /// <summary>
+        /// Commissioned finished assessments (spec 03 §10). Empty on an old save
+        /// is correct — nothing had been commissioned in a world with no way to
+        /// commission it — so this needs **no migration step**, on the same
+        /// reasoning as `displacement` and the war verdicts.
+        /// </summary>
+        public List<IntelProduct> intelProducts = new List<IntelProduct>();
+
         /// <summary>When each event definition last fired (GDD §23 cooldowns).</summary>
         public List<EventCooldown> eventCooldowns = new List<EventCooldown>();
 
@@ -283,6 +291,38 @@ namespace Brink.Data
         /// <summary>Consume the next value in the per-action draw sequence.</summary>
         public int NextActionSequence() => ++actionSequence;
 
+        /// <summary>
+        /// Per-month memo for "how much subversion has this state publicly been
+        /// caught at", read by `IntelligenceSystem.DirectedHardening`.
+        ///
+        /// **Not state, and deliberately not saved.** The value is a pure
+        /// function of the chronicle, but computing it means scanning every
+        /// entry, and it is wanted once per network per month against a record
+        /// that reaches a few thousand lines over a long save. Uncached it made
+        /// the twenty- and thirty-year fixtures measurably slower, and several
+        /// of those already sit against the clock.
+        ///
+        /// Keyed to nothing but this instance and this month: `[NonSerialized]`
+        /// keeps it out of the save, and it must never be keyed on the seed —
+        /// two worlds built from the same seed and played differently are
+        /// exactly what the counter-play tests compare, and a shared cache
+        /// would hand one arm's answer to the other.
+        /// </summary>
+        [NonSerialized] public Dictionary<string, float> subversionMemo;
+        [NonSerialized] public int subversionMemoMonth = int.MinValue;
+
+        /// <summary>
+        /// The player's debt stock as of the last trend sample. Paired with
+        /// `lastMonthTreasury` so the readout measures the **fiscal balance**
+        /// rather than the balance of the account.
+        ///
+        /// Needed because a deficit now finances itself into debt: the treasury
+        /// stops falling, so a treasury-delta reading goes quiet at exactly the
+        /// moment the government starts living on borrowed money. Seeded lazily
+        /// with the treasury figure, so no migration.
+        /// </summary>
+        public float lastMonthSovereignDebt;
+
         public bool HasSkill(string nodeId) => unlockedSkills.Contains(nodeId);
 
         /// <summary>Result of the first-launch assessment (GDD §5).</summary>
@@ -407,6 +447,15 @@ namespace Brink.Data
         }
 
         /// <summary>Every unresolved confrontation this country is party to.</summary>
+        /// <summary>An unresolved confrontation by id, or null.</summary>
+        public Confrontation FindConfrontation(string confrontationId)
+        {
+            if (string.IsNullOrEmpty(confrontationId)) return null;
+            for (int i = 0; i < confrontations.Count; i++)
+                if (confrontations[i].id == confrontationId) return confrontations[i];
+            return null;
+        }
+
         public List<Confrontation> ActiveConfrontationsFor(string countryId)
         {
             var active = new List<Confrontation>();

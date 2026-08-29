@@ -89,6 +89,19 @@ namespace Brink.Audio
 
         // ---- progression and system ----
         AnnualEvaluation = 80,
+
+        /// <summary>
+        /// **Currently has no call site**, and that is deliberate rather than the
+        /// dead-cue smell this file warns about elsewhere. Its only caller was
+        /// the manual SAVE TO button, removed 2026-08-28 with the save/load rows;
+        /// the autosave fires every resolved month and already has `EndMonth`, so
+        /// chirping again would be noise on the one event that happens most.
+        ///
+        /// Kept rather than deleted because the ids are explicitly numbered and
+        /// the library asset stores them by value — dropping one leaves the asset
+        /// holding a number the enum no longer defines. It becomes live again if
+        /// cloud sync or an explicit "record filed" moment ever needs it.
+        /// </summary>
         SaveComplete = 90
     }
 }

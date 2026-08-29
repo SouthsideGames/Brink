@@ -116,7 +116,10 @@ namespace Brink.Core
         /// catastrophe, and a host state that is otherwise well run absorbs it.
         /// </summary>
         public static float StandardsDrag(CountryState country)
-            => Math.Min(9f, country.displacement.hosted * 0.22f);
+            => Math.Min(9f, country.displacement.hosted * 0.22f)
+               // Shelters, stockpiles and a plan: what displacement does to the
+               // public lands softer (`CAP_CIVILDEF`, spec 13 §6).
+               * (1f - TechnologySystem.Effectiveness(country, "CAP_CIVILDEF") * 0.40f);
 
         /// <summary>
         /// What hosting adds to the pressure behind organised unrest. The other

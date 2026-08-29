@@ -225,18 +225,33 @@ namespace Brink.Core
         /// forming expectations wants "have they been caught doing this", and the
         /// chronicle is where that is written down permanently.
         /// </summary>
-        static float ObservedSubversion(GameState state, string observerId, string subjectId)
+        /// <remarks>
+        /// Public because `IntelligenceSystem.DirectedHardening` needs the same
+        /// reading: what a service hardens against is precisely what the world
+        /// has watched a state be caught doing. Two definitions of "how much
+        /// subversion have we seen from them" would drift apart, and the
+        /// expectation layer and the structural layer disagreeing about that is
+        /// the counter-play design coming apart quietly.
+        ///
+        /// `observerId` is deliberately unused: this reads the *public* record,
+        /// and being publicly caught is public. What collection buys is
+        /// confidence in the reading, applied by the callers.
+        /// </remarks>
+        public static float ObservedSubversion(GameState state, string observerId, string subjectId)
         {
             const int MemoryWindowMonths = 120;
             int acts = 0;
 
             foreach (var entry in state.chronicle)
             {
-                if (entry.category != ChronicleCategory.Intelligence) continue;
-                if (entry.countryId != subjectId) continue;
-                if (entry.publicity != Publicity.Public) continue;
                 if (state.date.MonthsSince(entry.date) > MemoryWindowMonths) continue;
-                if (entry.text.IndexOf("compromised", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                // One shared definition of "caught" — see
+                // `IntelligenceSystem.CaughtMarkers`. Matching "compromised"
+                // here by hand meant only a rolled-up *network* registered: a
+                // caught covert operation and a blown approach to a foreign
+                // minister both went unseen, which is most of what an operator
+                // is actually caught doing.
+                if (!IntelligenceSystem.IsPublicSubversionRecord(entry, subjectId)) continue;
                 acts++;
             }
 

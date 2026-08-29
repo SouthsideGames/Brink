@@ -47,6 +47,13 @@ namespace Brink.Core
         // ---- intelligence ----
         public const string ExposeNetwork = "EXPOSE_NETWORK";
 
+        /// <summary>
+        /// A foreign official offers themselves to us (spec 03 §11). Deep access
+        /// into one state, bought with that state's opinion of us — a defector
+        /// is a windfall, not a free one.
+        /// </summary>
+        public const string AcceptDefector = "ACCEPT_DEFECTOR";
+
         // ---- government ----
         public const string ForeignUnrest = "FOREIGN_UNREST";
         public const string Conspiracy = "CONSPIRACY";
@@ -57,7 +64,7 @@ namespace Brink.Core
             Relations, Trust, Threat,
             OpenConfrontation, SufferConfrontation, Readiness, WarSupport,
             ImposeSanction, SufferSanction, TradeShock, MarketShock,
-            ExposeNetwork,
+            ExposeNetwork, AcceptDefector,
             ForeignUnrest, Conspiracy
         };
 
@@ -224,6 +231,46 @@ namespace Brink.Core
                 }
 
                 // ---------------- intelligence ----------------
+
+                case AcceptDefector:
+                {
+                    if (target == null) return "";
+
+                    // **A pull channel, not a push one.** Every other route into
+                    // a foreign service is something we do to them; this is
+                    // somebody walking in. It is a windfall the operator can
+                    // refuse — and refusing costs nothing, which is what makes
+                    // taking them a decision rather than a formality.
+                    var network = state.FindNetwork(player.id, target.id);
+                    if (network == null)
+                    {
+                        network = new IntelNetwork
+                        {
+                            ownerId = player.id,
+                            targetId = target.id,
+                            focus = IntelDomain.Political
+                        };
+                        state.networks.Add(network);
+                    }
+                    network.penetration = Clamp(network.penetration + magnitude);
+                    network.compromised = false;
+
+                    // They know who left and where they went.
+                    var relationship = state.FindRelationship(player.id, target.id);
+                    if (relationship != null)
+                    {
+                        relationship.relations = Clamp(relationship.relations - 12f);
+                        relationship.trust = Clamp(relationship.trust - 15f);
+                        relationship.AddMemory(state.date, "Took in one of ours.", -2f);
+                    }
+
+                    // And their service tightens up, which is the cost that
+                    // outlives the windfall.
+                    target.counterIntel.institutionalHardening =
+                        Math.Min(20f, target.counterIntel.institutionalHardening + 3f);
+
+                    return $"A defector from {target.displayName} is in our hands.";
+                }
 
                 case ExposeNetwork:
                 {

@@ -72,6 +72,86 @@ AI states fund research along their leader's national priority (6% chance per
 month to open a programme when one is free). They are subject to the same
 prerequisites, industrial floors and funding rules.
 
+## 6. The catalogue expansion (spec 25 Tranche E, 2026-08-28)
+
+**Status: as-built.** 13 → **33 capabilities**.
+`TechnologySystemTests.EveryCapabilityIsReadSomewhere`.
+
+### Capabilities that unlock options, not only efficiencies
+
+The idea the catalogue was missing. The distinction already existed and was
+only ever used in one direction: **a skill is operator capability and gates
+operator verbs** (spec 07); **a capability is national ability** — and every one
+of the original 13 granted a multiplier, with nothing gated behind them except
+the five strategic instruments.
+
+| Capability | Unlocks |
+|---|---|
+| `CAP_CYBER` | `CovertOperation.CyberOperation` — the gate Tranche B was written expecting |
+| `CAP_FORENSICS` | The `SubversionSponsorship` Special Estimate; without tracing there is no answer |
+| `CAP_ARMSCONTROL` | `TreatyCommitment.ArmsControl`. Willingness returns **0** without it — proposing a limitation you cannot verify is a piece of paper, and the gate is deliberately on the whole treaty, so bundling the clause makes the package unsignable |
+| `CAP_HYPERSONIC` | Reads straight through air defences (×0.55) — nothing fielded intercepts it |
+| `CAP_OVERHEAD` | Estimates on states we have **nobody in** |
+
+`CAP_OVERHEAD` is the one that changes what the map *looks like* rather than how
+sharp it is. Capped at `ConfidenceGrade.Low` with a margin of `30 − reach × 8`,
+and **skipped entirely where a network exists**: it must not make networks
+redundant, it makes the decision about where to put them better informed.
+
+### `CAP_AGRI` closes a standing open item
+
+A food-poor state had **no route to raise its own ceiling** — only authored trade
+links and the player's own deals, neither of which a foreign government can reach
+for. An AI state born short of food stayed short for fifty years whatever it did.
+`FoodCeilingFor` now adds `Effectiveness × 22`.
+
+### Dual-use — prerequisites in two pillars
+
+The catalogue was five separate ladders. `CAP_SPACE` (ISR + Overhead),
+`CAP_STRATLOG` (Lift + LogNet) and `CAP_TECHTRANSFER` (AdvMfg + Convening) are
+the rungs that need both, and they are the reason to build breadth rather than
+depth in one place.
+
+`CAP_TECHTRANSFER` accelerates maturity **only for what was not developed here**
+— what we built we already understand, so there is nothing to absorb.
+
+### The guard
+
+`EveryCapabilityIsReadSomewhere` scans the runtime sources for `CAP_*` outside
+`CapabilityCatalog.cs` and fails on any capability nobody reads. Written *before*
+the wiring, deliberately: a capability with no read site is funded for years,
+completes, and changes nothing — the "written but never read" family, and at 33
+entries it would be that family at scale. The catalogue declaring and
+cross-referencing an id does not count as somebody reading it.
+
+**Adding a capability is therefore two places, not one:** the catalogue, and a
+system that reads it.
+
+### Full list of new read sites
+
+```
+CAP_AIRDEFENSE    DefensePowerFor, AirDefenses model      (×1.7 at maturity)
+CAP_UNDERSEA      DefensePowerFor, EnemyNavy model        (×1.45)
+CAP_AUTONOMY      attacker losses only                    (−30%)
+CAP_HYPERSONIC    pierces air defences                    (×0.55)
+CAP_AGRI          FoodCeilingFor                          (+22)
+CAP_SUBSTITUTION  MaterialsCeilingFor                     (+18)
+CAP_LOGNET        targetGrowth, via trade health
+CAP_RESERVECURR   sanction pressure on growth             (−35%)
+CAP_CYBER         gates the cyber operation
+CAP_OVERHEAD      CollectFromOverhead
+CAP_FORENSICS     gates the sponsorship question
+CAP_ARMSCONTROL   gates limitation treaties
+CAP_DEVAID        treaty willingness, via dependence
+CAP_BROADCAST     treaty willingness, where relations are cold
+CAP_STATISTICS    MishandleChanceFor                      (−45%)
+CAP_EMERGENCY     emergency powers PC cost                (−35%)
+CAP_CIVILDEF      DisplacementSystem.StandardsDrag        (−40%)
+CAP_SPACE         ProjectionRange                         (+12)
+CAP_STRATLOG      ProjectionRange                         (+14)
+CAP_TECHTRANSFER  maturity of non-developed capabilities  (+60%)
+```
+
 ## 6. Extension points
 
 - **Captured knowledge from operations** — GDD §11 mentions captured knowledge;

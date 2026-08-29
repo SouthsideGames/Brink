@@ -205,6 +205,7 @@ namespace Brink.Core
         {
             switch (commitment)
             {
+                case TreatyCommitment.ArmsControl: return 4f;    // neither of us builds the thing
                 case TreatyCommitment.MutualDefense: return 5f;   // we will die for you
                 case TreatyCommitment.Transit: return 3.5f;       // our ground, your forces
                 case TreatyCommitment.IntelligenceSharing: return 3f;
@@ -521,6 +522,9 @@ namespace Brink.Core
             switch (commitment)
             {
                 case TreatyCommitment.MutualDefense: return 22f;
+                // Heavy: it binds what we may field and how far we may go. Real
+                // agreements between rivals are hard, which is the point.
+                case TreatyCommitment.ArmsControl: return 16f;
                 case TreatyCommitment.JointPlanning: return 12f;
                 case TreatyCommitment.IntelligenceSharing: return 10f;
                 case TreatyCommitment.Transit: return 8f;
@@ -590,6 +594,41 @@ namespace Brink.Core
 
             // A state that already fears us wants fewer entanglements, not more.
             willingness -= relationship.ThreatPerceivedBy(targetId) * 0.25f;
+
+            // **Nobody signs with a state they will not admit exists** (spec 04
+            // §5b). A breakaway has to win recognition before it can win
+            // treaties, which is what makes recognition the first thing it
+            // needs and the thing worth spending standing on. Exactly zero for
+            // any country that was there at world creation.
+            willingness -= (1f - Legitimacy(state, player)) * 45f;
+
+            // Somebody in the room who knows them (spec 04 §5e). Zero unless the
+            // foreign minister is actually posted here.
+            willingness += EnvoyWeight(state, proposerId, targetId) * 12f;
+
+            // Speaking past a government to the people it governs (`CAP_BROADCAST`).
+            // Being disliked abroad costs us less than it did.
+            willingness += TechnologySystem.Effectiveness(player, "CAP_BROADCAST")
+                           * Math.Max(0f, 45f - relationship.relations) * 0.25f;
+
+            // Money that arrives as help and stays as leverage (`CAP_DEVAID`).
+            willingness += TechnologySystem.Effectiveness(player, "CAP_DEVAID")
+                           * relationship.DependenceOf(targetId) * 0.10f;
+
+            // **Verification is what lets rivals believe each other** (spec 04
+            // §5f) — which is precisely what `CAP_VERIFICATION`'s description
+            // has always promised and what it had almost no read site for. An
+            // arms-control clause is a heavy burden between states that do not
+            // trust each other; monitoring is how it gets signed anyway.
+            if (commitments != null && commitments.Contains(TreatyCommitment.ArmsControl))
+            {
+                // **A capability that unlocks a treaty class** (spec 13 §6).
+                // Inspection protocols nobody has to take on trust are what make
+                // a limitation signable at all; without the regime, proposing one
+                // is a piece of paper and everybody knows it.
+                if (!TechnologySystem.Has(player, "CAP_ARMSCONTROL")) return 0f;
+                willingness += TechnologySystem.Effectiveness(player, "CAP_VERIFICATION") * 26f;
+            }
 
             // **We will not pact with our enemy's ally.** The strongest case over
             // every third state of the proposer being deeply aligned with a
@@ -663,34 +702,58 @@ namespace Brink.Core
         /// diplomacy suffer — and everyone watching remembers (GDD §15.2).
         /// </summary>
         public static bool BreakTreaty(GameState state, string partnerId)
+            => BreakTreatyBy(state, state.playerCountryId, partnerId);
+
+        /// <summary>
+        /// Repudiate a treaty. **Actor-generic** — this was player-only, so a
+        /// foreign government could never be seen to break its word through this
+        /// path, and `AISystem`'s counter-play could not learn from something the
+        /// world could not do. Arms control breaking on escalation needed it too.
+        /// </summary>
+        public static bool BreakTreatyBy(GameState state, string actorId, string partnerId)
         {
-            var treaty = state.FindTreaty(state.playerCountryId, partnerId);
-            if (treaty == null) return false;
+            var treaty = state.FindTreaty(actorId, partnerId);
+            if (treaty == null || treaty.broken) return false;
 
             treaty.broken = true;
-            treaty.brokenBy = state.playerCountryId;
+            treaty.brokenBy = actorId;
 
-            var relationship = state.FindRelationship(state.playerCountryId, partnerId);
-            relationship.relations = Clamp(relationship.relations - 25f);
-            relationship.trust = Clamp(relationship.trust - 35f);
-            relationship.AddMemory(state.date, "Treaty broken against them", -6f);
+            var relationship = state.FindRelationship(actorId, partnerId);
+            if (relationship != null)
+            {
+                relationship.relations = Clamp(relationship.relations - 25f);
+                relationship.trust = Clamp(relationship.trust - 35f);
+                relationship.AddMemory(state.date, "Treaty broken against them", -6f);
+            }
 
             // Third parties revise their view of our reliability.
-            var player = state.PlayerCountry;
+            var player = state.FindCountry(actorId);
             player.pillars.diplomacy = Clamp(player.pillars.diplomacy - 6f);
             foreach (var other in state.relationships)
             {
-                if (!other.Involves(state.playerCountryId)) continue;
+                if (!other.Involves(actorId)) continue;
                 if (other.Involves(partnerId)) continue;
                 other.trust = Clamp(other.trust - 8f);
                 other.AddMemory(state.date, "Observed treaty violation", -1.5f);
             }
 
             var partner = state.FindCountry(partnerId);
-            state.AddNotification(NotificationClass.Priority, "TREATY BROKEN",
-                $"Commitments to {partner?.displayName} repudiated. Reputation damaged.", partnerId);
-            state.AddChronicle(ChronicleCategory.Diplomatic, state.playerCountryId,
-                                $"Treaty with {partner?.displayName} broken.", Publicity.Public);
+
+            // Ours is a decision we took; anybody else's is news off the wire —
+            // and only where we would see it (`WorldWire`). Before this was
+            // actor-generic the notification fired unconditionally and the
+            // chronicle was attributed to the player whoever broke the treaty.
+            if (actorId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "TREATY BROKEN",
+                    $"Commitments to {partner?.displayName} repudiated. Reputation damaged.",
+                    partnerId, desk: ReportingDesk.Diplomacy);
+            else if (WorldWire.Watches(state, actorId) || partnerId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Wire, "TREATY BROKEN",
+                    $"{player?.displayName} has repudiated its commitments to "
+                    + $"{partner?.displayName}.", actorId, desk: ReportingDesk.Diplomacy);
+
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"Treaty with {partner?.displayName} broken.", Publicity.Public);
             return true;
         }
 
@@ -1008,22 +1071,522 @@ namespace Brink.Core
         /// encirclement to whoever is not inside the web — each pact past the
         /// fourth raises it. This is what makes hegemony a held position rather
         /// than a finish line.
+        ///
+        /// **Counted through `AllianceSystem.GuarantorsOf`, so a bloc counts.**
+        /// This used to walk `state.treaties` alone, which was correct while
+        /// every alliance was bilateral and became a hole the moment a bloc could
+        /// carry `MutualDefense`: a twelve-member defence bloc registered as zero
+        /// pacts, so the multilateral route paid no anxiety at all and strictly
+        /// dominated the bilateral one — and the operator could quietly collect
+        /// the map again, which is the exact failure the heat work was built to
+        /// close.
+        ///
+        /// What is counted is **states lined up with them**, not documents
+        /// signed. Encirclement is a fact about how many governments would come,
+        /// and it does not care how the promise was papered.
         /// </summary>
         public static float PactAnxiety(GameState state, string countryId)
         {
-            int pacts = 0;
-            foreach (var treaty in state.treaties)
-            {
-                if (treaty.broken) continue;
-                if (treaty.countryA != countryId && treaty.countryB != countryId) continue;
-                if (treaty.Has(TreatyCommitment.MutualDefense)) pacts++;
-            }
+            int pacts = AllianceSystem.GuarantorsOf(state, countryId, null).Count;
             return Math.Min(1f, Math.Max(0f, pacts - 4) / 6f);
+        }
+
+        // ---------- recognition of successor states (spec 04 §5b) ----------
+
+        public const int RecogniseCost = 1;   // CP
+
+        /// <summary>
+        /// A state founded after world creation — a `SecessionSystem` breakaway.
+        ///
+        /// `SecessionSystem` is the only thing in the game that constructs a
+        /// country at runtime, and until now diplomacy had no verb about one:
+        /// a state could come into existence and the world had no way to take a
+        /// position on whether it existed.
+        /// </summary>
+        public static bool IsSuccessor(GameState state, CountryState country)
+            => country != null && country.foundedDate.CompareTo(state.startDate) > 0;
+
+        /// <summary>How many sovereign states have recognised this one.</summary>
+        public static int RecognitionCount(GameState state, string successorId)
+        {
+            int count = 0;
+            foreach (var relationship in state.relationships)
+            {
+                if (!relationship.recognised || !relationship.Involves(successorId)) continue;
+                count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 0..1 legitimacy: the share of the world that accepts this state
+        /// exists. Read by its stability target and by treaty acceptance, so
+        /// recognition is worth something concrete to the state receiving it
+        /// rather than being a line on a screen.
+        /// </summary>
+        public static float Legitimacy(GameState state, CountryState country)
+        {
+            if (!IsSuccessor(state, country)) return 1f;
+            int others = Math.Max(1, state.countries.Count - 1);
+            return Math.Min(1f, RecognitionCount(state, country.id) / (float)others);
+        }
+
+        public static bool CanRecognise(GameState state, string actorId, string successorId,
+            out string reason)
+        {
+            reason = "";
+            var successor = state.FindCountry(successorId);
+            if (successor == null) { reason = "NO SUCH STATE."; return false; }
+            if (actorId == successorId) { reason = "A STATE DOES NOT RECOGNISE ITSELF."; return false; }
+
+            if (!IsSuccessor(state, successor))
+            {
+                reason = "THEY HAVE ALWAYS BEEN THERE. Recognition is for a state that has "
+                         + "just declared itself.";
+                return false;
+            }
+
+            var relationship = state.FindRelationship(actorId, successorId);
+            if (relationship != null && relationship.recognised)
+            {
+                reason = "WE ALREADY RECOGNISE THEM.";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Recognise a breakaway state. Actor-generic.
+        ///
+        /// **The cost lands on the parent, and that is the decision.** Nothing
+        /// about this is free either way: recognising buys a grateful new state
+        /// and an angry old one, and withholding is not neutrality — it is a
+        /// position the successor notices for as long as it lasts.
+        /// </summary>
+        public static bool RecogniseBy(GameState state, string actorId, string successorId)
+        {
+            if (!CanRecognise(state, actorId, successorId, out _)) return false;
+
+            var successor = state.FindCountry(successorId);
+            var relationship = state.FindRelationship(actorId, successorId);
+            if (relationship == null) return false;
+
+            relationship.recognised = true;
+            relationship.relations = Clamp(relationship.relations + 16f);
+            relationship.trust = Clamp(relationship.trust + 12f);
+            relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 10f);
+            relationship.AddMemory(state.date, "Recognised us when it counted.", 0.9f);
+
+            // The parent state takes it as a hostile act, because it is one.
+            string parentId = ParentOf(state, successor);
+            var parent = state.FindCountry(parentId);
+            if (parent != null && parent.id != actorId)
+            {
+                var withParent = state.FindRelationship(actorId, parentId);
+                if (withParent != null)
+                {
+                    withParent.relations = Clamp(withParent.relations - 14f);
+                    withParent.trust = Clamp(withParent.trust - 10f);
+                    withParent.AddMemory(state.date,
+                        $"Recognised {successor.displayName} while we still called it ours.", 1f);
+                }
+            }
+
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"Recognises {successor.displayName}.", Publicity.Public);
+            return true;
+        }
+
+        /// <summary>
+        /// The state a breakaway broke away from. Derived from the id convention
+        /// `SecessionSystem` already uses (`PARENT_S`) rather than stored, so
+        /// there is nothing to migrate and nothing that can disagree with it.
+        /// </summary>
+        public static string ParentOf(GameState state, CountryState successor)
+        {
+            if (successor == null) return null;
+            int marker = successor.id.LastIndexOf("_S", StringComparison.Ordinal);
+            return marker <= 0 ? null : successor.id.Substring(0, marker);
+        }
+
+        // ---------- mediating somebody else's war (spec 04 §5c) ----------
+
+        public const int MediationCost = 2;   // CP
+
+        /// <summary>
+        /// Whether we can offer to mediate this confrontation, and why not.
+        ///
+        /// A mediator has to be outside the war and acceptable to both sides.
+        /// The world now fights around three of its own wars every thirty years
+        /// (spec 06) and the operator could only ever watch them — the pillar
+        /// had no verb that acted on a conflict it was not party to.
+        /// </summary>
+        public static bool CanMediate(GameState state, string actorId,
+            Confrontation confrontation, out string reason)
+        {
+            reason = "";
+            if (confrontation == null || confrontation.resolved)
+            {
+                reason = "THAT SITUATION IS CLOSED.";
+                return false;
+            }
+            if (confrontation.Involves(actorId))
+            {
+                reason = "WE ARE A PARTY TO IT. A belligerent is not a mediator.";
+                return false;
+            }
+            if (confrontation.escalation < EscalationState.Crisis)
+            {
+                reason = "NOTHING TO MEDIATE YET.";
+                return false;
+            }
+
+            // Both sides have to be willing to have us in the room.
+            var withA = state.FindRelationship(actorId, confrontation.initiatorId);
+            var withB = state.FindRelationship(actorId, confrontation.defenderId);
+            if (withA == null || withB == null) { reason = "NO STANDING WITH THEM."; return false; }
+
+            if (withA.relations < MediationFloor || withB.relations < MediationFloor)
+            {
+                reason = $"ONE SIDE WILL NOT HAVE US IN THE ROOM (needs {MediationFloor:F0} "
+                         + "relations with both).";
+                return false;
+            }
+            return true;
+        }
+
+        public const float MediationFloor = 35f;
+
+        /// <summary>
+        /// Offer to mediate. Actor-generic.
+        ///
+        /// **Failing has to cost**, or tabling an offer every month and seeing
+        /// what sticks is the correct play — the same reasoning that prices a
+        /// lost chamber motion. Success buys standing with both sides and a
+        /// settlement neither could reach alone; failure spends a little of that
+        /// standing with each of them, because we asked them to stop and they
+        /// declined in public.
+        /// </summary>
+        public static bool OfferMediationBy(GameState state, string actorId,
+            Confrontation confrontation)
+        {
+            if (!CanMediate(state, actorId, confrontation, out _)) return false;
+
+            var mediator = state.FindCountry(actorId);
+            var withA = state.FindRelationship(actorId, confrontation.initiatorId);
+            var withB = state.FindRelationship(actorId, confrontation.defenderId);
+
+            // What a mediator brings: standing with both sides, the diplomatic
+            // pillar, and — the term that makes collection and treaties pay off
+            // here — how tired of the war the belligerents already are.
+            var initiator = state.FindCountry(confrontation.initiatorId);
+            var defender = state.FindCountry(confrontation.defenderId);
+            float exhaustion = ((initiator?.warExhaustion ?? 0f)
+                                + (defender?.warExhaustion ?? 0f)) * 0.5f;
+
+            float odds = (withA.relations + withB.relations) * 0.25f
+                         + (mediator?.pillars.diplomacy ?? 0f) * 0.35f
+                         + exhaustion * 0.45f
+                         + TechnologySystem.Effectiveness(mediator, "CAP_VERIFICATION") * 18f
+                         - confrontation.momentum * 0.30f;
+
+            int monthIndex = state.date.MonthsSince(state.startDate);
+            var rng = new Random(unchecked(
+                state.rngSeed * 7919 + monthIndex * 313
+                + Hash.Of(actorId) * 37 + state.NextActionSequence() * 104729));
+
+            bool accepted = rng.NextDouble() * 100.0 < odds;
+
+            if (accepted)
+            {
+                ConfrontationSystem.CloseWithSettlement(state, confrontation, actorId,
+                    $"Mediated by {mediator?.displayName ?? actorId}.");
+
+                foreach (var relationship in new[] { withA, withB })
+                {
+                    relationship.relations = Clamp(relationship.relations + 12f);
+                    relationship.trust = Clamp(relationship.trust + 14f);
+                    relationship.AddMemory(state.date, "Brought us out of a war.", 1f);
+                }
+
+                state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                    $"Mediates an end to the fighting between "
+                    + $"{initiator?.displayName} and {defender?.displayName}.", Publicity.Public);
+                return true;
+            }
+
+            // Refused, in public.
+            foreach (var relationship in new[] { withA, withB })
+            {
+                relationship.relations = Clamp(relationship.relations - 5f);
+                relationship.trust = Clamp(relationship.trust - 3f);
+            }
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"Offer to mediate between {initiator?.displayName} and "
+                + $"{defender?.displayName} is declined.", Publicity.Public);
+            return false;
+        }
+
+        // ---------- normalisation after a war (spec 04 §5d) ----------
+
+        public const int NormalisationCost = 2;   // CP
+
+        /// <summary>
+        /// Whether there is a war to put behind us.
+        ///
+        /// Requires a settlement truce standing between the pair — that is what
+        /// marks two states as having *just stopped fighting*, which is the
+        /// situation this verb is about. Without one there is nothing to
+        /// normalise, only ordinary outreach.
+        /// </summary>
+        public static bool CanNormalise(GameState state, string actorId, string partnerId,
+            out string reason)
+        {
+            reason = "";
+            var relationship = state.FindRelationship(actorId, partnerId);
+            if (relationship == null) { reason = "NO STANDING WITH THEM."; return false; }
+
+            if (relationship.settlementTruceMonths <= 0)
+            {
+                reason = "NO RECENT WAR TO PUT BEHIND US.";
+                return false;
+            }
+            if (state.IsAtWar(actorId) && ConfrontationSystem.ExistingBetween(state, actorId, partnerId) != null)
+            {
+                reason = "WE ARE STILL FIGHTING THEM.";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Put a war behind us. Actor-generic.
+        ///
+        /// **The one verb that touches `memoryWeight` downward.** Historical
+        /// memory is read by treaty acceptance, sanctions relief and alliance
+        /// willingness, and until now it only ever accumulated — a pair who
+        /// fought in 1986 carried it identically in 2020 whatever either did
+        /// about it. That is the one-way-value family in the diplomatic model:
+        /// the game had no way to say two countries had *got over* something.
+        ///
+        /// It is deliberately partial. A third of the weight, once, at the cost
+        /// of standing at home — reconciling with an enemy is unpopular with the
+        /// people who fought them, which is what stops it being free.
+        /// </summary>
+        public static bool BeginNormalisationBy(GameState state, string actorId, string partnerId)
+        {
+            if (!CanNormalise(state, actorId, partnerId, out _)) return false;
+
+            var relationship = state.FindRelationship(actorId, partnerId);
+            var actor = state.FindCountry(actorId);
+            var partner = state.FindCountry(partnerId);
+
+            relationship.memoryWeight = Math.Max(0f, relationship.memoryWeight * 0.66f);
+            relationship.relations = Clamp(relationship.relations + 9f);
+            relationship.trust = Clamp(relationship.trust + 7f);
+
+            // The truce runs down faster once both sides are talking, so
+            // normalising is also the route back to being able to sign anything.
+            relationship.settlementTruceMonths =
+                Math.Max(0, relationship.settlementTruceMonths - 8);
+
+            // Unpopular with the people who did the fighting.
+            if (actor != null)
+            {
+                actor.governmentApproval = Clamp(actor.governmentApproval - 4f);
+                actor.warSupport = Clamp(actor.warSupport - 6f);
+            }
+
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"Moves to normalise relations with {partner?.displayName ?? partnerId}.",
+                Publicity.Public);
+            return true;
+        }
+
+        // ---------- standing envoys (spec 04 §5e) ----------
+
+        /// <summary>
+        /// The foreign minister, posted to one capital. One at a time: an envoy
+        /// who is everywhere is a modifier, not a decision.
+        /// </summary>
+        public static bool AssignEnvoyBy(GameState state, string actorId, string postingId)
+        {
+            var country = state.FindCountry(actorId);
+            var official = country?.FindOfficial(Pillar.Diplomacy);
+            if (official == null) return false;
+
+            // An empty posting recalls them, which has to be possible or the
+            // first choice is permanent.
+            if (string.IsNullOrEmpty(postingId))
+            {
+                official.envoyToCountryId = "";
+                return true;
+            }
+
+            if (postingId == actorId) return false;
+            if (state.FindCountry(postingId) == null) return false;
+
+            official.envoyToCountryId = postingId;
+            return true;
+        }
+
+        /// <summary>
+        /// What a posted envoy is worth on one relationship, 0..1.
+        ///
+        /// **Scaled by the official's competence**, which is the whole point:
+        /// this is the first place the diplomatic minister's quality shows up in
+        /// a *relationship* rather than in the pillar. A poor envoy is close to
+        /// no envoy; a good one is a standing channel.
+        ///
+        /// Read by monthly relationship drift and by treaty willingness, so
+        /// where the minister is posted is a real allocation of one scarce
+        /// person.
+        /// </summary>
+        public static float EnvoyWeight(GameState state, string actorId, string partnerId)
+        {
+            var country = state.FindCountry(actorId);
+            var official = country?.FindOfficial(Pillar.Diplomacy);
+            if (official == null || official.envoyToCountryId != partnerId) return 0f;
+
+            // Direct Control means the operator is running the pillar themselves
+            // and the minister is executing, not representing us abroad.
+            if (official.mode == ControlMode.DirectControl) return 0f;
+
+            return Math.Max(0f, Math.Min(1f, official.competence / 100f));
+        }
+
+        // ---------- summits (spec 04 §5g) ----------
+
+        public const int SummitCost = 3;          // CP
+        public const int SummitPreparation = 4;   // months
+
+        public static bool CanConveneSummit(GameState state, string actorId, string partnerId,
+            out string reason)
+        {
+            reason = "";
+            var relationship = state.FindRelationship(actorId, partnerId);
+            if (relationship == null) { reason = "NO STANDING WITH THEM."; return false; }
+
+            if (relationship.summitMonthsRemaining > 0)
+            {
+                reason = $"A SUMMIT IS ALREADY BEING PREPARED ({relationship.summitMonthsRemaining} "
+                         + "MONTH(S)).";
+                return false;
+            }
+            if (ConfrontationSystem.ExistingBetween(state, actorId, partnerId) != null)
+            {
+                reason = "WE ARE IN A CONFRONTATION WITH THEM. Settle it or mediate it first.";
+                return false;
+            }
+            if (relationship.relations < SummitFloor)
+            {
+                reason = $"THEY WILL NOT SIT DOWN WITH US (needs {SummitFloor:F0} relations).";
+                return false;
+            }
+            return true;
+        }
+
+        public const float SummitFloor = 30f;
+
+        /// <summary>Announce a summit. Actor-generic. The work is the months.</summary>
+        public static bool ConveneSummitBy(GameState state, string actorId, string partnerId)
+        {
+            if (!CanConveneSummit(state, actorId, partnerId, out _)) return false;
+
+            var relationship = state.FindRelationship(actorId, partnerId);
+            relationship.summitMonthsRemaining = SummitPreparation;
+
+            var actor = state.FindCountry(actorId);
+            var partner = state.FindCountry(partnerId);
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"{actor?.displayName} and {partner?.displayName} announce talks.",
+                Publicity.Public);
+            return true;
+        }
+
+        /// <summary>
+        /// Advance every announced summit, and resolve the ones that arrive.
+        ///
+        /// **The world can move underneath it.** Whether the meeting is worth
+        /// anything is judged on the relationship *as it stands the month it
+        /// happens*, not as it stood when it was called — so a summit announced
+        /// in a warm month and met in a cold one produces a communiqué and
+        /// nothing else. That is the whole reason it takes four months.
+        /// </summary>
+        static void AdvanceSummits(GameState state)
+        {
+            foreach (var relationship in state.relationships)
+            {
+                if (relationship.summitMonthsRemaining <= 0) continue;
+
+                // A war between the pair collapses the talks outright.
+                if (ConfrontationSystem.ExistingBetween(
+                        state, relationship.countryA, relationship.countryB) != null)
+                {
+                    relationship.summitMonthsRemaining = 0;
+                    CollapseSummit(state, relationship, "overtaken by events");
+                    continue;
+                }
+
+                relationship.summitMonthsRemaining--;
+                if (relationship.summitMonthsRemaining > 0) continue;
+
+                if (relationship.relations < SummitFloor)
+                {
+                    CollapseSummit(state, relationship, "the two sides had drifted too far apart");
+                    continue;
+                }
+
+                // It met, and it was worth having.
+                relationship.relations = Clamp(relationship.relations + 14f);
+                relationship.trust = Clamp(relationship.trust + 16f);
+                relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 9f);
+                relationship.AddMemory(state.date, "Sat down with us and meant it.", 1.2f);
+
+                var a = state.FindCountry(relationship.countryA);
+                var b = state.FindCountry(relationship.countryB);
+                state.AddChronicle(ChronicleCategory.Diplomatic, relationship.countryA,
+                    $"Summit between {a?.displayName} and {b?.displayName} concludes.",
+                    Publicity.Public);
+
+                if (relationship.Involves(state.playerCountryId))
+                {
+                    string other = relationship.PartnerOf(state.playerCountryId);
+                    state.AddNotification(NotificationClass.Priority, "SUMMIT CONCLUDES",
+                        $"The meeting with {state.FindCountry(other)?.displayName} went well. "
+                        + "Standing and trust have both moved.", other,
+                        desk: ReportingDesk.Diplomacy);
+                }
+            }
+        }
+
+        static void CollapseSummit(GameState state, Relationship relationship, string why)
+        {
+            relationship.summitMonthsRemaining = 0;
+
+            // A failed summit is worse than none: it was announced, and it did
+            // not deliver. Small, because the announcement is the exposure and
+            // the drift is what actually did the damage.
+            relationship.relations = Clamp(relationship.relations - 4f);
+
+            var a = state.FindCountry(relationship.countryA);
+            var b = state.FindCountry(relationship.countryB);
+            state.AddChronicle(ChronicleCategory.Diplomatic, relationship.countryA,
+                $"Talks between {a?.displayName} and {b?.displayName} collapse — {why}.",
+                Publicity.Public);
+
+            if (!relationship.Involves(state.playerCountryId)) return;
+            string other = relationship.PartnerOf(state.playerCountryId);
+            state.AddNotification(NotificationClass.Priority, "SUMMIT COLLAPSES",
+                $"The meeting with {state.FindCountry(other)?.displayName} did not happen — "
+                + $"{why}. It was announced, and it did not deliver.", other,
+                desk: ReportingDesk.Diplomacy);
         }
 
         public static void MonthlyUpdate(GameState state)
         {
             UpdateBasingRights(state);
+            AdvanceSummits(state);
 
             // O(1) pair lookup for the gravity pass — FindRelationship scans the
             // whole list, and gravity reads two third-party pairs per country per
@@ -1037,6 +1600,21 @@ namespace Brink.Core
                 var a = state.FindCountry(relationship.countryA);
                 var b = state.FindCountry(relationship.countryB);
                 if (a == null || b == null) continue;
+
+                // A posted envoy keeps a relationship warm without the operator
+                // spending a Command Point on it every month (spec 04 §5e).
+                // Small on purpose: a standing channel is worth about a third of
+                // an outreach a month, so it is a way to *hold* a relationship
+                // rather than a cheaper way to build one — and it is scaled by
+                // the minister's competence, so a weak appointment posted abroad
+                // is close to nobody being there.
+                float envoy = Math.Max(EnvoyWeight(state, a.id, b.id),
+                                       EnvoyWeight(state, b.id, a.id));
+                if (envoy > 0.01f)
+                {
+                    relationship.relations = Clamp(relationship.relations + envoy * 0.9f);
+                    relationship.trust = Clamp(relationship.trust + envoy * 0.5f);
+                }
 
                 // The friend of my enemy: deep alignment with a state's genuine
                 // rival caps how warm this relationship can be, and erodes what
