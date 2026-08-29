@@ -229,7 +229,11 @@ namespace Brink.Core
             => Clamp(country.resources.materialsEndowment
                      + TradeSystem.Supply(state, country.id, TradeFocus.Materials)
                      + TerritorySystem.MaterialsSwing(state, country.id)
-                     + NationalTraitCatalog.ResourceCeilingBonus(country), 0f, 100f);
+                     + NationalTraitCatalog.ResourceCeilingBonus(country)
+                     // Alloys and recycling: industry needs less of what we have
+                     // to import (`CAP_SUBSTITUTION`).
+                     + TechnologySystem.Effectiveness(country, "CAP_SUBSTITUTION") * 18f,
+                     0f, 100f);
 
         /// <summary>
         /// The most food security this country can hold: what its own land
@@ -240,7 +244,15 @@ namespace Brink.Core
         /// </summary>
         public static float FoodCeilingFor(GameState state, CountryState country)
             => Clamp(country.resources.foodEndowment
-                     + TradeSystem.Supply(state, country.id, TradeFocus.Food), 0f, 100f);
+                     + TradeSystem.Supply(state, country.id, TradeFocus.Food)
+                     // **The route a food-poor state never had** (spec 13 §6).
+                     // Until this, only authored trade links and the player's own
+                     // deals could raise a foreign food ceiling — so an AI
+                     // government born short of food stayed short of it for the
+                     // whole of a fifty-year save, whatever it did. Yield,
+                     // storage and distribution are something a country can
+                     // decide to be good at.
+                     + TechnologySystem.Effectiveness(country, "CAP_AGRI") * 22f, 0f, 100f);
 
         /// <summary>
         /// How much domestic capacity a sector is losing to imports.
@@ -355,7 +367,15 @@ namespace Brink.Core
 
             float targetGrowth = 1.6f + structural + industryPull + confidencePull + sectorPull
                                  + (tradeHealth - 50f) * 0.014f
+                                 // Ports, rail and the paperwork between them:
+                                 // trade carries more for the same relationships
+                                 // (`CAP_LOGNET`).
+                                 + TechnologySystem.Effectiveness(country, "CAP_LOGNET")
+                                   * Math.Max(0f, tradeHealth - 40f) * 0.012f
+                                 // Everyone settles in our paper, so coercion
+                                 // aimed at us lands softer (`CAP_RESERVECURR`).
                                  - sanctionPressure * 0.55f
+                                   * (1f - TechnologySystem.Effectiveness(country, "CAP_RESERVECURR") * 0.35f)
                                  - blowback * 0.2f
                                  - energyDrag
                                  - (atWar ? 1.3f : 0f)

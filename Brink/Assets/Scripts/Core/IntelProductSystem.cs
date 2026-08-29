@@ -64,6 +64,18 @@ namespace Brink.Core
                 return false;
             }
 
+            // **A capability that unlocks a question** (spec 13 §6). Tracing a
+            // weapon or a payment back to whoever sent it is a forensic
+            // apparatus, not an opinion — without it the service can report that
+            // there is a rising, and nothing about who is behind it.
+            var observer = state.FindCountry(observerId);
+            if (question == EstimateQuestion.SubversionSponsorship
+                && !TechnologySystem.Has(observer, "CAP_FORENSICS"))
+            {
+                reason = "WE CANNOT TRACE IT BACK. Requires the Attribution Forensics programme.";
+                return false;
+            }
+
             int outstanding = 0;
             foreach (var product in state.intelProducts)
             {

@@ -204,6 +204,15 @@ namespace Brink.Core
                 float rate = held.source == CapabilitySource.Developed ? 1.2f
                            : held.source == CapabilitySource.Shared ? 0.9f
                            : 0.6f;
+
+                // Dual-use (spec 13 §6): a state with a transfer regime absorbs
+                // what it did not build faster, because it has the institutions
+                // for taking knowledge in. It does **not** speed up our own
+                // research — what we developed we already understand, so there is
+                // nothing there to absorb.
+                if (held.source != CapabilitySource.Developed)
+                    rate *= 1f + Effectiveness(country, "CAP_TECHTRANSFER") * 0.6f;
+
                 held.maturity = Math.Min(100f, held.maturity + rate);
             }
         }

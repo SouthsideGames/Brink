@@ -606,13 +606,29 @@ namespace Brink.Core
             // foreign minister is actually posted here.
             willingness += EnvoyWeight(state, proposerId, targetId) * 12f;
 
+            // Speaking past a government to the people it governs (`CAP_BROADCAST`).
+            // Being disliked abroad costs us less than it did.
+            willingness += TechnologySystem.Effectiveness(player, "CAP_BROADCAST")
+                           * Math.Max(0f, 45f - relationship.relations) * 0.25f;
+
+            // Money that arrives as help and stays as leverage (`CAP_DEVAID`).
+            willingness += TechnologySystem.Effectiveness(player, "CAP_DEVAID")
+                           * relationship.DependenceOf(targetId) * 0.10f;
+
             // **Verification is what lets rivals believe each other** (spec 04
             // §5f) — which is precisely what `CAP_VERIFICATION`'s description
             // has always promised and what it had almost no read site for. An
             // arms-control clause is a heavy burden between states that do not
             // trust each other; monitoring is how it gets signed anyway.
             if (commitments != null && commitments.Contains(TreatyCommitment.ArmsControl))
+            {
+                // **A capability that unlocks a treaty class** (spec 13 §6).
+                // Inspection protocols nobody has to take on trust are what make
+                // a limitation signable at all; without the regime, proposing one
+                // is a piece of paper and everybody knows it.
+                if (!TechnologySystem.Has(player, "CAP_ARMSCONTROL")) return 0f;
                 willingness += TechnologySystem.Effectiveness(player, "CAP_VERIFICATION") * 26f;
+            }
 
             // **We will not pact with our enemy's ally.** The strongest case over
             // every third state of the proposer being deeply aligned with a

@@ -267,8 +267,22 @@ namespace Brink.Tests
             var armsControl = new System.Collections.Generic.List<TreatyCommitment>
                 { TreatyCommitment.ArmsControl };
 
+            // The regime itself is a separate capability and gates the clause
+            // outright (spec 13 §6) — without it, willingness is zero and this
+            // would compare nothing against nothing. What is being measured here
+            // is what *verification* adds on top of having the regime at all.
+            state.PlayerCountry.technology.capabilities.Add(new HeldCapability
+            {
+                capabilityId = "CAP_ARMSCONTROL",
+                source = CapabilitySource.Developed,
+                acquired = state.date,
+                maturity = 100f
+            });
+
             float blind = DiplomacySystem.TreatyWillingness(
                 state, state.playerCountryId, "CHN", armsControl);
+            Assert.Greater(blind, 0f,
+                "the fixture's state cannot sign a limitation at all, so this measured nothing");
 
             state.PlayerCountry.technology.capabilities.Add(new HeldCapability
             {

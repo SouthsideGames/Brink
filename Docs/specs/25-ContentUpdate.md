@@ -1,16 +1,26 @@
 # 25 — Content Update: Economy, Intelligence, Diplomacy, Government, Research
 
-**Status: Tranches 0, A and B are BUILT (2026-08-28); C, D and E are PLANNED.**
-Tranche 0 greened the suite (nine failures, four live bugs). Tranche A is
-as-built in spec 02 §9; Tranche B in spec 03 §6a, §6b, §7c and §10 — including
-what was deferred out of it and why. What follows describes the remaining
-tranches — C (diplomacy), D (government) and E (research) — and remains the plan
-of record for the expansion across the four pillars that have fewer verbs than
-Military, plus the capability catalogue.
+**Status: ALL TRANCHES BUILT (2026-08-29).**
+Tranche 0 greened the suite (nine failures, four live bugs). As-built detail
+lives in the pillar specs: A in 02 §9, B in 03 §6a–§10, C in 04 §5b–5g, D in
+05 §2e–2g, E in 13 §6. This document is now a record of the plan rather than
+of the code — the reasoning behind each tranche, and what was deferred out of it
+and why. **Where this document and a pillar spec disagree, the pillar spec is
+right.**
 
-Each tranche's *as-built* description lands in its own pillar spec (02, 03, 04,
-05, 13) as it ships — this document is the map, not the destination, and should
-be reduced to a status table once the last tranche is locked.
+Two places where the plan below was deliberately *not* followed, both recorded
+at the point of departure:
+
+- **Tranche B §5.1** claimed deception was a one-off for the player while the AI
+  ran it as a standing posture. It was already a standing programme; nothing was
+  built.
+- **Tranche D §7.1** proposed making `legislativeSupport` the derived total of
+  the faction blocs. It has 36 sites across eleven systems, eight of them
+  writes — the ledger became a lens on it instead, contributing to the support
+  *target* as `brokeredSupport` already does.
+
+Verb counts, start of the update → end: economy 6 → 13, intelligence 7 → 12,
+diplomacy 10 → 16, government 22 → 24, capabilities 13 → 33. Suite 1187 → 1258.
 
 ## 1. Why these four
 

@@ -173,7 +173,58 @@ namespace Brink.Core
                 }
             }
 
+            CollectFromOverhead(state);
             DecayStaleEstimates(state);
+        }
+
+        /// <summary>
+        /// Reporting on states we have nobody in (`CAP_OVERHEAD`, spec 13 §6).
+        ///
+        /// **The capability that changes what the map looks like rather than how
+        /// sharp it is.** Without a network the operator has NO ASSESSMENT and
+        /// nothing else — an honest fog, and for most of a save an empty one.
+        /// Overhead gives thin, unreliable reporting on everybody: enough to know
+        /// roughly where a state stands, never enough to replace somebody on the
+        /// ground.
+        ///
+        /// Deliberately capped at Low confidence and a wide margin. It must not
+        /// make networks redundant — it makes the *decision* about where to put
+        /// them better informed, which is the opposite thing.
+        /// </summary>
+        static void CollectFromOverhead(GameState state)
+        {
+            foreach (var observer in state.countries)
+            {
+                float reach = TechnologySystem.Effectiveness(observer, "CAP_OVERHEAD");
+                if (reach <= 0f) continue;
+
+                foreach (var target in state.countries)
+                {
+                    if (target.id == observer.id) continue;
+                    // Somebody on the ground is always better; this is only for
+                    // the states we have nobody in.
+                    if (state.FindNetwork(observer.id, target.id) != null) continue;
+
+                    foreach (IntelDomain domain in Enum.GetValues(typeof(IntelDomain)))
+                    {
+                        var estimate = state.FindEstimate(observer.id, target.id, domain);
+                        if (estimate == null)
+                        {
+                            estimate = new IntelEstimate
+                            {
+                                observerId = observer.id, targetId = target.id, domain = domain
+                            };
+                            state.estimates.Add(estimate);
+                        }
+
+                        estimate.reportedValue = TrueValue(target, domain);
+                        estimate.margin = 30f - reach * 8f;   // wide, and stays wide
+                        estimate.confidence = ConfidenceGrade.Low;
+                        estimate.asOf = state.date;
+                        estimate.everCollected = true;
+                    }
+                }
+            }
         }
 
         static void UpdateEstimate(GameState state, IntelNetwork network, CountryState target,
@@ -391,6 +442,19 @@ namespace Brink.Core
                 return true;
             }
 
+            // **A capability that unlocks an option** (spec 13 §6). Cyber
+            // operations need the apparatus to run them, the way deception needs
+            // deep cover — the difference being that this one is national
+            // ability rather than operator capability, so it is researched
+            // rather than learned.
+            if (operation == CovertOperation.CyberOperation
+                && !TechnologySystem.Has(state.PlayerCountry, "CAP_CYBER"))
+            {
+                reason = "No offensive cyber capability — requires the Offensive Cyber "
+                         + "Capability programme.";
+                return false;
+            }
+
             if (state.FindNetwork(state.playerCountryId, targetId) == null)
             {
                 reason = "No collection network in place to work through.";
@@ -430,6 +494,20 @@ namespace Brink.Core
                     "Defensive deception program expanded.", player.id);
                 state.AddChronicle(ChronicleCategory.Intelligence, player.id, "Deception program expanded.");
                 return true;
+            }
+
+            // **One gate, shared.** `CanRunCovertOperation` was called only on
+            // the Deception path, so every other verb reached the network lookup
+            // without consulting it — which meant the `CAP_CYBER` requirement
+            // was enforced in the view and nowhere else, and anything calling
+            // the verb directly (a bot, the AI, a test) walked straight past it.
+            // What a view offers and what the system accepts must be the same
+            // function; this is the `OperationCatalog.CanOrder` precedent, and I
+            // broke it adding the gate.
+            if (!CanRunCovertOperation(state, targetId, operation, out string refused))
+            {
+                GameLog.Warn("INTEL", refused);
+                return false;
             }
 
             var network = state.FindNetwork(state.playerCountryId, targetId);

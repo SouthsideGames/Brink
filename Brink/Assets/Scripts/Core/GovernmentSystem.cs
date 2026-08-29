@@ -1566,7 +1566,10 @@ namespace Brink.Core
                 return false;
             }
 
-            float cost = EmergencyPowersCost * (gov.IsElective ? 1.4f : 0.7f);
+            // Extraordinary authority with a legal shape costs the state less
+            // legitimacy to reach for (`CAP_EMERGENCY`, spec 13 §6).
+            float cost = EmergencyPowersCost * (gov.IsElective ? 1.4f : 0.7f)
+                         * (1f - TechnologySystem.Effectiveness(player, "CAP_EMERGENCY") * 0.35f);
             if (!SpendPoliticalCapital(state, cost, "Declare emergency powers")) return false;
 
             gov.emergencyPowers = true;

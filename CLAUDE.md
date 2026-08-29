@@ -2298,6 +2298,81 @@ for every figure in the table above.
       opportunity cost of commitment: 17 confrontations across five seeds,
       objective held at the end in 4 of 5, net territory +0.
 
+- [x] **Tranches C, D and E — the content update completes** (specs 04 §5b–5g,
+      05 §2e–2g, 13 §6). Suite 1218 → **1258, green**.
+      - **C, diplomacy's episodic layer.** Recognition of `SecessionSystem`
+        successors — the only thing that creates a country at runtime, and
+        diplomacy had no verb about one. Mediation of the AI's own wars.
+        Normalisation, **the only verb that reduces `memoryWeight`**, which until
+        now only ever accumulated. Envoys, the first time `Official.competence`
+        touches a *relationship* rather than a pillar. Arms control, giving
+        `CAP_VERIFICATION` its second and third read sites. Summits, where the
+        four months of preparation are the mechanic — judged on the relationship
+        as it stands when it *meets*.
+      - **D, government content.** Corruption gives patronage the tail its own
+        comment has promised since it shipped. Constitutional change makes
+        `GovernmentType` mutable for the first time — 30 months, paid monthly,
+        genuinely losable. The faction ledger gives support a shape.
+      - **E, research 13 → 33 capabilities**, five of which **unlock options
+        rather than efficiencies** — the parallel that already existed (a skill
+        is operator capability, a capability is national ability) and was unused.
+        `CAP_AGRI` closes the standing open item that a food-poor AI state had no
+        route to its own ceiling.
+      **Adding a capability is two places, not one** — the catalogue and a system
+      that reads it. `EveryCapabilityIsReadSomewhere` enforces it, and was
+      written *before* the wiring on purpose: written after, it would have passed
+      on whatever happened to be done.
+      **More player-only verbs found and fixed**: `BreakTreaty` (so no foreign
+      government could ever be *seen* breaking its word — the record the
+      counter-play layer reads), and my own `CAP_CYBER` gate, which was enforced
+      in the view and nowhere else until the verb was made to consult the same
+      function.
+
+- [x] **Three mechanics worked correctly and a measurement said otherwise.**
+      Worth naming as a class, because each read as a systems regression:
+      - The intelligence bot ran `TheftOfPlans` at one network every month for a
+        decade — exactly the habit `operationTempo` was built to punish — and
+        INTELLIGENCE fell *below passive* on XP. The feature worked; the bot had
+        stopped playing well. **The harness bots represent competent play, so
+        when the game changes what competent looks like they have to change with
+        it**, or every later measurement is of an operator doing something the
+        game now discourages.
+      - `ExperienceDecaysWithoutUse` ran the live pipeline for sixty months and
+        *hoped* nobody declared war. The training ceiling tops out at 48 and only
+        applies out of war, so an army still at 88 had spent five years fighting.
+      - `NoSocialValueRunsAwayInEitherDirection` demanded recovery from countries
+        `UnderRuin` flagged for war exhaustion while their social values were
+        healthy — Turkey arrived with unrest 11, grievance 0 and a market index of
+        117, and was asked to improve.
+      Read a failure as *"which of these two is wrong?"* rather than assuming the
+      code is. The same harness caught four real bugs the same day.
+
+- [x] **Balance after all five tranches (2026-08-29). Supersedes the table above.**
+
+      | Playstyle | After A+B | Now | Δ |
+      |---|---|---|---|
+      | PASSIVE (baseline) | 2.52 | **2.54** | +0.02 |
+      | DIPLOMACY | +0.44 | **+0.54** | +0.10 |
+      | ECONOMY | +0.52 | **+0.44** | −0.08 |
+      | MILITARY | +0.42 | **+0.38** | −0.04 |
+      | INTELLIGENCE | +0.50 | **+0.38** | −0.12 |
+      | GOVERNMENT | +0.40 | **+0.30** | −0.10 |
+      | DRIFTER | +0.18 | **+0.08** | −0.10 |
+
+      Passive is stable and every playstyle still clearly beats it — the two
+      properties that matter. The spread widened from 0.12 to 0.24, which is
+      **healthy rather than regressive**: a 0.12 band meant the pillars were
+      nearly interchangeable, and C–E gave them different characters.
+      Two movements have identifiable causes and **neither was tuned**, because
+      both are bots being penalised for habits the new systems exist to
+      discourage: GOVERNMENT (−0.10) is corruption landing on a bot that uses
+      patronage habitually, and INTELLIGENCE (−0.12) is the residual cost of
+      repeated covert action even after the bot was taught to spread it. Fitting
+      the game to the harness would be the wrong repair.
+      Drifting now costs **−0.46** against the diplomacy routine it runs (was
+      −0.26). MILITARY's ECON component (49.9) is unchanged and still the
+      measured-and-closed opportunity cost of commitment.
+
 Recommended next:
 - ~~**Run the suite.**~~ Done 2026-08-28: 1187 tests, green.
 - **Re-measure balance before anything else.** `Report_MultiSeedBalance` has not
