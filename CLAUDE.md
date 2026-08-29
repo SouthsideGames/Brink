@@ -2373,6 +2373,48 @@ for every figure in the table above.
       −0.26). MILITARY's ECON component (49.9) is unchanged and still the
       measured-and-closed opportunity cost of commitment.
 
+- [ ] **THE WORLD SANCTIONS ITSELF INTO A PERMANENT DEPRESSION.** Measured
+      2026-08-29 with the headless probe, seed 5171, 480 months:
+
+      | month | ruined | mean index | sanctions | mean pressure |
+      |---|---|---|---|---|
+      | 0 | 0 | 100.0 | 0 | 0.00 |
+      | 120 | 3 | 84.4 | 31 | 1.10 |
+      | 240 | 8 | 33.7 | 63 | 2.05 |
+      | 480 | **15 of 16** | 16.6 | **100** | 2.54 |
+
+      **`state.sanctions.Count` only ever grows.** AI states impose regimes
+      faster than `SanctionReviewMonths` and `SeekSanctionsReliefBy` remove them,
+      so pressure ratchets worldwide — and the market index subtracts
+      `sanctionPressure × 9`, so a mean of 2.5 costs 22 points of fundamentals
+      before growth, inflation or war are counted. Across six seeds, **36 of 43
+      ruined states were still ruined after twenty further years** with no
+      intervention; 7 climbed out.
+      This is the one-way-value family **at world scale**, and it is
+      pre-existing — no tranche of the content update caused it.
+      **What hid it**: `NoSocialValueRunsAwayInEitherDirection`'s relief arm was
+      moved to an isolated pipeline on 2026-08-28 (two attempts to hold a live
+      world off a wrecked country kept failing for unrelated reasons). That
+      changed the question from *"does the world recover?"* — it does not — to
+      *"do the recovery mechanics work?"*, which they do. The narrowing was
+      defensible and the consequence was not noticed at the time.
+      **Do not fix this by making the index floor higher.** The floor is a
+      symptom. The candidates worth measuring, in order: whether AI states
+      impose too readily, whether the 36-month review actually fires, and
+      whether `sanctionsTruceMonths` détente is reachable often enough to
+      matter. Re-run the probe (`C:\Temp\brink-probe`, `Recovery.cs`) against any
+      change — the sanction count over time is the diagnostic, not the index.
+
+- [x] **World heat re-measured after Tranche C (2026-08-29): unchanged at 1.25**
+      AI wars per 30-year world, same distribution across the same eight seeds
+      (1, 1, 4, 0, 0, 3, 1, 0). Tranche C did **not** warm the world, and the
+      reason is structural rather than tuning: recognition needs a secession,
+      which is rare, and mediation is player-only — neither gives a foreign
+      government a new reason to collide with another one. If the world is to be
+      warmer, the honest lever is a *cause* the AI can act on that is not
+      resource desperation, since `ResourcePrize`'s energy/materials-below-40
+      gate is what the economy repair closed off.
+
 Recommended next:
 - ~~**Run the suite.**~~ Done 2026-08-28: 1187 tests, green.
 - **Re-measure balance before anything else.** `Report_MultiSeedBalance` has not
