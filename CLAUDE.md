@@ -7,6 +7,11 @@ government command terminal. Landscape mobile (iOS/Android), Unity 6
 **Source of truth for design:** `Docs/GDD_v1.0.md` (extracted from
 `Unknown_Game_Consolidated_GDD_v1.0.docx`). Read it before designing any system.
 
+**Coming back after a break? Read [`Docs/PickUpHere.md`](Docs/PickUpHere.md)
+first.** It is short, states what is verified and what is not, and names the
+first command to run. This file is the accumulated design record — invaluable,
+and not the place to start from cold.
+
 ## Repository layout
 
 - `Brink/` — the Unity project (open this folder in Unity).
@@ -2500,41 +2505,74 @@ for every figure in the table above.
       re-run `Report_MultiSeedBalance`: bloc pacts, the cascade and the new
       repudiation costs are all balance-relevant and none are measured.
 
+- [x] **A stale checkout reverted two merged PRs, and it is undone** (2026-08-29).
+      `f6f463f` ("8/29") was pushed **two and a half minutes after PR #7 was
+      merged** and its tree is byte-identical to `7c6504b` (Aug 27) — the state
+      of the repository before both PR #6 and PR #7. It was a push from a working
+      copy that had never pulled either merge, so a commit named for a date
+      reverted ~10,500 lines: multi-party alliances, the entire content update
+      (tranches 0/A/B/C/D/E), `FiscalSystem`, `IntelProductSystem`,
+      `BelligerentRoster`, spec 25, five test fixtures, seven specs and 564 lines
+      of this file. Reverted in `3399f57`; the tree is again identical to
+      `5458ad1`. Nothing was rescued from the clobber because it introduced
+      nothing.
+      **Found alongside, a second and independent instance of the same shape:**
+      the merge `113a589` resolved a conflict on `run-suite.sh`'s single-line
+      `PART_A` by taking main's side, gaining `MultilateralAllianceTests` and
+      silently dropping the four the content update had added (`CorruptionTests`,
+      `RecognitionAndMediationTests`, `FiscalTests`, `IntelProductTests`). The
+      test *files* merged cleanly — only their registration was lost, so the
+      fixtures existed and would never have run. `verify_coverage` did its job
+      and refused to run the suite at all. Fixed in `9c50d46`.
+      **The rule:** `run-suite.sh`'s partitions, `SimulationPipeline`'s system
+      list and `ActionCatalog` are single lists that several branches touch, and
+      a line-level conflict in a list is resolved by keeping one side. **Check
+      all three by hand after any merge.** This project has now been bitten twice
+      in one week by a list that lost half its entries in a merge, which is the
+      same family as the hand-wired-pipeline sweep: the danger is never the
+      entries that are there.
+
 Recommended next:
-- **Measure the cascade.** Bloc pacts plus the alliance cascade can produce
-  multi-belligerent wars the harness has never seen, and `MaxCommitment` no
-  longer caps a state's total fronts (only the ones it opens itself). Watch
-  `TheatreSystem.TotalCommitment` and the confrontation-months figure in
-  `Report_MultiSeedBalance` — the pinned **92 confrontation-months per unattended
-  decade** is the number to compare against.
-- **Run the suite.** Nine new test classes (`ActionIndexTests`, `InsurgencyTests`,
-  `CouncilTests`, `OppositionTests`, `DisplacementTests`, `BlocTests`,
-  `HoldTests`, `HistoryCatalogTests`, `DossierTests`) and five new monthly
-  systems, none of them compiled. `run-suite.sh` partitions are already updated.
-- **The invariants most likely to complain**, in order: the readiness targets in
-  `WorldInvariantTests` (occupation drag now stacks with `InsurgencySystem.ForceDrag`),
-  the unrest and living-standards invariants (three new pressure terms), and any
-  test that assumed an empty chronicle at month zero (none found, but the sweep
-  was by grep).
-- **Re-measure balance** — see the note above; the last table predates all three
-  new systems.
+- **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
+  with the editor closed. The last green run was **1258 tests at `f36809e`
+  (Tranche E)**, which was the content-update branch *before* it took main's
+  alliance work. The union at HEAD has never been run, and
+  `MultilateralAllianceTests` (28 tests) has never run at all — PR #6's own entry
+  says so. Expect failures; work to green before starting anything new.
+- **Re-measure balance** with `Report_MultiSeedBalance` (five seeds, per-component
+  breakdown — never the single-seed report). The Tranche E table above predates
+  the alliance cascade and should be read as the previous game.
+- **Measure the cascade.** Bloc pacts plus obligation cascades can produce
+  multi-belligerent wars the harness has never seen, and `MaxCommitment` no longer
+  caps a state's total fronts — only the ones it opens itself. Watch
+  `TheatreSystem.TotalCommitment` against the pinned **92 confrontation-months per
+  unattended decade**.
+- **The world sanctions itself into a permanent depression** — measured,
+  confirmed, **not fixed**, and pre-existing rather than caused by any tranche.
+  Detail and the numbers are in the entry above. **The diagnostic is the sanction
+  count over time, not the index**, and raising the index floor would hide the
+  cause again. Probe: `Tools/Recovery.cs`.
+- **World heat is flat at 1.25 AI wars per 30-year world** and Tranche C did not
+  move it, for structural reasons rather than tuning. The honest lever is a
+  *cause* the AI can act on that is not resource desperation. Probe:
+  `Tools/Wars.cs`.
+- **Balance on Regional (10) and Full (24) world sizes remains unmeasured** — every
+  figure is the Standard 16-state world. Decide too whether the harness playstyles
+  should run on Full at all; eight more states change coalition and sanction
+  arithmetic.
+- **Re-audit `Docs/GDD_Coverage.md`.** Dated 2026-08-22, so it predates insurgency,
+  the chamber, the opposition, displacement, blocs, the mandate, multi-party
+  alliances and the whole content update. Several entries are already hand-marked
+  stale. Regenerate by re-auditing against the code; never edit it to match
+  intentions.
+- **Touch-target layout cost on a real device.** Buttons are 44 panel px and grew
+  ~30% taller; nobody has looked on hardware. MILITARY and GOVERNMENT first.
 - Diminishing returns on repeated covert ops (long-standing, niche).
-- An AI verb for food-poor states to seek food trade links — authored links
-  and player deals are still the only routes to a foreign food ceiling.
-- Touch-target layout cost on a real device (MILITARY and GOVERNMENT screens
-  first — buttons grew ~30% and nobody has looked on hardware).
-- Balance on **Regional and Full world sizes** remains unmeasured — the table
-  above is the Standard 16-state world.
-- **Run `Report_MultiSeedBalance` on Regional and Full worlds** before tuning
-  anything against them, and consider whether the harness playstyles should run
-  on Full at all — eight new states change coalition and sanction arithmetic.
-- Diminishing returns on repeated covert ops.
-- An AI verb (or trade-seeking behaviour) for a food-poor state — today only
-  authored links and the player's own deals raise a foreign food ceiling.
-- Touch targets are now 44 panel px and test-guarded, but the **layout cost has
-  not been checked on a device**: every button grew ~30% taller, so MILITARY
-  (domain tabs + up to 7 verbs + the new defensive panel) and GOVERNMENT (four
-  control rows) are the two screens to look at first.
+
+**Closed — do not relist:** an AI route to a foreign food ceiling. Tranche E's
+`CAP_AGRI` closed it and it is read in `EconomySystem`; it survived on the old
+list twice over after it was already done, which is what a recommended-next list
+does when it is appended to rather than edited.
 
 Process per GDD: Prompt → Implement → Test → Fix → Lock. Do not start a phase
 until the prior one passes its acceptance tests.
