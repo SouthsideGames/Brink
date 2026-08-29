@@ -662,6 +662,23 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Bargain with a **named bloc** (spec 05 §2g). Knowing who you are
+        /// talking to is worth more than an undirected approach.
+        /// </summary>
+        public bool CourtFaction(Data.OppositionTheme bloc)
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            bool ok = GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 10, "Bloc courted");
+                SaveSystem.Save(State, AutosaveSlot);
+            }
+            return ok;
+        }
+
         public bool BuildPoliticalSupport()
         {
             if (!MayCommand(Data.Pillar.Government)) return false;
@@ -748,6 +765,31 @@ namespace Brink.Core
         /// amended, or a parliamentary operator — the one who most needs it —
         /// could never reach it. Same reasoning as emergency powers.
         /// </summary>
+        /// <summary>
+        /// Begin rewriting what this state is (spec 05 §2f). Thirty months, paid
+        /// for every one of them, and genuinely losable.
+        /// </summary>
+        public bool BeginConstitutionalChange(Data.GovernmentType target)
+        {
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            if (!GovernmentSystem.CanChangeConstitution(State, State.playerCountryId, target,
+                    out string reason))
+            {
+                GameLog.Warn("GOV", reason);
+                return false;
+            }
+
+            bool ok = GovernmentSystem.BeginConstitutionalChangeBy(
+                State, State.playerCountryId, target);
+            if (ok)
+            {
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 30, "Constitutional process opened");
+            }
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool ConsolidateAuthority(Data.Pillar pillar)
         {
             if (!IsRunning) return false;

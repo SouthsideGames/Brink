@@ -409,6 +409,12 @@ namespace Brink.Core
                 player.government.IsElective ? "Bargain with the chamber" : "Accommodate the elite", "2 PC",
                 "Support bought rather than earned. It decays, so it has to be kept up.",
                 verbs: new[] { nameof(GameController.BuildPoliticalSupport) });
+            Add(Pillar.Government, "GOVERNMENT", "Court a bloc", "2 PC",
+                "Bargain with one named part of the coalition rather than with the chamber in "
+                + "general. Worth more than an undirected approach, because each bloc wants a "
+                + "different thing and only one of them wants what you are offering.",
+                verbs: new[] { nameof(GameController.CourtFaction) });
+
             Add(Pillar.Government, "GOVERNMENT", "Distribute patronage", "1 PC + treasury",
                 "The same support, bought with money instead of standing — and it hollows the state.",
                 player.resources.treasury >= GovernmentSystem.PatronageTreasury,
@@ -424,6 +430,18 @@ namespace Brink.Core
             Add(Pillar.Government, "GOVERNMENT", "Set civic posture", "3 PC",
                 "Open or restrictive. Order against legitimacy, and it decides how fast plots form.",
                 verbs: new[] { nameof(GameController.SetCivicPosture) });
+            Add(Pillar.Government, "GOVERNMENT", "Change the constitution",
+                $"{GovernmentSystem.ConstitutionalOpeningCost:F0} PC + "
+                + $"{GovernmentSystem.ConstitutionalUpkeep:F1} PC/mo for "
+                + $"{GovernmentSystem.ConstitutionalMonths} months",
+                "Become a different kind of state. It changes how power works here — succession, "
+                + "term limits, what emergency powers cost — and it can fail, publicly, after "
+                + "years of paying for it.",
+                !player.government.ChangingConstitution,
+                $"A constitutional process is already under way "
+                + $"({player.government.constitutionalMonthsRemaining} month(s)).",
+                verbs: new[] { nameof(GameController.BeginConstitutionalChange) });
+
             Add(Pillar.Government, "GOVERNMENT", "Consolidate authority", "12 PC",
                 "Permanently make one pillar the operator's to command. The one large purchase.",
                 verbs: new[] { nameof(GameController.ConsolidateAuthority) });

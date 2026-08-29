@@ -79,7 +79,12 @@ namespace Brink.Core
                 ? country.warExhaustion * 0.75f + Math.Max(0f, 50f - country.warSupport) * 0.55f
                 : country.warExhaustion * 0.30f;
 
-            float corruption = Math.Max(0f, 55f - country.pillars.government) * 0.60f
+            // **The recorded thing first** (spec 05 §2e). The three terms below
+            // measure the state being *feeble* — a weak pillar, plots, a divided
+            // elite — which is not the same as the state being bought, and was
+            // all this had to go on before `gov.corruption` existed.
+            float corruption = gov.corruption * 0.75f
+                             + Math.Max(0f, 55f - country.pillars.government) * 0.60f
                              + gov.conspiracyLevel * 0.25f
                              + Math.Max(0f, 50f - gov.eliteCohesion) * 0.20f;
 

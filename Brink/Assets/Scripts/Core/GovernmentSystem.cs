@@ -77,8 +77,12 @@ namespace Brink.Core
 
                 var rng = new Random(unchecked(state.rngSeed * 3010349 + monthIndex * 271 + Hash.Of(country.id)));
 
+                EnsureFactions(state, country);
+                DriftFactions(gov);
+
                 UpdatePoliticalCondition(state, country, gov);
                 UpdateEmergencyPowers(state, country, gov);
+                AdvanceConstitutionalChange(state, country, gov);
 
                 if (gov.IsElective)
                 {
@@ -202,6 +206,334 @@ namespace Brink.Core
         /// grievance is not measuring the hardship it is itself causing.
         /// </summary>
         public const float GrievanceStandardsDrag = 0.12f;
+
+        // ---------- the faction ledger (spec 05 §2g) ----------
+
+        /// <summary>
+        /// Seed the blocs this government rests on, if they are not there yet.
+        ///
+        /// **Lazy, and deterministic from the country id**, so an old save gains
+        /// them on load without a migration step and gains the *same* ones every
+        /// time it is loaded. Three blocs: what the government type implies, what
+        /// the country's condition implies, and the residual that is always
+        /// present in any coalition.
+        /// </summary>
+        public static void EnsureFactions(GameState state, CountryState country)
+        {
+            var gov = country.government;
+            if (gov.factions.Count > 0) return;
+
+            var rng = new Random(unchecked(state.rngSeed * 5501 + Hash.Of(country.id)));
+            float Vary(float mid) => mid + (float)(rng.NextDouble() * 16.0 - 8.0);
+
+            // The bloc that exists because of what kind of state this is.
+            OppositionTheme institutional = gov.IsElective
+                ? OppositionTheme.Liberty : OppositionTheme.Corruption;
+
+            gov.factions.Add(new Faction
+            {
+                name = gov.IsElective ? "THE CHAMBER MAJORITY" : "THE PARTY APPARATUS",
+                theme = OppositionTheme.Drift,
+                share = 0.45f,
+                disposition = Clamp(Vary(58f))
+            });
+            gov.factions.Add(new Faction
+            {
+                name = gov.IsElective ? "THE REFORM BENCH" : "THE SECURITY ORGANS",
+                theme = institutional,
+                share = 0.30f,
+                disposition = Clamp(Vary(48f))
+            });
+            gov.factions.Add(new Faction
+            {
+                name = "THE PROVINCES",
+                theme = OppositionTheme.Hardship,
+                share = 0.25f,
+                disposition = Clamp(Vary(50f))
+            });
+        }
+
+        /// <summary>
+        /// What the coalition is worth to the support target, −20..+20.
+        ///
+        /// Share-weighted and centred on 50, so a government whose blocs are
+        /// indifferent gets nothing from them and one that has courted the big
+        /// bloc gets more than one that courted a small one.
+        ///
+        /// **Exactly zero only when every disposition sits at 50**, which is not
+        /// where seeding puts them: a real coalition has its own majority, its
+        /// sceptics and its provinces from day one, and `EnsureFactions` seeds
+        /// them at 58 / 48 / 50 ± 8. That is worth about +1.2 support on a scale
+        /// where the field runs 0..100 — small enough not to retune anybody, and
+        /// stated here rather than claimed away, because "zero by construction"
+        /// was the first thing written about this and it was not true.
+        /// </summary>
+        public static float FactionSupport(GovernmentState gov)
+        {
+            float total = 0f, weight = 0f;
+            foreach (var faction in gov.factions)
+            {
+                total += (faction.disposition - 50f) * faction.share;
+                weight += faction.share;
+            }
+            if (weight <= 0f) return 0f;
+            float shift = total / weight * 0.4f;
+            return shift < -20f ? -20f : (shift > 20f ? 20f : shift);
+        }
+
+        /// <summary>
+        /// The bloc a given instrument actually reaches.
+        ///
+        /// This is what makes the ledger a decision rather than a readout: an
+        /// instrument does not move "support", it moves the people it speaks to.
+        /// Money reaches the provinces, order reaches the apparatus, and the
+        /// residual bloc is moved by simply governing competently.
+        /// </summary>
+        public static Faction FactionFor(GovernmentState gov, OppositionTheme theme)
+        {
+            Faction best = null;
+            foreach (var faction in gov.factions)
+                if (faction.theme == theme && (best == null || faction.share > best.share))
+                    best = faction;
+            return best;
+        }
+
+        /// <summary>Move one bloc's disposition. Actor-generic by construction.</summary>
+        public static void CourtFaction(GovernmentState gov, OppositionTheme theme, float amount)
+        {
+            var faction = FactionFor(gov, theme);
+            if (faction == null)
+            {
+                // Nothing here speaks for that; the effort spreads thin.
+                foreach (var any in gov.factions)
+                    any.disposition = Clamp(any.disposition + amount * 0.25f);
+                return;
+            }
+            faction.disposition = Clamp(faction.disposition + amount);
+        }
+
+        /// <summary>
+        /// Blocs drift back toward indifference, so a coalition is *maintained*
+        /// rather than bought once — the `brokeredSupport` rule, applied to the
+        /// people rather than to the number.
+        /// </summary>
+        static void DriftFactions(GovernmentState gov)
+        {
+            foreach (var faction in gov.factions)
+                faction.disposition = Approach(faction.disposition, 50f, 0.02f);
+        }
+
+        // ---------- constitutional change (spec 05 §2f) ----------
+
+        public const float ConstitutionalOpeningCost = 6f;   // PC, to begin
+        public const float ConstitutionalUpkeep = 1.2f;      // PC every month it runs
+        public const int ConstitutionalMonths = 30;
+        public const float ConstitutionalThreshold = 60f;    // support needed at the end
+
+        /// <summary>
+        /// Whether this government can attempt to change what it is, and why not.
+        ///
+        /// The route differs by what we already are, which is §13's requirement
+        /// that the type change *how power works* rather than hand out a
+        /// modifier: an elective system goes to the country and needs the
+        /// chamber behind it; a centralised one decrees it and needs the elite.
+        /// </summary>
+        public static bool CanChangeConstitution(GameState state, string countryId,
+            GovernmentType target, out string reason)
+        {
+            reason = "";
+            var country = state.FindCountry(countryId);
+            if (country == null) { reason = "NO SUCH STATE."; return false; }
+            var gov = country.government;
+
+            if (gov.type == target) { reason = "WE ARE ALREADY THAT."; return false; }
+            if (gov.ChangingConstitution)
+            {
+                reason = $"AN ATTEMPT IS ALREADY UNDER WAY ({gov.constitutionalMonthsRemaining} "
+                         + "MONTH(S)).";
+                return false;
+            }
+            if (gov.inCivilConflict)
+            {
+                reason = "THE STATE IS FIGHTING ITSELF. Settle that first.";
+                return false;
+            }
+
+            // A constitution is not rewritten by a government nobody is
+            // listening to.
+            if (gov.IsElective && gov.legislativeSupport < 45f)
+            {
+                reason = $"THE CHAMBER WILL NOT CARRY IT (support {gov.legislativeSupport:F0}, "
+                         + "needs 45).";
+                return false;
+            }
+            if (!gov.IsElective && gov.eliteCohesion < 45f)
+            {
+                reason = $"THE ELITE IS TOO DIVIDED TO REWRITE ANYTHING (cohesion "
+                         + $"{gov.eliteCohesion:F0}, needs 45).";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Actor-generic. Begins the attempt; the months are the work.</summary>
+        public static bool BeginConstitutionalChangeBy(GameState state, string countryId,
+            GovernmentType target)
+        {
+            if (!CanChangeConstitution(state, countryId, target, out _)) return false;
+            if (!SpendPoliticalCapitalBy(state, countryId, ConstitutionalOpeningCost,
+                    "Constitutional change")) return false;
+
+            var country = state.FindCountry(countryId);
+            var gov = country.government;
+            gov.constitutionalTarget = target;
+            gov.constitutionalMonthsRemaining = ConstitutionalMonths;
+
+            // It starts from whatever standing the government already has with
+            // whoever would have to carry it, not from zero.
+            gov.constitutionalSupport =
+                Clamp(gov.IsElective ? gov.legislativeSupport * 0.6f : gov.eliteCohesion * 0.6f);
+
+            state.AddChronicle(ChronicleCategory.Political, countryId,
+                $"{country.displayName} opens a constitutional process toward "
+                + $"{TypeTextOf(target)}.", Publicity.Public);
+            return true;
+        }
+
+        /// <summary>
+        /// Advance an attempt, and resolve it when the clock runs out.
+        ///
+        /// **Genuinely losable, and the loss is the point.** Rewriting how power
+        /// works threatens whoever holds it now: support erodes with elite
+        /// cohesion and unrest, and an attempt that ends below the threshold
+        /// costs standing and leaves the constitution alone. Without that this
+        /// is a thirty-month wait for a guaranteed outcome.
+        /// </summary>
+        static void AdvanceConstitutionalChange(GameState state, CountryState country,
+            GovernmentState gov)
+        {
+            if (!gov.ChangingConstitution) return;
+
+            // It has to be paid for every month it runs. A government that runs
+            // out of standing cannot hold the process together.
+            if (!SpendPoliticalCapitalBy(state, country.id, ConstitutionalUpkeep,
+                    "Constitutional process"))
+            {
+                AbandonConstitutionalChange(state, country, gov,
+                    "the government could no longer carry it");
+                return;
+            }
+
+            gov.constitutionalMonthsRemaining--;
+
+            // Whoever benefits from the present arrangement pushes back, and a
+            // country coming apart underneath the process is not going to
+            // ratify anything.
+            float backing = gov.IsElective ? gov.legislativeSupport : gov.eliteCohesion;
+            float drift = (backing - 50f) * 0.06f
+                          - country.socialUnrest * 0.020f
+                          - gov.corruption * 0.015f;
+            gov.constitutionalSupport = Clamp(gov.constitutionalSupport + drift);
+
+            if (gov.constitutionalMonthsRemaining > 0) return;
+
+            if (gov.constitutionalSupport >= ConstitutionalThreshold)
+                CompleteConstitutionalChange(state, country, gov);
+            else
+                AbandonConstitutionalChange(state, country, gov,
+                    "it could not command the support to pass");
+        }
+
+        static void CompleteConstitutionalChange(GameState state, CountryState country,
+            GovernmentState gov)
+        {
+            var was = gov.type;
+            gov.type = gov.constitutionalTarget;
+            gov.constitutionalMonthsRemaining = 0;
+            gov.constitutionalSupport = 0f;
+
+            // A new settlement resets the clock on the old one's arrangements.
+            gov.emergencyPowers = false;
+            gov.emergencyPowersMonthsRemaining = 0;
+            gov.brokeredSupport *= 0.5f;
+
+            // Becoming elective means facing the country on a schedule that did
+            // not exist before; leaving it means the schedule stops mattering.
+            if (gov.IsElective)
+                gov.nextElectionDate = AddMonths(state.date, gov.termLengthMonths);
+
+            country.stability = Clamp(country.stability - 8f);
+            country.nationalUnity = Clamp(country.nationalUnity + 4f);
+
+            state.AddChronicle(ChronicleCategory.Political, country.id,
+                $"{country.displayName} becomes a {TypeTextOf(gov.type)}.", Publicity.Public);
+
+            if (country.isPlayer)
+                state.AddNotification(NotificationClass.Priority, "CONSTITUTION REWRITTEN",
+                    $"We were a {TypeTextOf(was)}. We are now a {TypeTextOf(gov.type)}, and how "
+                    + "power works here has changed with it.", country.id,
+                    desk: ReportingDesk.Command);
+        }
+
+        static void AbandonConstitutionalChange(GameState state, CountryState country,
+            GovernmentState gov, string why)
+        {
+            gov.constitutionalMonthsRemaining = 0;
+            gov.constitutionalSupport = 0f;
+
+            // A failed attempt to rewrite the rules is not a neutral event: it
+            // was public, and it told everyone what this government wanted.
+            country.governmentApproval = Clamp(country.governmentApproval - 6f);
+            gov.eliteCohesion = Clamp(gov.eliteCohesion - 7f);
+
+            state.AddChronicle(ChronicleCategory.Political, country.id,
+                $"The constitutional process in {country.displayName} is abandoned — {why}.",
+                Publicity.Public);
+
+            if (country.isPlayer)
+                state.AddNotification(NotificationClass.Priority, "CONSTITUTIONAL PROCESS FAILS",
+                    $"The attempt is over — {why}. Everyone saw what we wanted, and we did not "
+                    + "get it.", country.id, desk: ReportingDesk.Command);
+        }
+
+        /// <summary>Plain name for a government type, for the readouts.</summary>
+        public static string TypeTextOf(GovernmentType type)
+        {
+            switch (type)
+            {
+                case GovernmentType.PresidentialRepublic: return "PRESIDENTIAL REPUBLIC";
+                case GovernmentType.ParliamentaryRepublic: return "PARLIAMENTARY REPUBLIC";
+                case GovernmentType.DominantPartyState: return "DOMINANT-PARTY STATE";
+                case GovernmentType.CentralizedRepublic: return "CENTRALIZED REPUBLIC";
+                default: return "MONARCHY";
+            }
+        }
+
+        // ---------- corruption (spec 05 §2e) ----------
+
+        /// <summary>What one round of patronage puts into the system.</summary>
+        public const float PatronageCorruption = 7f;
+
+        /// <summary>What an inquiry takes back out. Less than patronage puts in.</summary>
+        public const float InquiryCorruptionRelief = 11f;
+
+        /// <summary>
+        /// Monthly fade, **proportional** so every level has a resting point.
+        /// A flat rate is the one-way-value trap: any inflow above it ratchets
+        /// to the cap and pins there, which is how `publicGrievance` was written
+        /// wrong the first time.
+        /// </summary>
+        public static float CorruptionDecay(GovernmentState gov)
+            => 0.20f + gov.corruption * 0.012f;
+
+        /// <summary>
+        /// How much of the money never arrives. Read by `EconomySystem`'s
+        /// treasury income — the most concrete thing corruption does, and the
+        /// one an operator feels without being told.
+        /// </summary>
+        public static float RevenueLeakage(CountryState country)
+            => country == null ? 0f
+                : Math.Min(0.33f, country.government.corruption / 300f);
 
         /// <summary>
         /// What each point of remembered hardship adds to the pressure behind
@@ -523,11 +855,17 @@ namespace Brink.Core
             // that is decremented every month by conditions that recur, with a
             // recovery path that does not. Both now sit at a level the state's
             // own institutions and standing can hold.
+            // Favours fade if they stop being handed out (spec 05 §2e).
+            gov.corruption = Clamp(gov.corruption - CorruptionDecay(gov));
+
             float stabilityTarget = Clamp(
                 38f
                 + country.pillars.government * 0.30f
                 + country.governmentApproval * 0.20f
                 - country.warExhaustion * 0.25f
+                // A state that runs on favours is not a state people rely on.
+                // On the target, like everything else here.
+                - gov.corruption * 0.12f
                 - (gov.inCivilConflict ? 22f : 0f)
                 - InsurgencySystem.StabilityDrag(state, country.id)
                 // A state most of the world refuses to admit exists is harder to
@@ -611,6 +949,11 @@ namespace Brink.Core
                 float supportTarget = country.governmentApproval * 0.7f + country.pillars.government * 0.3f
                                       + gov.brokeredSupport * 0.45f
                                       + FactionSupportShift(gov)
+                                      // The blocs the government actually rests
+                                      // on (spec 05 §2g). Zero for a coalition
+                                      // sitting at indifference, so this changes
+                                      // nothing until somebody is courted.
+                                      + FactionSupport(gov)
                                       // A campaign against the government is
                                       // weight in the chamber. It moves the
                                       // target, like everything else here —
@@ -624,7 +967,11 @@ namespace Brink.Core
                 float cohesionTarget = 40f + country.pillars.government * 0.35f + country.stability * 0.25f
                                        - country.warExhaustion * 0.15f
                                        + gov.brokeredSupport * 0.45f
-                                       + FactionCohesionShift(gov);
+                                       + FactionCohesionShift(gov)
+                                       // A non-elective state rests on blocs too
+                                       // — the apparatus, the organs, the
+                                       // provinces (spec 05 §2g).
+                                       + FactionSupport(gov);
                 if (gov.emergencyPowers) cohesionTarget -= 8f;
                 gov.eliteCohesion = Approach(gov.eliteCohesion, Clamp(cohesionTarget), 0.06f);
             }
@@ -1264,6 +1611,18 @@ namespace Brink.Core
 
         /// <summary>Actor-generic. Every government bargains for its own support.</summary>
         public static bool BuildPoliticalSupportBy(GameState state, string countryId)
+            => BuildPoliticalSupportBy(state, countryId, null);
+
+        /// <summary>
+        /// Bargain for support, optionally with **a named bloc** (spec 05 §2g).
+        ///
+        /// Passing a theme courts the constituency that cares about it and moves
+        /// the ledger; passing none is the old undirected bargain, which still
+        /// works and is worth slightly less. That asymmetry is the whole point of
+        /// naming the blocs: knowing who you are talking to is worth something.
+        /// </summary>
+        public static bool BuildPoliticalSupportBy(GameState state, string countryId,
+            OppositionTheme? courting)
         {
             var country = state.FindCountry(countryId);
             if (country == null) return false;
@@ -1271,6 +1630,11 @@ namespace Brink.Core
                 return false;
 
             var gov = country.government;
+            EnsureFactions(state, country);
+
+            if (courting.HasValue) CourtFaction(gov, courting.Value, 9f);
+            else foreach (var faction in gov.factions)
+                faction.disposition = Clamp(faction.disposition + 2f);
 
             // Diminishing: the first concessions are cheap and the last are not,
             // so a government cannot simply buy its way to a compliant chamber.
@@ -1325,6 +1689,16 @@ namespace Brink.Core
             // hollows the state out if it becomes the habitual instrument.
             country.pillars.government = Growth.Apply(country.pillars.government, -1.4f);
 
+            // And it is now *recorded* (spec 05 §2e). The line above has claimed
+            // to hollow the state out since patronage shipped, while nothing in
+            // the simulation remembered that it had — so the habitual instrument
+            // cost a slowly-regrowing pillar and nothing else.
+            gov.corruption = Clamp(gov.corruption + PatronageCorruption);
+
+            // Money speaks loudest where people are short of it (spec 05 §2g).
+            EnsureFactions(state, country);
+            CourtFaction(gov, OppositionTheme.Hardship, 7f);
+
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "PATRONAGE DISTRIBUTED",
                     "Appointments, contracts and quiet favours. Everyone is content, and the " +
@@ -1366,6 +1740,13 @@ namespace Brink.Core
                 weakest.competence = Clamp(weakest.competence + 7f);
                 weakest.loyalty = Clamp(weakest.loyalty - 4f); // nobody enjoys being audited
             }
+
+            // What an inquiry is actually for (spec 05 §2e): it takes favours
+            // back out of the system. Deliberately less than patronage puts in,
+            // so buying support and then auditing it is a net loss rather than a
+            // laundering cycle.
+            country.government.corruption =
+                Clamp(country.government.corruption - InquiryCorruptionRelief);
 
             country.pillars.government = Growth.Apply(country.pillars.government, 2.5f);
             country.counterIntel.counterIntelligence =

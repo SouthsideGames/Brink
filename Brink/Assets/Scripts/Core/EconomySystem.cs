@@ -521,7 +521,11 @@ namespace Brink.Core
             // have charged it twice.
             country.resources.treasury += eco.gdp * TreasuryIncomeRate
                                           * FiscalSystem.TaxMultiplier(country)
-                                          * FiscalSystem.PostureIncomeMultiplier(country.fiscal.budgetPosture);
+                                          * FiscalSystem.PostureIncomeMultiplier(country.fiscal.budgetPosture)
+                                          // Money that never arrives (spec 05 §2e).
+                                          // Zero for a government that has not
+                                          // been buying support.
+                                          * (1f - GovernmentSystem.RevenueLeakage(country));
 
             // ---- confidence ----
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f
