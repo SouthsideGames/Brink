@@ -38,6 +38,7 @@ crises against fifteen) both drifted because that rule was skipped.
 | 23 | [Audio](23-Audio.md) | Cues, music contexts, the mixer, and what drives them | As-built |
 | 24 | [Directives & Career](24-DirectivesAndCareer.md) | Standing directives, the career record across postings | As-built |
 | 25 | [Content Update](25-ContentUpdate.md) | Fiscal statecraft, intel products, episodic diplomacy, government content, research expansion | Built; plan of record |
+| 26 | [Causal Explainability](26-Causality.md) | Why important values moved: the causal record, disclosure through the fog, the WHY? panel, bounded history | As-built (Phase A) |
 
 Spec 25 is a special case: **all its tranches are built** (2026-08-29) and the
 as-built detail lives in the pillar specs it fed — A in 02 §9, B in 03 §6a–§10,

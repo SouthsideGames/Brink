@@ -2532,6 +2532,84 @@ for every figure in the table above.
       same family as the hand-wired-pipeline sweep: the danger is never the
       entries that are there.
 
+- [x] **Causal explainability, Phase A** (spec 26, GDD §28.3 — a new
+      non-negotiable). The simulation moved numbers with no account of itself
+      everywhere except two places: `OperationAnalysis`, which explains one
+      operation because it records each term of `ResolveOperation` as it is
+      computed, and `MilitaryAdvice`, which explains one order before it is
+      given. The monthly tick — where a save actually accumulates its outcomes —
+      explained nothing.
+      That matters more here than it would in most projects, because of what this
+      file already records. The two most-repeated bug families are a value that
+      ratchets because a recurring cost was applied to the value instead of the
+      target, and a value written but never read; **both are invisible from the
+      terminal**, since the number moves, or fails to, and nothing on screen
+      separates a designed consequence from a defect. Two of the three most
+      recent playtest bug reports were correct simulation the game could not
+      explain, which this file already named as its own kind of broken.
+      - **Recorded where the change is applied, never reconstructed.** A value
+        re-derived afterwards can only guess at its own history, and a guess
+        presented as an explanation teaches the wrong lesson — the operator plays
+        to it.
+      - **The arithmetic is untouched, and that is the safety story.** Where a
+        target is a sum, each term is lifted into a `float` local and the sum is
+        rewritten from the locals **in the identical order** (`a - b` and
+        `a + (-b)` are the same IEEE result, and `indexTerm` was already written
+        that way). One definition feeds both the simulation and the explanation.
+        A second copy of the formula for the panel to read would have drifted
+        within a month — that is the bug this project has shipped in six
+        costumes. Elsewhere `Causal.Apply(ref field, value)` takes the caller's
+        expression **as an argument**, assigns it, and records the movement it
+        actually caused, so the recorded figure is the real post-clamp change.
+      - **`Approach` is linear in its target**, which is the whole reason the
+        figures can be honest: `delta = rate x (target - previous)`, so a
+        decomposition of the target scales exactly into a decomposition of the
+        month. Multipliers are exact too — the effect of `M` on `M x (t1 + t2)`
+        is `(sum so far) x (M - 1)`, an additive term — so national unity damping
+        unrest is its own signed line and the column still adds up.
+      - **The presentation matches the mathematics.** Where contributions
+        reconcile, figures print and a NET line proves it. Where a cause was
+        withheld or could not be sized, the panel drops to ranked bands and
+        claims no total. Fabricated additive precision is the numeric form of the
+        distortion spec 15 forbids.
+      - **One disclosure gate, and it defers rather than restates.**
+        `CausalDisclosure` is the only thing that decides what a reader sees:
+        intelligence for foreign states, `ReportingSystem` quality for a
+        delegated pillar (a poor desk **loses small causes and never restates a
+        figure** — missed or buried, never distorted), and `Classified` dropped
+        for everyone. **Withholding is itself reported** — "one further factor is
+        not reported to us" is what keeps collection worth buying, and hiding the
+        hole would be the omniscience exploit running the other way.
+      - **No save version bump.** The ledger is additive and empty is *correct*
+        on an old save; inventing reasons for months that resolved before the
+        feature existed would be fabricating history. Same reasoning as `warsWon`
+        and `Bloc.commitments`. Bounded to the player's country, 12 months per
+        metric, 14 contributions per record, pruned per (country, metric) so a
+        chatty metric cannot evict a quiet one.
+      - **All eleven `warExhaustion` write sites are instrumented**, across six
+        systems, into **one** record per month. A metric instrumented at one site
+        out of eleven would produce a confidently wrong explanation, which is
+        worse than none — the partial-explanation failure the brief for this
+        phase named explicitly.
+      **Deliberately not done, and recorded so the next reader does not assume
+      otherwise:** `treasury` has ~50 write sites and instrumenting it is the
+      dangerous-global-refactor case; `sovereignDebt` (5 sites) carries the
+      fiscal representation instead. Chains are one hop — the hooks for
+      `doctrine → decision → policy → effect → consequence` are in the record
+      shape and nothing walks them yet, and there is deliberately no global
+      dependency graph. Episodic causes outside the pilot metrics land in the
+      month's record as `Unattributed`, shown as OTHER, which is the honest
+      reading rather than a silent gap.
+      **NOT COMPILED AND NOT TEST-RUN** — written in an environment with no
+      Unity, no C# compiler, and a proxy that refuses the .NET SDK, so
+      `Tools/syntax-check.sh` could not run either. `CausalityTests` (21 tests)
+      is written and partitioned. Run `bash Tools/run-suite.sh` before trusting
+      any of it. The two tests that matter most are the ones asserting a 24-month
+      world resolves to an identical fingerprint with recording on and off: the
+      framework is only correct if it changes nothing, and **that claim is
+      currently unverified**. The float-locals extraction is the specific thing
+      to check — it should be bit-identical and has not been proven so.
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

@@ -262,7 +262,14 @@ namespace Brink.Core
             // finding could only be recorded as an open question.
             if (country.resources.treasury < 0f)
             {
-                fiscal.sovereignDebt += -country.resources.treasury;
+                // Indirect on purpose: the deficit is the *mechanism*, but what
+                // caused it is whatever this government spent the month doing.
+                // Phase A records the hop; the spending decisions upstream of it
+                // are Phase B's chain to complete (spec 26 §8).
+                Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
+                    CausalReason.FiscalDeficit, ref fiscal.sovereignDebt,
+                    fiscal.sovereignDebt + -country.resources.treasury,
+                    CausalCategory.Fiscal, CausalKind.Indirect);
                 country.resources.treasury = 0f;
             }
 
@@ -272,7 +279,9 @@ namespace Brink.Core
             {
                 float repayment = Math.Min(fiscal.sovereignDebt,
                     (country.resources.treasury - SurplusBuffer) * 0.10f);
-                fiscal.sovereignDebt -= repayment;
+                Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
+                    CausalReason.FiscalSurplus, ref fiscal.sovereignDebt,
+                    fiscal.sovereignDebt - repayment, CausalCategory.Fiscal);
                 country.resources.treasury -= repayment;
             }
 
@@ -375,7 +384,11 @@ namespace Brink.Core
 
             float raised = country.economy.gdp * IssueShareOfGdp;
             country.resources.treasury += raised;
-            country.fiscal.sovereignDebt += raised;
+            Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
+                CausalReason.BondIssue, ref country.fiscal.sovereignDebt,
+                country.fiscal.sovereignDebt + raised, CausalCategory.Fiscal,
+                CausalKind.Direct, CausalVisibility.Known, null,
+                nameof(GameController.IssueSovereignDebt));
 
             // Issuing is itself a signal. The standing falls now rather than
             // only through next month's ratio, so a government cannot raise four

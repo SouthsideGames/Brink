@@ -648,8 +648,14 @@ namespace Brink.Core
 
                 confrontation.initiatorWarExhaustion += drain * initiatorFactor;
                 confrontation.defenderWarExhaustion += drain * defenderFactor;
-                initiator.warExhaustion = Clamp(initiator.warExhaustion + drain * 0.5f * initiatorFactor);
-                defender.warExhaustion = Clamp(defender.warExhaustion + drain * 0.5f * defenderFactor);
+                Causal.Apply(state, initiator.id, CausalMetric.WarExhaustion,
+                    CausalReason.ActiveFighting, ref initiator.warExhaustion,
+                    Clamp(initiator.warExhaustion + drain * 0.5f * initiatorFactor),
+                    CausalCategory.Military, CausalKind.Direct, CausalVisibility.Known, defender.id);
+                Causal.Apply(state, defender.id, CausalMetric.WarExhaustion,
+                    CausalReason.ActiveFighting, ref defender.warExhaustion,
+                    Clamp(defender.warExhaustion + drain * 0.5f * defenderFactor),
+                    CausalCategory.Military, CausalKind.Direct, CausalVisibility.Known, initiator.id);
 
                 // Long wars erode support and approval (GDD §12: historical memory).
                 if (initiatorFactor >= 1f)
@@ -1266,11 +1272,11 @@ namespace Brink.Core
             switch (confrontation.verdict)
             {
                 case WarVerdict.InitiatorVictory:
-                    if (initiator != null) { initiator.warsWon++; VictoryDividend(initiator); }
+                    if (initiator != null) { initiator.warsWon++; VictoryDividend(state, initiator); }
                     if (defender != null) { defender.warsLost++; DefeatBill(defender); }
                     break;
                 case WarVerdict.DefenderVictory:
-                    if (defender != null) { defender.warsWon++; VictoryDividend(defender); }
+                    if (defender != null) { defender.warsWon++; VictoryDividend(state, defender); }
                     if (initiator != null) { initiator.warsLost++; DefeatBill(initiator); }
                     break;
                 default:
@@ -1300,13 +1306,15 @@ namespace Brink.Core
             VictoryStability = 3f, VictoryExhaustionRelief = 15f;
         public const float DefeatApproval = 5f, DefeatWarSupport = 8f, DefeatUnity = 3f;
 
-        static void VictoryDividend(CountryState country)
+        static void VictoryDividend(GameState state, CountryState country)
         {
             country.governmentApproval = Clamp(country.governmentApproval + VictoryApproval);
             country.nationalUnity = Clamp(country.nationalUnity + VictoryUnity);
             country.warSupport = Clamp(country.warSupport + VictoryWarSupport);
             country.stability = Clamp(country.stability + VictoryStability);
-            country.warExhaustion = Clamp(country.warExhaustion - VictoryExhaustionRelief);
+            Causal.Apply(state, country.id, CausalMetric.WarExhaustion,
+                CausalReason.Victory, ref country.warExhaustion,
+                Clamp(country.warExhaustion - VictoryExhaustionRelief), CausalCategory.Military);
             country.pillars.military = Growth.Apply(country.pillars.military, 2f);
         }
 
@@ -1395,7 +1403,9 @@ namespace Brink.Core
                 if (country.military.posture == MilitaryPosture.Alert)
                     country.military.posture = MilitaryPosture.Peacetime;
 
-                country.warExhaustion = Clamp(country.warExhaustion - 10f);
+                Causal.Apply(state, country.id, CausalMetric.WarExhaustion,
+                    CausalReason.SettlementRelief, ref country.warExhaustion,
+                    Clamp(country.warExhaustion - 10f), CausalCategory.Military);
             }
 
             bool playerInvolved = confrontation.Involves(state.playerCountryId);

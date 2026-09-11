@@ -175,7 +175,9 @@ namespace Brink.Core
                 // subtracting it here was undone by the same tick's drift back
                 // toward target, so it was a cost that never actually arrived.
                 country.stability = Clamp(country.stability - occupied * 0.006f);
-                country.warExhaustion = Clamp(country.warExhaustion + occupied * 0.008f);
+                Causal.Apply(state, country.id, CausalMetric.WarExhaustion,
+                    CausalReason.Occupation, ref country.warExhaustion,
+                    Clamp(country.warExhaustion + occupied * 0.008f), CausalCategory.Military);
             }
         }
 

@@ -62,6 +62,7 @@ this is the most complete Brink has ever been:
 |---|---|---|
 | `f36809e` (Tranche E) | **1258 tests, green** | Measured, 5 seeds, frozen tree |
 | `5458ad1` → HEAD (the union) | **never run** | **never measured** |
+| + causal explainability (spec 26) | **never compiled** | n/a by design |
 
 Two specific gaps:
 
@@ -72,8 +73,16 @@ Two specific gaps:
    content-update branch *before* it took main's alliance work. The two halves
    are each individually plausible and have never met in a test run.
 
-There are ~1,280 test methods on disk across 89 fixtures. Treat the current
+There are ~1,300 test methods on disk across 90 fixtures. Treat the current
 tree as **unverified** until the suite runs.
+
+The causal explainability layer (spec 26) was added on top, in an environment
+with no Unity and no C# compiler, so **it has never been compiled** — not even a
+syntax check. It is written to change nothing: recording is inert behind
+`Causal.Enabled`, the instrumented formulas keep their exact operation order, and
+two tests assert a 24-month world resolves identically with recording on and off.
+**Those tests have not run.** If anything in the tree is going to be broken, it
+is the newest thing in it; start there.
 
 The last balance table (Tranche E, 5 seeds) — **it predates the alliance
 cascade, so treat it as the previous game**:

@@ -119,6 +119,18 @@ namespace Brink.Data
         /// <summary>World Chronicle — automatic historical archive (GDD §31.3).</summary>
         public List<ChronicleEntry> chronicle = new List<ChronicleEntry>();
 
+        /// <summary>
+        /// Why important values moved (spec 26). Bounded, player-country only,
+        /// and **empty is correct on an old save** — a world that resolved its
+        /// months before this existed has no recorded reasons, and manufacturing
+        /// them after the fact would be inventing history rather than reporting
+        /// it. That is the same reasoning `warsWon` and `Bloc.commitments`
+        /// shipped under, so this needs no migration step and
+        /// `SaveSystem.CurrentSaveVersion` is unchanged: an old save simply
+        /// starts accumulating explanations from the first month it resolves.
+        /// </summary>
+        public CausalLedger causal = new CausalLedger();
+
         /// <summary>Briefing traffic (GDD §28.2), newest last. Trimmed to MaxNotifications.</summary>
         public List<Notification> notifications = new List<Notification>();
 
