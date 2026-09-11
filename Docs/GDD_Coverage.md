@@ -1,6 +1,10 @@
 # GDD Coverage — re-audited 2026-08-22
 
-Every discrete requirement in `GDD_v1.0.md` §1–37, checked against the code rather
+Audited against `GDD_v1.0.md`. Section numbering is unchanged in `GDD_v1.1.md`,
+so every citation below still resolves; v1.1's own amendments (28.3 Causal
+Legibility) postdate this audit and are **not** counted in the totals.
+
+Every discrete requirement in the GDD §1–37, checked against the code rather
 than against `CLAUDE.md`'s phase claims. Regenerate this by re-auditing; do not
 edit it to match intentions.
 

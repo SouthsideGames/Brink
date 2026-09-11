@@ -1,8 +1,24 @@
-> **Superseded.** This file is the historical v1.0, kept unchanged as the record
-> of what was extracted from `Unknown_Game_Consolidated_GDD_v1.0.docx`. The
-> current source of truth for design is [`GDD_v1.1.md`](GDD_v1.1.md), which
-> carries this document forward with its later amendments. Nothing below has
-> been edited; read v1.1 for anything you intend to build against.
+# Unknown Game / Brink — Consolidated GDD v1.1
+
+**This is the source of truth for design.** It supersedes `GDD_v1.0.md`, which is
+kept unchanged as the historical record of what was extracted from
+`Unknown_Game_Consolidated_GDD_v1.0.docx`. Where the two disagree, v1.1 is right.
+
+v1.1 is v1.0 plus the amendments the implementation has since established as
+non-negotiable. Amendments carry their date and the reasoning that produced
+them, in place rather than in a changelog, so a reader meeting a rule for the
+first time also meets the argument for it.
+
+**Changes in v1.1**
+
+- **28.3 Causal Legibility** (2026-09-11) — new, non-negotiable. Important
+  player-facing outcomes must be causally legible. Implemented by
+  [`specs/26-Causality.md`](specs/26-Causality.md).
+
+Section numbering is unchanged from v1.0, so every existing citation — in
+`CLAUDE.md`, in `Docs/specs/`, and in `GDD_Coverage.md` — still resolves.
+
+---
 
 ﻿
 
@@ -431,6 +447,21 @@ WIRE
 General world news
 ARCHIVE
 Historical/informational
+28.3 Causal Legibility
+Amendment, September 11, 2026. Non-negotiable, alongside 28.1's information hierarchy.
+
+Important player-facing outcomes must be causally legible. When the simulation changes something that matters, the game is expected to know why, and where the player's government is entitled to that knowledge, the game must be able to state it plainly: what changed, by how much, which factors contributed, which of them were the player's own decisions, and which were direct rather than downstream.
+
+The player does not get the formulas. Brink is a deep interconnected simulation and its internals are not the subject; the requirement is that a player can understand why an important outcome happened and learn from it. A number that moves for reasons the operator cannot reconstruct is indistinguishable from a number that moves arbitrarily, and this project has already shipped that failure twice in other clothes - a refusal the operator could not see reads as a broken control, and an outcome the game could not explain reads as unfair dice. Both were correct simulation reported as bugs.
+
+Three rules bound it.
+
+Explanations are recorded where the change is applied, never reconstructed afterwards. A value re-derived after the fact can only guess at its own history, and a guess presented as an explanation teaches the wrong lesson.
+
+Explanations obey the information rules. This is subordinate to Section 14's fog of war, to 28.1's rule that official competence governs what is surfaced or missed, and to the standing rule that reporting may bury or miss an item but may never distort one. An explanation layer that reported the true cause of everything would be a free intelligence service and would repeal the reason to buy collection. Where the government does not know, the game says that it does not know - an unattributed factor is itself worth reporting, because knowing that something is acting on you and not knowing what is the condition intelligence exists to fix.
+
+The presentation matches the mathematics. Where contributions genuinely account for a change, figures are shown and they add up. Where they cannot, the game gives direction and rank and claims no total. Fabricated additive precision is the numeric form of the distortion this design already forbids.
+
 29. Optional Strategic Directives
 The government, Cabinet or circumstances may suggest optional strategic directives such as reducing energy dependence, resolving a border dispute or restoring readiness. They can improve XP/evaluation but are not mandatory quests and should never become generic daily-task chores.
 30. Saves

@@ -97,49 +97,74 @@ namespace Brink.Core
             float change = resulting - previous;
             if (Math.Abs(change) < Epsilon) return;
 
-            var ledger = state.causal;
-            if (ledger == null) return;
+            var record = OpenRecord(state, countryId, metric, previous);
+            if (record == null) return;
 
-            var record = FindOpen(ledger, countryId, metric, state.date);
-            if (record == null)
-            {
-                record = new CausalRecord
-                {
-                    metric = metric,
-                    countryId = countryId,
-                    year = state.date.year,
-                    month = state.date.month,
-                    previous = previous,
-                    resulting = resulting,
-                    delta = change,
-                    reconciliation = CausalReconciliation.Exact,
-                };
-                ledger.Add(record);
-            }
-            else
-            {
-                // The month's running total. `previous` stays the value the
-                // month opened at; a later site's `previous` is an intermediate
-                // and must not overwrite it.
-                record.resulting = resulting;
-                record.delta = record.resulting - record.previous;
-            }
+            // The month's running total. `previous` stays what the month opened
+            // at; a later site's `previous` is an intermediate and must never
+            // overwrite it.
+            record.resulting = resulting;
+            record.delta = record.resulting - record.previous;
 
-            if (record.contributions.Count >= CausalLedger.MaxContributions)
-            {
-                // Fold anything past the cap into OTHER rather than dropping it,
-                // or the listed causes would stop adding up to the change and
-                // the reader would not be told why.
-                Fold(record, change);
-                return;
-            }
-
-            record.contributions.Add(new CausalContribution(reason, change, category, kind, visibility)
+            Append(record, new CausalContribution(reason, change, category, kind, visibility)
             {
                 sourceCountryId = sourceCountryId ?? "",
                 sourceActionId = sourceActionId ?? "",
                 confidence = confidence,
             });
+        }
+
+        /// <summary>
+        /// This month's record for a metric, created on first touch.
+        ///
+        /// `previous` comes from the month-open snapshot when there is one, so a
+        /// record describes **the whole month** rather than the slice between
+        /// the first instrumented site and the last. Without that, a value moved
+        /// by a cabinet action before the government tick and by a crisis after
+        /// it reported a change that did not match what the operator could read
+        /// on the screen — which is the one thing this framework may not do.
+        /// </summary>
+        internal static CausalRecord OpenRecord(GameState state, string countryId,
+                                                CausalMetric metric, float fallbackPrevious)
+        {
+            var ledger = state.causal;
+            if (ledger == null) return null;
+
+            var record = FindOpen(ledger, countryId, metric, state.date);
+            if (record != null) return record;
+
+            float previous = ledger.TryOpening(countryId, metric, out var opened)
+                ? opened
+                : fallbackPrevious;
+
+            record = new CausalRecord
+            {
+                metric = metric,
+                countryId = countryId,
+                year = state.date.year,
+                month = state.date.month,
+                previous = previous,
+                resulting = previous,
+                delta = 0f,
+                reconciliation = CausalReconciliation.Exact,
+            };
+            ledger.Add(record);
+            return record;
+        }
+
+        /// <summary>
+        /// Append a cause, folding anything past the cap into OTHER rather than
+        /// dropping it — listed causes that stop adding up without saying why
+        /// are worse than a remainder that admits itself.
+        /// </summary>
+        internal static void Append(CausalRecord record, CausalContribution contribution)
+        {
+            if (record.contributions.Count >= CausalLedger.MaxContributions)
+            {
+                Fold(record, contribution.value);
+                return;
+            }
+            record.contributions.Add(contribution);
         }
 
         /// <summary>
@@ -186,6 +211,115 @@ namespace Brink.Core
                 if (r.metric == metric && r.countryId == countryId) return r;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Every value this framework reconciles over a whole month. Adding a
+        /// metric here without a reader below is caught by
+        /// `CausalityTests.EveryReconciledMetricCanBeRead`.
+        /// </summary>
+        public static readonly CausalMetric[] Reconciled =
+        {
+            CausalMetric.GovernmentApproval,
+            CausalMetric.SocialUnrest,
+            CausalMetric.LivingStandards,
+            CausalMetric.PublicGrievance,
+            CausalMetric.MarketIndex,
+            CausalMetric.SovereignDebt,
+            CausalMetric.WarExhaustion,
+        };
+
+        public static bool TryRead(CountryState country, CausalMetric metric, out float value)
+        {
+            value = 0f;
+            if (country == null) return false;
+            switch (metric)
+            {
+                case CausalMetric.GovernmentApproval: value = country.governmentApproval; return true;
+                case CausalMetric.SocialUnrest: value = country.socialUnrest; return true;
+                case CausalMetric.LivingStandards: value = country.livingStandards; return true;
+                case CausalMetric.PublicGrievance: value = country.publicGrievance; return true;
+                case CausalMetric.MarketIndex: value = country.economy.marketIndex; return true;
+                case CausalMetric.SovereignDebt: value = country.fiscal.sovereignDebt; return true;
+                case CausalMetric.WarExhaustion: value = country.warExhaustion; return true;
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// First system of the month: remember what every reconciled value read
+        /// before anything touched it.
+        ///
+        /// **This is what makes the headline figure honest.** Approval is moved
+        /// by a cabinet action before the government tick and by a crisis after
+        /// it; the market index is moved by the economy tick and then again by a
+        /// market shock. Anchoring a record on the first *instrumented* site
+        /// reported a monthly change that did not match the value the operator
+        /// can read on the screen — the one thing an explanation layer may not
+        /// do. Wired in `SimulationPipeline`, never in a caller.
+        /// </summary>
+        public static void OpenMonth(GameState state)
+        {
+            if (!Enabled || state == null || state.causal == null) return;
+
+            state.causal.openings?.Clear();
+
+            for (int i = 0; i < state.countries.Count; i++)
+            {
+                var country = state.countries[i];
+                if (!Records(state, country.id)) continue;
+                for (int m = 0; m < Reconciled.Length; m++)
+                    if (TryRead(country, Reconciled[m], out var value))
+                        state.causal.OpenMetric(country.id, Reconciled[m], value);
+            }
+        }
+
+        /// <summary>
+        /// Last system of the month: make every record describe the month that
+        /// actually happened.
+        ///
+        /// Anything the listed causes do not account for is booked as
+        /// `Unattributed` and shown as OTHER — a crisis effect, a coup, a peace
+        /// term. **Admitting a remainder is the honest reading**; silently
+        /// reporting a change smaller than the one on screen is not.
+        /// </summary>
+        public static void CloseMonth(GameState state)
+        {
+            if (!Enabled || state == null || state.causal == null) return;
+
+            for (int i = 0; i < state.countries.Count; i++)
+            {
+                var country = state.countries[i];
+                if (!Records(state, country.id)) continue;
+
+                for (int m = 0; m < Reconciled.Length; m++)
+                {
+                    var metric = Reconciled[m];
+                    if (!TryRead(country, metric, out var now)) continue;
+                    if (!state.causal.TryOpening(country.id, metric, out var opened)) continue;
+
+                    var existing = FindOpen(state.causal, country.id, metric, state.date);
+                    if (existing == null && Math.Abs(now - opened) < Epsilon) continue;
+
+                    var record = existing ?? OpenRecord(state, country.id, metric, opened);
+                    if (record == null) continue;
+
+                    record.resulting = now;
+                    record.delta = now - record.previous;
+
+                    float explained = 0f;
+                    for (int c = 0; c < record.contributions.Count; c++)
+                        explained += record.contributions[c].value;
+
+                    float remainder = record.delta - explained;
+                    if (Math.Abs(remainder) <= Epsilon) continue;
+
+                    record.unexplained += remainder;
+                    Fold(record, remainder);
+                }
+            }
+
+            state.causal.openings?.Clear();
         }
 
         internal static float EpsilonValue => Epsilon;
@@ -327,28 +461,27 @@ namespace Brink.Core
             float explained = Sum();
             float remainder = actual - explained;
 
-            var record = new CausalRecord
-            {
-                metric = metric,
-                countryId = countryId,
-                year = state.date.year,
-                month = state.date.month,
-                previous = previous,
-                resulting = resulting,
-                delta = actual,
-                reconciliation = reconciliation,
-            };
-            record.contributions.AddRange(terms);
+            if (terms.Count == 0 && Math.Abs(actual) < Causal.EpsilonValue) return;
+
+            // **One record per metric per month**, shared with every `Note` site.
+            // A decomposition and a scattered episodic cause both describing the
+            // same value in the same month have to be the same explanation, or
+            // the operator is shown two partial accounts of one movement.
+            var record = Causal.OpenRecord(state, countryId, metric, previous);
+            if (record == null) return;
+
+            record.reconciliation = reconciliation;
+            for (int i = 0; i < terms.Count; i++) Causal.Append(record, terms[i]);
+
+            record.resulting = resulting;
+            record.delta = record.resulting - record.previous;
 
             if (Math.Abs(remainder) > Causal.EpsilonValue)
             {
-                record.unexplained = remainder;
-                record.contributions.Add(new CausalContribution(
+                record.unexplained += remainder;
+                Causal.Append(record, new CausalContribution(
                     CausalReason.Unattributed, remainder, CausalCategory.Other, CausalKind.Indirect));
             }
-
-            if (!record.HasContent) return;
-            ledger.Add(record);
         }
     }
 }
