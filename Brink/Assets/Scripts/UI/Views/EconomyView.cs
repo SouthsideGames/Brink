@@ -69,6 +69,8 @@ namespace Brink.UI.Views
             if (blowback > 0f) sb.AppendLine($"  SELF-INFLICTED BLOWBACK:  {blowback:F2}");
             if (eco.InRecession) sb.AppendLine("  ** ECONOMY IN CONTRACTION **");
             text.text = sb.ToString();
+
+            AddWhyPanel(state, CausalMetric.MarketIndex, CausalMetric.SovereignDebt);
         }
 
         /// <summary>

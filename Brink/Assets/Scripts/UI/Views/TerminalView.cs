@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Brink.Core;
 using Brink.Data;
 using UnityEngine.UIElements;
@@ -424,6 +425,94 @@ namespace Brink.UI.Views
             var label = AddText(ussClass);
             label.AddToClassList("terminal-figure");
             return label;
+        }
+
+        /// <summary>
+        /// Which metric's explanation is currently open, and whether its history
+        /// is unrolled.
+        ///
+        /// **UI state, so it lives in the UI** — not in `GameState`, for the same
+        /// reason `DisplaySettings` does not: which panel an operator has open is
+        /// ergonomics, not a fact about the world, and putting it in the save
+        /// would make it a thing that has to migrate. One metric at a time, so an
+        /// answer to "why?" cannot itself become the permanent wall of panels
+        /// this feature is supposed to replace.
+        /// </summary>
+        static CausalMetric openExplanation = CausalMetric.None;
+        static bool openExplanationHistory;
+
+        /// <summary>Forget any open explanation. Called when the world is replaced.</summary>
+        public static void ResetExplanations()
+        {
+            openExplanation = CausalMetric.None;
+            openExplanationHistory = false;
+        }
+
+        /// <summary>
+        /// The on-demand "WHY?" affordance for one metric (spec 26 §6).
+        ///
+        /// Any view can call this under any readout it shows; nothing about it
+        /// is specific to approval or to any one screen. It renders **nothing**
+        /// but a button until asked, which is the whole design brief — an
+        /// explanation is something an operator reaches for, not a second
+        /// dashboard bolted under the first.
+        ///
+        /// Everything shown goes through `CausalDisclosure` first, so this is
+        /// not a route around the fog: a view calling it on a foreign country
+        /// gets what our collection supports and nothing more.
+        /// </summary>
+        protected void AddWhyPanel(GameState state, params CausalMetric[] metrics)
+        {
+            if (state == null || metrics == null || metrics.Length == 0) return;
+
+            // One row for the whole readout above, not one row per figure. Four
+            // separate WHY? buttons under one panel is the permanent explanation
+            // wall this feature exists to avoid.
+            var row = MakeRow();
+            CausalMetric metric = CausalMetric.None;
+
+            for (int i = 0; i < metrics.Length; i++)
+            {
+                var candidate = metrics[i];
+                if (candidate == CausalMetric.None) continue;
+                if (openExplanation == candidate) metric = candidate;
+
+                bool isOpen = openExplanation == candidate;
+                AddButton(row, "WHY " + CausalReasons.ShortLabel(candidate), null, () =>
+                {
+                    openExplanation = isOpen ? CausalMetric.None : candidate;
+                    openExplanationHistory = false;
+                    Refresh();
+                });
+            }
+
+            if (metric == CausalMetric.None) return;
+
+            // Derived from the real panel every time. A hardcoded column count
+            // here is the END MONTH overflow waiting to happen again.
+            int width = TerminalMetrics.Inset();
+
+            var latest = state.causal?.Latest(state.playerCountryId, metric);
+            AddFigure().text = CausalExplanation.Render(
+                CausalDisclosure.Disclose(state, latest), width);
+
+            if (latest == null) return;
+
+            var historyRow = MakeRow();
+            AddButton(historyRow, openExplanationHistory ? "HIDE HISTORY" : "VIEW HISTORY", null, () =>
+            {
+                openExplanationHistory = !openExplanationHistory;
+                Refresh();
+            });
+
+            if (!openExplanationHistory) return;
+
+            var records = state.causal.History(state.playerCountryId, metric, 6);
+            var disclosed = new List<DisclosedExplanation>();
+            for (int i = 0; i < records.Count; i++)
+                disclosed.Add(CausalDisclosure.Disclose(state, records[i]));
+
+            AddFigure().text = CausalExplanation.RenderHistory(disclosed, width);
         }
     }
 }

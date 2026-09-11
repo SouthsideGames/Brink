@@ -702,21 +702,47 @@ namespace Brink.Core
             // ---- market index (GDD §20.1) ----
             // The index tracks fundamentals and reacts sharply to shocks, rather
             // than compounding indefinitely. 100 is the world-creation baseline.
+            float indexConfidence = eco.confidence * 0.85f;
+            float indexGrowth = eco.growthRate * 7f;
+            float indexInflation = -Math.Max(0f, eco.inflation - 4f) * 3.5f;
+            float indexSanctions = -sanctionPressure * 9f;
+            float indexBlowback = -blowback * 4f;
+            float indexWar = -(atWar ? 12f : 0f);
+
             float fundamentals = 45f
-                                 + eco.confidence * 0.85f
-                                 + eco.growthRate * 7f
-                                 - Math.Max(0f, eco.inflation - 4f) * 3.5f
-                                 - sanctionPressure * 9f
-                                 - blowback * 4f
-                                 - (atWar ? 12f : 0f);
+                                 + indexConfidence
+                                 + indexGrowth
+                                 + indexInflation
+                                 + indexSanctions
+                                 + indexBlowback
+                                 + indexWar;
             fundamentals = Clamp(fundamentals, 8f, 260f);
 
             // Sentiment converges on fundamentals. Sanctions and war are already
             // priced into `fundamentals`, so there is no separate ongoing shock
             // term — applying one every month would drag the index permanently
             // below its own floor rather than reacting and settling.
+            float marketBefore = eco.marketIndex;
             eco.marketIndex += (fundamentals - eco.marketIndex) * 0.14f;
             eco.marketIndex = Math.Max(5f, eco.marketIndex);
+
+            // `+= (fundamentals - value) * rate` is the same shape as
+            // `Approach`, so the decomposition of the fundamentals scales into
+            // the month's movement exactly (spec 26 §3). Our own sanctions'
+            // blowback is filed as a player decision: it is the cost of
+            // something this government chose, and an operator wondering why
+            // their market is soft is entitled to see their own foreign policy
+            // in the list.
+            if (Causal.Records(state, country.id))
+                Causal.Begin(state, country.id, CausalMetric.MarketIndex, marketBefore)
+                    .Add(CausalReason.MarketConfidence, indexConfidence, CausalCategory.Economic)
+                    .Add(CausalReason.EconomicGrowth, indexGrowth, CausalCategory.Economic)
+                    .Add(CausalReason.Inflation, indexInflation, CausalCategory.Economic)
+                    .Add(CausalReason.SanctionPressure, indexSanctions, CausalCategory.Diplomatic)
+                    .Add(CausalReason.SanctionBlowback, indexBlowback, CausalCategory.PlayerDecision,
+                         CausalKind.Indirect)
+                    .Add(CausalReason.AtWar, indexWar, CausalCategory.Military)
+                    .CommitApproach(fundamentals, 0.14f, eco.marketIndex, 45f);
             eco.RecordMarket();
 
             // Severe economic distress is politically corrosive.

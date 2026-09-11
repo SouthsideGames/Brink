@@ -1648,8 +1648,15 @@ namespace Brink.Core
                 confrontation.momentum += attackerIsInitiator ? momentumSwing : -momentumSwing;
             }
 
-            attacker.warExhaustion = Clamp(attacker.warExhaustion + attackerExhaustion * 0.5f);
-            if (defender != null) defender.warExhaustion = Clamp(defender.warExhaustion + defenderExhaustion * 0.5f);
+            Causal.Apply(state, attacker.id, CausalMetric.WarExhaustion,
+                CausalReason.MilitaryOperations, ref attacker.warExhaustion,
+                Clamp(attacker.warExhaustion + attackerExhaustion * 0.5f), CausalCategory.Military,
+                CausalKind.Direct, CausalVisibility.Known, defender?.id);
+            if (defender != null)
+                Causal.Apply(state, defender.id, CausalMetric.WarExhaustion,
+                    CausalReason.MilitaryOperations, ref defender.warExhaustion,
+                    Clamp(defender.warExhaustion + defenderExhaustion * 0.5f), CausalCategory.Military,
+                    CausalKind.Direct, CausalVisibility.Known, attacker.id);
 
             // Civilian harm hardens enemy resistance and costs international standing (GDD §27).
             if (record.civilianHarm > 1.5f)

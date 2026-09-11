@@ -217,7 +217,9 @@ namespace Brink.Core
                     // Saying you will wind it down is heard by the people you are
                     // asking to keep fighting it.
                     country.warSupport = Clamp(country.warSupport - 10f);
-                    country.warExhaustion = Clamp(country.warExhaustion - 4f);
+                    Causal.Apply(state, country.id, CausalMetric.WarExhaustion,
+                        CausalReason.OppositionCampaign, ref country.warExhaustion,
+                        Clamp(country.warExhaustion - 4f), CausalCategory.Political);
                     break;
 
                 case OppositionTheme.Corruption:

@@ -649,7 +649,9 @@ namespace Brink.Core
             // drain, not a bankruptcy. At 210 it was 6–12× income: Russia was
             // −11,000 by year ten of a passive decade with nobody choosing anything.
             holder.resources.treasury -= intensity * InsurgencyBillPerMonth;
-            holder.warExhaustion = Clamp(holder.warExhaustion + intensity * 0.24f);
+            Causal.Apply(state, holder.id, CausalMetric.WarExhaustion,
+                CausalReason.Insurgency, ref holder.warExhaustion,
+                Clamp(holder.warExhaustion + intensity * 0.24f), CausalCategory.Military);
 
             // National unity used to be billed here too, flatly, at
             // `intensity * 0.22` a month — directly against the rule stated four
@@ -764,7 +766,9 @@ namespace Brink.Core
                     location.garrison = 22f;
                     location.pacification = 0f;
 
-                    holder.warExhaustion = Clamp(holder.warExhaustion + 9f);
+                    Causal.Apply(state, holder.id, CausalMetric.WarExhaustion,
+                        CausalReason.Insurgency, ref holder.warExhaustion,
+                        Clamp(holder.warExhaustion + 9f), CausalCategory.Military);
                     holder.warSupport = Clamp(holder.warSupport - 11f);
                     holder.governmentApproval = Clamp(holder.governmentApproval - 6f);
 

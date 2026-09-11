@@ -620,14 +620,31 @@ namespace Brink.Core
             float indexGap = eco.marketIndex - 100f;
             float indexTerm = indexGap >= 0f ? indexGap * 0.15f : indexGap * 0.42f;
 
+            // Each term of the target is named into a local before the sum
+            // (spec 26 §3). The order and the operations are exactly as they
+            // were — `a - b` and `a + (-b)` are the identical IEEE result, and
+            // `indexTerm` above was already written this way — so the arithmetic
+            // is untouched and the explanation is built from the very values the
+            // simulation uses rather than from a second copy of the formula that
+            // would drift within a month.
+            float standardsGrowth = eco.growthRate * 1.6f;
+            float standardsInflation = -Math.Max(0f, eco.inflation - 4f) * 1.5f;
+            float standardsUnemployment = -Math.Max(0f, eco.unemployment - 6f) * 1.2f;
+            float standardsExhaustion = -country.warExhaustion * 0.20f;
+            float standardsGrievance = -country.publicGrievance * GrievanceStandardsDrag;
+            float standardsHunger = -Math.Max(0f, country.resources.foodEndowment
+                                                  - country.resources.foodSecurity - 5f) * 0.5f;
+            float standardsHosting = -DisplacementSystem.StandardsDrag(country);
+            float standardsPosture = FiscalSystem.PostureStandardsShift(country.fiscal.budgetPosture);
+
             float standardsTarget = Clamp(
                 52f
                 + indexTerm
-                + eco.growthRate * 1.6f
-                - Math.Max(0f, eco.inflation - 4f) * 1.5f
-                - Math.Max(0f, eco.unemployment - 6f) * 1.2f
-                - country.warExhaustion * 0.20f
-                - country.publicGrievance * GrievanceStandardsDrag
+                + standardsGrowth
+                + standardsInflation
+                + standardsUnemployment
+                + standardsExhaustion
+                + standardsGrievance
                 // Hunger — measured against the country's *own normal*, not an
                 // absolute line. An absolute threshold (the first version used
                 // 50) reads an authored dependency as a standing humanitarian
@@ -638,21 +655,37 @@ namespace Brink.Core
                 // *falling below its own endowment* — which war, siege and
                 // sanctions now genuinely cause. Zero by construction at every
                 // authored baseline — the `distress` idiom, kept honest.
-                - Math.Max(0f, country.resources.foodEndowment
-                               - country.resources.foodSecurity - 5f) * 0.5f
+                + standardsHunger
                 // Carrying a crisis for somebody else is a strain on services.
                 // Mild per point, and through the target like everything else
                 // here — a host that is otherwise well run absorbs it.
-                - DisplacementSystem.StandardsDrag(country)
+                + standardsHosting
                 // What the budget posture does to what people can afford
                 // (spec 02 §9). Zero on Balanced, so untouched saves are
                 // unaffected.
-                + FiscalSystem.PostureStandardsShift(country.fiscal.budgetPosture));
+                + standardsPosture);
 
             // Deliberately slower to rise than to fall. Prosperity is felt as it
             // accumulates; a collapse is felt immediately.
             float standardsRate = standardsTarget > country.livingStandards ? 0.020f : 0.045f;
+            float standardsBefore = country.livingStandards;
             country.livingStandards = Approach(country.livingStandards, standardsTarget, standardsRate);
+
+            if (Causal.Records(state, country.id))
+                Causal.Begin(state, country.id, CausalMetric.LivingStandards, standardsBefore)
+                    .Add(CausalReason.MarketConditions, indexTerm, CausalCategory.Economic)
+                    .Add(CausalReason.EconomicGrowth, standardsGrowth, CausalCategory.Economic)
+                    .Add(CausalReason.CostOfLiving, standardsInflation, CausalCategory.Economic)
+                    .Add(CausalReason.Unemployment, standardsUnemployment, CausalCategory.Economic)
+                    .Add(CausalReason.WarExhaustionLevel, standardsExhaustion, CausalCategory.Military)
+                    .Add(CausalReason.PublicMemory, standardsGrievance, CausalCategory.Social,
+                         CausalKind.Indirect)
+                    .Add(CausalReason.Hunger, standardsHunger, CausalCategory.Social)
+                    .Add(CausalReason.DisplacementHosting, standardsHosting, CausalCategory.Social)
+                    .Add(CausalReason.BudgetPosture, standardsPosture, CausalCategory.Fiscal,
+                         CausalKind.Direct, CausalVisibility.Known, null,
+                         nameof(GameController.SetBudgetPosture))
+                    .CommitApproach(standardsTarget, standardsRate, country.livingStandards, 52f);
 
             // ---- social unrest: organised anger ----
             //
@@ -660,20 +693,27 @@ namespace Brink.Core
             // simply being unpopular. A government can be disliked without
             // anybody organising, and that distinction is what stops this from
             // being a second approval score.
+            float unrestDeprivation = Math.Max(0f, 45f - country.livingStandards) * 0.55f;
+            float unrestInflation = Math.Max(0f, eco.inflation - 8f) * 1.6f;
+            float unrestUnemployment = Math.Max(0f, eco.unemployment - 10f) * 1.4f;
+            float unrestExhaustion = country.warExhaustion * 0.22f;
+            float unrestGrievance = country.publicGrievance * GrievanceUnrestPressure;
+            float unrestHunger = Math.Max(0f, country.resources.foodEndowment
+                                              - country.resources.foodSecurity - 10f) * 0.45f;
+
             float unrestPressure =
-                Math.Max(0f, 45f - country.livingStandards) * 0.55f
-                + Math.Max(0f, eco.inflation - 8f) * 1.6f
-                + Math.Max(0f, eco.unemployment - 10f) * 1.4f
-                + country.warExhaustion * 0.22f
-                + country.publicGrievance * GrievanceUnrestPressure
+                unrestDeprivation
+                + unrestInflation
+                + unrestUnemployment
+                + unrestExhaustion
+                + unrestGrievance
                 // Hunger organises faster than the living-standards average it
                 // is part of — standards move over years, an empty shelf moves
                 // people this month. Gap against the country's own endowment
                 // (see the standards term above for why not an absolute line),
                 // with a deeper grace: organisation needs a real drop, not a
                 // lean month.
-                + Math.Max(0f, country.resources.foodEndowment
-                               - country.resources.foodSecurity - 10f) * 0.45f;
+                + unrestHunger;
 
             // National unity *damps* hardship; it does not cancel it.
             //
@@ -693,32 +733,41 @@ namespace Brink.Core
             // gated at 58, unreachable for any country in any playthrough.
             // In normal times the pressure sum is near zero, so widening the
             // multiplier here changes nothing outside a genuine crisis.
-            unrestPressure *= 1.18f - country.nationalUnity / 165f;
+            float unrestUnityFactor = 1.18f - country.nationalUnity / 165f;
+            unrestPressure *= unrestUnityFactor;
 
             // An organised campaign against the government is people already
             // meeting about it. Added to the pressure rather than to the value,
             // so it raises where unrest settles instead of being erased by the
             // next month's drift.
-            unrestPressure += OppositionSystem.UnrestPressure(gov);
+            float unrestOpposition = OppositionSystem.UnrestPressure(gov);
+            unrestPressure += unrestOpposition;
 
             // People shooting at the government somewhere in the country is not a
             // mood, and it does not stay local.
-            unrestPressure += InsurgencySystem.UnrestPressure(state, country.id);
+            float unrestInsurgency = InsurgencySystem.UnrestPressure(state, country.id);
+            unrestPressure += unrestInsurgency;
 
             // Arrivals are an argument in the host, and people who wanted out and
             // could not get out are an argument at home. Different countries,
             // different terms.
-            unrestPressure += DisplacementSystem.UnrestPressure(country);
-            unrestPressure += DisplacementSystem.PressureAtSource(state, country);
+            float unrestHosting = DisplacementSystem.UnrestPressure(country);
+            unrestPressure += unrestHosting;
+            float unrestAtSource = DisplacementSystem.PressureAtSource(state, country);
+            unrestPressure += unrestAtSource;
 
             // Some states argue about everything. Hardship organises faster there.
-            float unrestTarget = Clamp(unrestPressure * NationalTraitCatalog.UnrestVolatility(country));
+            float unrestVolatility = NationalTraitCatalog.UnrestVolatility(country);
+            float unrestTarget = Clamp(unrestPressure * unrestVolatility);
 
             // A restrictive posture suppresses the *expression* without touching
             // the cause — the grievance keeps accruing underneath, which is the
             // trade the posture is meant to represent.
-            if (gov.civicPosture == CivicPosture.Restrictive) unrestTarget *= 0.45f;
-            else if (gov.civicPosture == CivicPosture.Open) unrestTarget *= 1.15f;
+            float unrestPostureFactor =
+                gov.civicPosture == CivicPosture.Restrictive ? 0.45f
+                : gov.civicPosture == CivicPosture.Open ? 1.15f
+                : 1f;
+            unrestTarget *= unrestPostureFactor;
 
             // Asymmetric, like living standards above and for the same reason:
             // anger organises faster than it disperses. A single rate meant that
@@ -730,7 +779,38 @@ namespace Brink.Core
             // repairs the economy does not get its streets back the same quarter,
             // which is what stops unrest from being a number you buy off.
             float unrestRate = unrestTarget > country.socialUnrest ? 0.11f : 0.05f;
+            float unrestBefore = country.socialUnrest;
             country.socialUnrest = Approach(country.socialUnrest, unrestTarget, unrestRate);
+
+            // The order here mirrors the arithmetic above exactly, because the
+            // builder's `Multiply` is only exact if it is applied to the same
+            // running sum the simulation applied it to: hardship, damped by
+            // unity; then the organised and external pressures, which the
+            // damping does not reach; then temperament; then the posture.
+            // A multiplier is recorded as its own signed line worth
+            // `(sum so far) x (factor - 1)`, which is exactly what it did.
+            if (Causal.Records(state, country.id))
+                Causal.Begin(state, country.id, CausalMetric.SocialUnrest, unrestBefore)
+                    .Add(CausalReason.Deprivation, unrestDeprivation, CausalCategory.Social)
+                    .Add(CausalReason.CostOfLiving, unrestInflation, CausalCategory.Economic)
+                    .Add(CausalReason.Unemployment, unrestUnemployment, CausalCategory.Economic)
+                    .Add(CausalReason.WarExhaustionLevel, unrestExhaustion, CausalCategory.Military)
+                    .Add(CausalReason.PublicMemory, unrestGrievance, CausalCategory.Social,
+                         CausalKind.Indirect)
+                    .Add(CausalReason.Hunger, unrestHunger, CausalCategory.Social)
+                    .Multiply(CausalReason.NationalUnity, unrestUnityFactor, CausalCategory.Social)
+                    .Add(CausalReason.OppositionCampaign, unrestOpposition, CausalCategory.Political)
+                    .Add(CausalReason.Insurgency, unrestInsurgency, CausalCategory.Military)
+                    .Add(CausalReason.DisplacementHosting, unrestHosting, CausalCategory.Social)
+                    .Add(CausalReason.DisplacementAtSource, unrestAtSource, CausalCategory.Social)
+                    .Multiply(CausalReason.NationalTemperament, unrestVolatility, CausalCategory.Social)
+                    // Provenance: this line is the operator's own standing
+                    // decision acting on the street, which is precisely the
+                    // consequence spec 26 §7 exists to be able to trace back.
+                    .Multiply(CausalReason.CivicPosture, unrestPostureFactor, CausalCategory.PlayerDecision,
+                              CausalKind.Direct, CausalVisibility.Known,
+                              nameof(GameController.SetCivicPosture))
+                    .CommitApproach(unrestTarget, unrestRate, country.socialUnrest);
 
             // ---- public grievance: what is not forgotten ----
             //
@@ -780,10 +860,14 @@ namespace Brink.Core
             float unrestNow = Math.Max(0f,
                 country.socialUnrest - country.publicGrievance * GrievanceUnrestPressure);
 
+            float grievanceUnrestTerm = Math.Max(0f, unrestNow - 45f) * 0.010f;
+            float grievanceHardshipTerm = Math.Max(0f, 40f - hardshipNow) * 0.011f;
+            float grievanceWarTerm = state.IsAtWar(country.id) ? country.warExhaustion * 0.004f : 0f;
+
             float grievanceGain =
-                Math.Max(0f, unrestNow - 45f) * 0.010f
-                + Math.Max(0f, 40f - hardshipNow) * 0.011f
-                + (state.IsAtWar(country.id) ? country.warExhaustion * 0.004f : 0f);
+                grievanceUnrestTerm
+                + grievanceHardshipTerm
+                + grievanceWarTerm;
 
             // Decay is **proportional to what has accumulated**, not a flat
             // subtraction. A constant 0.045/month has no equilibrium: any
@@ -798,7 +882,20 @@ namespace Brink.Core
             // does not return to the condition of one that has not, it just no
             // longer does so irreversibly.
             float grievanceDecay = 0.045f + country.publicGrievance * 0.004f;
+            float grievanceBefore = country.publicGrievance;
             country.publicGrievance = Clamp(country.publicGrievance + grievanceGain - grievanceDecay);
+
+            // Applied straight to the value rather than approached, so the terms
+            // are already in delta space and reconcile exactly — bar the clamp,
+            // which the builder books as a remainder rather than swallowing.
+            if (Causal.Records(state, country.id))
+                Causal.Begin(state, country.id, CausalMetric.PublicGrievance, grievanceBefore)
+                    .Add(CausalReason.OrganisedUnrest, grievanceUnrestTerm, CausalCategory.Social)
+                    .Add(CausalReason.Deprivation, grievanceHardshipTerm, CausalCategory.Social)
+                    .Add(CausalReason.ActiveFighting, grievanceWarTerm, CausalCategory.Military)
+                    .Add(CausalReason.PeacetimeRecovery, -grievanceDecay, CausalCategory.Social,
+                         CausalKind.Indirect)
+                    .CommitAdditive(country.publicGrievance);
 
             // ---- what the layer does to the rest of the state ----
             //
@@ -823,11 +920,17 @@ namespace Brink.Core
             // Living standards drive approval more than anything else — and now
             // they are a real accumulated quantity rather than a phrase in a
             // comment describing this month's growth figure.
-            float approvalPull = eco.growthRate * 0.35f
-                                 - Math.Max(0f, eco.inflation - 4f) * 0.30f
-                                 - Math.Max(0f, eco.unemployment - 7f) * 0.18f
-                                 - country.warExhaustion * 0.03f
-                                 + (country.livingStandards - 55f) * 0.09f;
+            float approvalGrowth = eco.growthRate * 0.35f;
+            float approvalInflation = -Math.Max(0f, eco.inflation - 4f) * 0.30f;
+            float approvalUnemployment = -Math.Max(0f, eco.unemployment - 7f) * 0.18f;
+            float approvalExhaustion = -country.warExhaustion * 0.03f;
+            float approvalStandards = (country.livingStandards - 55f) * 0.09f;
+
+            float approvalPull = approvalGrowth
+                                 + approvalInflation
+                                 + approvalUnemployment
+                                 + approvalExhaustion
+                                 + approvalStandards;
 
             // Approach a level rather than integrating a rate. Accumulating the
             // pull each month meant a healthy economy drove approval to 100 in
@@ -835,13 +938,42 @@ namespace Brink.Core
             // which made elections a formality, and — because the AI scores
             // ConsolidateHome on (50 − approval) — stopped every AI government
             // from ever attending to its own domestic condition again.
-            float approvalTarget = Clamp(50f + approvalPull * 6f + ApprovalShiftFor(gov)
-                                         - country.socialUnrest * 0.25f
-                                         + gov.publicMessaging * 0.42f
+            float approvalForm = ApprovalShiftFor(gov);
+            float approvalUnrest = -country.socialUnrest * 0.25f;
+            float approvalMessaging = gov.publicMessaging * 0.42f;
+            float approvalTax = -FiscalSystem.TaxApprovalDrag(country);
+
+            float approvalTarget = Clamp(50f + approvalPull * 6f + approvalForm
+                                         + approvalUnrest
+                                         + approvalMessaging
                                          // Nobody thanks a government for a tax
                                          // rise. Zero at the baseline rate.
-                                         - FiscalSystem.TaxApprovalDrag(country));
+                                         + approvalTax);
+            float approvalBefore = country.governmentApproval;
             country.governmentApproval = Approach(country.governmentApproval, approvalTarget, 0.06f);
+
+            // The five economic pulls are each worth six times their own figure
+            // in the target, so they are recorded pre-multiplied — an operator
+            // asking why approval moved wants the size of the effect, not the
+            // size of the intermediate.
+            if (Causal.Records(state, country.id))
+                Causal.Begin(state, country.id, CausalMetric.GovernmentApproval, approvalBefore)
+                    .Add(CausalReason.EconomicGrowth, approvalGrowth * 6f, CausalCategory.Economic)
+                    .Add(CausalReason.CostOfLiving, approvalInflation * 6f, CausalCategory.Economic)
+                    .Add(CausalReason.Unemployment, approvalUnemployment * 6f, CausalCategory.Economic)
+                    .Add(CausalReason.WarExhaustionLevel, approvalExhaustion * 6f, CausalCategory.Military)
+                    .Add(CausalReason.LivingStandardsLevel, approvalStandards * 6f, CausalCategory.Social,
+                         CausalKind.Indirect)
+                    .Add(CausalReason.ConstitutionalForm, approvalForm, CausalCategory.Political)
+                    .Add(CausalReason.OrganisedUnrest, approvalUnrest, CausalCategory.Social,
+                         CausalKind.Indirect)
+                    .Add(CausalReason.PublicMessaging, approvalMessaging, CausalCategory.PlayerDecision,
+                         CausalKind.Direct, CausalVisibility.Known, null,
+                         nameof(GameController.PublicMessaging))
+                    .Add(CausalReason.TaxBurden, approvalTax, CausalCategory.Fiscal,
+                         CausalKind.Direct, CausalVisibility.Known, null,
+                         nameof(GameController.SetTaxRate))
+                    .CommitApproach(approvalTarget, 0.06f, country.governmentApproval, 50f);
 
             // Stability and unity had **no restoring force at all** — the only
             // two political stats in the simulation without one. They ratcheted
@@ -917,7 +1049,9 @@ namespace Brink.Core
             // wars was locked into a coup cycle for the rest of the game.
             if (!state.IsAtWar(country.id))
             {
-                country.warExhaustion = Math.Max(0f, country.warExhaustion - 0.7f);
+                Causal.Apply(state, country.id, CausalMetric.WarExhaustion,
+                    CausalReason.PeacetimeRecovery, ref country.warExhaustion,
+                    Math.Max(0f, country.warExhaustion - 0.7f), CausalCategory.Military);
 
                 // Public willingness to fight recovers toward normal in peacetime
                 // too. It was drained by every war month and never restored, so

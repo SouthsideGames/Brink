@@ -112,6 +112,7 @@ namespace Brink.UI
 
             root.RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
             GameLog.OnLog += OnAnyLog;
+            GameController.Instance.StateReplaced += Views.TerminalView.ResetExplanations;
             GameController.Instance.StateReplaced += RefreshAll;
 
             tutorialPanel = new TutorialPanel(RefreshAll);
@@ -138,6 +139,7 @@ namespace Brink.UI
         void OnDisable()
         {
             GameLog.OnLog -= OnAnyLog;
+            GameController.Instance.StateReplaced -= Views.TerminalView.ResetExplanations;
             GameController.Instance.StateReplaced -= RefreshAll;
         }
 

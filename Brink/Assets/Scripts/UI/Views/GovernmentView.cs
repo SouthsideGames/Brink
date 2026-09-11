@@ -172,6 +172,15 @@ namespace Brink.UI.Views
                           + $"{(player.government.IsElective ? "the chamber" : "elite")} backing. "
                           + "Govern well and there is more of it.");
             text.text = sb.ToString();
+
+            // On demand, never permanent (spec 26 §6). Every bar above this row
+            // can be asked about; nothing is explained until it is.
+            AddWhyPanel(state,
+                CausalMetric.GovernmentApproval,
+                CausalMetric.SocialUnrest,
+                CausalMetric.LivingStandards,
+                CausalMetric.PublicGrievance,
+                CausalMetric.WarExhaustion);
         }
 
         void BuildInstruments(GameState state, CountryState player)
