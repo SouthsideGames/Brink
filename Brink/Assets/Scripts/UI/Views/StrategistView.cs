@@ -66,23 +66,39 @@ namespace Brink.UI.Views
                 foreach (var policy in policies)
                 {
                     var captured = policy;
-                    var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
                     AddText().text = $" {policy.label.ToUpperInvariant()} — {policy.description}";
+                    var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
                     var button = new Button(() => { StrategySystem.SetPolicy(state, captured.id); Refresh(); }) { text = "ADOPT" };
                     button.AddToClassList("cmd-button"); row.Add(button);
                 }
             }
 
-            AddText("terminal-text-dim").text = " WRITE AN OBJECTIVE — measurement only; no XP, no hidden bonus, maximum three.";
+            AddText("terminal-text-dim").text = " WRITE AN OBJECTIVE — standing measurement only; no XP/grade bonus, maximum three.";
             var title = new TextField("OBJECTIVE") { value = "" }; title.AddToClassList("terminal-input"); Root.Add(title);
             var kinds = new List<string> { "Stability", "Approval", "Unity", "Energy", "Food", "Materials", "Industry", "Military", "Economy", "Intelligence", "Diplomacy", "Government", "Treaties", "Capabilities", "Relations ≥", "Relations ≤", "Solvent" };
             var kind = new DropdownField("MEASURE", kinds, 0); Root.Add(kind);
             var threshold = new FloatField("TARGET") { value = 60f }; Root.Add(threshold);
             var param = new TextField("COUNTRY ID (relations only)") { value = "" }; Root.Add(param);
+            var feedback = AddText("terminal-text-dim"); feedback.text = " ";
             var add = new Button(() =>
             {
+                if (plan != null && plan.objectives.Count >= StrategySystem.MaxObjectives)
+                {
+                    feedback.text = " OBJECTIVE LIMIT REACHED — remove one of the three standing objectives first.";
+                    return;
+                }
                 var condition = ObjectiveCondition(kind.value, threshold.value, param.value);
-                if (condition != null && StrategySystem.AddObjective(state, string.IsNullOrWhiteSpace(title.value) ? condition.text : title.value, condition)) Refresh();
+                if (condition == null)
+                {
+                    feedback.text = " OBJECTIVE REJECTED — relationship measures require a country ID.";
+                    return;
+                }
+                if (!StrategySystem.AddObjective(state, string.IsNullOrWhiteSpace(title.value) ? condition.text : title.value, condition))
+                {
+                    feedback.text = " OBJECTIVE REJECTED — this measure cannot be used as a self-authored standing goal.";
+                    return;
+                }
+                Refresh();
             }) { text = "ADD OBJECTIVE" };
             add.AddToClassList("cmd-button"); add.AddToClassList("primary"); Root.Add(add);
 
@@ -91,15 +107,15 @@ namespace Brink.UI.Views
                 {
                     var captured = objective;
                     var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
-                    var remove = new Button(() => { StrategySystem.RemoveObjective(state, captured.id); Refresh(); }) { text = "REMOVE" };
+                    var remove = new Button(() => { StrategySystem.RemoveObjective(state, captured.id); Refresh(); })
+                    { text = "REMOVE — " + captured.title };
                     remove.AddToClassList("cmd-button"); row.Add(remove);
                 }
         }
 
         static MandateObjective ObjectiveCondition(string measure, float target, string param)
         {
-            MandateObjectiveKind kind;
-            string p = "";
+            MandateObjectiveKind kind; string p = "";
             switch (measure)
             {
                 case "Stability": kind=MandateObjectiveKind.StabilityAtLeast; break;
@@ -114,8 +130,7 @@ namespace Brink.UI.Views
                 case "Relations ≥": kind=MandateObjectiveKind.RelationsAtLeast; p=param?.Trim(); if(string.IsNullOrEmpty(p)) return null; break;
                 case "Relations ≤": kind=MandateObjectiveKind.RelationsAtMost; p=param?.Trim(); if(string.IsNullOrEmpty(p)) return null; break;
                 case "Solvent": return new MandateObjective { kind=MandateObjectiveKind.Solvent, text="Remain fiscally solvent." };
-                default:
-                    kind=MandateObjectiveKind.PillarAtLeast; p=measure; break;
+                default: kind=MandateObjectiveKind.PillarAtLeast; p=measure; break;
             }
             return new MandateObjective { kind=kind, threshold=target, param=p, text=$"{measure} at {target:F0} or better." };
         }
