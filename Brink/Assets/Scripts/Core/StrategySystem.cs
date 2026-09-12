@@ -9,14 +9,12 @@ namespace Brink.Core
     {
         public string id, slotId, label, description, countryId;
         public Pillar favours, strains;
-        public float favour = 0.08f, strain = 0.06f;
     }
 
     /// <summary>
-    /// Phase B strategic intent. This sits above Cabinet directives: doctrine is
-    /// the standing answer to "what matters when I am not looking?"; national
-    /// policies are country-shaped trade-offs; authored objectives let the player
-    /// define success without turning Brink into a quest log.
+    /// Standing strategic intent for the player's posting. Strategy never grants
+    /// national power directly: it is translated into existing Cabinet
+    /// instructions, and explicit direction or Direct Control still wins.
     /// </summary>
     public static class StrategySystem
     {
@@ -40,7 +38,7 @@ namespace Brink.Core
             P("KOR_TECH_EDGE","NATIONAL","Technology Edge","Weight economic and technical capacity above diplomatic flexibility.","KOR",Pillar.Economy,Pillar.Diplomacy),
             P("MEX_DOMESTIC_FOUNDATION","NATIONAL","Domestic Foundation","Put state capacity ahead of foreign-policy ambition.","MEX",Pillar.Government,Pillar.Diplomacy),
             P("IDN_ARCHIPELAGIC_BALANCE","NATIONAL","Archipelagic Balance","Protect internal cohesion while maintaining maritime reach.","IDN",Pillar.Government,Pillar.Military),
-            P("POL_FRONTLINE_DETERRENCE","NATIONAL","Frontline Deterrence","Accept economic strain to keep military readiness high.","POL",Pillar.Military,Pillar.Economy),
+            P("POL_FRONTLINE_DETERRENCE","NATIONAL","Frontline Security","Accept economic strain to keep the armed forces prepared.","POL",Pillar.Military,Pillar.Economy),
             P("KAZ_MULTI_VECTOR","NATIONAL","Multi-Vector Policy","Prioritize diplomatic room between stronger neighbours over force concentration.","KAZ",Pillar.Diplomacy,Pillar.Military)
         };
 
@@ -74,7 +72,9 @@ namespace Brink.Core
             plan.doctrineChosen = true;
             plan.doctrineAdopted = state.date;
             plan.revisionCount++;
-            ProgressionSystem.RecordInitiative(state);
+            // Strategy authoring is not annual-evaluation initiative. Otherwise a
+            // player can toggle doctrine/policy/objectives for free grade points,
+            // the same exploit Cabinet mode switching already had to close.
             state.AddNotification(NotificationClass.Priority, "STRATEGY ADOPTED",
                 $"Standing doctrine: {DoctrineLabel(doctrine)}. Delegated desks will weight routine choices accordingly.", state.playerCountryId);
             state.AddChronicle(ChronicleCategory.Political, state.playerCountryId,
@@ -97,39 +97,9 @@ namespace Brink.Core
             if (existing == null) plan.policies.Add(new StrategicPolicyChoice { slotId=def.slotId, policyId=def.id, adopted=state.date });
             else { existing.policyId=def.id; existing.adopted=state.date; }
             plan.revisionCount++;
-            ProgressionSystem.RecordInitiative(state);
             state.AddNotification(NotificationClass.Priority, "NATIONAL POLICY",
                 $"{def.label}: {def.description}", state.playerCountryId);
             return true;
-        }
-
-        /// <summary>
-        /// Delegated-work weighting only. It never changes Direct Control output,
-        /// resources, or a pillar by itself; it changes which unattended desks
-        /// receive marginal institutional attention.
-        /// </summary>
-        public static float DelegatedMultiplier(GameState state, Pillar pillar)
-        {
-            var plan = Ensure(state); if (plan == null || !plan.doctrineChosen) return 1f;
-            float m = DoctrineMultiplier(plan.doctrine, pillar);
-            foreach (var choice in plan.policies)
-            {
-                var def = FindPolicy(choice.policyId);
-                if (def == null) continue;
-                if (def.favours == pillar) m += def.favour;
-                if (def.strains == pillar) m -= def.strain;
-            }
-            return Math.Max(0.75f, Math.Min(1.25f, m));
-        }
-
-        static float DoctrineMultiplier(StrategicDoctrine d, Pillar p)
-        {
-            if (d == StrategicDoctrine.Balanced) return 1f;
-            if (d == StrategicDoctrine.Deterrence) return p == Pillar.Military ? 1.12f : p == Pillar.Economy ? 0.94f : 1f;
-            if (d == StrategicDoctrine.Prosperity) return p == Pillar.Economy ? 1.12f : p == Pillar.Military ? 0.94f : 1f;
-            if (d == StrategicDoctrine.Influence) return p == Pillar.Diplomacy ? 1.10f : p == Pillar.Intelligence ? 1.06f : p == Pillar.Military ? 0.95f : 1f;
-            if (d == StrategicDoctrine.Resilience) return p == Pillar.Government ? 1.10f : p == Pillar.Economy ? 1.05f : p == Pillar.Diplomacy ? 0.96f : 1f;
-            return p == Pillar.Economy || p == Pillar.Intelligence ? 1.07f : p == Pillar.Government ? 0.96f : 1f;
         }
 
         public static bool AddObjective(GameState state, string title, MandateObjective condition)
@@ -142,14 +112,14 @@ namespace Brink.Core
                 created = state.date
             };
             plan.objectives.Add(objective);
-            ProgressionSystem.RecordInitiative(state);
             return true;
         }
 
         public static bool RemoveObjective(GameState state, string id)
         {
             var plan = Ensure(state); if (plan == null) return false;
-            for (int i=0;i<plan.objectives.Count;i++) if (plan.objectives[i].id==id) { plan.objectives.RemoveAt(i); return true; }
+            for (int i=0;i<plan.objectives.Count;i++)
+                if (plan.objectives[i].id==id) { plan.objectives.RemoveAt(i); return true; }
             return false;
         }
 
@@ -173,12 +143,52 @@ namespace Brink.Core
             var plan = Ensure(state); if (plan == null) return;
             foreach (var o in plan.objectives)
             {
-                if (o.achieved || o.condition == null) continue;
-                if (!MandateSystem.IsMet(state, o.condition)) continue;
-                o.achieved = true; o.achievedDate = state.date;
-                state.AddNotification(NotificationClass.Advisory, "OBJECTIVE REACHED", o.title, state.playerCountryId);
-                state.AddChronicle(ChronicleCategory.System, state.playerCountryId, $"Player-authored objective reached: {o.title}.");
+                if (o.condition == null) continue;
+                bool met = MandateSystem.IsMet(state, o.condition);
+                bool wasMet = o.achieved;
+                o.achieved = met;
+                if (!met || wasMet) continue;
+
+                // First attainment is history; later regain is just current
+                // status. This keeps a standing objective from becoming a noisy
+                // quest that fires every time a threshold oscillates.
+                if (!o.everAchieved)
+                {
+                    o.everAchieved = true;
+                    o.achievedDate = state.date;
+                    state.AddNotification(NotificationClass.Advisory, "OBJECTIVE REACHED", o.title, state.playerCountryId);
+                    state.AddChronicle(ChronicleCategory.System, state.playerCountryId,
+                        $"Player-authored objective first reached: {o.title}.");
+                }
             }
+        }
+
+        /// <summary>
+        /// CabinetSystem is older than standing strategy and labels every
+        /// Autonomous desk as "own judgement". After the month, correct only the
+        /// player's strategy-steered report lines so authorship remains truthful.
+        /// This changes reporting, never simulation state.
+        /// </summary>
+        public static void ClarifyCabinetReport(GameState state)
+        {
+            var country = state.PlayerCountry;
+            var plan = Ensure(state);
+            if (country == null || plan == null) return;
+            foreach (var line in state.cabinetReport)
+            {
+                var official = country.FindOfficial(line.pillar);
+                if (official == null || official.mode != ControlMode.Autonomous || string.IsNullOrEmpty(official.directiveId)) continue;
+                var def = CabinetSystem.FindDirective(official.office, official.directiveId);
+                string label = def?.label ?? official.directiveId;
+                line.ownJudgement = false;
+                line.summary = $"worked under standing strategy ({label.ToLowerInvariant()}) — " + QualityTail(line.summary);
+            }
+        }
+
+        static string QualityTail(string summary)
+        {
+            int dash = summary == null ? -1 : summary.LastIndexOf(" — ", StringComparison.Ordinal);
+            return dash >= 0 ? summary.Substring(dash + 3) : "month resolved";
         }
 
         public static string StatusText(GameState state)
@@ -190,7 +200,8 @@ namespace Brink.Core
             foreach (var c in plan.policies) { var d=FindPolicy(c.policyId); if(d!=null) sb.AppendLine("POLICY: " + d.label.ToUpperInvariant()); }
             sb.AppendLine("PLAYER OBJECTIVES:");
             if (plan.objectives.Count==0) sb.AppendLine("  NONE — define what success means for this posting.");
-            foreach (var o in plan.objectives) sb.AppendLine((o.achieved ? "  [MET] " : "  [   ] ") + o.title);
+            foreach (var o in plan.objectives)
+                sb.AppendLine((o.achieved ? "  [MET] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
             return sb.ToString().TrimEnd();
         }
 
