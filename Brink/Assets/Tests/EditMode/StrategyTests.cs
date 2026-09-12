@@ -24,6 +24,7 @@ namespace Brink.Tests
             var plan = StrategySystem.Ensure(state);
             Assert.NotNull(plan);
             Assert.AreEqual(StrategicDoctrine.Balanced, plan.doctrine);
+            Assert.AreEqual(60, plan.horizonMonths);
         }
 
         [Test]
@@ -68,6 +69,40 @@ namespace Brink.Tests
             int initiative = state.initiativesThisYear;
             Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
             Assert.AreEqual(initiative, state.initiativesThisYear);
+        }
+
+        [Test]
+        public void PlanFrameIsPlanningContextNotNationalPower()
+        {
+            int initiative = state.initiativesThisYear;
+            int influence = state.influence;
+            float treasury = state.PlayerCountry.resources.treasury;
+            float military = state.PlayerCountry.pillars.military;
+
+            Assert.IsTrue(StrategySystem.SetPlanFrame(state, "Five Year Security Plan", 59));
+            var plan = StrategySystem.Ensure(state);
+            Assert.AreEqual("Five Year Security Plan", plan.planTitle);
+            Assert.AreEqual(60, plan.horizonMonths);
+            Assert.AreEqual(initiative, state.initiativesThisYear);
+            Assert.AreEqual(influence, state.influence);
+            Assert.AreEqual(treasury, state.PlayerCountry.resources.treasury);
+            Assert.AreEqual(military, state.PlayerCountry.pillars.military);
+        }
+
+        [Test]
+        public void ForecastIsDeterministicAndReadOnly()
+        {
+            StrategySystem.SetDoctrine(state, StrategicDoctrine.Resilience);
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            string a = StrategicForecastSystem.Render(state, StrategicDoctrine.Deterrence, 36, 72);
+            string b = StrategicForecastSystem.Render(state, StrategicDoctrine.Deterrence, 36, 72);
+            string after = UnityEngine.JsonUtility.ToJson(state);
+
+            Assert.AreEqual(a, b);
+            Assert.AreEqual(before, after, "A what-if must never become a hidden simulation step.");
+            StringAssert.Contains("WHAT-IF: DETERRENCE", a);
+            StringAssert.Contains("PREPARE FOR WAR", a);
+            StringAssert.Contains("YES, BUT", a);
         }
 
         [Test]
@@ -131,10 +166,13 @@ namespace Brink.Tests
         public void StrategyPersistsOnMandateReissue()
         {
             StrategySystem.SetDoctrine(state, StrategicDoctrine.Influence);
+            StrategySystem.SetPlanFrame(state, "Influence Plan", 120);
             var before = state.mandate.strategy;
             MandateSystem.Reissue(state, "test administration");
             Assert.AreSame(before, state.mandate.strategy);
             Assert.AreEqual(StrategicDoctrine.Influence, state.mandate.strategy.doctrine);
+            Assert.AreEqual("Influence Plan", state.mandate.strategy.planTitle);
+            Assert.AreEqual(120, state.mandate.strategy.horizonMonths);
         }
     }
 }
