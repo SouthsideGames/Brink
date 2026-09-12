@@ -101,6 +101,15 @@ namespace Brink.Data
         public string summary;
 
         /// <summary>
+        /// Who launched it. The after-action log labels losses OWN / ENEMY, and
+        /// a record of an enemy assault on our position has *their* losses in
+        /// `attackerLosses`. Empty on a record written before this field
+        /// existed, which the reader treats as "ours" — the assumption the
+        /// label always made.
+        /// </summary>
+        public string attackerId = "";
+
+        /// <summary>
         /// Combat power multiplier from distance at the time this ran, 0.35..1
         /// (GDD §16). Recorded so the after-action report can say the operation
         /// failed because the force could not be brought to bear, rather than
@@ -195,6 +204,24 @@ namespace Brink.Data
 
         /// <summary>Set once defense commitments have been called upon (GDD §15.2).</summary>
         public bool obligationsInvoked;
+
+        /// <summary>
+        /// The war this front was opened *for*, when it was opened by honouring
+        /// a guarantee (GDD §15.2). Empty for a war of the initiator's own
+        /// choosing. Two things hang on it: the front closes when the war it was
+        /// joined for closes — a guarantor's war has no purpose once its ally has
+        /// settled — and `AllianceSystem` uses it to tell whether a further
+        /// call-in is *defensive* (an ally on the defending side was attacked)
+        /// or *offensive* (an ally fighting for the aggressor was answered).
+        /// Empty on an old save is correct: those fronts were never satellites.
+        /// </summary>
+        public string obligationRootId = "";
+
+        /// <summary>Whom the honouring state entered on behalf of.</summary>
+        public string obligationOnBehalfOfId = "";
+
+        /// <summary>A front opened by honouring a guarantee rather than chosen.</summary>
+        public bool IsObligationEntry => !string.IsNullOrEmpty(obligationRootId);
 
         /// <summary>
         /// Months before a foreign government may put terms to the player again

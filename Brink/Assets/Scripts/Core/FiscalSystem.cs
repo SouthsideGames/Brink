@@ -164,6 +164,150 @@ namespace Brink.Core
         public static float MonthlyDebtService(CountryState country)
             => country == null ? 0f : country.fiscal.sovereignDebt * MonthlyInterestRate(country);
 
+        /// <summary>How far arrears pull the investor-confidence target down.</summary>
+        public const float ArrearsConfidenceDrag = 12f;
+
+        /// <summary>A year of ordinary treasury income, floored so a tiny economy still has a scale.</summary>
+        public static float AnnualIncome(CountryState country)
+            => Math.Max(50f, country.economy.gdp * EconomySystem.TreasuryIncomeRate * 12f);
+
+        /// <summary>
+        /// The one reading of a government's finances (spec 02 §9a). Read by
+        /// the annual grade, the mandate, the AI's books and the operator's own
+        /// desk, so all four agree about what "solvent" means. Derived, never
+        /// stored: the inputs are the debt stock, the credit standing, the
+        /// account, and how long the deficit has been financed.
+        /// </summary>
+        public static FiscalCondition ConditionOf(GameState state, CountryState country)
+        {
+            if (country == null) return FiscalCondition.Sound;
+            var fiscal = country.fiscal;
+            float ratio = DebtToGdp(country);
+            float treasury = country.resources.treasury;
+
+            bool arrears = treasury < 0f;
+            bool deepArrears = treasury < -AnnualIncome(country) * 0.25f;
+            bool justRestructured = fiscal.restructuringMemoryMonths > RestructuringMemoryMonths - 12;
+            bool shutOut = fiscal.creditStanding < MinimumCreditToIssue;
+
+            // A crisis is an account that cannot be paid or a debt that was just
+            // written down. A heavy debt nobody will lend into, with the account
+            // in the black, is *stress*: dear and dangerous, and answered by the
+            // ordinary budget rather than the emergency programme.
+            if (deepArrears || justRestructured || (shutOut && arrears))
+                return FiscalCondition.Crisis;
+            if (ratio >= 120f || fiscal.creditStanding < 35f || arrears)
+                return FiscalCondition.DebtStressed;
+            if (fiscal.deficitFinancedMonths >= 6 || (ratio >= 80f && fiscal.deficitFinancedMonths >= 3))
+                return FiscalCondition.DeficitFinanced;
+            if (fiscal.deficitFinancedMonths >= 1)
+                return FiscalCondition.CashNegativeButCreditworthy;
+            return FiscalCondition.Sound;
+        }
+
+        /// <summary>Plain words for the condition, for the terminal.</summary>
+        public static string ConditionText(FiscalCondition condition)
+        {
+            switch (condition)
+            {
+                case FiscalCondition.CashNegativeButCreditworthy: return "BORROWING, CREDITWORTHY";
+                case FiscalCondition.DeficitFinanced: return "LIVING ON CREDIT";
+                case FiscalCondition.DebtStressed: return "DEBT-STRESSED";
+                case FiscalCondition.Crisis: return "FISCAL CRISIS";
+                default: return "SOUND";
+            }
+        }
+
+        /// <summary>
+        /// What a government does about a fiscal crisis when nobody with a
+        /// mandate is deciding: the standard programme, applied without a
+        /// dice roll. Tighten the budget, raise revenue toward
+        /// <see cref="CrisisTaxCeiling"/>, and — if permitted — write the debt
+        /// down once arrears exceed <see cref="DefaultArrearsShare"/> of a year's
+        /// income. Used by the AI's books and by the operator's *autonomous*
+        /// Economy desk, so a delegating operator's country is steadied by its
+        /// minister rather than left to default in silence.
+        ///
+        /// Returns true when anything changed. Deliberately does nothing outside
+        /// a crisis: routine budgeting is the AI's own judgement and the
+        /// operator's own verbs.
+        /// </summary>
+        public static bool SteadyTheBooks(GameState state, string countryId, bool mayRestructure)
+        {
+            var country = state.FindCountry(countryId);
+            if (country == null) return false;
+            var condition = ConditionOf(state, country);
+            if (condition < FiscalCondition.DebtStressed) return false;
+
+            var fiscal = country.fiscal;
+            bool changed = false;
+            bool depression = country.economy.marketIndex < DepressionLine;
+
+            // **Austerity is not prescribed into a depression.** The first
+            // version of this cut spending whatever the economy was doing, and
+            // a ruined state then never left crisis: the cuts held growth at
+            // −4% a year, the shrinking economy raised the debt ratio through
+            // the denominator, the ratio kept the state in crisis, and the
+            // crisis kept the cuts. Twenty years of it, measured, with the
+            // market index pinned at its floor. Cuts are for a creditworthiness
+            // problem in an economy that can bear them; a collapsed economy is
+            // left to recover and the debt is dealt with by the write-down below.
+            if (condition == FiscalCondition.Crisis && !depression
+                && fiscal.budgetPosture != BudgetPosture.Austerity)
+                changed |= SetBudgetPostureBy(state, countryId, BudgetPosture.Austerity);
+            else if (depression && fiscal.budgetPosture == BudgetPosture.Austerity)
+                changed |= SetBudgetPostureBy(state, countryId, BudgetPosture.Balanced);
+
+            if (condition == FiscalCondition.Crisis)
+            {
+                float ceiling = depression ? DepressionTaxCeiling : CrisisTaxCeiling;
+                float wanted = fiscal.taxRate < ceiling
+                    ? Math.Min(ceiling, fiscal.taxRate + CrisisTaxStep)
+                    : Math.Max(ceiling, fiscal.taxRate - CrisisTaxStep);
+                if (Math.Abs(wanted - fiscal.taxRate) >= 0.5f)
+                    changed |= SetTaxRateBy(state, countryId, wanted);
+            }
+
+            // The write-down, by necessity: arrears nobody will cover, or a
+            // debt so far past what anyone will lend into that carrying it is
+            // the whole of the problem. Once per memory, at the same
+            // reputational price the operator pays for it.
+            bool deepArrears = country.resources.treasury < -AnnualIncome(country) * DefaultArrearsShare;
+            bool unpayable = fiscal.creditStanding < MinimumCreditToIssue && DebtToGdp(country) > DefaultRatio;
+            if (mayRestructure && !fiscal.HasRestructured && (deepArrears || unpayable))
+                changed |= RestructureDebtBy(state, countryId);
+
+            return changed;
+        }
+
+        /// <summary>
+        /// Whether cutting spending would help this government's books rather
+        /// than deepen a slump. Read by the AI's own budget review too, so the
+        /// review and the emergency programme cannot disagree about it.
+        /// </summary>
+        public static bool AusterityAdvisable(GameState state, CountryState country)
+            => country != null
+               && ConditionOf(state, country) >= FiscalCondition.DebtStressed
+               && country.economy.marketIndex >= DepressionLine;
+
+        /// <summary>Market index below which the economy is in a depression and cuts deepen it.</summary>
+        public const float DepressionLine = 55f;
+
+        /// <summary>How far a government in crisis will push the tax rate.</summary>
+        public const float CrisisTaxCeiling = 46f;
+
+        /// <summary>The same, in a depression, where every point drags growth.</summary>
+        public const float DepressionTaxCeiling = 40f;
+
+        /// <summary>Points of tax rate moved per month of crisis, toward the ceiling.</summary>
+        public const float CrisisTaxStep = 2f;
+
+        /// <summary>Arrears, as a share of a year's income, at which a default is forced.</summary>
+        public const float DefaultArrearsShare = 0.5f;
+
+        /// <summary>Debt, as a share of GDP, past which a state nobody will lend to writes it down.</summary>
+        public const float DefaultRatio = 200f;
+
         /// <summary>
         /// Where credit standing settles. Driven by the debt, whether the
         /// economy is growing into it, whether anybody is lending into a war,
@@ -262,20 +406,65 @@ namespace Brink.Core
             // finding could only be recorded as an open question.
             if (country.resources.treasury < 0f)
             {
-                // Indirect on purpose: the deficit is the *mechanism*, but what
-                // caused it is whatever this government spent the month doing.
-                // Phase A records the hop; the spending decisions upstream of it
-                // are Phase B's chain to complete (spec 26 §8).
-                Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
-                    CausalReason.FiscalDeficit, ref fiscal.sovereignDebt,
-                    fiscal.sovereignDebt + -country.resources.treasury,
-                    CausalCategory.Fiscal, CausalKind.Indirect);
-                country.resources.treasury = 0f;
+                // **Only a creditworthy government can finance a deficit.** The
+                // automatic path used to have no gate at all — the voluntary
+                // verb was held to `MinimumCreditToIssue` and a 200% ceiling,
+                // the deficit was not — so every unattended world reached 300–700%
+                // of GDP: interest at zero credit ran 1.2% a month, deepened the
+                // deficit it serviced, and the deficit was borrowed again. Now the
+                // gate the verb answers to is the gate the deficit answers to.
+                // Below it the shortfall is **arrears**: the account stays
+                // negative, which is what a fiscal crisis looks like, and the
+                // creditors who will not lend say so through confidence.
+                // **And only up to the ceiling the voluntary verb answers to.**
+                // The credit gate was applied here and the debt ceiling was
+                // not, so the automatic path had a second, looser definition of
+                // what the market will lend into — the same repeal the endgame
+                // pre-check once made of `DiscretionaryReserve`. Measured (seed
+                // 6301): a state shut out for three years of war accrued a hole
+                // of −4,633, and the month its standing crossed the issuing line
+                // the whole of it was borrowed at once, 88% → 400% of GDP in one
+                // tick, standing back to zero, shut out again — a ratchet with a
+                // five-year period. Whatever the market will not absorb stays
+                // arrears, where a default can reach it.
+                float room = Math.Max(0f,
+                    country.economy.gdp * IssueDebtCeiling / 100f - fiscal.sovereignDebt);
+                float shortfall = -country.resources.treasury;
+                float financed = Math.Min(shortfall, room);
+                if (fiscal.creditStanding >= MinimumCreditToIssue && financed > 0f)
+                {
+                    // Indirect on purpose: the deficit is the *mechanism*, but
+                    // what caused it is whatever this government spent the month
+                    // doing. Phase A records the hop; the spending decisions
+                    // upstream of it are Phase B's chain to complete (spec 26 §8).
+                    Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
+                        CausalReason.FiscalDeficit, ref fiscal.sovereignDebt,
+                        fiscal.sovereignDebt + financed,
+                        CausalCategory.Fiscal, CausalKind.Indirect);
+                    country.resources.treasury += financed;
+                    fiscal.deficitFinancedMonths++;
+                    if (country.resources.treasury >= 0f) fiscal.arrearsMonths = 0;
+                    else fiscal.arrearsMonths++;
+                }
+                else
+                {
+                    // The creditors' verdict reaches confidence through its
+                    // *target* (`EconomySystem`, `ArrearsConfidenceDrag`), never
+                    // as a flat drain on a value the economy tick drives toward
+                    // a target every month — that is the value-versus-target
+                    // family, and the first draft of this branch was in it.
+                    fiscal.arrearsMonths++;
+                }
+            }
+            else
+            {
+                fiscal.deficitFinancedMonths = 0;
+                fiscal.arrearsMonths = 0;
             }
 
             // A surplus retires debt before it piles up, so a well-run country
             // climbs out on its own and the stock is not a one-way value.
-            else if (fiscal.sovereignDebt > 0f && country.resources.treasury > SurplusBuffer)
+            if (country.resources.treasury >= 0f && fiscal.sovereignDebt > 0f && country.resources.treasury > SurplusBuffer)
             {
                 float repayment = Math.Min(fiscal.sovereignDebt,
                     (country.resources.treasury - SurplusBuffer) * 0.10f);
@@ -286,6 +475,14 @@ namespace Brink.Core
             }
 
             if (fiscal.restructuringMemoryMonths > 0) fiscal.restructuringMemoryMonths--;
+
+            // A foreign finance ministry answers a crisis as routine business —
+            // the same reasoning that put routine restocking on the military
+            // desk rather than four gates deep in the AI's strategy. The
+            // operator's own country is steadied by its Economy desk instead
+            // (`CabinetSystem`), so a pillar the operator runs themselves is
+            // theirs to run.
+            if (!country.isPlayer) SteadyTheBooks(state, country.id, mayRestructure: true);
 
             fiscal.creditStanding = Approach(fiscal.creditStanding, CreditTarget(state, country), 0.08f);
 
@@ -489,11 +686,34 @@ namespace Brink.Core
             var country = state.FindCountry(actorId);
             if (country == null || country.fiscal.sovereignDebt <= 0f) return false;
 
-            country.fiscal.sovereignDebt *= 0.5f;
+            // SovereignDebt is a pilot metric, so the write-down is recorded
+            // where it is applied — an uninstrumented halving left a restructure
+            // month's debt explanation silently short by half the stock (spec 26
+            // §3). `Apply` assigns the caller's expression untouched, for the
+            // player and the AI alike; recording itself is player-only as ever.
+            Causal.Apply(state, actorId, CausalMetric.SovereignDebt,
+                CausalReason.DebtRestructured, ref country.fiscal.sovereignDebt,
+                country.fiscal.sovereignDebt * 0.5f, CausalCategory.Fiscal,
+                sourceActionId: nameof(GameController.RestructureDebt));
             country.fiscal.creditStanding = Clamp(country.fiscal.creditStanding - 30f, 0f, 100f);
             country.fiscal.restructuringMemoryMonths = RestructuringMemoryMonths;
             country.economy.confidence = Clamp(country.economy.confidence - 14f, 0f, 100f);
             country.economy.debtToGdp = DebtToGdp(country);
+
+            // **A default settles the arrears as well as the stock.** Written
+            // down without this, the account stayed in the red and the
+            // creditors who were not being paid went on not being paid — so
+            // a government shut out of the market kept accruing arrears
+            // through the whole five-year memory, and the month its standing
+            // crossed the issuing line every one of them was borrowed at once
+            // (`MonthlyUpdate` finances the entire shortfall) and the debt was
+            // back at the ceiling. Measured on a 400%-of-GDP case: three
+            // write-downs in twenty years, arrears counted to 233 months, and
+            // the ratio back to 400 the moment credit recovered — an absorbing
+            // cycle, the ratchet family with a five-year period. The hole is
+            // what the creditors take the haircut on; the reputational price
+            // above is unchanged and is paid whether or not there was one.
+            country.resources.treasury = Math.Max(0f, country.resources.treasury);
 
             // Somebody was holding that paper. Standing, not capability — the
             // exposure-penalty lesson (spec 03): a cost with no recovery path in

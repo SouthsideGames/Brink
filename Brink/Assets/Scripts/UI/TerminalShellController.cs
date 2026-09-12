@@ -24,9 +24,7 @@ namespace Brink.UI
         Label cpLabel;
         Label crisisIndicator;
         VisualElement crisisOverlay;
-        Label crisisTitle;
-        Label crisisBody;
-        VisualElement crisisOptions;
+        CrisisPanel crisisPanel;
         VisualElement scanlines;
 
         /// <summary>Off-screen label used only to measure the monospace advance width.</summary>
@@ -54,10 +52,16 @@ namespace Brink.UI
             dateLabel = root.Q<Label>("date-label");
             cpLabel = root.Q<Label>("cp-label");
 
+            // The modal is built in code (CrisisPanel) so its scroller can be
+            // bounded against the measured panel and asserted on in tests; the
+            // UXML supplies only the full-screen overlay it sits in.
             crisisOverlay = root.Q<VisualElement>("crisis-overlay");
-            crisisTitle = root.Q<Label>("crisis-title");
-            crisisBody = root.Q<Label>("crisis-body");
-            crisisOptions = root.Q<VisualElement>("crisis-options");
+            if (crisisOverlay != null)
+            {
+                crisisOverlay.Clear();
+                crisisPanel = new CrisisPanel();
+                crisisOverlay.Add(crisisPanel.Root);
+            }
 
             crisisIndicator = new Label("■ CRISIS");
             crisisIndicator.AddToClassList("status-crisis");
@@ -587,31 +591,17 @@ namespace Brink.UI
             if (!active) return;
 
             var crisis = crises[0];
-            crisisTitle.text = crisis.title;
-            crisisBody.text = crisis.body;
-
-            crisisOptions.Clear();
-            for (int i = 0; i < crisis.options.Count; i++)
+            crisisPanel?.Show(crisis, index =>
             {
-                var option = crisis.options[i];
-                int index = i;
-                var button = new Button(() =>
-                {
-                    GameController.Instance.ResolveCrisis(crisis, index);
-                    RefreshAll();
-                })
-                { text = $"{i + 1}. {option.label}" };
-                button.AddToClassList("crisis-option-button");
-                crisisOptions.Add(button);
-
-                var hint = new Label(option.description);
-                hint.AddToClassList("crisis-option-hint");
-                crisisOptions.Add(hint);
-            }
+                GameController.Instance.ResolveCrisis(crisis, index);
+                RefreshAll();
+            });
 
             // An overlay built outside a shell refresh has to wrap itself. The
-            // body and the option hints are the longest prose in the game.
-            ApplyTextPolicy(crisisOverlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.Columns);
+            // body and the option hints are the longest prose in the game — and
+            // they wrap to the *overlay's* width, which is a fifth narrower than
+            // the content host (the END MONTH briefing lesson).
+            ApplyTextPolicy(crisisOverlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns);
         }
 
         /// <summary>

@@ -27,13 +27,9 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <ui:VisualElement name="crisis-overlay" class="crisis-overlay" style="display: none;">
-            <ui:VisualElement name="crisis-panel" class="crisis-panel">
-                <ui:Label name="crisis-flash" text="■ FLASH ■ CRISIS TURN ■ IMMEDIATE DECISION REQUIRED" class="crisis-flash" />
-                <ui:Label name="crisis-title" text="CRISIS" class="crisis-title" />
-                <ui:Label name="crisis-body" text="" class="crisis-body" />
-                <ui:VisualElement name="crisis-options" class="crisis-options" />
-            </ui:VisualElement>
-        </ui:VisualElement>
+        <!-- The Crisis Turn modal. Only the overlay lives here: the panel is
+             built by CrisisPanel so its scroller can be capped against the
+             measured screen height and tested without a UIDocument. -->
+        <ui:VisualElement name="crisis-overlay" class="crisis-overlay" style="display: none;" />
     </ui:VisualElement>
 </ui:UXML>

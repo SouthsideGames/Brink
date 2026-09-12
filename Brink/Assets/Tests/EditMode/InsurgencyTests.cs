@@ -323,6 +323,22 @@ namespace Brink.Tests
             a.resources.treasury = 60000f;
             a.military.ground.supply = 90f;
 
+            // A sponsor finds a rising through its reporting on the state it is
+            // rising against (2026-09): the AI used to read the movement's exact
+            // figures with no collection at all, where the player sees a band.
+            // Give it the reporting a hostile government would actually hold.
+            state.estimates.Add(new IntelEstimate
+            {
+                observerId = a.id, targetId = b.id, domain = IntelDomain.Political,
+                reportedValue = 50f, margin = 8f, confidence = ConfidenceGrade.Moderate, everCollected = true,
+            });
+            // ...and a network to keep it current, or monthly decay takes the
+            // estimate back to nothing before the sponsor's next look.
+            state.networks.Add(new IntelNetwork
+            {
+                ownerId = a.id, targetId = b.id, focus = IntelDomain.Political, penetration = 60f,
+            });
+
             var rising = Plant(ground, InsurgencyCause.Deprivation, 55f);
             rising.strength = 40f;
 

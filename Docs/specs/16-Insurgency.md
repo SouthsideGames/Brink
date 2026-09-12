@@ -145,6 +145,16 @@ weight 1.8, and −3.5 trust with **everyone else**. No pillar cost.
 competing for this month's actions). It requires real hostility, a viable
 movement, and treasury above `AISystem.DiscretionaryReserve`.
 
+### A sponsor sees a rising through its reporting (2026-09)
+
+`ConsiderSponsorship` read `insurgency.support` and `strength` exactly, where
+the player is shown bands unless they hold collection on the holder.
+`PerceivedViability(observer, insurgency, holder)` now goes through the
+sponsor's Political estimate of the holder: no reporting, nothing seen (−1,
+below any bar); coarse reporting quantises both figures to wide bins so two
+risings a poor service cannot tell apart read the same; a movement the sponsor
+already arms is its own asset and is known exactly. See spec 06 §7d.
+
 ## 7. Endings
 
 | Cause | On victory (`strength ≥ 88`, `support ≥ 70`, `garrison < 30`) |

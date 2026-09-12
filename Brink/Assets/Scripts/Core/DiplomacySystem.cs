@@ -18,6 +18,43 @@ namespace Brink.Core
         public const int CoalitionRequestCost = 2;
         public const int DiplomaticOutreachCost = 1;
 
+        /// <summary>
+        /// How far below its alignment a sanctioned pair's relations settle.
+        /// A target, never a drain — see the monthly tick. Sized so a pair at
+        /// the alignment baseline settles *above* `EconomySystem.SanctionHostilityLine`:
+        /// a neutral pair is not a hostile one, and its measures lapse at review.
+        /// </summary>
+        public const float SanctionChill = 8f;
+
+        /// <summary>Trust does not erode below this under sanctions alone.</summary>
+        public const float SanctionTrustFloor = 15f;
+
+        /// <summary>How cold a pair under standing sanctions reads to rival gravity, 0..1.</summary>
+        public const float SanctionEnmity = 0.5f;
+
+        /// <summary>How committed a signed defence pact reads to rival gravity, 0..1.</summary>
+        public const float PactWarmth = 0.6f;
+
+        /// <summary>How committed a shared bloc reads to rival gravity, 0..1.</summary>
+        public const float BlocWarmth = 0.75f;
+
+        /// <summary>Monthly approach rate toward the gravity ceiling on relations.</summary>
+        public const float GravityCeilingRate = 0.35f;
+
+        /// <summary>Where cold alignment thaws to between incidents: neutral, a little cool.</summary>
+        public const float AlignmentBaseline = 40f;
+
+        /// <summary>Monthly rate of the thaw toward the baseline (~20-year timescale). Upward only.</summary>
+        public const float AlignmentReversion = 0.004f;
+
+        /// <summary>
+        /// How far rival gravity can cap a pair's alignment (100 − gravity × this).
+        /// The same weight as the relations ceiling: at the gravity a committed
+        /// bloc produces the cap has to cross the friendship line, or it
+        /// decorates the thing it exists to prevent.
+        /// </summary>
+        public const float AlignmentGravityWeight = 85f;
+
         /// <summary>Create the relationship graph for a new world.</summary>
         public static void SeedRelationships(GameState state)
         {
@@ -1034,8 +1071,43 @@ namespace Brink.Core
             // gravity, and thirty years later 93 of 120 pairs were hostile.
             // Only committed blocs (alignment past 68) radiate, and only real
             // enmity (relations under 22) attracts.
-            float Warmth(Relationship r) => Math.Max(0f, r.strategicAlignment - 68f) / 32f;
-            float Coldness(Relationship r) => Math.Max(0f, 22f - r.relations) / 22f;
+            // Commitment is read from acts as well as from the alignment figure
+            // (2026-09). A signed defence guarantee, or a shared bloc, is a
+            // commitment to a side whatever the number says — and the number
+            // for a treaty partner sits in the low seventies, barely over the
+            // 68 line, so gravity from a signed pact was a rounding error and
+            // the befriend-everyone bot collected the map the moment the world
+            // stopped sanctioning it for other reasons.
+            float Warmth(Relationship r)
+            {
+                float warm = Math.Max(0f, r.strategicAlignment - 68f) / 32f;
+                var treaty = state.FindTreaty(r.countryA, r.countryB);
+                if (treaty != null && treaty.Has(TreatyCommitment.MutualDefense))
+                    warm = Math.Max(warm, PactWarmth);
+                if (BlocSystem.SameBloc(state, r.countryA, r.countryB))
+                    warm = Math.Max(warm, BlocWarmth);
+                return warm;
+            }
+
+            // Enmity is read from acts as well as from the relations figure
+            // (2026-09). Sanctions no longer drive a pair's relations to zero —
+            // they chill it to a bounded target — so a pair under standing
+            // measures reads in the low thirties and never crossed the old
+            // coldness line; the friend-of-my-enemy cap then almost never
+            // engaged and the befriend-everyone bot collected the map again. A
+            // state at war with, or under the measures of, one of my partners
+            // is my partner's enemy whatever the number says.
+            float Coldness(Relationship r)
+            {
+                float cold = Math.Max(0f, 22f - r.relations) / 22f;
+                if (ConfrontationSystem.ExistingBetween(state, r.countryA, r.countryB) is Confrontation war
+                    && war.escalation >= EscalationState.LimitedConflict)
+                    return 1f;
+                if (state.FindSanction(r.countryA, r.countryB) != null
+                    || state.FindSanction(r.countryB, r.countryA) != null)
+                    cold = Math.Max(cold, SanctionEnmity);
+                return cold;
+            }
 
             float worst = 0f;
             foreach (var third in state.countries)
@@ -1634,11 +1706,29 @@ namespace Brink.Core
                     // friendship line, or it decorates the thing it exists to
                     // prevent.
                     float ceiling = 100f - gravity * 85f;
+                    // Approached fast enough to outrun a monthly outreach call
+                    // (+3 × (1 − 0.8 gravity)): at 0.12 a pair sitting a dozen
+                    // points over the cap was pulled 1.5 a month and pushed
+                    // back 1.8, and the befriend-everyone bot held every
+                    // partner just over the friendship line. A ceiling that a
+                    // courtesy call can outrun is a drag with a comment.
                     if (relationship.relations > ceiling)
-                        relationship.relations = Approach(relationship.relations, ceiling, 0.12f);
+                        relationship.relations = Approach(relationship.relations, ceiling, GravityCeilingRate);
                     if (relationship.trust > ceiling)
                         relationship.trust = Approach(relationship.trust, ceiling, 0.08f);
-                    relationship.strategicAlignment = Clamp(relationship.strategicAlignment - gravity * 0.3f);
+
+                    // Alignment is capped by gravity too, never drained by it.
+                    // The drain (−0.3 × gravity a month, no floor) was the
+                    // thirteenth value-versus-target instance: gravity attracts
+                    // where relations are cold, cold pairs are what sanctions
+                    // make, so every sanctioned pair's alignment ran to zero and
+                    // the chill target below it ran to zero with it — which is
+                    // the "relations 0 on every standing regime" the sanction
+                    // dump showed, and the mechanism that froze the planet in
+                    // the first calibration.
+                    float alignmentCeiling = 100f - gravity * AlignmentGravityWeight;
+                    if (relationship.strategicAlignment > alignmentCeiling)
+                        relationship.strategicAlignment = Approach(relationship.strategicAlignment, alignmentCeiling, 0.1f);
                 }
 
                 // What you learned of a partner's doctrine goes stale.
@@ -1677,17 +1767,44 @@ namespace Brink.Core
                 relationship.dependenceAOnB = Approach(relationship.dependenceAOnB, dependenceTarget, 0.08f);
                 relationship.dependenceBOnA = Approach(relationship.dependenceBOnA, dependenceTarget, 0.08f);
 
-                // Sanctions are read as hostility by the target.
-                if (state.FindSanction(a.id, b.id) != null || state.FindSanction(b.id, a.id) != null)
-                {
-                    relationship.relations = Clamp(relationship.relations - 1.2f);
-                    relationship.trust = Clamp(relationship.trust - 0.4f);
-                }
-                else
-                {
-                    // Relations drift slowly toward the alignment baseline.
-                    relationship.relations = Approach(relationship.relations, relationship.strategicAlignment, 0.02f);
-                }
+                // Sanctions are read as hostility by the target — as a **ceiling
+                // on where the relationship can settle**, not as a monthly drain.
+                //
+                // The drain (−1.2 relations a month, and the pair excluded from
+                // the alignment reversion below) drove every sanctioned pair to
+                // zero inside three years, and the review that lifts a regime
+                // needs relations above 30 — so a sanction guaranteed its own
+                // permanence. Twelfth instance of the value-versus-target family,
+                // and the mechanism under "the world sanctions itself into a
+                // permanent depression": the count only ever grew. Now a
+                // sanctioned pair settles `SanctionChill` below its alignment,
+                // which is cold, recoverable, and honest about what the measures
+                // are: a standing grievance, not an accelerating one.
+                bool sanctioned = state.FindSanction(a.id, b.id) != null || state.FindSanction(b.id, a.id) != null;
+                float chill = sanctioned ? SanctionChill : 0f;
+                relationship.relations = Approach(relationship.relations,
+                    Clamp(relationship.strategicAlignment - chill), 0.02f);
+                // Trust erodes under sanctions, toward a floor rather than to
+                // nothing: a floor only stops the drag taking, never gives.
+                if (sanctioned && relationship.trust > SanctionTrustFloor)
+                    relationship.trust = Math.Max(SanctionTrustFloor, relationship.trust - 0.15f);
+
+                // **Cold alignment thaws.** Everything that moved alignment
+                // down was an event — a repudiation, a war, gravity — and
+                // nothing brought it back, so a pair driven cold by one bad
+                // decade was cold for the rest of the save and every sanction
+                // between them stood with it. Absent a war between them, a pair
+                // below neutral drifts back toward it on a generational
+                // timescale. **Upward only**: warm alignment is earned by
+                // treaties and blocs and keeps until something spends it — a
+                // symmetric pull toward neutral held every alliance at ~75,
+                // under the 68 line rival gravity radiates from, and the
+                // befriend-everyone bot collected the map again.
+                var warBetween = ConfrontationSystem.ExistingBetween(state, a.id, b.id);
+                if (relationship.strategicAlignment < AlignmentBaseline
+                    && (warBetween == null || warBetween.escalation < EscalationState.LimitedConflict))
+                    relationship.strategicAlignment = Approach(
+                        relationship.strategicAlignment, AlignmentBaseline, AlignmentReversion);
 
                 var treaty = state.FindTreaty(a.id, b.id);
                 if (treaty != null)

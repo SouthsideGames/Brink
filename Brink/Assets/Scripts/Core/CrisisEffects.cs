@@ -189,7 +189,7 @@ namespace Brink.Core
                 {
                     if (target == null) return "";
                     var severity = SeverityFor(magnitude);
-                    if (!EconomySystem.ImposeSanctionsBy(state, player.id, target.id, severity)) return "";
+                    if (!EconomySystem.ImposeSanctionsBy(state, player.id, target.id, severity, "CRISIS")) return "";
                     return $"Sanctions imposed on {target.displayName}.";
                 }
 
@@ -197,7 +197,7 @@ namespace Brink.Core
                 {
                     if (target == null) return "";
                     var severity = SeverityFor(magnitude);
-                    if (!EconomySystem.ImposeSanctionsBy(state, target.id, player.id, severity)) return "";
+                    if (!EconomySystem.ImposeSanctionsBy(state, target.id, player.id, severity, "CRISIS")) return "";
                     return $"{target.displayName} has imposed sanctions on us.";
                 }
 

@@ -72,9 +72,13 @@ namespace Brink.Core
             var confrontation = state.ActiveConfrontation;
             if (confrontation != null && !confrontation.resolved)
             {
-                if (ConfrontationSystem.OpponentWouldAccept(state, confrontation))
+                // Our reporting's read, never the acceptance test itself: the
+                // old nudge fired off true willingness and told the operator, with
+                // no collection, the month the enemy became willing.
+                if (PeaceSystem.AssessDisposition(state, confrontation, state.playerCountryId)
+                    >= SettlementDisposition.PotentiallyReceptive)
                     Add("MILITARY", AttentionLevel.Decision,
-                        "They would accept terms — see NEGOTIATED SETTLEMENT to sign");
+                        "Our reporting reads them as open to terms — see NEGOTIATED SETTLEMENT");
                 else
                     Add("MILITARY", AttentionLevel.Information,
                         $"Confrontation active — {Phrase.Of(confrontation.escalation)}");

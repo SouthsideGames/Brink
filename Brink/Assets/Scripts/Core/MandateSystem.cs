@@ -106,7 +106,11 @@ namespace Brink.Core
                     return (state.FindRelationship(player.id, objective.param)?.relations ?? 100f) <= objective.threshold;
                 case MandateObjectiveKind.CapabilitiesAtLeast:
                     return player.technology.capabilities.Count >= objective.threshold;
-                case MandateObjectiveKind.Solvent: return player.resources.treasury >= 0f;
+                // Read through the one fiscal condition, not the balance: with
+                // deficit financing the balance is zero every month and this
+                // objective was a free tick in five authored mandates.
+                case MandateObjectiveKind.Solvent:
+                    return FiscalSystem.ConditionOf(state, player) <= FiscalCondition.CashNegativeButCreditworthy;
                 case MandateObjectiveKind.ConstitutionalOrderKept:
                     return player.government.type.ToString() == mandate.startGovernmentType;
                 default: return false;

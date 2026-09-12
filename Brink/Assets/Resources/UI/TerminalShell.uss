@@ -290,6 +290,14 @@
     margin-bottom: 6px;
 }
 
+/* The body and the options scroll together. Height is capped in code
+   (CrisisPanel.Show) against the measured panel, because a percentage here
+   would need a definite parent height and a centred overlay has none.
+   flex-shrink lets it give way to the pinned FLASH line and title. */
+.crisis-reader {
+    flex-shrink: 1;
+}
+
 .crisis-body {
     color: rgb(230, 220, 200);
     font-size: 13px;
@@ -297,6 +305,8 @@
     margin-bottom: 12px;
 }
 
+/* min-height: the same 44 panel px every other interactive control is held
+   to (spec 09) — this is the control a brand-new player taps first. */
 .crisis-option-button {
     background-color: rgb(38, 16, 12);
     color: rgb(255, 190, 120);
@@ -305,6 +315,7 @@
     border-radius: 0;
     padding: 10px;
     margin: 3px 0;
+    min-height: 44px;
     font-size: 13px;
     -unity-text-align: middle-left;
     -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");

@@ -26,6 +26,18 @@ namespace Brink.Core
         /// <summary>Fired when a December resolves — annual evaluation entry point (GDD §25.2).</summary>
         public event Action<int> YearEnded;
 
+        /// <summary>
+        /// Fired once the resolved month is complete — after every
+        /// <see cref="ResolveMonth"/> handler *and* after <see cref="YearEnded"/>
+        /// — while the resolved date is still current. This is the causal month
+        /// boundary (spec 26 §3a): an observer that needs to see the whole month
+        /// as one interval closes here, and anything that happens after this
+        /// point — the operator's turn, a crisis they let lapse at the top of
+        /// the next <see cref="EndMonth"/> — belongs to the next month.
+        /// Observational: nothing that moves the world should subscribe.
+        /// </summary>
+        public event Action<GameState> MonthResolved;
+
         public TurnManager(GameState state)
         {
             State = state ?? throw new ArgumentNullException(nameof(state));
@@ -62,6 +74,10 @@ namespace Brink.Core
                 GameLog.Info("TURN", $"Year {resolvedDate.year} concluded. Annual evaluation pending.");
                 YearEnded?.Invoke(resolvedDate.year);
             }
+
+            // The month is now whole. Everything from here to the top of the
+            // next EndMonth is the operator's turn.
+            MonthResolved?.Invoke(State);
 
             ReportingSystem.FilterMonth(State, trafficStart);
 

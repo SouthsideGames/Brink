@@ -914,6 +914,30 @@ warning; the button itself is not disabled, and the `■ CRISIS` indicator is th
 visible cue. Do not add further modals casually — the interrupt has weight
 because it is rare.
 
+### The crisis modal scrolls (core stability repair, 2026-09)
+
+The Crisis Turn modal is built by `UI/CrisisPanel` (the UXML supplies only the
+overlay). The FLASH line and the title are pinned; the body and the options live
+in one `ScrollView` capped in code at `CrisisPanel.ReaderHeightFor` — 68% of
+`TerminalMetrics.PanelHeight`, 58% on a short screen — because a percentage in
+USS would need a definite parent height and a centred overlay has none. It had
+no scroller and no height cap, so a long body plus four options clipped below
+the fold of a short screen with nothing scrollable: the tutorial/settings bug in
+the one overlay that stands between the operator and END MONTH. Options sit
+inside the scroller on purpose — a cut-off option invites a scroll, an invisible
+one does not — and `.crisis-option-button` now carries the 44px minimum every
+other control is held to. The overlay wraps to `OverlayColumns`, not `Columns`.
+`MapAndLayoutTests.CrisisModal_EveryOptionIsReachableOnAShortScreen` guards it.
+
+**Two more view-built figures derived from the grid.** `MilitaryView.StandingFigure`
+(the assessment cell was a fixed 28 columns, ~57 on a 49-column phone; it now
+takes what the row has left and drops to a second indented line when that is
+under 14) and `MilitaryView.InventoryFigure` (14 + 18 fixed columns plus an
+ON-ORDER suffix, ~56; label and value now share the width and an ON-ORDER note
+that does not fit goes on its own line). Both are pure `static` functions so
+`MapAndLayoutTests` can assert no line exceeds any width from `MinColumns` to
+`MaxColumns` without a panel.
+
 ### First launch
 
 With no save, `UpdateSessionMode` hides the nav rail, the date, the CP readout

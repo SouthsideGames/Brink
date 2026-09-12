@@ -946,16 +946,22 @@ namespace Brink.Core
             // legends, mounts a programme of its own (GDD §14).
             if (MountDeception(state, ai, country, targetId, rng)) return true;
 
-            // 4. Economic coercion, when the exposure is bearable.
-            if (state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f)
+            // 4. Economic coercion, when the exposure is bearable — and only
+            // against a state this government is genuinely at odds with. The
+            // same predicate the review uses to *keep* measures, so a regime is
+            // imposed for a cause and lifted when the cause is gone; before
+            // this a rival was sanctioned at 35% a month for as long as it
+            // stayed a rival, and the review could never catch up.
+            if (state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f
+                && EconomySystem.SanctionCauseStands(state, country.id, targetId))
             {
                 var link = state.FindTrade(country.id, targetId);
                 float exposure = link != null ? link.volume : 0f;
                 bool worthIt = exposure < 55f || ai.profile.aggression > 70f;
-                if (worthIt && rng.NextDouble() < 0.35)
+                if (worthIt && rng.NextDouble() < 0.20)
                 {
                     var severity = ai.profile.aggression > 70f ? SanctionSeverity.Coercive : SanctionSeverity.Pressure;
-                    return EconomySystem.ImposeSanctionsBy(state, country.id, targetId, severity);
+                    return EconomySystem.ImposeSanctionsBy(state, country.id, targetId, severity, "RIVALRY");
                 }
             }
 
@@ -980,9 +986,13 @@ namespace Brink.Core
             if (country.pillars.intelligence < 45f) return false;
             if (country.counterIntel.deceptionStrength > 40f) return false;
 
-            // No point deceiving someone who is not looking at us.
-            var theirNetwork = state.FindNetwork(targetId, country.id);
-            if (theirNetwork == null || theirNetwork.penetration < 20f) return false;
+            // No point deceiving someone who is not looking at us — as far as we
+            // can tell. Whether a foreign service is inside us, and how deep, is
+            // what counter-intelligence has to *earn*; reading their network's
+            // penetration directly was a free mole hunt. We know they are looking
+            // if we have caught them at it, or if our own service is strong
+            // enough to assume it of a hostile state.
+            if (!SuspectsCollection(state, country, targetId)) return false;
 
             // Difficulty is reasoning quality, never a stat cheat (GDD §24.3):
             // a sharper government notices the opportunity to mislead more often
@@ -1006,7 +1016,7 @@ namespace Brink.Core
         /// pair; a sharper government reads what this partner actually needs —
         /// security if they feel threatened, trade if they are short.
         /// </summary>
-        static List<TreatyCommitment> TreatyOfferFor(GameState state, CountryState country, string targetId)
+        public static List<TreatyCommitment> TreatyOfferFor(GameState state, CountryState country, string targetId)
         {
             var commitments = new List<TreatyCommitment>
             {
@@ -1020,11 +1030,17 @@ namespace Brink.Core
             if (relationship == null || target == null) return commitments;
 
             // Someone who feels surrounded wants a guarantee more than a tariff.
-            if (relationship.ThreatPerceivedBy(targetId) > 45f || target.pillars.military < 45f)
+            // Their weakness is read through our estimate of them, never their
+            // true pillar: this offer used to be tailored off the target's
+            // real military figure, including against the player, which no
+            // government can know without collecting.
+            if (relationship.ThreatPerceivedBy(targetId) > 45f
+                || PerceivedStrength(state, country.id, target, IntelDomain.Military) < 45f)
                 commitments.Add(TreatyCommitment.MutualDefense);
 
-            // Someone blind wants to see.
-            if (target.pillars.intelligence < 50f)
+            // A threatened partner is offered what *we* can see. Whether they
+            // are blind is their secret; whether we have eyes is our own fact.
+            if (relationship.ThreatPerceivedBy(targetId) > 45f && country.pillars.intelligence >= 50f)
                 commitments.Add(TreatyCommitment.IntelligenceSharing);
 
             return commitments;
@@ -1053,8 +1069,32 @@ namespace Brink.Core
         {
             if (state.difficulty == Difficulty.Standard) return IntelDomain.Military;
 
+            // A network we have rolled up told us what it was tasked on. One we
+            // merely suspect has not, so we protect what we would want hidden:
+            // whatever we are strongest in.
             var theirNetwork = state.FindNetwork(targetId, country.id);
-            return theirNetwork != null ? theirNetwork.focus : IntelDomain.Military;
+            if (theirNetwork != null && theirNetwork.compromised) return theirNetwork.focus;
+
+            var pillars = country.pillars;
+            if (pillars.economy >= pillars.military && pillars.economy >= pillars.diplomacy) return IntelDomain.Economic;
+            if (pillars.diplomacy >= pillars.military) return IntelDomain.Diplomatic;
+            return IntelDomain.Military;
+        }
+
+        /// <summary>
+        /// Whether this government has reason to believe `targetId` is
+        /// collecting against it — from its own side of the fog: a network it
+        /// has caught, or a counter-intelligence service good enough to assume
+        /// it of a state that regards us coldly.
+        /// </summary>
+        public static bool SuspectsCollection(GameState state, CountryState country, string targetId)
+        {
+            var theirNetwork = state.FindNetwork(targetId, country.id);
+            if (theirNetwork != null && theirNetwork.compromised) return true;
+
+            var relationship = state.FindRelationship(country.id, targetId);
+            bool cold = relationship != null && relationship.relations < 45f;
+            return cold && country.counterIntel.counterIntelligence >= 55f;
         }
 
         /// <summary>
@@ -1206,17 +1246,49 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// Seek terms on one front when the war has stopped paying for itself.
+        /// Returns true when a proposal was put (and the month's attention is
+        /// spent on it), whether or not the other side took it.
+        ///
+        /// Wars ran 30+ months because nobody asked for terms until exhaustion
+        /// was well past 45 (2026-08). A government now seeks terms sooner, and
+        /// any war that has run two years wears on it. A front opened for an
+        /// ally is held to the same test as any other, on its own exhaustion.
+        /// </summary>
+        static bool SeekTermsIfWorn(GameState state, AIState ai, CountryState country,
+            Confrontation confrontation, Random rng)
+        {
+            bool isInitiator = confrontation.initiatorId == country.id;
+            float ourExhaustion = isInitiator ? confrontation.initiatorWarExhaustion : confrontation.defenderWarExhaustion;
+            float ourMomentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
+
+            bool wantsOut = ourExhaustion > 35f + ai.profile.patience * 0.25f
+                            || country.warSupport < 25f
+                            || (ourMomentum < -25f && ai.profile.caution > 50f)
+                            || (confrontation.monthsActive >= 24 && ourMomentum < 15f);
+
+            if (!wantsOut || confrontation.monthsActive < 2) return false;
+
+            if (ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
+                return true;
+
+            // Terms refused; a tired or cautious state may simply concede.
+            if (ourExhaustion > 70f && rng.NextDouble() < 0.25)
+            {
+                ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id, concedeInstead: true);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Run an ongoing confrontation: escalate, act, or seek terms. The AI
         /// weighs its own exhaustion and momentum exactly as the player must.
         /// </summary>
         static void ManageOngoingConfrontation(GameState state, AIState ai, CountryState country, Random rng)
         {
-            var confrontation = state.ActiveConfrontationFor(country.id);
-            if (confrontation == null || confrontation.resolved) return;
-
-            bool isInitiator = confrontation.initiatorId == country.id;
-            float ourExhaustion = isInitiator ? confrontation.initiatorWarExhaustion : confrontation.defenderWarExhaustion;
-            float ourMomentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
+            var fronts = state.ActiveConfrontationsFor(country.id);
+            if (fronts.Count == 0) return;
 
             // A state at war moves money to the military, if its politics will
             // carry it. This lives here, not in the objective budget: when the
@@ -1227,32 +1299,31 @@ namespace Brink.Core
             // for attention; it is what the war ministry does with the war it
             // has. Same reasoning that moved routine restocking to the desk.
             if (!country.military.warFooting
-                && confrontation.escalation >= EscalationState.LimitedConflict
+                && state.IsAtWar(country.id)
                 && AcquisitionSystem.CanDeclareWarFooting(state, country.id, out _)
                 && rng.NextDouble() < 0.30)
                 AcquisitionSystem.SetWarFootingBy(state, country.id, true);
 
-            // Seek terms when the war has stopped paying for itself.
-            // Wars ran 30+ months because nobody asked for terms until
-            // exhaustion was well past 45 (2026-08). A government now seeks
-            // terms sooner, and any war that has run two years wears on it.
-            bool wantsOut = ourExhaustion > 35f + ai.profile.patience * 0.25f
-                            || country.warSupport < 25f
-                            || (ourMomentum < -25f && ai.profile.caution > 50f)
-                            || (confrontation.monthsActive >= 24 && ourMomentum < 15f);
-
-            if (wantsOut && confrontation.monthsActive >= 2)
+            // **Every front is examined for terms, not only the first.** The
+            // manager used to read `ActiveConfrontationFor`, the first unresolved
+            // war in list order, so a state in three wars sought terms in one and
+            // the other two — always the later, obligation-opened fronts — had no
+            // exit at all: nothing else in the game settles an AI-vs-AI war.
+            // Seeking terms on every front is what a foreign ministry does;
+            // operations below still go to one front, because that is what an
+            // army does.
+            for (int i = 0; i < fronts.Count; i++)
             {
-                if (ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
-                    return;
-
-                // Terms refused; a tired or cautious state may simply concede.
-                if (ourExhaustion > 70f && rng.NextDouble() < 0.25)
-                {
-                    ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id, concedeInstead: true);
-                    return;
-                }
+                var front = fronts[i];
+                if (front.resolved) continue;
+                if (SeekTermsIfWorn(state, ai, country, front, rng)) return;
             }
+
+            var confrontation = state.ActiveConfrontationFor(country.id);
+            if (confrontation == null || confrontation.resolved) return;
+
+            bool isInitiator = confrontation.initiatorId == country.id;
+            float ourMomentum = isInitiator ? confrontation.momentum : -confrontation.momentum;
 
             // Escalate when confident and aggressive.
             if (confrontation.escalation < EscalationState.LimitedConflict)
@@ -1312,7 +1383,7 @@ namespace Brink.Core
         /// still falls through to `Assault`, because it is the only operation
         /// that takes ground and an AI that never assaults never wins.
         /// </summary>
-        static OperationType ChooseOperation(GameState state, CountryState country, AIState ai,
+        public static OperationType ChooseOperation(GameState state, CountryState country, AIState ai,
             StrategicLocation target, Confrontation confrontation, float ourMomentum, Random rng)
         {
             if (target == null) return OperationType.Assault;
@@ -1327,6 +1398,13 @@ namespace Brink.Core
             bool Can(OperationType type) => possible.Contains(type);
 
             var mil = country.military;
+
+            // The garrison we *believe* is there, through the same estimate the
+            // player plans from — centred on a deceived figure when the holder
+            // runs deception. The AI used to read `target.garrison` directly and
+            // plan every strike from the truth. Fortifications stay public:
+            // works are visible from orbit, a headcount is not.
+            float garrison = PerceivedGarrison(state, country.id, target);
 
             // Dug-in works are worth breaking before spending an army on them,
             // and the effect is permanent, so it stays worth doing once.
@@ -1371,7 +1449,7 @@ namespace Brink.Core
 
             // A cautious government reaches for standoff fires and deniable
             // action before it spends its own people.
-            if (ai.profile.caution > 60f && target.garrison > 40f)
+            if (ai.profile.caution > 60f && garrison > 40f)
             {
                 if (Can(OperationType.AirStrike) && rng.NextDouble() < 0.35) return OperationType.AirStrike;
                 if (Can(OperationType.CyberOperation) && rng.NextDouble() < 0.3)
@@ -1381,7 +1459,7 @@ namespace Brink.Core
             }
 
             // Starve it before storming it.
-            if (Can(OperationType.AirInterdiction) && target.garrison > 55f && rng.NextDouble() < 0.3)
+            if (Can(OperationType.AirInterdiction) && garrison > 55f && rng.NextDouble() < 0.3)
                 return OperationType.AirInterdiction;
 
             if (ourMomentum < -15f && Can(OperationType.Siege)) return OperationType.Siege;
@@ -1582,6 +1660,15 @@ namespace Brink.Core
             var fiscal = country.fiscal;
             bool broke = country.resources.treasury < DiscretionaryReserve;
             bool flush = country.resources.treasury > DiscretionaryReserve * 6f;
+            // A fiscal *crisis* is answered by the finance ministry every month
+            // (`FiscalSystem.SteadyTheBooks`, run from the fiscal tick for every
+            // non-player state) — austerity, revenue up, a write-down once
+            // arrears are deep. It is not here because it is not a strategy
+            // competing for the month's attention: the old books had one
+            // response to insolvency, a 6%-a-month chance of a restructure, and
+            // an austerity branch disarmed by the case it existed for
+            // (`booksInTrouble && !publicInTrouble`, when the loop delivers both).
+            var condition = FiscalSystem.ConditionOf(state, country);
 
             // Borrow before the lights go out, not after: research, procurement
             // and every strategic instrument are treasury-gated, and a state that
@@ -1626,14 +1713,38 @@ namespace Brink.Core
                                   || fiscal.creditStanding < 40f;
             bool publicInTrouble = country.livingStandards < 38f || country.socialUnrest > 55f;
 
+            // When both are in trouble the books come first if the stress is
+            // real: a government that cannot borrow cannot buy the public
+            // anything. The old rule chose Balanced here, which is to say it
+            // chose nothing at exactly the moment a choice was required.
+            bool depression = country.economy.marketIndex < FiscalSystem.DepressionLine;
             BudgetPosture wantedPosture =
-                booksInTrouble && !publicInTrouble ? BudgetPosture.Austerity
+                FiscalSystem.AusterityAdvisable(state, country) ? BudgetPosture.Austerity
+                : booksInTrouble && !publicInTrouble && !depression ? BudgetPosture.Austerity
                 : publicInTrouble && !booksInTrouble ? BudgetPosture.Expansionary
                 : BudgetPosture.Balanced;
 
             if (wantedPosture != fiscal.budgetPosture
                 && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Budget posture"))
                 FiscalSystem.SetBudgetPostureBy(state, country.id, wantedPosture);
+
+            // **The revenue lever.** `SetTaxRateBy` had no AI caller at all, so a
+            // foreign government could only ever spend less, never raise more.
+            // Books in trouble: up, toward the crisis ceiling. Public in trouble
+            // with the books sound: down, a little. Otherwise back toward the
+            // authored baseline, so the measured world stays comparable.
+            float wantedTax = fiscal.taxRate;
+            if (booksInTrouble || condition >= FiscalCondition.DeficitFinanced)
+                wantedTax = Math.Min(depression ? FiscalSystem.DepressionTaxCeiling : FiscalSystem.CrisisTaxCeiling,
+                    fiscal.taxRate + 3f);
+            else if (publicInTrouble && FiscalSystem.DebtToGdp(country) < 60f)
+                wantedTax = Math.Max(FiscalState.BaselineTaxRate - 5f, fiscal.taxRate - 2f);
+            else if (Math.Abs(fiscal.taxRate - FiscalState.BaselineTaxRate) > 0.5f)
+                wantedTax = fiscal.taxRate + Math.Sign(FiscalState.BaselineTaxRate - fiscal.taxRate) * 1f;
+
+            if (Math.Abs(wantedTax - fiscal.taxRate) > 0.5f
+                && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Tax rate"))
+                FiscalSystem.SetTaxRateBy(state, country.id, wantedTax);
         }
 
         /// <summary>
@@ -1656,7 +1767,13 @@ namespace Brink.Core
             foreach (var sanction in state.sanctions)
             {
                 if (sanction.targetId != country.id) continue;
-                if (EconomySystem.ReliefWillingness(state, sanction.senderId, country.id) < 45f) continue;
+                // Screened through our reporting on the sender, not their
+                // acceptance function: a government that could read exactly
+                // who would relent never wasted a request, which is a perfect
+                // oracle the player is not given. With no reporting it asks
+                // and may be refused; that is what poor intelligence costs.
+                if (EconomySystem.AssessRelief(state, sanction.senderId, country.id) == SettlementOutlook.Unlikely)
+                    continue;
                 if (sanction.Weight > bestWeight) { bestWeight = sanction.Weight; bestSender = sanction.senderId; }
             }
             if (bestSender == null) return;
@@ -1926,6 +2043,22 @@ namespace Brink.Core
         /// cautious public-information guess when no collection exists — the AI
         /// never reads true foreign state.
         /// </summary>
+        /// <summary>
+        /// A foreign garrison as this government's reporting has it: the
+        /// midpoint of the same band the player is shown, or a flat prior of 50
+        /// when nothing has been collected. Never the true figure.
+        /// </summary>
+        public static float PerceivedGarrison(GameState state, string observerId, StrategicLocation location)
+        {
+            if (location == null) return 50f;
+            if (location.ownerId == observerId) return location.garrison;
+            if (IntelligenceSystem.TryEstimateGarrison(state, observerId, location,
+                    out float low, out float high, out var confidence)
+                && confidence != ConfidenceGrade.None)
+                return (low + high) * 0.5f;
+            return 50f;
+        }
+
         public static float PerceivedStrength(GameState state, string observerId, CountryState target, IntelDomain domain)
         {
             var estimate = IntelligenceSystem.GetEstimate(state, observerId, target.id, domain);

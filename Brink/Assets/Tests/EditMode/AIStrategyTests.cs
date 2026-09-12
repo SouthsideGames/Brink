@@ -139,6 +139,78 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ADefeatForcesOneRethink_NotOneEveryMonthOfTheShockWindow()
+        {
+            // Measured on seed 4242: China, beaten and at war, swapped Survival
+            // for TechnologicalEdge and back every month for twenty months on
+            // scores of 102 against 109, because the shock re-fired a
+            // no-inertia, noise-rerolled review every month for thirty months.
+            var state = World(4242);
+            var country = state.FindCountry("CHN");
+            var ai = state.FindAI("CHN");
+            ai.path = StrategicPath.TechnologicalEdge;
+            ai.monthsOnPath = 5;
+            ai.disposition = -11.6f;
+
+            // A war of China's own, just lost.
+            var lost = ConfrontationSystem.BeginBy(state, "CHN", "IND",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            lost.momentum = -40f;
+            lost.resolved = true;
+            Assume.That(AIStrategy.RecentDefeat(state, "CHN"), Is.EqualTo(lost.id));
+
+            int pivots = 0;
+            var previous = ai.path;
+            for (int month = 0; month < 12; month++)
+            {
+                AIStrategy.ReviewPath(state, ai, country, new Random(1000 + month));
+                if (ai.path != previous) { pivots++; previous = ai.path; }
+            }
+
+            Assert.LessOrEqual(pivots, 1,
+                $"one defeat produced {pivots} strategic reversals in a year — the shock was reviewed monthly");
+            Assert.AreEqual(lost.id, ai.lastDefeatReviewedId, "the defeat should be recorded as rethought");
+
+            // A second, later defeat is a new shock and is reviewed once more.
+            var second = ConfrontationSystem.BeginBy(state, "CHN", "RUS",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            second.momentum = -40f;
+            second.resolved = true;
+            Assert.AreEqual(second.id, AIStrategy.RecentDefeat(state, "CHN"));
+            AIStrategy.ReviewPath(state, ai, country, new Random(7));
+            Assert.AreEqual(second.id, ai.lastDefeatReviewedId, "a new defeat is a new shock");
+        }
+
+        [Test]
+        public void AFailingPathIsReconsideredOncePerYear_NotEveryMonth()
+        {
+            // TechnologicalEdge reads progress 30 with no matured capability,
+            // which is below the failing line — so it is reconsidered after a
+            // year, and a reconsideration that keeps it stands for another year
+            // rather than being rolled again next month.
+            var state = World(4242);
+            var country = state.FindCountry("AUS");
+            var ai = state.FindAI("AUS");
+            ai.path = StrategicPath.TechnologicalEdge;
+            ai.monthsOnPath = 0;
+            ai.disposition = 4.2f;
+            ai.lastReviewMonthIndex = state.date.year * 12 + state.date.month;
+
+            int reviews = 0;
+            int previousReview = ai.lastReviewMonthIndex;
+            for (int month = 0; month < 36; month++)
+            {
+                state.date = state.date.NextMonth();
+                AIStrategy.ReviewPath(state, ai, country, new Random(500 + month));
+                if (ai.lastReviewMonthIndex != previousReview) { reviews++; previousReview = ai.lastReviewMonthIndex; }
+            }
+
+            Assert.LessOrEqual(reviews, 3,
+                $"a failing path was reconsidered {reviews} times in three years — once a year is a rethink, monthly is a die");
+            Assert.GreaterOrEqual(reviews, 1, "a path that is genuinely failing must still be reconsidered");
+        }
+
+        [Test]
         public void GovernmentsDoNotChangeStrategyEveryMonth()
         {
             // A government that re-plans constantly reads as noise rather than

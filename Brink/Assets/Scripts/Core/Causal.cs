@@ -153,18 +153,16 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Append a cause, folding anything past the cap into OTHER rather than
-        /// dropping it — listed causes that stop adding up without saying why
-        /// are worse than a remainder that admits itself.
+        /// Append a cause, folding past the cap into OTHER rather than dropping
+        /// — listed causes that stop adding up without saying why are worse than
+        /// a remainder that admits itself. `FoldToCap` keeps the largest named
+        /// causes and merges the smallest, so a big late arrival displaces a
+        /// small early one instead of vanishing into OTHER itself.
         /// </summary>
         internal static void Append(CausalRecord record, CausalContribution contribution)
         {
-            if (record.contributions.Count >= CausalLedger.MaxContributions)
-            {
-                Fold(record, contribution.value);
-                return;
-            }
             record.contributions.Add(contribution);
+            CausalLedger.FoldToCap(record);
         }
 
         /// <summary>
@@ -198,6 +196,7 @@ namespace Brink.Core
             }
             record.contributions.Add(new CausalContribution(
                 CausalReason.Unattributed, amount, CausalCategory.Other));
+            CausalLedger.FoldToCap(record);
         }
 
         static CausalRecord FindOpen(CausalLedger ledger, string countryId,
@@ -247,18 +246,35 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// First system of the month: remember what every reconciled value read
-        /// before anything touched it.
+        /// **The causal month boundary (spec 26 §3a).** A causal month is the
+        /// interval between two consecutive completions of
+        /// `TurnManager.EndMonth`: from the moment the operator's turn begins —
+        /// the previous resolution has finished, its year-end evaluation
+        /// included, and the screen shows the values the operator reads — to
+        /// the moment this resolution finishes. Everything inside belongs to
+        /// the month being resolved: the operator's own verbs, a crisis they
+        /// answered or let lapse (`CrisisSystem.LapseUnanswered` runs before
+        /// `ResolveMonth` fires), the whole pipeline, and whatever `YearEnded`
+        /// does in a December.
         ///
-        /// **This is what makes the headline figure honest.** Approval is moved
-        /// by a cabinet action before the government tick and by a crisis after
-        /// it; the market index is moved by the economy tick and then again by a
-        /// market shock. Anchoring a record on the first *instrumented* site
-        /// reported a monthly change that did not match the value the operator
-        /// can read on the screen — the one thing an explanation layer may not
-        /// do. Wired in `SimulationPipeline`, never in a caller.
+        /// Snapshotting at pipeline start instead left every pre-resolution
+        /// mutation outside the record — the measured symptom was approval
+        /// endpoints disagreeing with the screen in exactly the months a crisis
+        /// lapsed (13 of 60 on one seed, 6 of 60 on another).
+        ///
+        /// So the snapshot is taken **when the month closes**, for the month
+        /// that follows (`CloseMonth`, wired to `TurnManager.MonthResolved`);
+        /// seeded at `SimulationPipeline.Wire` for a new world or a save that
+        /// predates it (`OpenMonth`, which fills gaps and never overwrites); and
+        /// **persisted**, because the game autosaves after every player verb, so
+        /// a reload mid-turn must resume the bracket the turn began in rather
+        /// than open a new one on the post-verb values.
+        ///
+        /// This method clears and re-takes it. A fixture that rewrites the world
+        /// after wiring is describing "the world as given", not a month, and
+        /// should call this to say so.
         /// </summary>
-        public static void OpenMonth(GameState state)
+        public static void SnapshotOpenings(GameState state)
         {
             if (!Enabled || state == null || state.causal == null) return;
 
@@ -275,8 +291,38 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Last system of the month: make every record describe the month that
-        /// actually happened.
+        /// Fill any missing opening from the current value, **never overwriting
+        /// one that exists**. Called at `SimulationPipeline.Wire` — a new world,
+        /// an old save with no snapshot, a country whose recording was just
+        /// switched on — and again as the first system of the pipeline as a
+        /// fallback for a hand-wired fixture. The real snapshot was taken when
+        /// the previous month closed (see `SnapshotOpenings` for the boundary
+        /// rule); overwriting it here would push the boundary back to pipeline
+        /// start and re-open the pre-resolution gap.
+        /// </summary>
+        public static void OpenMonth(GameState state)
+        {
+            if (!Enabled || state == null || state.causal == null) return;
+
+            for (int i = 0; i < state.countries.Count; i++)
+            {
+                var country = state.countries[i];
+                if (!Records(state, country.id)) continue;
+                for (int m = 0; m < Reconciled.Length; m++)
+                {
+                    if (state.causal.TryOpening(country.id, Reconciled[m], out _)) continue;
+                    if (TryRead(country, Reconciled[m], out var value))
+                        state.causal.OpenMetric(country.id, Reconciled[m], value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The close of the causal month: make every record describe the month
+        /// that actually happened, then open the next one where this one
+        /// closed. Wired to `TurnManager.MonthResolved`, which fires after the
+        /// pipeline *and* after `YearEnded`, so a December's record includes
+        /// the annual evaluation's consequences rather than closing before them.
         ///
         /// Anything the listed causes do not account for is booked as
         /// `Unattributed` and shown as OTHER — a crisis effect, a coup, a peace
@@ -319,7 +365,21 @@ namespace Brink.Core
                 }
             }
 
-            state.causal.openings?.Clear();
+            // The next causal month opens *here*, where this one closed — not at
+            // the next pipeline start. Anything that happens in between (the
+            // operator's turn, a lapsing crisis) belongs to the month it
+            // precedes. See `SnapshotOpenings` for the boundary rule.
+            SnapshotOpenings(state);
+        }
+
+        /// <summary>
+        /// Whether a metric's opening is on record for a country — what the
+        /// boundary tests read to prove the bracket survived a save.
+        /// </summary>
+        public static bool TryOpening(GameState state, string countryId, CausalMetric metric, out float value)
+        {
+            value = 0f;
+            return state?.causal != null && state.causal.TryOpening(countryId, metric, out value);
         }
 
         internal static float EpsilonValue => Epsilon;

@@ -111,7 +111,14 @@ namespace Brink.Core
                     // drifting costs a government is authority.
                     float resilience = 1f - TechnologySystem.Effectiveness(player, "CAP_CONTINUITY") * 0.35f;
                     player.stability = Clamp(player.stability - 4f * resilience);
-                    player.governmentApproval = Clamp(player.governmentApproval - 5f * resilience);
+                    // Named, not left to the month's OTHER line: letting a
+                    // crisis lapse is the operator's own non-decision, and the
+                    // WHY panel should say so (spec 26 §3a). The arithmetic is
+                    // the caller's expression, untouched.
+                    Causal.Apply(state, player.id, CausalMetric.GovernmentApproval,
+                        CausalReason.CrisisLapsed, ref player.governmentApproval,
+                        Clamp(player.governmentApproval - 5f * resilience),
+                        CausalCategory.PlayerDecision);
                     player.nationalUnity = Clamp(player.nationalUnity - 2f * resilience);
                 }
 

@@ -26,11 +26,18 @@ namespace Brink.Core
         /// </summary>
         public static void Wire(TurnManager turns, GameState state)
         {
-            // Absolutely first: record what every explained value read before
-            // anything touched it, so a month's explanation describes the whole
-            // month rather than the slice between its first and last
-            // instrumented site (spec 26 §3). Observational only — it writes no
-            // simulation field and draws no random number.
+            // The causal month opens where the previous one closed (spec 26
+            // §3a). Seed the month-open snapshot now — a new world, or an old
+            // save with none — before the operator can act, so their verbs and
+            // a lapsing crisis land inside the month they precede. Fills gaps
+            // only: a loaded save carries its own snapshot, taken when its last
+            // month closed and persisted, and overwriting it would lose whatever
+            // the operator did between that close and the save. The
+            // pipeline-start hook is the same fill, as a fallback for a
+            // hand-wired fixture. Observational only — no simulation field is
+            // written and no random number is drawn, so wiring cannot move the
+            // world.
+            Causal.OpenMonth(state);
             turns.ResolveMonth += Causal.OpenMonth;
 
             // Lifecycle first: an official who retires this month should not also
@@ -122,13 +129,17 @@ namespace Brink.Core
             // as it was halfway through being resolved.
             turns.ResolveMonth += Telemetry.RecordMonth;
 
-            // Truly last: reconcile each explained value against what it now
-            // reads, so the figure on the panel is the movement the operator can
-            // see, and whatever the named causes do not account for is shown as
-            // OTHER instead of quietly going missing.
-            turns.ResolveMonth += Causal.CloseMonth;
-
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
+
+            // The causal month closes on `MonthResolved`, not as the last
+            // `ResolveMonth` handler: that hook fires after `YearEnded` as well,
+            // so a December's record includes the annual evaluation and every
+            // record closes where the operator's screen does. It reconciles each
+            // explained value against what it now reads — whatever the named
+            // causes do not account for is shown as OTHER instead of quietly
+            // going missing — and re-takes the opening snapshot for the month
+            // that follows (spec 26 §3a).
+            turns.MonthResolved += Causal.CloseMonth;
         }
     }
 }

@@ -37,6 +37,12 @@ namespace Brink.Core
         public const float FailingProgress = 34f;
 
         /// <summary>
+        /// How long a path must have been failing before it is reconsidered,
+        /// and how long a reconsideration that kept it stands before the next.
+        /// </summary>
+        public const int FailingReviewMonths = 12;
+
+        /// <summary>
         /// Choose or reconsider this government's path.
         ///
         /// Called every month, but almost always does nothing: pivoting is
@@ -48,17 +54,41 @@ namespace Brink.Core
         {
             ai.monthsOnPath++;
             ai.pathProgress = ProgressOn(state, ai, country, ai.path);
+            int monthIndex = state.date.year * 12 + state.date.month;
 
             bool firstChoice = ai.monthsOnPath <= 1 && ai.disposition == 0f;
-            bool longEnough = ai.monthsOnPath >= MinimumMonthsOnPath;
-            bool failing = ai.pathProgress < FailingProgress && ai.monthsOnPath >= 12;
+
+            // **A review is an event, and it happens once per cause.** All three
+            // triggers used to re-fire every month for as long as their
+            // condition held — a path past thirty months was re-rolled monthly
+            // for the rest of its life, a lost war kept `beaten` true for thirty
+            // months, a low reading kept `failing` true indefinitely — and each
+            // firing re-rolled the ±6 noise across all six candidates (with the
+            // +10 inertia stripped for the shocks). Measured on seed 4242: China,
+            // at war and beaten, swapped Survival for TechnologicalEdge and back
+            // **every month for twenty months** on scores of 102 against 109,
+            // which was 18 of the world's 44 pivots in a decade, and a cluster
+            // of pivots at months 31–36 was governments re-rolling a kept
+            // course. Now the scheduled review runs once per
+            // `MinimumMonthsOnPath`, a failing path is reconsidered once per
+            // `FailingReviewMonths`, and a defeat forces one rethink
+            // (`lastDefeatReviewedId`) — a rethink that keeps the course is a
+            // decision that stands rather than a die rolled again next month.
+            int sinceReview = monthIndex - ai.lastReviewMonthIndex;
+            bool longEnough = ai.monthsOnPath >= MinimumMonthsOnPath && sinceReview >= MinimumMonthsOnPath;
+            bool failing = ai.pathProgress < FailingProgress && ai.monthsOnPath >= FailingReviewMonths
+                           && sinceReview >= FailingReviewMonths;
 
             // Losing a war is the one shock that forces a rethink immediately.
             // A state that has just been beaten and carries on exactly as before
             // is the single most obviously artificial thing an AI can do.
-            bool beaten = RecentlyBeaten(state, country.id);
+            string defeatId = RecentDefeat(state, country.id);
+            bool beaten = defeatId != null && defeatId != ai.lastDefeatReviewedId;
 
             if (!firstChoice && !longEnough && !failing && !beaten) return;
+
+            ai.lastReviewMonthIndex = monthIndex;
+            if (beaten) ai.lastDefeatReviewedId = defeatId;
 
             if (ai.disposition == 0f)
                 ai.disposition = (float)(rng.NextDouble() * 2.0 - 1.0) * 12f;
@@ -319,7 +349,7 @@ namespace Brink.Core
         /// same reach model operations do, so "regional" means the region the
         /// force can be brought to bear in rather than a hand-drawn one.
         /// </summary>
-        static float NeighbourhoodDominance(GameState state, CountryState country)
+        public static float NeighbourhoodDominance(GameState state, CountryState country)
         {
             float weighted = 0f;
             float total = 0f;
@@ -331,7 +361,12 @@ namespace Brink.Core
                 if (reach < 0.6f) continue; // not our neighbourhood
 
                 float relationship = state.FindRelationship(country.id, other.id)?.relations ?? 50f;
-                float edge = country.pillars.military - other.pillars.military;
+                // Our own pillar against our *estimate* of theirs — the fog every
+                // other read in this file already uses. Reading the neighbour's
+                // true military figure here decided which path a government
+                // adopted and whether it judged the path to be failing.
+                float edge = country.pillars.military
+                             - AISystem.PerceivedStrength(state, country.id, other, IntelDomain.Military);
 
                 weighted += reach * (Clamp(50f + edge) * 0.6f + relationship * 0.4f);
                 total += reach;
@@ -376,8 +411,15 @@ namespace Brink.Core
         }
 
         /// <summary>Did this state lose a confrontation in the last couple of years?</summary>
-        static bool RecentlyBeaten(GameState state, string countryId)
+        /// <summary>
+        /// The most recent war this state lost inside the shock window, by id,
+        /// or null. Returned by identity rather than as a flag so a defeat can
+        /// be reviewed exactly once — see <see cref="ReviewPath"/>.
+        /// </summary>
+        public static string RecentDefeat(GameState state, string countryId)
         {
+            string newest = null;
+            int newestStart = int.MinValue;
             foreach (var confrontation in state.confrontations)
             {
                 if (!confrontation.resolved) continue;
@@ -386,9 +428,13 @@ namespace Brink.Core
 
                 bool weInitiated = confrontation.initiatorId == countryId;
                 float ourMomentum = weInitiated ? confrontation.momentum : -confrontation.momentum;
-                if (ourMomentum < -20f) return true;
+                if (ourMomentum >= -20f) continue;
+
+                // Later in the list is later created; on a tie the newer entry wins.
+                int start = confrontation.startDate.year * 12 + confrontation.startDate.month;
+                if (start >= newestStart) { newestStart = start; newest = confrontation.id; }
             }
-            return false;
+            return newest;
         }
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

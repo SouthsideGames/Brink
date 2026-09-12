@@ -333,6 +333,19 @@ namespace Brink.Core
 
                 ApplyPillarEffect(state, country, official.office, official.directiveId, amount);
 
+                // The operator's *autonomous* economy desk steadies the books in
+                // a fiscal crisis, the way a foreign finance ministry does:
+                // austerity where the economy can bear it, revenue up, a
+                // write-down once the debt cannot be carried. A delegating
+                // operator's country used to have no fiscal response at all, so
+                // delegation could end in a default nobody decided. A directed
+                // desk leaves all of it to the operator: they are steering the
+                // pillar, and a minister who reverses their budget is not
+                // delegation, it is insubordination.
+                if (official.office == Pillar.Economy && country.isPlayer
+                    && official.mode == ControlMode.Autonomous)
+                    FiscalSystem.SteadyTheBooks(state, country.id, mayRestructure: true);
+
                 // Has this instruction been carried out? Reported once, on the
                 // month it happens, so an order given is an order the operator
                 // hears back about.

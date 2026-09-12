@@ -458,6 +458,142 @@ namespace Brink.Tests
             StringAssert.Contains("199.0", chart, "Newest value should anchor the scale.");
         }
 
+        // ---------- industrial capacity approaches what the country can hold ----------
+
+        /// <summary>
+        /// Runs the economy alone on a fresh world.
+        /// NARROW PIPELINE: only `EconomySystem` runs, because the assertions
+        /// are about one resource's drift toward its own ceiling — territory,
+        /// acquisition, programmes, regime change and war would all move
+        /// industrial capacity too and make the movement unattributable.
+        /// </summary>
+        static (GameState world, TurnManager turns) EconomyOnly(int seed)
+        {
+            var world = WorldFactory.CreateDebugWorld(seed);
+            var localTurns = new TurnManager(world);
+            localTurns.ResolveMonth += EconomySystem.MonthlyUpdate;
+            return (world, localTurns);
+        }
+
+        [Test]
+        public void LosingAWorksCostsWhatItWasWorth_NotTheWholeIndustrialBase()
+        {
+            // Measured (seed 1212, harness): one contested industrial centre
+            // took India from 58 to literal zero in six years, because the
+            // territory swing was applied as `approach(v, v + swing, 0.05)` —
+            // a rate wearing a target's clothes, subtracting 5% of the works'
+            // value every month with nowhere to stop. The stagnation floor is
+            // anchored on this figure, so the economy pillar followed it down
+            // and the country could never grow again.
+            var (world, localTurns) = EconomyOnly(1212);
+            var country = world.FindCountry("IND");
+            var works = world.locations.Find(l =>
+                l.type == LocationType.IndustrialCenter && l.originalOwnerId == country.id);
+            Assume.That(works, Is.Not.Null, "Precondition: India is authored with an industrial centre.");
+
+            float endowment = country.resources.industrialEndowment;
+            Assume.That(endowment, Is.GreaterThan(30f));
+
+            works.ownerId = "CHN";
+            for (int month = 0; month < 120; month++) localTurns.EndMonth();
+
+            float swing = TerritorySystem.IndustrySwing(world, country.id);
+            Assert.Less(swing, -1f, "Precondition: the lost works registers as a loss.");
+            Assert.Less(country.resources.industrialCapacity, endowment - 1f,
+                "Losing a works cost the country nothing.");
+            Assert.GreaterOrEqual(country.resources.industrialCapacity, endowment + swing - 1f,
+                $"Losing one works worth {-swing:F1} took industry to "
+                + $"{country.resources.industrialCapacity:F1} of {endowment:F1}: a rate, not a level.");
+
+            // And what was lost comes back when the ground does.
+            works.ownerId = country.id;
+            for (int month = 0; month < 120; month++) localTurns.EndMonth();
+            Assert.GreaterOrEqual(country.resources.industrialCapacity, endowment - 2f,
+                "The works was recovered and the industry it carried was not.");
+        }
+
+        [Test]
+        public void PlantDestroyedByAShockRegrowsTowardWhatTheCountryCanHold()
+        {
+            // Bombing, sabotage and civil conflict all write the value down and
+            // nothing wrote it back up for a non-player state: programmes are
+            // the operator's, procurement and research need a treasury the
+            // collapse has emptied. The recovery-path rule, failed in the one
+            // resource the whole economy is derived from.
+            var (world, localTurns) = EconomyOnly(1212);
+            var country = world.FindCountry("CHN");
+            float endowment = country.resources.industrialEndowment;
+            country.resources.industrialCapacity = 20f;
+
+            for (int month = 0; month < 120; month++) localTurns.EndMonth();
+
+            Assert.Greater(country.resources.industrialCapacity, 45f,
+                $"Ten years after its plant was destroyed, a country authored at {endowment:F0} "
+                + $"still had industry of {country.resources.industrialCapacity:F1}.");
+            Assert.LessOrEqual(country.resources.industrialCapacity, endowment + 0.5f,
+                "Regrowth overshot what the country was authored to hold.");
+        }
+
+        [Test]
+        public void WhatIsBuiltRaisesWhatTheCountryCanHold()
+        {
+            // Or the drift toward the endowment takes a finished programme's
+            // yield straight back — the value-versus-target family from the
+            // other direction.
+            // A/B against a control arm, because the authored start value is
+            // jittered ±5 around an unjittered endowment (the energy precedent),
+            // so a country that opens above its endowment drifts a few points
+            // down over the first years whether or not anything was built. The
+            // first version measured the built arm against its own opening
+            // figure and read that ordinary settling as the programme being
+            // taken back. What the claim needs is the *difference* the building
+            // makes, and that difference has to survive the drift intact.
+            float After(bool build)
+            {
+                var (world, localTurns) = EconomyOnly(1212);
+                var country = world.FindCountry("DEU");
+                float before = country.resources.industrialCapacity;
+                float endowmentBefore = country.resources.industrialEndowment;
+                if (build)
+                {
+                    EconomySystem.BuildIndustry(country, 6f);
+                    float builtNow = country.resources.industrialCapacity - before;
+                    Assert.Greater(builtNow, 1f, "Building bought nothing.");
+                    Assert.AreEqual(builtNow, country.resources.industrialEndowment - endowmentBefore, 0.001f,
+                        "What was built and what the country can now hold moved by different amounts.");
+                    built = builtNow;
+                }
+                for (int month = 0; month < 36; month++) localTurns.EndMonth();
+                return country.resources.industrialCapacity;
+            }
+
+            float withProgramme = After(true);
+            float without = After(false);
+            Assert.GreaterOrEqual(withProgramme - without, built - 0.1f,
+                $"Three years on, the drift had taken back what the programme built "
+                + $"(built {built:F2}, kept {withProgramme - without:F2}).");
+        }
+
+        float built;
+
+        [Test]
+        public void AnOldSaveSeedsTheIndustrialEndowmentFromTheAuthoredProfile()
+        {
+            // The other three endowments seed from the current value. This one
+            // arrives after measured decades in which the swing bug ran
+            // countries to zero, so "current value" would enshrine the damage.
+            var (world, localTurns) = EconomyOnly(1212);
+            var country = world.FindCountry("CHN");
+            country.resources.industrialEndowment = 0f;
+            country.resources.industrialCapacity = 3f;
+
+            localTurns.EndMonth();
+
+            Assert.AreEqual(WorldFactory.FindProfile("CHN").industry,
+                country.resources.industrialEndowment, 0.001f,
+                "An old save's endowment was seeded from the ruin rather than from the profile.");
+        }
+
         // ---------- capability erodes in a bad decade, not only in a collapse ----------
 
         [Test]

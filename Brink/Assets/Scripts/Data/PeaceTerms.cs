@@ -22,6 +22,25 @@ namespace Brink.Data
         Likely
     }
 
+    /// <summary>
+    /// How the other side is disposed toward ending the war at all, before any
+    /// terms are priced — as far as our own reporting can tell (GDD §26,
+    /// spec 01 §5a). The console used to print the true acceptance bit as
+    /// "OPEN TO TERMS / RESISTING"; watching it flip told the operator exactly
+    /// when hidden willingness crossed its threshold, with no collection.
+    /// Ordered from least to most receptive so a comparison reads naturally;
+    /// `Unknown` first because it is what no collection yields.
+    /// </summary>
+    public enum SettlementDisposition
+    {
+        Unknown = 0,
+        HighlyResistant,
+        Resistant,
+        Uncertain,
+        PotentiallyReceptive,
+        LikelyReceptive
+    }
+
     public enum PeaceTerm
     {
         // ---- demands: things we ask of them ----

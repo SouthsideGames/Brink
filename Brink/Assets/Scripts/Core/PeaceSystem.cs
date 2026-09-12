@@ -284,24 +284,131 @@ namespace Brink.Core
             var estimate = IntelligenceSystem.GetEstimate(state, proposerId, opponentId, IntelDomain.Political);
             var grade = estimate?.confidence ?? ConfidenceGrade.None;
 
+            // A dead-band around the line, narrowing with collection and never
+            // closing entirely. Confirmed/High used to answer the exact sign of
+            // the margin, which let a well-collected operator walk the term list
+            // to the precise acceptance boundary — an oracle bought rather than
+            // free, but still an oracle. Better reporting now narrows the band
+            // of doubt; it never removes it.
+            float deadBand = DeadBandFor(grade);
+            if (grade == ConfidenceGrade.None) return SettlementOutlook.Unknown;
+            if (margin > deadBand) return SettlementOutlook.Likely;
+            if (margin < -deadBand) return SettlementOutlook.Unlikely;
+            return SettlementOutlook.Uncertain;
+        }
+
+        /// <summary>
+        /// Half-width of the margin our reporting cannot resolve, by grade.
+        /// Precision is bought with collection; certainty is never sold.
+        /// </summary>
+        public static float DeadBandFor(ConfidenceGrade grade)
+        {
             switch (grade)
             {
-                case ConfidenceGrade.Confirmed:
-                case ConfidenceGrade.High:
-                    // We can read the room.
-                    return margin >= 0f ? SettlementOutlook.Likely : SettlementOutlook.Unlikely;
-
-                case ConfidenceGrade.Moderate:
-                case ConfidenceGrade.Low:
-                    // We can tell a hopeless demand from a modest one, no more.
-                    if (margin > 25f) return SettlementOutlook.Likely;
-                    if (margin < -25f) return SettlementOutlook.Unlikely;
-                    return SettlementOutlook.Uncertain;
-
-                default:
-                    // No reporting on their politics: we are guessing.
-                    return SettlementOutlook.Unknown;
+                case ConfidenceGrade.Confirmed: return 4f;
+                case ConfidenceGrade.High: return 10f;
+                case ConfidenceGrade.Moderate: return 25f;
+                case ConfidenceGrade.Low: return 35f;
+                default: return float.PositiveInfinity;
             }
+        }
+
+        /// <summary>
+        /// How the other side is disposed toward ending the war at all, as far
+        /// as our reporting on their politics supports (GDD §26). The truth is
+        /// `ConfrontationSystem.SettlementWillingnessFor`; this is what a
+        /// government at war actually knows about the other government's mood.
+        ///
+        /// Two properties carry the fog rule. **Identical reporting gives an
+        /// identical read**: two hidden willingness values inside the same band
+        /// are indistinguishable, so the read cannot be used to solve for the
+        /// hidden figure. **Better collection buys resolution, not truth**: with
+        /// Moderate or Low reporting the five bands collapse to three, and with
+        /// none there is no read at all.
+        /// </summary>
+        public static SettlementDisposition AssessDisposition(GameState state, Confrontation confrontation,
+            string proposerId)
+        {
+            if (confrontation == null || confrontation.resolved) return SettlementDisposition.Unknown;
+
+            string opponentId = confrontation.OpponentOf(proposerId);
+            var estimate = IntelligenceSystem.GetEstimate(state, proposerId, opponentId, IntelDomain.Political);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            if (grade == ConfidenceGrade.None) return SettlementDisposition.Unknown;
+
+            float willingness = ConfrontationSystem.SettlementWillingnessFor(state, confrontation, proposerId);
+
+            SettlementDisposition fine;
+            if (willingness >= 60f) fine = SettlementDisposition.LikelyReceptive;
+            else if (willingness >= 35f) fine = SettlementDisposition.PotentiallyReceptive;
+            else if (willingness >= 15f) fine = SettlementDisposition.Uncertain;
+            else if (willingness >= -10f) fine = SettlementDisposition.Resistant;
+            else fine = SettlementDisposition.HighlyResistant;
+
+            if (grade == ConfidenceGrade.Confirmed || grade == ConfidenceGrade.High) return fine;
+
+            // Coarse reporting: receptive, uncertain, or resistant — no more.
+            switch (fine)
+            {
+                case SettlementDisposition.LikelyReceptive: return SettlementDisposition.PotentiallyReceptive;
+                case SettlementDisposition.HighlyResistant: return SettlementDisposition.Resistant;
+                default: return fine;
+            }
+        }
+
+        /// <summary>
+        /// The terms our own staff would recommend putting to them, derived from
+        /// the **assessment**, never from the acceptance test.
+        ///
+        /// The settlement screen used to draft its one-press offer from
+        /// `BestAcceptableProposal`, which walks `WouldAccept` — so it printed
+        /// the exact maximal term list the enemy would sign, under the words
+        /// "THEY WOULD SIGN THIS TODAY", with no collection at all. This walks
+        /// the same suggestion, giving ground one demand at a time, but stops
+        /// where our *reporting* says they would likely sign. With poor
+        /// reporting that means giving more ground than strictly necessary;
+        /// with none there is no recommendation, and the honest answer is that
+        /// we would be guessing.
+        ///
+        /// Returns null with `outlook` = `Unknown` when nothing can be said, and
+        /// the last draft reached with `outlook` = `Uncertain` when the read
+        /// never firmed up — a draft that *might* be signed is still worth
+        /// putting to them, and the label says so.
+        /// </summary>
+        public static PeaceProposal RecommendedProposal(GameState state, Confrontation confrontation,
+            string proposerId, out SettlementOutlook outlook)
+        {
+            outlook = SettlementOutlook.Unknown;
+            if (confrontation == null || confrontation.resolved) return null;
+
+            var proposal = SuggestProposal(state, confrontation, proposerId);
+            PeaceProposal uncertain = null;
+
+            for (int attempt = 0; attempt < 8 && proposal.terms.Count > 0; attempt++)
+            {
+                var read = Assess(state, confrontation, proposerId, proposal);
+                if (read == SettlementOutlook.Unknown) { outlook = read; return null; }
+                if (read == SettlementOutlook.Likely) { outlook = read; return proposal; }
+                if (read == SettlementOutlook.Uncertain && uncertain == null)
+                {
+                    uncertain = new PeaceProposal();
+                    uncertain.terms.AddRange(proposal.terms);
+                }
+
+                PeaceTerm? worst = null;
+                float worstCost = 0f;
+                foreach (var term in proposal.terms)
+                {
+                    float cost = TermCost(state, confrontation, proposerId, term);
+                    if (cost > worstCost) { worstCost = cost; worst = term; }
+                }
+                if (worst == null) break; // only concessions left; nothing more to give
+                proposal.terms.Remove(worst.Value);
+            }
+
+            if (uncertain != null) { outlook = SettlementOutlook.Uncertain; return uncertain; }
+            outlook = SettlementOutlook.Unlikely;
+            return null;
         }
 
         /// <summary>
@@ -502,11 +609,14 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// A reasonable opening offer for the player: the objective, plus the
-        /// sweeteners that cost us least.
-        /// </summary>
-        /// <summary>
         /// The most favourable set of terms the other side would actually sign.
+        ///
+        /// **Ground truth. Never for a view.** This walks `WouldAccept`, so
+        /// handing its result to the player is handing them the enemy's exact
+        /// acceptance boundary; the settlement screen did exactly that once and
+        /// `SettlementFogTests` now scans player-facing code for it. The
+        /// player-facing counterpart is `RecommendedProposal`, which walks the
+        /// assessment instead.
         ///
         /// This exists because the game had no **accept** verb. It would tell the
         /// operator "the other side is prepared to negotiate" and then offer only
@@ -552,6 +662,11 @@ namespace Brink.Core
                 : null;
         }
 
+        /// <summary>
+        /// A reasonable opening offer for the player: the objective, plus the
+        /// sweeteners that cost us least. Ours to know — what we would put on the
+        /// table is not a fact about them.
+        /// </summary>
         public static PeaceProposal SuggestProposal(GameState state, Confrontation confrontation, string proposerId)
         {
             var proposal = new PeaceProposal();

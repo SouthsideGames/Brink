@@ -68,29 +68,45 @@ namespace Brink.Tests
             //
             // So this now asserts the *failure mode* rather than the old number:
             // the world must not be scenery, and it must not be in flames.
+            //
+            // **A war and a front are counted separately (2026-09).** Since the
+            // multilateral alliance work, honouring a guarantee opens a
+            // satellite front of the war it was joined for — "three states and
+            // three states become *one war* between six", in the design's own
+            // words — and those fronts close with it. Counting every satellite
+            // as a war of its own reported a single bloc war as six, which is
+            // the flames-versus-peace question asked of the wrong quantity.
+            // Wars a government *chose* are held to the old ceiling; the fronts
+            // those wars pull in are bounded separately, generously, so a
+            // world that swarms every aggressor still cannot become one where
+            // every state is always fighting.
             int[] seeds = { 4242, 9090, 8686, 5171, 6301, 2468 };
-            int aiWars = 0;
+            int aiWars = 0, aiFronts = 0;
             int worldsWithAWar = 0;
             var perWorld = new System.Text.StringBuilder();
 
             foreach (int seed in seeds)
             {
                 var state = RunPassive(seed, 360);
-                int here = 0;
+                int here = 0, fronts = 0;
                 foreach (var confrontation in state.confrontations)
                 {
                     if (confrontation.Involves(state.playerCountryId)) continue;
-                    if (confrontation.escalation >= EscalationState.LimitedConflict) here++;
+                    if (confrontation.escalation < EscalationState.LimitedConflict) continue;
+                    if (confrontation.IsObligationEntry) fronts++;
+                    else here++;
                 }
                 aiWars += here;
-                if (here > 0) worldsWithAWar++;
-                perWorld.Append($" {seed}:{here}");
+                aiFronts += fronts;
+                if (here + fronts > 0) worldsWithAWar++;
+                perWorld.Append($" {seed}:{here}+{fronts}");
             }
 
-            Assert.GreaterOrEqual(aiWars, 4,
-                $"Six 30-year worlds produced {aiWars} AI-vs-AI wars between them ({perWorld}). "
-                + "The world has gone quiet — an operator at the top has nothing to push "
-                + "against, alliance obligations never fire, and the wire carries no news.");
+            Assert.GreaterOrEqual(aiWars + aiFronts, 4,
+                $"Six 30-year worlds produced {aiWars} AI-vs-AI wars and {aiFronts} alliance fronts "
+                + $"between them ({perWorld}). The world has gone quiet — an operator at the top "
+                + "has nothing to push against, alliance obligations never fire, and the wire "
+                + "carries no news.");
             Assert.GreaterOrEqual(worldsWithAWar, 3,
                 $"Only {worldsWithAWar} of {seeds.Length} worlds saw a single AI war in thirty "
                 + $"years ({perWorld}). A handful of loud worlds hiding a majority of silent "
@@ -98,6 +114,9 @@ namespace Brink.Tests
             Assert.LessOrEqual(aiWars, 40,
                 $"{aiWars} AI-vs-AI wars in {seeds.Length * 30} world-years ({perWorld}) — the "
                 + "world is in flames, which is as flat as a world at peace.");
+            Assert.LessOrEqual(aiFronts, 72,
+                $"{aiFronts} alliance fronts in {seeds.Length * 30} world-years ({perWorld}) — "
+                + "every war is a world war, which is the cascade the 2026-09 repair damped.");
         }
 
         [Test]

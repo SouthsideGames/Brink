@@ -74,7 +74,19 @@ namespace Brink.Core
     ///   the operator runs under Direct Control they see in full, exactly as the
     ///   advice rule already works.
     /// - **Classification.** A `Classified` cause is dropped for every reader at
-    ///   every width. There is no flag that reveals it.
+    ///   every width — and **leaves no existence side-channel**: it is never
+    ///   named, never counted into the withheld line, and never degrades the
+    ///   explanation. Its magnitude is merged into the record's OTHER line
+    ///   *before* any reader-specific rule runs (`WithoutClassified`), so every
+    ///   reader — the country's own government, a foreign one with confirmed
+    ///   collection, one with none — sees exactly what they would have seen had
+    ///   the movement simply gone unattributed. The net movement is on the
+    ///   operator's screen regardless, so hiding the magnitude would protect
+    ///   nothing and a column that fell short of it would itself be the tell;
+    ///   what is protected is that the movement *had a cause at all*. Distinct
+    ///   from `Unknown`, which is *counted*: "something is here you cannot see"
+    ///   is what collection can fix; classified is what no reader may learn
+    ///   exists.
     ///
     /// The honesty rule on arithmetic: if anything was withheld or could not be
     /// sized, the explanation is downgraded to `Qualitative`, because a column
@@ -109,12 +121,22 @@ namespace Brink.Core
 
             bool degraded = false;
 
-            for (int i = 0; i < record.contributions.Count; i++)
-            {
-                var c = record.contributions[i];
+            // A classified cause must not reveal that it exists (see the class
+            // comment). Before any reader-specific rule runs, every Classified
+            // contribution is merged into the record's OTHER line — so what
+            // every reader sees, at every width and every collection grade, is
+            // exactly what they would see had the movement simply gone
+            // unattributed. Done up front rather than inside the loop, because
+            // each of the loop's own rules (counting withheld, degrading to
+            // bands, sizing by collection, burying by desk) was a place it could
+            // leak: the first version counted it as withheld, and a foreign
+            // reader with confirmed collection would have been handed a column
+            // that no longer summed to the net change — a tell either way.
+            var contributions = WithoutClassified(record.contributions);
 
-                // Never, at any width, for any reader.
-                if (c.visibility == CausalVisibility.Classified) { view.withheld++; degraded = true; continue; }
+            for (int i = 0; i < contributions.Count; i++)
+            {
+                var c = contributions[i];
 
                 var visibility = c.visibility;
                 float confidence = c.confidence;
@@ -166,6 +188,61 @@ namespace Brink.Core
 
             if (degraded) view.reconciliation = CausalReconciliation.Qualitative;
             return view;
+        }
+
+        /// <summary>
+        /// The record's contributions with every `Classified` one merged into
+        /// its OTHER line. Returns the original list untouched when there is
+        /// nothing to merge, and otherwise a **copy** — the record is the
+        /// simulation's own complete account of itself, and disclosure reads it,
+        /// never writes it.
+        ///
+        /// The magnitude is kept rather than dropped because dropping it would
+        /// itself be the side-channel: the net change is on the operator's
+        /// screen regardless, so a column that fell short of it would announce
+        /// that something was missing. What classification protects is that the
+        /// movement *had a cause at all*; folded into OTHER it reads as the
+        /// ordinary unattributed remainder every other month already carries.
+        /// </summary>
+        static List<CausalContribution> WithoutClassified(List<CausalContribution> source)
+        {
+            float classified = 0f;
+            bool any = false;
+            for (int i = 0; i < source.Count; i++)
+            {
+                if (source[i].visibility != CausalVisibility.Classified) continue;
+                classified += source[i].value;
+                any = true;
+            }
+            if (!any) return source;
+
+            var result = new List<CausalContribution>(source.Count);
+            bool merged = false;
+            for (int i = 0; i < source.Count; i++)
+            {
+                var c = source[i];
+                if (c.visibility == CausalVisibility.Classified) continue;
+
+                if (!merged && c.reason == CausalReason.Unattributed)
+                {
+                    result.Add(new CausalContribution(
+                        c.reason, c.value + classified, c.category, c.kind, c.visibility)
+                    {
+                        sourceCountryId = c.sourceCountryId,
+                        sourceActionId = c.sourceActionId,
+                        confidence = c.confidence,
+                    });
+                    merged = true;
+                    continue;
+                }
+                result.Add(c);
+            }
+
+            if (!merged && Math.Abs(classified) > Causal.EpsilonValue)
+                result.Add(new CausalContribution(
+                    CausalReason.Unattributed, classified, CausalCategory.Other, CausalKind.Indirect));
+
+            return result;
         }
 
         /// <summary>

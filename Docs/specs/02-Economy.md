@@ -430,19 +430,67 @@ foodDrift   = clamp((foodTarget − food) × 0.03, −0.60, +0.30)
 `FoodCeilingFor` is public and is the single definition of the ceiling, same
 rule as energy and materials. Covered by `FoodSecurityTests`.
 
-### Industrial capacity
+### Industrial capacity approaches an endowment (2026-09)
 
-Two inputs, both drifts rather than jumps:
+The fourth resource to get the idiom, and the last:
 
 ```
-industrialCapacity = Growth.Apply(industrialCapacity, CAP_ADVMFG effectiveness × 0.12)
-industrialCapacity → approach(industrialCapacity + IndustrySwing, rate 0.05)
+industryCeiling = clamp(industrialEndowment + TerritorySystem.IndustrySwing, 0, 100)
+industrialCapacity += clamp((industryCeiling − industrialCapacity) × 0.03, −0.4, +0.25)
 ```
 
-Capability compounds slowly into real capacity (GDD §11) — it unlocks the ability
-to build, it does not hand over the result. Territory is applied as a slow drift
-so seizing a works does not teleport its output home the month it falls.
-`MilitarySystem`'s procurement adds a third input (spec 01 §2).
+`NationalResources.industrialEndowment` is authored (`profile.industry`) and
+**seeded from the authored profile** on the first tick of a save that predates
+it — not from the current value like the other three, because this one arrives
+after measured decades in which the bug below ran countries to zero, and
+"current value" would enshrine the damage the endowment exists to repair
+(`EconomySystem.EnsureIndustrialEndowment`; a state with no profile seeds from
+what it has). Additive field, no version bump.
+
+**What it replaces.** `approach(capacity, capacity + IndustrySwing, 0.05)` was
+not a target but an accumulating *rate* wearing a target's clothes — the
+sector-capacity bug one level up. A works lost, or in revolt
+(`InsurgencySystem.Denies`), subtracted 5% of its value every month with nothing
+to stop at: measured on seed 1212, one contested industrial centre took India
+from 58 to literal zero in six years and held it there, and a lost works ran
+China from 92 to 1 in Unity. `StagnationFloor` is anchored on this figure, so
+the economy pillar followed it down to 12 and a country that had lost one
+province could never grow again — the absorbing state under
+`NoSocialValueRunsAwayInEitherDirection`'s relief arm for CHN, IND and MEX. And
+plant destroyed by bombing, sabotage or a civil conflict had **no recovery path
+for a non-player state**: programmes are the operator's, procurement and
+research need a treasury the collapse has emptied.
+
+**Builders raise the endowment too.** `EconomySystem.BuildIndustry(country,
+amount)` applies `Growth.Apply` to the value and adds the same gain to the
+endowment, so what was built is not taken back by the next month's drift. Its
+five callers: industrial programmes (Industry × 0.45, Technology × 0.20),
+procurement (`strengthPerMonth × 0.25`), a matured `CAP_ADVMFG` (× 0.12 a
+month), arrivals put to work (`hosted × 0.010`), and mobilisation (+0.3).
+Damage writes the value alone and heals toward the ceiling; a strategic
+instrument's destruction (−30) takes the endowment with it, so it stays the
+permanent loss it was. Tests: `EconomySystemTests.LosingAWorksCostsWhatItWasWorth…`,
+`PlantDestroyedByAShockRegrowsTowardWhatTheCountryCanHold`,
+`WhatIsBuiltRaisesWhatTheCountryCanHold`, `AnOldSaveSeedsTheIndustrialEndowment…`.
+
+### A breakaway is born with an economy (2026-09)
+
+`SecessionSystem.MakeSuccessor` used to hand a successor 30% of its parent's
+economy pillar and industrial capacity, no sectors, a fifth of the parent's
+*overdraft*, the parent's energy and materials endowments with the levels left
+at zero, and food security with no food endowment. Measured in Unity (seed 1212):
+born at pillar 6, industry 6, treasury −1,576, growth −1.6 for twenty isolated
+years. Now: the pillar is born at `StagnationFloor` at the least (the floor
+never gives, so a state born under it stayed there), industry at
+`MinimumBirthIndustry` (10) at the least, the seven sectors at their anchors
+with the parent's sector health, a share of the account only when it is in
+credit (the debt stays with the rump; a successor is born owing nothing), every
+resource *level* and endowment copied from the parent — including the
+industrial endowment, so the breakaway's plant regrows toward what the ground
+can hold. Still by design: a third of the parent's *capability*, which the
+growth formula's structural term reads as a contraction until a ministry rebuilds
+it; the isolated arm (no ministry) shows industry regrowing, the contraction
+easing, and no crisis regime (`ABreakawayIsBornWithAnEconomyItCanRecoverOn`).
 
 ## 5a. The treasury trend readout
 
@@ -593,6 +641,112 @@ would silently forgive whatever debt the save was already carrying, since
 that would not exist. The step seeds the stock from the save's own ratio and
 GDP, so a migrated world lands where it stood and migrating twice gives the same
 answer.
+
+## 9a. Fiscal condition, arrears, and the sanction cause (core stability repair, 2026-09)
+
+The audit measured every unattended 40-year world converging on sovereign debt
+at 300–700% of GDP, a sanction count that only grew, ~100 coups and 13–15 of 16
+states ruined. Three things in this pillar were the loop's edges.
+
+### Deficits answer to creditworthiness
+
+The automatic deficit financing in `FiscalSystem.Tick` had no gate at all — the
+voluntary verb answered to `MinimumCreditToIssue` (18) and a 200% ceiling, the
+deficit did not. Now the deficit is financed only while `creditStanding >=
+MinimumCreditToIssue`; below it the shortfall is **arrears**: the account stays
+negative, `FiscalState.arrearsMonths` counts, and confidence's target carries
+`ArrearsConfidenceDrag` (12) while it lasts. `FiscalState.deficitFinancedMonths`
+counts consecutive financed months. Both fields are additive, zero on old saves,
+no version bump.
+
+**And only up to the ceiling** (2026-09). The credit gate was applied to the
+automatic path and `IssueDebtCeiling` (200%) was not, so the deficit had a
+second, looser definition of what the market will absorb. Measured on seed
+6301: Turkey, shut out for three years of war, accrued a hole of −4,633, and
+the month its standing crossed the issuing line the whole of it was borrowed at
+once — 88% → 400% of GDP in one tick, standing back to zero, shut out again — a
+ratchet with the five-year period of the restructuring memory. Financing now
+stops at the ceiling; whatever the market will not absorb stays arrears, where
+a default can reach it. **A default settles the arrears as well as the stock**:
+`RestructureDebtBy` floors the account at zero, because a write-down that left
+the hole standing kept the creditors unpaid through the whole memory and set up
+the same lump the month credit returned (measured on a 400% case: three
+write-downs in twenty years, arrears counted to 233 months, the ratio back to
+400 the moment credit recovered). The reputational price is unchanged.
+
+### One fiscal condition
+
+`FiscalSystem.ConditionOf` is the only definition of solvency, read by the
+annual grade (`ProgressionSystem.SolvencyPenalty`), the `Solvent` mandate
+objective, the AI's books and the operator's desk:
+
+| `FiscalCondition` | Meaning |
+|---|---|
+| `Sound` | balanced or in surplus, nothing borrowed lately |
+| `CashNegativeButCreditworthy` | a financed shortfall this month or last |
+| `DeficitFinanced` | ≥ 6 consecutive financed months, or ≥ 3 at ≥ 80% of GDP |
+| `DebtStressed` | ≥ 120% of GDP, or credit < 35, or shallow arrears |
+| `Crisis` | deep arrears (> ¼ year's income), shut out *and* in arrears, or restructured within the last year |
+
+A heavy debt nobody will lend into, with the account in the black, is
+`DebtStressed` rather than `Crisis` — the ordinary budget's problem, not the
+emergency programme's. `SolvencyPenalty` ranks the profiles (0 / ≥2 / 6–12 /
+12–18 / 20); a posting three times its GDP in debt with a zeroed balance used to
+grade penalty-free. `MandateObjectiveKind.Solvent` is met at
+`CashNegativeButCreditworthy` or better — it was a free tick in five authored
+mandates.
+
+### The finance ministry answers a crisis
+
+`FiscalSystem.SteadyTheBooks` runs from the fiscal tick for every non-player
+state and from the operator's **autonomous** Economy desk (`CabinetSystem`;
+a directed desk leaves the budget to the operator who is directing it). At
+`DebtStressed` or worse: austerity where the economy can bear it, the tax rate
+stepped (`CrisisTaxStep` 2/month) toward `CrisisTaxCeiling` 46 — or
+`DepressionTaxCeiling` 40 — and a write-down once arrears exceed
+`DefaultArrearsShare` (½ a year's income) or a state shut out of credit sits
+above `DefaultRatio` (200% of GDP). **Austerity is not prescribed into a
+depression** (`DepressionLine`: market index 55): the first version cut spending
+whatever the economy was doing and a ruined state never left crisis — the cuts
+held growth at −4% a year, the shrinking economy raised the ratio through the
+denominator, the ratio kept the state in crisis, and the crisis kept the cuts;
+twenty measured years of it. `AusterityAdvisable` is shared with the AI's
+budget review, and the AI now also moves its tax rate (`SetTaxRateBy` had no AI
+caller at all). The isolated recovery arm of `NoSocialValueRunsAwayInEitherDirection`
+climbs from index 8 to 78 and debt 149% to zero over twenty years with these in
+place; re-measured after the ceiling and the endowment (2026-09, harness, seed
+1212, India entering at index 8, debt 66%, credit 12, −332 in arrears): `Sound`
+by year 3, debt zero by year 5, index 95 and living standards 42 by year 20.
+
+### Sanctions: a cause, a chill, a lapse
+
+`EconomySystem.SanctionCauseStands` is the one definition of "hostile enough to
+sanction": the pair is at war, or the sender's relations with the target are
+below `SanctionHostilityLine` (30). The AI's `CounterRival` imposes only while it
+stands (at 20% a month, was 35%), and `AgeSanctions` lifts a regime at its
+36-month review when it does not. Threat perception is deliberately not part of
+it: it tracks capability and never fades, so measures against any strong state
+could never lapse. `Sanction.cause` (RIVALRY / REPUDIATION / CRISIS / PLAYER)
+is recorded for the long-run probe and read by nothing else.
+
+The self-lock is broken on the diplomacy side (spec 04 §9b): a sanctioned pair's
+relations settle `SanctionChill` (8) below alignment as a target, instead of
+draining 1.2 a month to zero and being excluded from the recovery branch.
+
+`EconomySystem.WouldGrantRelief` / `ReliefMargin`: a request for relief is an
+early review — a foreign sender whose cause is gone lifts when asked (unless it
+still regards the target as a major threat, `ReliefFearLine` 55), and the
+player's own measures are never lifted by a computed rule. `AssessRelief` is the
+assessment layer over it, gated on the target's *Diplomatic* reporting on the
+sender, and `AISystem.ConsiderDetente` screens through it rather than through
+the sender's acceptance function.
+
+**Measured after (40 years, seeds 5171 / 1212 / 9090):** ruined states 3 / 3 / 3
+of 16 (was 15 / 14 / 13), mean market index 85–97 (was 16–27), sanctions 28–34
+(was 72–99), coups 24–48 (was 95–114), median debt 0% with a maximum of
+246–333% (was 340–692% mean). The count still creeps; the residual regimes are
+RIVALRY ones on pairs that stay genuinely cold, which is the intended reading.
+Probe: `Tools/Stability.cs`.
 
 ## 7. Extension points
 

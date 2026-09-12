@@ -99,6 +99,14 @@ namespace Brink.Data
         public GameDate imposedDate;
         public int monthsActive;
 
+        /// <summary>
+        /// Why it was imposed — RIVALRY, REPUDIATION, CRISIS, PLAYER. Read by
+        /// nothing in the simulation; it exists so a long-run probe can say
+        /// where a world's standing regimes come from, which is the diagnostic
+        /// the sanction ratchet needed and did not have. Empty on old saves.
+        /// </summary>
+        public string cause = "";
+
         /// <summary>Damage multiplier applied to the target.</summary>
         public float Weight
         {

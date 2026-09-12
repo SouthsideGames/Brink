@@ -304,5 +304,76 @@ namespace Brink.UI
                 default: return 0.85f;
             }
         }
+
+        /// <summary>
+        /// The other side's war exhaustion, as a **bin** our political reporting
+        /// supports — never the figure. The console printed it to one decimal
+        /// beside casualties it carefully banded, and exhaustion is the largest
+        /// single term of the acceptance test (spec 01 §5a), so the exact value
+        /// let the operator reconstruct most of what the settlement fog exists to
+        /// hide.
+        ///
+        /// Bins sit on a fixed grid rather than centring on the truth: a band
+        /// centred on the true value hands it over as the midpoint. Better
+        /// collection buys a narrower bin; no collection buys nothing.
+        /// </summary>
+        public static string ForeignExhaustion(GameState state, Confrontation confrontation)
+        {
+            if (confrontation == null) return "NO READ";
+            string opponentId = confrontation.OpponentOf(state.playerCountryId);
+            bool weInitiated = confrontation.initiatorId == state.playerCountryId;
+            float truth = weInitiated ? confrontation.defenderWarExhaustion
+                                      : confrontation.initiatorWarExhaustion;
+
+            var estimate = IntelligenceSystem.GetEstimate(
+                state, state.playerCountryId, opponentId, IntelDomain.Political);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            int bin = ExhaustionBinFor(grade);
+            if (bin <= 0) return "NO READ";
+
+            int low = (int)System.Math.Floor(truth / bin) * bin;
+            int high = System.Math.Min(100, low + bin);
+            return $"≈{low}–{high}";
+        }
+
+        /// <summary>Our own side's war exhaustion. Ours to know exactly.</summary>
+        public static float OwnExhaustion(GameState state, Confrontation confrontation)
+        {
+            if (confrontation == null) return 0f;
+            return confrontation.initiatorId == state.playerCountryId
+                ? confrontation.initiatorWarExhaustion
+                : confrontation.defenderWarExhaustion;
+        }
+
+        /// <summary>Width of the exhaustion bin our reporting resolves, 0 = none.</summary>
+        public static int ExhaustionBinFor(ConfidenceGrade grade)
+        {
+            switch (grade)
+            {
+                case ConfidenceGrade.Confirmed: return 5;
+                case ConfidenceGrade.High: return 10;
+                case ConfidenceGrade.Moderate: return 20;
+                case ConfidenceGrade.Low: return 25;
+                default: return 0;
+            }
+        }
+
+        /// <summary>
+        /// One operation's losses as the log may print them: ours exact, theirs
+        /// through the same band the war's totals use. The log used to print the
+        /// enemy's per-operation losses to one decimal on the screen whose totals
+        /// are banded, so summing six lines reconstructed the figure the band
+        /// exists to hide. Knows which side launched the operation, so an enemy
+        /// assault on our position reads OWN for our losses too.
+        /// </summary>
+        public static string OperationLosses(GameState state, Confrontation confrontation, OperationRecord op)
+        {
+            if (op == null) return "";
+            string opponentId = confrontation?.OpponentOf(state.playerCountryId) ?? "";
+            bool weAttacked = string.IsNullOrEmpty(op.attackerId) || op.attackerId == state.playerCountryId;
+            float ours = weAttacked ? op.attackerLosses : op.defenderLosses;
+            float theirs = weAttacked ? op.defenderLosses : op.attackerLosses;
+            return $"LOSSES OWN {OwnCasualties(ours)} / ENEMY (EST) {ForeignCasualties(state, opponentId, theirs)}";
+        }
     }
 }

@@ -147,6 +147,9 @@ namespace Brink.Core
             if (resources.foodEndowment <= 0f)
                 resources.foodEndowment = resources.foodSecurity;
 
+            // Industry seeds from the authored profile instead — see the helper.
+            EnsureIndustrialEndowment(country);
+
             if (resources.manpower < 0f) resources.manpower = 0f;
             if (resources.manpower >= resources.manpowerBaseline) return;
 
@@ -253,6 +256,64 @@ namespace Brink.Core
                      // storage and distribution are something a country can
                      // decide to be good at.
                      + TechnologySystem.Effectiveness(country, "CAP_AGRI") * 22f, 0f, 100f);
+
+        /// <summary>
+        /// The most industrial capacity this country can hold: its endowment —
+        /// authored, and raised by everything that builds — plus what the
+        /// industrial centres it actually controls are worth (GDD §16). A works
+        /// in revolt is worth nothing to anybody (`InsurgencySystem.Denies`),
+        /// which is what makes arming one a way to deny a rival its industry
+        /// without taking it; a works taken is worth the same to its new owner
+        /// as it cost the old one.
+        /// </summary>
+        public static float IndustryCeilingFor(GameState state, CountryState country)
+            => Clamp(country.resources.industrialEndowment
+                     + TerritorySystem.IndustrySwing(state, country.id), 0f, 100f);
+
+        /// <summary>
+        /// Seed the industrial endowment where a save predates it. From the
+        /// *authored* profile where there is one, not from where the country
+        /// currently stands: the other three endowments were introduced while
+        /// every save still sat near its authored values, whereas this one
+        /// arrives after twenty measured years in which a single contested
+        /// works ran a great power's industry to literal zero (spec 02 §5), so
+        /// "current value" would enshrine the damage the endowment exists to
+        /// repair. A state with no profile — a breakaway on an old save —
+        /// seeds from what it has.
+        /// </summary>
+        public static void EnsureIndustrialEndowment(CountryState country)
+        {
+            var resources = country.resources;
+            if (resources.industrialEndowment > 0f) return;
+            var profile = WorldFactory.FindProfile(country.id);
+            resources.industrialEndowment = profile != null
+                ? profile.industry
+                : Math.Max(1f, resources.industrialCapacity);
+        }
+
+        /// <summary>
+        /// Build industry: raise the capacity *and* what the country can hold by
+        /// the same amount, through `Growth.Apply`'s diminishing returns.
+        ///
+        /// One helper for the five builders (programmes, procurement, a matured
+        /// capability, arrivals put to work, a mobilisation) because the monthly
+        /// drift pulls capacity toward the ceiling — plant built above what the
+        /// country was authored to hold would otherwise be erased by the next
+        /// tick, the value-versus-target family from the other direction.
+        /// Damage (bombing, sabotage, civil conflict) writes the value alone and
+        /// heals; a strategic instrument's destruction takes the endowment with
+        /// it, so it stays the permanent loss it was.
+        /// </summary>
+        public static void BuildIndustry(CountryState country, float amount)
+        {
+            if (amount <= 0f) return;
+            EnsureIndustrialEndowment(country);
+            float before = country.resources.industrialCapacity;
+            float after = Growth.Apply(before, amount);
+            country.resources.industrialCapacity = after;
+            country.resources.industrialEndowment =
+                Clamp(country.resources.industrialEndowment + (after - before), 0f, 100f);
+        }
 
         /// <summary>
         /// How much domestic capacity a sector is losing to imports.
@@ -430,8 +491,24 @@ namespace Brink.Core
             // healthy economy. Skills and capacity are lost slowly: at full
             // collapse this is about 1.3 points a year, so a bad decade costs real
             // ground without making recovery impossible.
+            // Floored exactly as the stagnation drag below is: a collapse takes
+            // the margin above what the country physically still has, and no
+            // further. Unfloored, this was the absorbing state one level up
+            // from the sector anchor — a breakaway born at the floor (15) was
+            // eroded to 6.6 in ten isolated years by the very distress its
+            // missing capability caused, and `SectorAnchor` reads this pillar
+            // for three sectors, so the loop closed on itself. The floor stops
+            // the drag taking; it never gives.
             if (distress > 0.01f)
-                country.pillars.economy = Clamp(country.pillars.economy - distress * 0.11f, 0f, 100f);
+            {
+                // Same shape as the stagnation floor below: the drag applies only
+                // above the floor and stops there; at or below it, nothing is
+                // taken and nothing is given.
+                float distressFloor = StagnationFloor(country);
+                if (country.pillars.economy > distressFloor)
+                    country.pillars.economy = Math.Max(distressFloor,
+                        Clamp(country.pillars.economy - distress * 0.11f, 0f, 100f));
+            }
 
             // **And the ordinary version of the same thing.**
             //
@@ -548,10 +625,14 @@ namespace Brink.Core
                                           * (1f - GovernmentSystem.RevenueLeakage(country));
 
             // ---- confidence ----
+            // Arrears are the creditors' verdict, and they reach confidence
+            // here — as a term in the target, so the pull lifts the month the
+            // account is back in the black (spec 02 §9a).
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f
                                      - sanctionPressure * 6f - blowback * 3f
                                      + (country.stability - 50f) * 0.25f
-                                     - (atWar ? 8f : 0f);
+                                     - (atWar ? 8f : 0f)
+                                     - (country.fiscal.arrearsMonths > 0 ? FiscalSystem.ArrearsConfidenceDrag : 0f);
             eco.confidence = Clamp(Approach(eco.confidence, targetConfidence, 0.25f), 0f, 100f);
 
             // ---- sectors ----
@@ -621,17 +702,38 @@ namespace Brink.Core
 
             // Capability compounds slowly into real capacity (GDD §11) — it
             // unlocks the ability to build, it does not hand over the result.
-            country.resources.industrialCapacity = Growth.Apply(country.resources.industrialCapacity,
-                TechnologySystem.Effectiveness(country, "CAP_ADVMFG") * 0.12f);
+            BuildIndustry(country, TechnologySystem.Effectiveness(country, "CAP_ADVMFG") * 0.12f);
 
-            // Held industrial centres are capacity; lost ones are not. Applied as
-            // a drift toward the adjusted level so seizing a works does not
-            // teleport its output home the month it falls.
-            float industrySwing = TerritorySystem.IndustrySwing(state, country.id);
-            if (Math.Abs(industrySwing) > 0.01f)
-                country.resources.industrialCapacity = Clamp(
-                    Approach(country.resources.industrialCapacity,
-                             country.resources.industrialCapacity + industrySwing, 0.05f), 0f, 100f);
+            // **Industrial capacity approaches what the country can hold** —
+            // the same endowment/ceiling/drift idiom as energy, materials and
+            // food below, and the last of the four to get it (2026-09).
+            //
+            // What it replaces was `approach(capacity, capacity + swing, 0.05)`:
+            // not a target but an accumulating *rate* wearing a target's
+            // clothes, the sector-capacity bug one level up. A works lost or in
+            // revolt subtracted 5% of its value every month with nothing to
+            // stop at, so one contested industrial centre took India from 58 to
+            // literal zero in six measured years and held it there; the
+            // stagnation floor is anchored on this figure, so the economy
+            // pillar followed it down and a country that had lost one province
+            // could never grow again. And plant destroyed by bombing, sabotage
+            // or a civil conflict had no way back at all for a non-player
+            // state — programmes are the operator's, procurement and research
+            // need a treasury the collapse has emptied — which is this
+            // project's recovery-path rule failed in the one resource the
+            // whole economy is derived from.
+            //
+            // Held ground is now a *level* in the ceiling (`IndustryCeilingFor`),
+            // so seizing a works still does not teleport its output home and
+            // losing one costs exactly what it was worth, once. Plant is built
+            // over years: the upward cap is the materials rate, the downward
+            // one roughly what the old rate took from a large works, but it
+            // stops where the country's remaining base stops.
+            float industryCeiling = IndustryCeilingFor(state, country);
+            float industryDrift = Math.Max(-0.4f, Math.Min(0.25f,
+                (industryCeiling - country.resources.industrialCapacity) * 0.03f));
+            country.resources.industrialCapacity =
+                Clamp(country.resources.industrialCapacity + industryDrift, 0f, 100f);
 
             // Strategic materials and energy erode under embargo, recover otherwise.
             //
@@ -816,14 +918,15 @@ namespace Brink.Core
             if (!turns.SpendCommandPoints(cost, $"Impose {severity} sanctions on {target.displayName}"))
                 return false;
 
-            bool imposed = ImposeSanctionsBy(state, state.playerCountryId, targetId, severity);
+            bool imposed = ImposeSanctionsBy(state, state.playerCountryId, targetId, severity, "PLAYER");
             if (imposed) ProgressionSystem.AwardXP(state, 12, "Sanctions imposed");
             if (imposed) ProgressionSystem.RecordInitiative(state);
             return imposed;
         }
 
         /// <summary>Sanctions imposed by any state. AI coercion uses the same model.</summary>
-        public static bool ImposeSanctionsBy(GameState state, string senderId, string targetId, SanctionSeverity severity)
+        public static bool ImposeSanctionsBy(GameState state, string senderId, string targetId, SanctionSeverity severity,
+            string cause = "")
         {
             if (senderId == targetId) return false;
             if (state.FindSanction(senderId, targetId) != null) return false;
@@ -849,7 +952,8 @@ namespace Brink.Core
                 senderId = senderId,
                 targetId = targetId,
                 severity = severity,
-                imposedDate = state.date
+                imposedDate = state.date,
+                cause = cause ?? ""
             });
 
             var link = state.FindTrade(senderId, targetId);
@@ -1088,6 +1192,67 @@ namespace Brink.Core
             return willingness;
         }
 
+        /// <summary>
+        /// What the *target* believes about a sender's readiness to lift its
+        /// measures, at the precision its diplomatic reporting on that sender
+        /// supports. `ReliefWillingness` is the sender's own decision and is
+        /// ground truth; this is the assessment layer over it, the same shape
+        /// as `PeaceSystem.Assess` and `TradeSystem.Assess`.
+        /// </summary>
+        public static SettlementOutlook AssessRelief(GameState state, string senderId, string targetId)
+        {
+            if (state.FindSanction(senderId, targetId) == null) return SettlementOutlook.NoTerms;
+
+            float margin = ReliefMargin(state, senderId, targetId);
+            var estimate = IntelligenceSystem.GetEstimate(state, targetId, senderId, IntelDomain.Diplomatic);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            if (grade == ConfidenceGrade.None) return SettlementOutlook.Unknown;
+
+            float deadBand = PeaceSystem.DeadBandFor(grade);
+            if (margin > deadBand) return SettlementOutlook.Likely;
+            if (margin < -deadBand) return SettlementOutlook.Unlikely;
+            return SettlementOutlook.Uncertain;
+        }
+
+        /// <summary>Willingness at or above which a sender lifts its measures when asked.</summary>
+        public const float ReliefThreshold = 50f;
+
+        /// <summary>
+        /// The sender's decision when asked (ground truth). A request is an
+        /// early review: measures whose cause is gone are lifted when asked,
+        /// exactly as they would lapse at the scheduled review — otherwise the
+        /// negotiated door only opened where the scheduled one already would,
+        /// and thirty measured years produced no détente at all. Measures whose
+        /// cause still stands are lifted only when the sender is worn down
+        /// enough (fatigue, blowback, what warmth survives) to take the deal.
+        /// </summary>
+        public static bool WouldGrantRelief(GameState state, string senderId, string targetId)
+            => ReliefMargin(state, senderId, targetId) >= 0f;
+
+        /// <summary>Signed distance from the point at which relief is granted.</summary>
+        public static float ReliefMargin(GameState state, string senderId, string targetId)
+        {
+            float willingness = ReliefWillingness(state, senderId, targetId) - ReliefThreshold;
+
+            // The early review is a foreign government's judgement, not the
+            // operator's: the player's own measures are lifted by the player.
+            // And a sender that still regards the target as a major threat does
+            // not lift on request however the relationship reads — relief must
+            // be earned by conduct, which is what the threat figure tracks.
+            bool aiSender = senderId != state.playerCountryId;
+            var relationship = state.FindRelationship(senderId, targetId);
+            bool feared = relationship != null && relationship.ThreatPerceivedBy(senderId) > ReliefFearLine;
+            if (aiSender && !feared && !SanctionCauseStands(state, senderId, targetId))
+                return Math.Max(willingness, ReliefGrantedMargin);
+            return willingness;
+        }
+
+        /// <summary>Threat perception above which a request for relief is refused on principle.</summary>
+        public const float ReliefFearLine = 55f;
+
+        /// <summary>The margin a request carries once the regime's cause is gone.</summary>
+        public const float ReliefGrantedMargin = 15f;
+
         /// <summary>Ask a state to lift its measures against us and hold a détente.</summary>
         public static bool SeekSanctionsRelief(GameState state, TurnManager turns, string senderId)
         {
@@ -1128,8 +1293,7 @@ namespace Brink.Core
                 return false;
             }
 
-            float willingness = ReliefWillingness(state, senderId, targetId);
-            if (willingness < 50f)
+            if (!WouldGrantRelief(state, senderId, targetId))
             {
                 relationship.AddMemory(state.date, "Rebuffed a request for sanctions relief", -0.4f);
                 if (targetId == state.playerCountryId)
@@ -1192,14 +1356,10 @@ namespace Brink.Core
 
                 var sender = state.FindCountry(sanction.senderId);
                 var target = state.FindCountry(sanction.targetId);
-                var relationship = state.FindRelationship(sanction.senderId, sanction.targetId);
                 if (sender == null || target == null) continue;
 
-                // Kept in force while they are still regarded as a threat.
-                bool stillHostile = relationship != null
-                                    && (relationship.relations < 30f
-                                        || relationship.ThreatPerceivedBy(sanction.senderId) > 55f);
-                if (stillHostile) continue;
+                // Kept in force while the cause stands; lapses when it does not.
+                if (SanctionCauseStands(state, sanction.senderId, sanction.targetId)) continue;
 
                 state.sanctions.RemoveAt(i);
                 var link = state.FindTrade(sanction.senderId, sanction.targetId);
@@ -1218,6 +1378,31 @@ namespace Brink.Core
 
         /// <summary>Months after which a foreign government revisits a sanctions regime.</summary>
         public const int SanctionReviewMonths = 36;
+
+        /// <summary>
+        /// **One definition of "hostile enough to sanction"**, read by the AI
+        /// when it imposes measures and by the review when it decides whether to
+        /// keep them. A regime stands while its cause stands — the pair is at
+        /// war, or the sender's relations with the target are genuinely cold.
+        ///
+        /// Two things are deliberately *not* here. Threat perception, which the
+        /// old review read: it tracks military capability and never fades, so
+        /// measures against any strong state could never lapse and the world's
+        /// sanction count could only grow. And the chill the sanction itself
+        /// puts on relations: that is now a bounded target
+        /// (`DiplomacySystem.SanctionChill`), so a regime can no longer keep
+        /// itself alive by driving the relationship it is judged against to zero.
+        /// </summary>
+        public static bool SanctionCauseStands(GameState state, string senderId, string targetId)
+        {
+            if (ConfrontationSystem.ExistingBetween(state, senderId, targetId) is Confrontation war
+                && war.escalation >= EscalationState.LimitedConflict) return true;
+            var relationship = state.FindRelationship(senderId, targetId);
+            return relationship != null && relationship.relations < SanctionHostilityLine;
+        }
+
+        /// <summary>Relations below which a government sanctions and keeps sanctioning.</summary>
+        public const float SanctionHostilityLine = 30f;
 
         static float Approach(float current, float target, float rate) => current + (target - current) * rate;
 

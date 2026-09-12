@@ -237,7 +237,11 @@ namespace Brink.Data
         public bool HasContent => contributions.Count > 0 || Math.Abs(delta) > 0.0001f;
     }
 
-    /// <summary>What one value read at the start of a month.</summary>
+    /// <summary>
+    /// What one value read at the start of a causal month — the moment the
+    /// operator's turn began (spec 26 §3a).
+    /// </summary>
+    [Serializable]
     public struct MetricOpening
     {
         public string countryId;
@@ -286,15 +290,24 @@ namespace Brink.Data
         public List<CausalRecord> records = new List<CausalRecord>();
 
         /// <summary>
-        /// What each instrumented value read when the month opened.
+        /// What each instrumented value read when the causal month opened —
+        /// taken when the previous month closed, i.e. the values on the
+        /// operator's screen as their turn began (spec 26 §3a).
         ///
-        /// **Transient by design.** It exists only between the first and last
-        /// system of one monthly tick, so persisting it would be storing a
-        /// half-resolved month. Rebuilt every month; absent after a load, which
-        /// is why every reader treats a missing entry as "no snapshot" rather
-        /// than as zero.
+        /// **Persisted, and the reason is the autosave.** The game saves after
+        /// every player verb, not only after a resolution, so a save can be
+        /// taken mid-turn: after the operator answered a crisis and before they
+        /// ended the month. A snapshot rebuilt at load from the values then
+        /// current would open the causal month *after* that answer, and its
+        /// movement would fall between two records. Carrying the snapshot in the
+        /// save keeps the bracket where the operator's turn actually began.
+        /// (It used to be `[NonSerialized]` on the reasoning that it lived only
+        /// inside one tick; once the boundary moved to the turn, that reasoning
+        /// inverted.) Absent from an old save, which every reader treats as "no
+        /// snapshot" rather than as zero, and `Causal.OpenMonth` fills at wiring.
+        /// Seven entries for the player's country — no size concern.
         /// </summary>
-        [NonSerialized] public List<MetricOpening> openings = new List<MetricOpening>();
+        public List<MetricOpening> openings = new List<MetricOpening>();
 
         public void OpenMetric(string countryId, CausalMetric metric, float value)
         {
@@ -329,9 +342,7 @@ namespace Brink.Data
         {
             if (record == null) return;
 
-            if (record.contributions.Count > MaxContributions)
-                record.contributions.RemoveRange(
-                    MaxContributions, record.contributions.Count - MaxContributions);
+            FoldToCap(record);
 
             records.Add(record);
 
@@ -342,6 +353,69 @@ namespace Brink.Data
                 if (r.metric != record.metric || r.countryId != record.countryId) continue;
                 seen++;
                 if (seen > MonthsKept) records.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
+        /// Enforce `MaxContributions` by **folding, never dropping** (spec 26 §3).
+        ///
+        /// A record whose contributions were cut with `RemoveRange` stopped
+        /// summing to its own delta — and the entries appended last are Bounds,
+        /// Reversion and Unattributed, precisely the terms that make the column
+        /// add up, so the busiest months broke first. Instead the smallest
+        /// contributions are merged into the single OTHER line: the largest
+        /// named causes survive, the magnitude of everything folded is
+        /// preserved, `previous + Σ contributions == resulting` keeps holding,
+        /// and repeated folding can never mint a second OTHER row.
+        ///
+        /// Deterministic by construction: candidates are chosen by smallest
+        /// absolute value, ties broken by earliest index, and surviving entries
+        /// keep their recorded order.
+        /// </summary>
+        public static void FoldToCap(CausalRecord record)
+        {
+            var list = record?.contributions;
+            if (list == null) return;
+
+            // One OTHER row, ever — merge any duplicates before counting.
+            int otherIdx = -1;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].reason != CausalReason.Unattributed) continue;
+                if (otherIdx < 0) { otherIdx = i; continue; }
+                list[otherIdx].value += list[i].value;
+                list.RemoveAt(i);
+                i--;
+            }
+
+            while (list.Count > MaxContributions)
+            {
+                int fold = -1;
+                float smallest = float.MaxValue;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (i == otherIdx) continue;
+                    float magnitude = Math.Abs(list[i].value);
+                    if (magnitude < smallest) { smallest = magnitude; fold = i; }
+                }
+                if (fold < 0) break;   // nothing left but OTHER itself
+
+                if (otherIdx < 0)
+                {
+                    // No OTHER yet: the smallest entry *becomes* it. The count is
+                    // unchanged this pass; the next iteration folds into it.
+                    float value = list[fold].value;
+                    list.RemoveAt(fold);
+                    list.Add(new CausalContribution(
+                        CausalReason.Unattributed, value, CausalCategory.Other));
+                    otherIdx = list.Count - 1;
+                }
+                else
+                {
+                    list[otherIdx].value += list[fold].value;
+                    list.RemoveAt(fold);
+                    if (fold < otherIdx) otherIdx--;
+                }
             }
         }
 

@@ -39,6 +39,19 @@ namespace Brink.Data
         /// </summary>
         public float foodEndowment;
 
+        /// <summary>
+        /// The industrial base this country returns to — what its plant and
+        /// workforce can hold, the fourth resource to get the endowment idiom
+        /// (2026-09). Until it existed `industrialCapacity` had drains (civil
+        /// conflict, bombing, sabotage, a lost or contested works) and only
+        /// *deliberate* builders (programmes, procurement, a capability), so
+        /// a non-player state whose plant was destroyed never rebuilt it, and
+        /// a territory swing applied as a rate ran the figure to zero. Raised
+        /// by everything that builds (`EconomySystem.BuildIndustry`); seeded
+        /// from the authored profile on the first tick of an old save.
+        /// </summary>
+        public float industrialEndowment;
+
         public float energy;             // fuel/electricity security (0..100)
         public float industrialCapacity; // ability to produce, build, maintain (0..100)
         public float strategicMaterials; // aggregated critical materials (0..100)

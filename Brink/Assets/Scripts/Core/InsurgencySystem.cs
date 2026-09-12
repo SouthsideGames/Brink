@@ -932,8 +932,12 @@ namespace Brink.Core
                                 + Math.Max(0f, relationship.ThreatPerceivedBy(country.id) - 45f) * 0.8f;
                 if (hostility < 12f) continue;
 
-                // A movement with nothing behind it is money into a hole.
-                float viability = insurgency.support * 0.5f + insurgency.strength * 0.3f;
+                // A movement with nothing behind it is money into a hole — and a
+                // movement we have no reporting on is one we cannot find to arm.
+                // The player is shown a rising's strength as a band unless they
+                // hold collection on the holder; the AI used to read the exact
+                // figures. Same fog, both sides.
+                float viability = PerceivedViability(state, country.id, insurgency, targetId);
                 if (viability < 12f) continue;
 
                 float score = hostility + viability;
@@ -954,6 +958,38 @@ namespace Brink.Core
                     state, country.id, SponsorPoliticalCost, "Sponsor a movement")) return;
 
             SupportBy(state, country.id, best);
+        }
+
+        /// <summary>
+        /// How viable a rising looks to a would-be sponsor, through the
+        /// sponsor's political reporting on the state it is rising against.
+        /// No reporting: nothing is seen (−1, below any bar). Coarse reporting
+        /// quantises support and strength to wide bins, so two risings a poor
+        /// service cannot tell apart read the same; confirmed reporting reads
+        /// them nearly as they are. The sponsor of a movement it already arms
+        /// knows its own asset.
+        /// </summary>
+        public static float PerceivedViability(GameState state, string observerId, Insurgency insurgency,
+            string holderId)
+        {
+            if (insurgency == null) return -1f;
+            if (insurgency.sponsorId == observerId)
+                return insurgency.support * 0.5f + insurgency.strength * 0.3f;
+
+            var estimate = IntelligenceSystem.GetEstimate(state, observerId, holderId, IntelDomain.Political);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            int bin;
+            switch (grade)
+            {
+                case ConfidenceGrade.Confirmed: bin = 5; break;
+                case ConfidenceGrade.High: bin = 10; break;
+                case ConfidenceGrade.Moderate: bin = 20; break;
+                case ConfidenceGrade.Low: bin = 25; break;
+                default: return -1f;
+            }
+            float support = (float)Math.Floor(insurgency.support / bin) * bin;
+            float strength = (float)Math.Floor(insurgency.strength / bin) * bin;
+            return support * 0.5f + strength * 0.3f;
         }
 
         static float Approach(float current, float target, float rate)

@@ -464,6 +464,10 @@ namespace Brink.Tests
         {
             var bloc = MakeBloc("IND", "RUS", "BRA");
             WillFight("RUS", "IND", "CHN");
+            // Brazil too: an indifferent member now declines (2026-09), and its
+            // repudiation would be charged on the very RUS–BRA pair measured
+            // here. The claim is about the member who *came*, so both must.
+            WillFight("BRA", "IND", "CHN");
 
             var withThirdParty = state.FindRelationship("RUS", "BRA");
             float trustBefore = withThirdParty.trust;

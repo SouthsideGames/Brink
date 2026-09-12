@@ -43,6 +43,25 @@ before pushing it.
 
 ---
 
+## 1a. 2026-09-12: Phase A is closed and the core stability repair is on a branch
+
+Two branches since this file was written. `claude/phase-a-closure` holds the
+committed Phase A closure (spec 26; the CLAUDE.md entry "Phase A closed").
+`claude/core-stability-repair` holds the seven-part repair the Unity audit asked
+for — settlement fog, alliance cascade, the debt/sanction/collapse loop, the
+fiscal signal, AI point-reads, recovery, and the crisis modal — with the
+measurements in the CLAUDE.md entry "Core stability repair". Read that entry and
+specs 01 §5c, 02 §9a, 04 §8a/§9b, 05 §7b, 06 §7d before touching any of those
+systems. `Tools/Stability.cs` is the long-run probe. Balance is unmeasured since.
+
+The three failures that repair left were run down on the same branch (CLAUDE.md
+entry "The three failures the stability repair left"): strategy reviews now fire
+once per cause, `industrialCapacity` has an endowment and a recovery path (the
+territory swing was a rate that ran a country with one contested works to zero),
+deficits stop at the debt ceiling and a default settles the arrears. Spec 02 §5
+and §9a, spec 06 §7a. If a ruined state will not climb out of the isolated
+relief arm, look at its `industrialCapacity` and `industrialEndowment` first.
+
 ## 2. What state the game is in
 
 The tree at HEAD is the union of everything through PR #7. In feature terms

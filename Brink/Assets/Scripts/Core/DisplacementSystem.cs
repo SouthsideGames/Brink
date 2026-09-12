@@ -315,8 +315,7 @@ namespace Brink.Core
                 // And what it is worth. Slow, and through `Growth.Apply`, because
                 // people arriving with nothing take years to be an economy and
                 // this must never become a reason to want a neighbour to collapse.
-                country.resources.industrialCapacity = Growth.Apply(
-                    country.resources.industrialCapacity, displacement.hosted * 0.010f);
+                EconomySystem.BuildIndustry(country, displacement.hosted * 0.010f);
 
                 Report(state, country);
             }

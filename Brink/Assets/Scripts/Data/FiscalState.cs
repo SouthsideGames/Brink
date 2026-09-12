@@ -11,6 +11,36 @@ namespace Brink.Data
     /// rather than on a posture nobody chose — the same reasoning that put
     /// `CivicPosture.Standard` first.
     /// </summary>
+    /// <summary>
+    /// What state the public finances are in, as one reading (spec 02 §9a).
+    ///
+    /// Deficit financing turns a shortfall into debt and zeroes the account, so
+    /// every solvency check that read the balance — the annual grade, the
+    /// mandate, the efficiency score — concluded a government 300% of GDP in
+    /// debt was solvent. The information was there, in the debt stock, the
+    /// credit standing and the months spent borrowing; nothing assembled it.
+    /// This is that assembly, and it is the only definition, read by the grade,
+    /// the mandate, the AI's books and the operator's desk. Ordered from best
+    /// to worst so a comparison reads naturally.
+    /// </summary>
+    public enum FiscalCondition
+    {
+        /// <summary>Balanced or in surplus; nothing borrowed lately.</summary>
+        Sound = 0,
+
+        /// <summary>A shortfall this month or last, covered by a creditworthy state's borrowing.</summary>
+        CashNegativeButCreditworthy,
+
+        /// <summary>Living on credit: a run of financed deficits, or a debt already sizeable.</summary>
+        DeficitFinanced,
+
+        /// <summary>The stock is heavy or the markets are wary; borrowing is dear.</summary>
+        DebtStressed,
+
+        /// <summary>Nobody will lend, arrears mount, or the debt was just written down.</summary>
+        Crisis
+    }
+
     public enum BudgetPosture
     {
         Balanced = 0,
@@ -116,5 +146,22 @@ namespace Brink.Data
         }
 
         public bool HasRestructured => restructuringMemoryMonths > 0;
+
+        /// <summary>
+        /// Consecutive months in which the deficit was covered by borrowing.
+        /// The signal deficit financing used to erase: a treasury zeroed every
+        /// month reads as solvent to everything that inspects the balance, so
+        /// the *duration* of living on credit is kept here for the grade, the
+        /// mandate and the condition read to see. Resets the month the account
+        /// closes in the black.
+        /// </summary>
+        public int deficitFinancedMonths;
+
+        /// <summary>
+        /// Consecutive months in which nobody would lend and the shortfall
+        /// stayed unpaid. This is a fiscal crisis, and it is visible: the
+        /// treasury goes negative and stays there.
+        /// </summary>
+        public int arrearsMonths;
     }
 }
