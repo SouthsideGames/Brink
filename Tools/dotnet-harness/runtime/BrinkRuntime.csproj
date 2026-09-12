@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Brink.Runtime</AssemblyName>
+    <RootNamespace>Brink</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS0414;CS0649;CS0169;CS0108;CS0162;CS0219;CS1998;CS0067</NoWarn>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../shim/**/*.cs" />
+    <Compile Include="../../../Brink/Assets/Scripts/**/*.cs" />
+  </ItemGroup>
+</Project>

@@ -1,8 +1,9 @@
 # 26 — Causal Explainability
 
-**Status: Phase A as-built (2026-09-11).** The framework and a representative
-vertical slice. Later phases extend the instrumentation; they should not need to
-change the record shape. GDD §28.3 is the principle this implements.
+**Status: Phase A as-built, compiled and test-run (2026-09-11).** The framework
+and a representative vertical slice. Later phases extend the instrumentation;
+they should not need to change the record shape.
+[`GDD_v1.1.md`](../GDD_v1.1.md) §28.3 is the principle this implements.
 
 The rule, stated once: **when the simulation changes something important, it
 should know why, and where the operator's government is entitled to that reason,
@@ -82,6 +83,30 @@ results and uninstrumented terms become a `Bounds` or `Unattributed`
 contribution. A decomposition that quietly fails to add up is worse than one that
 admits a remainder.
 
+### The month is the unit, and the whole month is accounted for
+
+`Causal.OpenMonth` is the **first** system in `SimulationPipeline` and
+`Causal.CloseMonth` is the **last**. Open snapshots what every reconciled value
+read before anything touched it; Close sets the record's `resulting` to what it
+now reads and books whatever the named causes do not account for as
+`Unattributed`.
+
+**This is not bookkeeping tidiness — without it the headline figure is wrong.**
+Approval is moved by a cabinet action *before* the government tick and by a
+crisis *after* it; the market index is set by the economy tick and then moved
+again by a market shock. A record anchored on the first *instrumented* site
+therefore reported the movement between that site and the last one, not the
+movement the operator can read on the screen. Measured on one real month: the
+panel claimed approval fell 2.01 when it had fallen 1.95, and claimed the market
+index **rose 1.0 when it had fallen 4.4**. An explanation layer that disagrees
+with the number it is explaining is worse than none, and
+`AMonthsRecordDescribesTheWholeMonthNotJustOnePartOfIt` now fails the build on it.
+
+**One record per metric per month**, shared by the decomposition and by every
+scattered `Note`. Two explanations of one movement are two partial accounts, and
+a screen would show whichever it happened to fetch;
+`OneRecordPerMetricPerMonthEvenWhenManySystemsTouchIt` guards that.
+
 ### Instrumenting without changing the arithmetic
 
 Two patterns, and the choice between them is the whole safety story.
@@ -149,6 +174,11 @@ movement would protect nothing.
 `MonthsKept = 12` per metric, `MaxContributions = 14` per record. Pruning is per
 (country, metric), not global, or a chatty metric would evict a quiet one and the
 quiet one is the first thing an operator goes looking for.
+
+The month-open snapshot (`CausalLedger.openings`) is `[NonSerialized]`: it exists
+only between the first and last system of one tick, so persisting it would be
+storing a half-resolved month. It is absent after a load, and every reader treats
+a missing entry as "no snapshot" rather than as zero.
 
 **No save version bump and no migration step.** The field is additive and *empty
 is correct* on an old save — a world that resolved its months before this existed
@@ -219,7 +249,10 @@ Recorded honestly so the next reader does not assume more than is there.
   would produce exactly the misleading partial explanation this framework exists
   to prevent. `SovereignDebt` carries the fiscal representation instead, and is
   complete.
-- **Episodic causes outside the pilot metrics are not recorded.** A crisis option
-  or a coup that moves approval shows up in that month's record as
-  `Unattributed` — visible as OTHER, which is the honest reading.
+- **Most episodic causes are not individually named.** A coup or a peace term
+  that moves approval shows up in that month's record as `Unattributed`, rendered
+  as OTHER. The *figure* is still exact — `CloseMonth` guarantees the total — but
+  the *reason* is unnamed. A crisis market shock is named, because a crisis is the
+  most explainable thing that happens to a market and the operator has just
+  answered one; the rest are Phase B's to attribute.
 - **Foreign explanations are not stored**, only disclosed.

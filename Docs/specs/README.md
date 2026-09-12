@@ -46,7 +46,9 @@ C in 04 §5b–5g, D in 05 §2e–2g, E in 13 §6. It is kept as the record of t
 and of what was deliberately *not* followed. **Where spec 25 and a pillar spec
 disagree, the pillar spec is right.**
 
-Coverage of the GDD as a whole — what is done, partial, missing and
+The design source of truth these specs implement is
+[`../GDD_v1.1.md`](../GDD_v1.1.md) (v1.0 is kept unedited as the historical
+record). Coverage of the GDD as a whole — what is done, partial, missing and
 contradicted, section by section — is tracked separately in
 [`../GDD_Coverage.md`](../GDD_Coverage.md), which was last audited 2026-08-22
 and now predates a good deal of the code. Returning to the project after a

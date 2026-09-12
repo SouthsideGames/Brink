@@ -167,6 +167,79 @@ namespace Brink.Tests
             Assert.AreEqual(record.delta, sum, 0.01f, "the multiplier broke reconciliation");
         }
 
+        [Test]
+        public void AMonthsRecordDescribesTheWholeMonthNotJustOnePartOfIt()
+        {
+            // The defect this guards, found by running a real month and reading
+            // the panel against the values: a record anchored on the first
+            // *instrumented* site reports the movement between that site and the
+            // last one, not the movement the operator can see. Approval is moved
+            // by a cabinet action before the government tick; the market index is
+            // moved again afterwards by a crisis. Both reported a monthly change
+            // that did not match the screen — which is the one thing this
+            // framework may not do.
+            Stress();
+
+            var before = new Dictionary<CausalMetric, float>();
+            foreach (var metric in Causal.Reconciled)
+                if (Causal.TryRead(Player, metric, out var v)) before[metric] = v;
+            Assert.AreEqual(Causal.Reconciled.Length, before.Count,
+                "a reconciled metric has no reader, so it can never be reconciled");
+
+            turns.EndMonth();
+
+            int proven = 0;
+            foreach (var metric in Causal.Reconciled)
+            {
+                Assert.IsTrue(Causal.TryRead(Player, metric, out var after));
+                float moved = after - before[metric];
+                var record = state.causal.Latest(Player.id, metric);
+
+                if (record == null)
+                {
+                    Assert.AreEqual(0f, moved, 0.0005f,
+                        $"{metric} moved {moved} and recorded nothing at all");
+                    continue;
+                }
+
+                Assert.AreEqual(before[metric], record.previous, 0.0005f,
+                    $"{metric}: the record does not open where the month opened");
+                Assert.AreEqual(after, record.resulting, 0.0005f,
+                    $"{metric}: the record does not close where the month closed");
+                Assert.AreEqual(moved, record.delta, 0.0005f,
+                    $"{metric}: the reported change is not the change that happened");
+
+                float sum = 0f;
+                foreach (var c in record.contributions) sum += c.value;
+                Assert.AreEqual(record.delta, sum, 0.01f,
+                    $"{metric}: listed causes sum to {sum} against a move of {record.delta}");
+                proven++;
+            }
+
+            Assert.Greater(proven, 3,
+                "too few metrics recorded anything for this to prove a thing");
+        }
+
+        [Test]
+        public void OneRecordPerMetricPerMonthEvenWhenManySystemsTouchIt()
+        {
+            // War exhaustion is written at eleven sites across six systems. Two
+            // explanations of one month's movement is two partial accounts, and
+            // the operator would be shown whichever one a screen happened to
+            // fetch.
+            Stress();
+            RunMonths(3);
+
+            var seen = new Dictionary<string, int>();
+            foreach (var r in state.causal.records)
+            {
+                string key = r.countryId + "|" + r.metric + "|" + r.MonthIndex;
+                seen[key] = seen.TryGetValue(key, out var n) ? n + 1 : 1;
+            }
+            foreach (var pair in seen)
+                Assert.AreEqual(1, pair.Value, $"{pair.Key} has {pair.Value} records for one month");
+        }
+
         // ---- 3. signs survive into the rendering ----
 
         [Test]
@@ -399,9 +472,16 @@ namespace Brink.Tests
                 "the ledger grew past its own bound");
             Assert.Greater(approval.Count, 0);
 
-            // Newest first, and the newest is this month.
-            Assert.AreEqual(state.date.year * 12 + state.date.month, approval[0].MonthIndex,
-                "the most recent month is not at the head of the history");
+            // Newest first, and the newest is the month that was last *resolved*.
+            // `TurnManager.EndMonth` raises `ResolveMonth` and only then advances
+            // `State.date`, so a record is stamped with the month it describes
+            // and the clock afterwards reads the next, still-unresolved month.
+            // That is the behaviour we want — "MAR 2041, approval fell 3.8" has
+            // to name March — so the expectation is one behind the clock.
+            var resolved = new GameDate(state.date.year, state.date.month);
+            int lastResolved = resolved.year * 12 + resolved.month - 1;
+            Assert.AreEqual(lastResolved, approval[0].MonthIndex,
+                "the most recent resolved month is not at the head of the history");
 
             for (int i = 1; i < approval.Count; i++)
                 Assert.Less(approval[i].MonthIndex, approval[i - 1].MonthIndex,

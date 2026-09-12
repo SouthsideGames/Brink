@@ -26,6 +26,13 @@ namespace Brink.Core
         /// </summary>
         public static void Wire(TurnManager turns, GameState state)
         {
+            // Absolutely first: record what every explained value read before
+            // anything touched it, so a month's explanation describes the whole
+            // month rather than the slice between its first and last
+            // instrumented site (spec 26 §3). Observational only — it writes no
+            // simulation field and draws no random number.
+            turns.ResolveMonth += Causal.OpenMonth;
+
             // Lifecycle first: an official who retires this month should not also
             // have worked it, and a seat filled this month should.
             turns.ResolveMonth += CabinetLifecycle.MonthlyUpdate;
@@ -114,6 +121,12 @@ namespace Brink.Core
             // Last, so the snapshot describes the month as it ended rather than
             // as it was halfway through being resolved.
             turns.ResolveMonth += Telemetry.RecordMonth;
+
+            // Truly last: reconcile each explained value against what it now
+            // reads, so the figure on the panel is the movement the operator can
+            // see, and whatever the named causes do not account for is shown as
+            // OTHER instead of quietly going missing.
+            turns.ResolveMonth += Causal.CloseMonth;
 
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
         }

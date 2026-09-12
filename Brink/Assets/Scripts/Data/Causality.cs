@@ -237,6 +237,15 @@ namespace Brink.Data
         public bool HasContent => contributions.Count > 0 || Math.Abs(delta) > 0.0001f;
     }
 
+    /// <summary>What one value read at the start of a month.</summary>
+    public struct MetricOpening
+    {
+        public string countryId;
+        public CausalMetric metric;
+        public float value;
+        public bool present;
+    }
+
     /// <summary>
     /// The bounded store of recent explanations (spec 26 §5).
     ///
@@ -275,6 +284,41 @@ namespace Brink.Data
         /// <summary>Flat, newest last. Flat rather than keyed because
         /// `JsonUtility` does not serialize dictionaries.</summary>
         public List<CausalRecord> records = new List<CausalRecord>();
+
+        /// <summary>
+        /// What each instrumented value read when the month opened.
+        ///
+        /// **Transient by design.** It exists only between the first and last
+        /// system of one monthly tick, so persisting it would be storing a
+        /// half-resolved month. Rebuilt every month; absent after a load, which
+        /// is why every reader treats a missing entry as "no snapshot" rather
+        /// than as zero.
+        /// </summary>
+        [NonSerialized] public List<MetricOpening> openings = new List<MetricOpening>();
+
+        public void OpenMetric(string countryId, CausalMetric metric, float value)
+        {
+            if (openings == null) openings = new List<MetricOpening>();
+            for (int i = 0; i < openings.Count; i++)
+                if (openings[i].metric == metric && openings[i].countryId == countryId)
+                {
+                    openings[i] = new MetricOpening
+                    { countryId = countryId, metric = metric, value = value, present = true };
+                    return;
+                }
+            openings.Add(new MetricOpening
+            { countryId = countryId, metric = metric, value = value, present = true });
+        }
+
+        public bool TryOpening(string countryId, CausalMetric metric, out float value)
+        {
+            value = 0f;
+            if (openings == null) return false;
+            for (int i = 0; i < openings.Count; i++)
+                if (openings[i].metric == metric && openings[i].countryId == countryId && openings[i].present)
+                { value = openings[i].value; return true; }
+            return false;
+        }
 
         /// <summary>
         /// Append and prune. Pruning is per (country, metric) rather than

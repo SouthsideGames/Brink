@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Brink.Tests.EditMode</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsPackable>false</IsPackable>
+    <NoWarn>CS0414;CS0649;CS0169;CS0108;CS0162;CS0219;CS1998;CS0067;NUnit1032;NUnit2005</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- TestProgressLogger is a UnityEngine.TestRunner callback: editor-only
+         instrumentation, no assertions, nothing for this harness to run. -->
+    <Compile Include="../../../Brink/Assets/Tests/EditMode/**/*.cs"
+             Exclude="../../../Brink/Assets/Tests/EditMode/TestProgressLogger.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="../runtime/BrinkRuntime.csproj" /></ItemGroup>
+</Project>

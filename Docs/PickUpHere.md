@@ -62,7 +62,7 @@ this is the most complete Brink has ever been:
 |---|---|---|
 | `f36809e` (Tranche E) | **1258 tests, green** | Measured, 5 seeds, frozen tree |
 | `5458ad1` → HEAD (the union) | **never run** | **never measured** |
-| + causal explainability (spec 26) | **never compiled** | n/a by design |
+| + causal explainability (spec 26) | **1312 tests via the dotnet harness; 30 failures, all pre-existing** | n/a by design |
 
 Two specific gaps:
 
@@ -76,13 +76,20 @@ Two specific gaps:
 There are ~1,300 test methods on disk across 90 fixtures. Treat the current
 tree as **unverified** until the suite runs.
 
-The causal explainability layer (spec 26) was added on top, in an environment
-with no Unity and no C# compiler, so **it has never been compiled** — not even a
-syntax check. It is written to change nothing: recording is inert behind
-`Causal.Enabled`, the instrumented formulas keep their exact operation order, and
-two tests assert a 24-month world resolves identically with recording on and off.
-**Those tests have not run.** If anything in the tree is going to be broken, it
-is the newest thing in it; start there.
+The causal explainability layer (spec 26) **has** now been compiled and run —
+not in Unity, which is still absent here, but through
+[`Tools/dotnet-harness/`](../Tools/dotnet-harness/README.md), which builds the
+runtime and the test assembly against a shim for the slice of UnityEngine this
+project uses. 1312 tests, 1282 passed, 30 failed. The same harness on the commit
+before Phase A gives 1285 / 1255 / 30 with a **byte-identical failure set**, so
+every one of those 30 predates it.
+
+**That is not the same as a Unity run.** 23 of the 30 are the harness having no
+asset pipeline — every stylesheet, palette, touch-target and audio test — and
+they say nothing about the code. The other 7 are real and pre-existing, and six
+of them are things "Recommended next" in `CLAUDE.md` already names as unmeasured.
+**`bash Tools/run-suite.sh` in Unity is still the first thing to do**, and the
+seven real failures are the first thing to look at when you do.
 
 The last balance table (Tranche E, 5 seeds) — **it predates the alliance
 cascade, so treat it as the previous game**:
@@ -216,7 +223,8 @@ done-by-decision items. Read it before believing any gap list.
   ("Build phases", "Architecture rules") plus the bottom four sections
   (terminal layout, readability, Android, running tests, conventions) are the
   parts that constrain new code.
-- **`Docs/GDD_v1.0.md`** — source of truth for design.
+- **`Docs/GDD_v1.1.md`** — source of truth for design. `GDD_v1.0.md` sits beside
+  it as the unedited historical record; v1.1 wins where they differ.
 - **`Docs/specs/`** — 25 as-built system specs. `README.md` there is the index.
   **If you change a system's behaviour, update its spec in the same commit.**
 - **`Docs/AndroidTestChecklist.md`** — device test checklist.

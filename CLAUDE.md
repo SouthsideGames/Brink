@@ -4,8 +4,12 @@ Persistent geopolitical strategy simulation presented as a retro classified
 government command terminal. Landscape mobile (iOS/Android), Unity 6
 (6000.3.9f1), UI Toolkit / UI Builder. Single-player, offline-first.
 
-**Source of truth for design:** `Docs/GDD_v1.0.md` (extracted from
-`Unknown_Game_Consolidated_GDD_v1.0.docx`). Read it before designing any system.
+**Source of truth for design:** `Docs/GDD_v1.1.md`. Read it before designing any
+system. It is the consolidated document — v1.0 (extracted from
+`Unknown_Game_Consolidated_GDD_v1.0.docx`) carried forward with the amendments
+the implementation has since established as non-negotiable. `Docs/GDD_v1.0.md`
+remains as the unedited historical record; **where the two disagree, v1.1 is
+right**, and new design rules go in v1.1 rather than being written back into v1.0.
 
 **Coming back after a break? Read [`Docs/PickUpHere.md`](Docs/PickUpHere.md)
 first.** It is short, states what is verified and what is not, and names the
@@ -2600,15 +2604,48 @@ for every figure in the table above.
       dependency graph. Episodic causes outside the pilot metrics land in the
       month's record as `Unattributed`, shown as OTHER, which is the honest
       reading rather than a silent gap.
-      **NOT COMPILED AND NOT TEST-RUN** — written in an environment with no
-      Unity, no C# compiler, and a proxy that refuses the .NET SDK, so
-      `Tools/syntax-check.sh` could not run either. `CausalityTests` (21 tests)
-      is written and partitioned. Run `bash Tools/run-suite.sh` before trusting
-      any of it. The two tests that matter most are the ones asserting a 24-month
-      world resolves to an identical fingerprint with recording on and off: the
-      framework is only correct if it changes nothing, and **that claim is
-      currently unverified**. The float-locals extraction is the specific thing
-      to check — it should be bit-identical and has not been proven so.
+      **COMPILED AND TEST-RUN (2026-09-11).** The first pass shipped unverified;
+      it has now been compiled and run. Ubuntu's own `dotnet-sdk-8.0` is in the
+      archive (the PPAs are blocked by the proxy, the main repos are not), so the
+      runtime and the test assembly build against a shim for the slice of
+      UnityEngine this project uses — `Tools/dotnet-harness/`, which is a
+      verification aid and **not** a replacement for Unity.
+      **1312 tests, 1282 passed, 30 failed, 0 skipped.** The same harness run
+      against `baf1cb0` — the commit before Phase A — gives **1285 / 1255 / 30**,
+      and the two failure sets are **byte-identical**: every failure predates
+      Phase A, and Phase A added 27 tests that all pass. 23 of the 30 are the
+      harness having no Unity asset pipeline (stylesheet, `Resources`, source-path
+      scans); the other 7 are real and pre-existing, six of them the very things
+      "Recommended next" already names as unmeasured — including
+      `TheWorldFightsItsOwnWars` reporting **73 AI-vs-AI wars in 180 world-years
+      against a documented 1.25 per world**, and the two
+      `MultilateralAllianceTests` that PR #6 said had never run.
+      **Two real defects the verification found, both now fixed:**
+      - **A record described part of a month, not the month.** Anchoring on the
+        first *instrumented* site is wrong, because approval is moved by a
+        cabinet action before the government tick and by a crisis after it, and
+        the market index is set by the economy tick and moved again by a market
+        shock. Measured on one real month the panel claimed approval fell 2.01
+        when it had fallen 1.95, and claimed the market index **rose 1.0 when it
+        had fallen 4.4**. `Causal.OpenMonth` is now the first system in
+        `SimulationPipeline` and `Causal.CloseMonth` the last: the record opens
+        where the month opened, closes where it closed, and whatever the named
+        causes do not account for is booked as OTHER. **An explanation that
+        disagrees with the number it is explaining is worse than none** — which
+        is the whole argument for this feature, turned on itself.
+      - **One record per metric per month.** The builder and the scattered
+        `Note` sites were creating rival records for the same movement, so a
+        screen would show whichever it happened to fetch. Both now share
+        `Causal.OpenRecord`.
+      One test expectation was wrong rather than the code:
+      `HistoryIsBoundedAndKeepsTheNewest` compared the newest record against
+      `state.date`, but `TurnManager` raises `ResolveMonth` and only *then*
+      advances the clock — so a record is correctly stamped with the month it
+      describes and the clock afterwards reads the next, unresolved one. The
+      expectation moved, not the behaviour.
+      The float-locals extraction is **verified bit-identical**: a 24-month
+      world resolves to the same fingerprint with recording on and off, and two
+      runs with it on are identical to each other.
 
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
