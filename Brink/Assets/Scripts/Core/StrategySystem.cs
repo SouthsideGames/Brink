@@ -72,9 +72,6 @@ namespace Brink.Core
             plan.doctrineChosen = true;
             plan.doctrineAdopted = state.date;
             plan.revisionCount++;
-            // Strategy authoring is not annual-evaluation initiative. Otherwise a
-            // player can toggle doctrine/policy/objectives for free grade points,
-            // the same exploit Cabinet mode switching already had to close.
             state.AddNotification(NotificationClass.Priority, "STRATEGY ADOPTED",
                 $"Standing doctrine: {DoctrineLabel(doctrine)}. Delegated desks will weight routine choices accordingly.", state.playerCountryId);
             state.AddChronicle(ChronicleCategory.Political, state.playerCountryId,
@@ -99,6 +96,20 @@ namespace Brink.Core
             plan.revisionCount++;
             state.AddNotification(NotificationClass.Priority, "NATIONAL POLICY",
                 $"{def.label}: {def.description}", state.playerCountryId);
+            return true;
+        }
+
+        /// <summary>
+        /// Give the standing strategy a human name and planning horizon. This is
+        /// organisation only: no Influence, initiative, XP or national effect.
+        /// </summary>
+        public static bool SetPlanFrame(GameState state, string title, int horizonMonths)
+        {
+            var plan = Ensure(state);
+            if (plan == null || string.IsNullOrWhiteSpace(title)) return false;
+            plan.planTitle = title.Trim();
+            plan.horizonMonths = StrategicForecastSystem.ClampHorizon(horizonMonths);
+            plan.horizonSet = state.date;
             return true;
         }
 
@@ -149,9 +160,6 @@ namespace Brink.Core
                 o.achieved = met;
                 if (!met || wasMet) continue;
 
-                // First attainment is history; later regain is just current
-                // status. This keeps a standing objective from becoming a noisy
-                // quest that fires every time a threshold oscillates.
                 if (!o.everAchieved)
                 {
                     o.everAchieved = true;
@@ -163,12 +171,6 @@ namespace Brink.Core
             }
         }
 
-        /// <summary>
-        /// CabinetSystem is older than standing strategy and labels every
-        /// Autonomous desk as "own judgement". After the month, correct only the
-        /// player's strategy-steered report lines so authorship remains truthful.
-        /// This changes reporting, never simulation state.
-        /// </summary>
         public static void ClarifyCabinetReport(GameState state)
         {
             var country = state.PlayerCountry;
@@ -196,6 +198,7 @@ namespace Brink.Core
             var plan = Ensure(state); if (plan == null) return "NO STRATEGIC PLAN ON FILE.";
             var sb = new StringBuilder();
             sb.AppendLine("STANDING STRATEGY");
+            sb.AppendLine($"PLAN: {plan.planTitle.ToUpperInvariant()}   HORIZON: {plan.horizonMonths} MONTHS");
             sb.AppendLine("DOCTRINE: " + (plan.doctrineChosen ? DoctrineLabel(plan.doctrine).ToUpperInvariant() : "UNSET"));
             foreach (var c in plan.policies) { var d=FindPolicy(c.policyId); if(d!=null) sb.AppendLine("POLICY: " + d.label.ToUpperInvariant()); }
             sb.AppendLine("PLAYER OBJECTIVES:");
