@@ -31,7 +31,7 @@ namespace Brink.Tests
         public void Bar_HandlesDegenerateInputs()
         {
             Assert.AreEqual(string.Empty, AsciiChart.Bar(50, 100, 0));
-            Assert.AreEqual(10, AsciiChart.Bar(5, 0, 10).Length); // max<=0 treated as 1
+            Assert.AreEqual(10, AsciiChart.Bar(5, 0, 10).Length);
         }
 
         [Test]
@@ -39,7 +39,6 @@ namespace Brink.Tests
         {
             string line = AsciiChart.LabeledBar("MIL", 50, 100, 10, 10);
             StringAssert.StartsWith("MIL       ", line);
-
             string truncated = AsciiChart.LabeledBar("VERYLONGNAME", 50, 100, 6, 10);
             StringAssert.StartsWith("VERYLO ", truncated);
         }
@@ -79,15 +78,44 @@ namespace Brink.Tests
             Assert.AreEqual(' ', line[0]);
             Assert.AreEqual('█', line[2]);
         }
+
+        [Test]
+        public void Canvas_ClipsAndKeepsExactDimensions()
+        {
+            var canvas = new AsciiCanvas(12, 5);
+            canvas.Text(9, 2, "ABCDE");
+            canvas.Plot(-1, 0, 'X');
+            var rows = canvas.ToString().Split('\n');
+            Assert.AreEqual(5, rows.Length);
+            foreach (var row in rows) Assert.AreEqual(12, row.Length);
+            StringAssert.EndsWith("ABC", rows[2]);
+        }
+
+        [Test]
+        public void Canvas_LineCanRespectExistingArt()
+        {
+            var canvas = new AsciiCanvas(12, 5);
+            canvas.Text(5, 2, "US");
+            canvas.Line(0, 2, 11, 2, '·', overwrite: false);
+            Assert.AreEqual('U', canvas.At(5, 2));
+            Assert.AreEqual('S', canvas.At(6, 2));
+            Assert.AreEqual('·', canvas.At(4, 2));
+            Assert.AreEqual('·', canvas.At(7, 2));
+        }
+
+        [Test]
+        public void Canvas_FromTextPreservesExistingFigure()
+        {
+            var canvas = AsciiCanvas.FromText("ABC\nD E");
+            Assert.AreEqual(3, canvas.Width);
+            Assert.AreEqual(2, canvas.Height);
+            Assert.AreEqual('B', canvas.At(1, 0));
+            Assert.AreEqual(' ', canvas.At(1, 1));
+        }
     }
 
     public class BreakpointTests
     {
-        /// <summary>
-        /// Size classes are measured in characters across, not panel points —
-        /// points became meaningless once the panel scale started being derived
-        /// to hit a column target.
-        /// </summary>
         [Test]
         public void FromColumns_MapsSizeClasses()
         {
