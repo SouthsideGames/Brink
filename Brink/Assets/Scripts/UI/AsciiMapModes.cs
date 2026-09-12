@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using Brink.Data;
 
 namespace Brink.UI
@@ -38,6 +37,25 @@ namespace Brink.UI
             return canvas.ToString();
         }
 
+        /// <summary>
+        /// The same five visual grammars used elsewhere in Phase C, paired to the
+        /// question this map mode asks. Political is the Government picture;
+        /// Trade is Economy; Blocs is Diplomacy.
+        /// </summary>
+        public static string Signature(GameState state, WorldMapMode mode, int width)
+        {
+            Pillar pillar;
+            switch (mode)
+            {
+                case WorldMapMode.Military: pillar = Pillar.Military; break;
+                case WorldMapMode.Trade: pillar = Pillar.Economy; break;
+                case WorldMapMode.Intelligence: pillar = Pillar.Intelligence; break;
+                case WorldMapMode.Blocs: pillar = Pillar.Diplomacy; break;
+                default: pillar = Pillar.Government; break;
+            }
+            return AsciiPillarArt.Render(state, pillar, width);
+        }
+
         public static string Legend(WorldMapMode mode)
         {
             switch (mode)
@@ -71,21 +89,25 @@ namespace Brink.UI
                 case WorldMapMode.Trade:
                 {
                     int links = 0, embargoes = 0, sanctions = 0;
-                    foreach (var t in state.trade) if (t.Involves(state.playerCountryId)) { links++; if (t.embargoed) embargoes++; }
-                    foreach (var s in state.sanctions) if (s.senderId == state.playerCountryId || s.targetId == state.playerCountryId) sanctions++;
+                    foreach (var t in state.trade)
+                        if (t.Involves(state.playerCountryId)) { links++; if (t.embargoed) embargoes++; }
+                    foreach (var s in state.sanctions)
+                        if (s.senderId == state.playerCountryId || s.targetId == state.playerCountryId) sanctions++;
                     return $"OUR TRADE LINKS {links}   EMBARGOED {embargoes}   SANCTIONS INVOLVING US {sanctions}";
                 }
                 case WorldMapMode.Intelligence:
                 {
                     int networks = 0, deep = 0;
                     foreach (var n in state.networks)
-                        if (n.ownerId == state.playerCountryId && !n.compromised) { networks++; if (n.penetration >= 55f) deep++; }
+                        if (n.ownerId == state.playerCountryId && !n.compromised)
+                        { networks++; if (n.penetration >= 55f) deep++; }
                     return $"ACTIVE NETWORKS {networks}   DEEP ACCESS {deep}";
                 }
                 case WorldMapMode.Blocs:
                 {
                     int active = 0, ours = 0;
-                    foreach (var b in state.blocs) if (!b.dissolved) { active++; if (b.Has(state.playerCountryId)) ours++; }
+                    foreach (var b in state.blocs)
+                        if (!b.dissolved) { active++; if (b.Has(state.playerCountryId)) ours++; }
                     return $"ACTIVE BLOCS {active}   OUR MEMBERSHIPS {ours}";
                 }
                 default:
