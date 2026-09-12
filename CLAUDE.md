@@ -2647,6 +2647,63 @@ for every figure in the table above.
       world resolves to the same fingerprint with recording on and off, and two
       runs with it on are identical to each other.
 
+- [x] **Phase A closed (2026-09-12).** Four contract defects the Unity
+      verification named, and nothing else. Supersedes the "OpenMonth first,
+      CloseMonth last" rule in the entry above.
+      - **The causal month is `EndMonth` itself** (spec 26 §3a). The snapshot
+        used to be taken at pipeline start, and `CrisisSystem.LapseUnanswered`
+        runs *before* `ResolveMonth` fires — so every lapse penalty, and every
+        player verb taken on the operator's turn, fell outside the record.
+        Measured: approval endpoints stale in 13/60 and 6/60 months on two
+        seeds, every one a lapse month. Now: `TurnManager.MonthResolved` is a
+        new observational hook fired after `ResolveMonth` *and* `YearEnded`;
+        `Causal.CloseMonth` reconciles there and **re-takes the opening
+        snapshot** for the month that follows; `Causal.OpenMonth` only fills
+        gaps (at `Wire` and as the first pipeline system) and never overwrites.
+        **The snapshot is persisted** — the game autosaves after every player
+        verb, so a save taken mid-turn had to carry it or a reload would open
+        the month after the verb. `[NonSerialized]` was right when the snapshot
+        lived inside one tick and wrong once the boundary moved to the turn.
+        Not special-cased to the lapse: the lapse is also *named*
+        (`CausalReason.CrisisLapsed`), but an answered crisis, a debt
+        restructure and a year-end consequence land in the right month by the
+        same rule, and each has a test. After: 0 stale, 0 missing, max
+        reconciliation error 0.0004 across all seven metrics on both seeds.
+      - **`RestructureDebtBy` is instrumented** (`CausalReason.DebtRestructured`,
+        provenance `nameof(GameController.RestructureDebt)`); the only raw write
+        to a pilot metric left.
+      - **The contribution cap folds, never drops.** `RemoveRange` at 14 cut the
+        entries appended *last* — `Bounds`, `Reversion`, `Unattributed`, the ones
+        that make the column add up — so the busiest months broke first.
+        `CausalLedger.FoldToCap` merges the smallest into the single OTHER row;
+        the largest named causes survive in recorded order; idempotent.
+      - **Classified leaves no existence side-channel.** It was counted into the
+        withheld line ("one further factor is not reported to us" is an
+        existence flag), and the first fix folded it into OTHER for the own
+        reader only — a foreign reader with confirmed collection would have been
+        handed a sized column that no longer summed to the net change, the same
+        flag by another route. `CausalDisclosure.WithoutClassified` now merges
+        it *before* any reader rule runs, so every reader sees exactly what an
+        unattributed remainder would have shown them. `Unknown` stays counted:
+        that is the hole collection can fix.
+      **A recording-only change, proven:** on/off and run-to-run fingerprints
+      for seeds 4242 and 1212 are byte-identical to the pre-repair recordings
+      (`C:\Temp\brink-audit`, `closure_causal_*.txt`). The `saveload` probe
+      cannot run outside Unity (`JsonUtility` is an engine call — pre-existing);
+      save fidelity is the two round-trip tests plus the new mid-turn one.
+      **Verified in Unity on a temp copy of the project** because the editor was
+      open: CausalityTests 37/37 (was 27); full suite **1323 tests, 1314
+      passed, 8 failed — every failure pre-existing and named in the 9/11 run**
+      (debt ratchet, drift margin, cascade heat, delegating-operator coups,
+      strategy churn, the two alliance repudiation-cost tests, hardship
+      organising). The dotnet harness agrees: HEAD 1312/30 failed, this tree
+      1322/30 failed, identical failure sets.
+      **Unity was run on a project copy** (`C:\Temp\brink-suite-copy`, Assets +
+      Packages + ProjectSettings, fresh Library) — a batch run cannot share the
+      open editor's project lock, and killing somebody's editor is not a step a
+      test script gets to take. Same sources, same editor binary; only the
+      Library was regenerated.
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

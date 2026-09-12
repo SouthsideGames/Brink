@@ -85,11 +85,41 @@ admits a remainder.
 
 ### The month is the unit, and the whole month is accounted for
 
-`Causal.OpenMonth` is the **first** system in `SimulationPipeline` and
-`Causal.CloseMonth` is the **last**. Open snapshots what every reconciled value
-read before anything touched it; Close sets the record's `resulting` to what it
-now reads and books whatever the named causes do not account for as
-`Unattributed`.
+**§3a — the causal month boundary.** A causal month is the interval between two
+consecutive completions of `TurnManager.EndMonth`: from the moment the
+operator's turn begins — the previous resolution has finished, its year-end
+evaluation included, and the screen shows the values the operator reads — to
+the moment this resolution finishes. Everything inside belongs to the month
+being resolved: the operator's own verbs, a crisis they answered or let lapse
+(`CrisisSystem.LapseUnanswered` runs at the top of `EndMonth`, *before*
+`ResolveMonth` fires), the whole pipeline, and whatever `YearEnded` does in a
+December. The rule is testable and tested: for every reconciled metric,
+`record.previous` is the value when the turn began and `record.resulting` is
+the value when `EndMonth` returned.
+
+Three pieces implement it:
+
+- **`Causal.CloseMonth` is wired to `TurnManager.MonthResolved`**, a hook that
+  fires after every `ResolveMonth` handler *and* after `YearEnded`, while the
+  resolved date is still current. It sets each record's `resulting` to what the
+  value now reads, books whatever the named causes do not account for as
+  `Unattributed`, and then **re-takes the month-open snapshot** for the month
+  that follows. The next month opens where this one closed.
+- **`Causal.OpenMonth` fills gaps and never overwrites.** Called at
+  `SimulationPipeline.Wire` for a new world or an old save with no snapshot, and
+  again as the first pipeline system as a fallback for a hand-wired fixture.
+  Overwriting there would push the boundary back to pipeline start.
+- **The snapshot is persisted** (`CausalLedger.openings`, see §5). The game
+  autosaves after every player verb, so a save can be taken mid-turn; a snapshot
+  rebuilt at load would open the causal month *after* the verb.
+
+The first version snapshotted at pipeline start. Measured on two seeds over 60
+months, approval's endpoints disagreed with the screen in 13 and 6 months — every
+one a month in which a crisis lapsed, because the lapse penalty ran before the
+snapshot. Fixing that by special-casing the lapse would have left every other
+between-months write (an answered crisis, a debt restructure, a posture change)
+in the same gap. A fixture that rewrites the world after wiring is describing
+"the world as given", not a month, and calls `Causal.SnapshotOpenings` to say so.
 
 **This is not bookkeeping tidiness — without it the headline figure is wrong.**
 Approval is moved by a cabinet action *before* the government tick and by a
@@ -142,7 +172,7 @@ itself. What a *reader* gets is decided here:
 | `Estimated` | Named, with its figure and a confidence |
 | `Suspected` | Named, **no figure** |
 | `Unknown` | Not named; counted as withheld |
-| `Classified` | Dropped, at every width, for every reader |
+| `Classified` | Merged into OTHER before any reader rule runs; never named, never counted, never degrades |
 
 Three existing systems are deferred to rather than restated:
 
@@ -156,11 +186,26 @@ Three existing systems are deferred to rather than restated:
   most tempting place in the codebase to break it. Direct Control removes the
   intermediary and the filter, exactly as `CabinetAdvice.ShouldAdvise` already
   works.
-- **Classification.** No flag reveals it.
+- **Classification.** No flag reveals it — **and no count, no band, no short
+  column.** `CausalDisclosure.WithoutClassified` merges every `Classified`
+  contribution into the record's OTHER line *before* the reader-specific rules
+  run, so every reader — the country's own government, a foreign one with
+  confirmed collection, one with none — sees exactly what they would have seen
+  had the movement simply gone unattributed. The first version counted it into
+  the withheld line, which told the operator "there is one cause here you do not
+  know about"; and a foreign reader with confirmed collection, who is handed
+  sized figures and a NET line, would have been handed a column that no longer
+  summed to the net change. Both are existence flags. The magnitude is kept
+  rather than dropped because the net movement is on the screen regardless;
+  what classification protects is that the movement *had a cause at all*.
+  `Unknown` is the deliberate contrast: it *is* counted, because "something is
+  here you cannot see" is what collection can fix.
 
-**Withholding is itself reported.** "One further factor is not reported to us" is
-information an operator is entitled to, and is what keeps collection worth
-buying. Hiding the hole would be the omniscience exploit running the other way.
+**Withholding is itself reported** — for `Unknown` and for what a desk buried.
+"One further factor is not reported to us" is information an operator is
+entitled to, and is what keeps collection worth buying. Hiding the hole would be
+the omniscience exploit running the other way. Classified is the one thing this
+does not apply to, for the reason above.
 
 **If anything was withheld or could not be sized, the explanation drops to
 `Qualitative`** and prints ranked bands with no total. A column of figures that
@@ -175,10 +220,25 @@ movement would protect nothing.
 (country, metric), not global, or a chatty metric would evict a quiet one and the
 quiet one is the first thing an operator goes looking for.
 
-The month-open snapshot (`CausalLedger.openings`) is `[NonSerialized]`: it exists
-only between the first and last system of one tick, so persisting it would be
-storing a half-resolved month. It is absent after a load, and every reader treats
-a missing entry as "no snapshot" rather than as zero.
+**The contribution cap folds; it never drops.** `CausalLedger.FoldToCap` merges
+the smallest contributions into the record's single OTHER line until the record
+fits, so the largest named causes survive in the order they were recorded, the
+folded magnitude is preserved, and `previous + Σ contributions == resulting`
+keeps holding on the busiest month. The first version cut the list with
+`RemoveRange` — and the entries appended last are `Bounds`, `Reversion` and
+`Unattributed`, precisely the terms that make the column add up, so the busiest
+months broke first. Deterministic: smallest absolute value first, ties to the
+earliest index, and repeated folding is idempotent and never mints a second
+OTHER row.
+
+The month-open snapshot (`CausalLedger.openings`) is **persisted**. It is taken
+when a month closes and describes the values on the operator's screen as their
+turn began (§3a); since the game autosaves after every player verb, a save taken
+mid-turn has to carry it or the reload would open the causal month after the
+verb. It was `[NonSerialized]` while the snapshot lived inside one tick; once the
+boundary moved to the turn, that reasoning inverted. Absent from an old save,
+which every reader treats as "no snapshot" rather than as zero, and
+`Causal.OpenMonth` fills it at wiring. No version bump: seven additive entries.
 
 **No save version bump and no migration step.** The field is additive and *empty
 is correct* on an old save — a world that resolved its months before this existed

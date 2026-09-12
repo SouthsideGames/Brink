@@ -97,6 +97,15 @@ namespace Brink.Data
         /// </summary>
         ForeignInterference,
         CovertAction,
+
+        // ---- appended 2026-09 (Phase A closure). Append-only: new members go
+        // ---- below this line, never between existing ones. ----
+
+        /// <summary>A crisis the operator let lapse unanswered (GDD §23).</summary>
+        CrisisLapsed,
+
+        /// <summary>Sovereign debt written down by decision (spec 02 §9).</summary>
+        DebtRestructured,
     }
 
     /// <summary>
@@ -165,6 +174,9 @@ namespace Brink.Data
 
                 case CausalReason.ForeignInterference: return "FOREIGN INTERFERENCE";
                 case CausalReason.CovertAction: return "COVERT ACTION";
+
+                case CausalReason.CrisisLapsed: return "CRISIS LEFT UNANSWERED";
+                case CausalReason.DebtRestructured: return "DEBT RESTRUCTURED";
 
                 default: return "UNSPECIFIED";
             }

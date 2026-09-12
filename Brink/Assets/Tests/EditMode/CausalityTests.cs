@@ -78,6 +78,13 @@ namespace Brink.Tests
             Player.socialUnrest = 30f;
             Player.publicGrievance = 35f;
             Player.warExhaustion = 40f;
+
+            // Arrangement is "the world as given", not something that happened
+            // during a month. The causal month opens where the previous one
+            // closed (spec 26 §3a), so a fixture that rewrites the world after
+            // wiring must re-take the month-open snapshot or the first month's
+            // records would truthfully — and uselessly — explain the fixture.
+            Causal.SnapshotOpenings(state);
         }
 
         // ---- 1. the record describes the movement it was taken from ----
@@ -221,6 +228,218 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ACrisisLapseBelongsToTheMonthItLapsed()
+        {
+            // `TurnManager.EndMonth` lapses unanswered crises *before* the
+            // resolution hook fires. The causal month opens where the previous
+            // one closed (spec 26 §3a), so the lapse penalty must land inside
+            // this month's record — the measured defect was approval endpoints
+            // disagreeing with the screen in exactly the months a crisis lapsed.
+            state.activeCrises.Add(CrisisSystem.Create(state, EventCatalog.Definitions[0].id));
+
+            float before = Player.governmentApproval;
+            turns.EndMonth();
+            float after = Player.governmentApproval;
+
+            var record = state.causal.Latest(Player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record, "the lapse month recorded nothing for approval");
+            Assert.AreEqual(before, record.previous, 0.0005f,
+                "the lapse penalty fell outside the record — the month did not open where the screen did");
+            Assert.AreEqual(after, record.resulting, 0.0005f,
+                "the record does not close where the month closed");
+
+            var lapsed = record.contributions.Find(c => c.reason == CausalReason.CrisisLapsed);
+            Assert.IsNotNull(lapsed, "letting a crisis lapse was not named as a cause");
+            Assert.Less(lapsed.value, -3f, "the lapse penalty lost its magnitude");
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f, "the lapse month does not reconcile");
+        }
+
+        [Test]
+        public void ABetweenMonthsMutationBelongsToTheMonthItPrecedes()
+        {
+            // Anything that happens on the operator's turn — here standing in
+            // for any episodic, uninstrumented write — belongs to the month
+            // about to resolve, and lands in its record as OTHER rather than
+            // falling into a gap between two records.
+            RunMonths(1);
+
+            float opened = Player.governmentApproval;   // what the screen shows
+            Player.governmentApproval = opened + 3f;    // an uninstrumented act
+
+            turns.EndMonth();
+            float closed = Player.governmentApproval;
+
+            var record = state.causal.Latest(Player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            Assert.AreEqual(opened, record.previous, 0.0005f,
+                "the record does not open where the operator's turn began");
+            Assert.AreEqual(closed, record.resulting, 0.0005f);
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f,
+                "the between-months movement was lost rather than booked");
+        }
+
+        [Test]
+        public void ADebtRestructureIsAttributedAndItsArithmeticIsUntouched()
+        {
+            Player.fiscal.sovereignDebt = 800f;
+            Causal.SnapshotOpenings(state);   // the world as given
+
+            float before = Player.fiscal.sovereignDebt;
+            Assert.IsTrue(FiscalSystem.RestructureDebtBy(state, Player.id),
+                "the restructure was refused, so this test proves nothing");
+
+            // 1. The debt changed exactly as it always did.
+            Assert.AreEqual(before * 0.5f, Player.fiscal.sovereignDebt, 0f,
+                "instrumentation changed the write-down arithmetic");
+
+            turns.EndMonth();
+
+            var record = state.causal.Latest(Player.id, CausalMetric.SovereignDebt);
+            Assert.IsNotNull(record, "a restructure month recorded nothing for debt");
+
+            // 2. The action is named, with provenance.
+            var restructure = record.contributions.Find(
+                c => c.reason == CausalReason.DebtRestructured);
+            Assert.IsNotNull(restructure, "the write-down is not attributed");
+            Assert.AreEqual(-before * 0.5f, restructure.value, 0.01f,
+                "the attributed figure is not the write-down");
+            Assert.AreEqual(nameof(GameController.RestructureDebt), restructure.sourceActionId,
+                "provenance is not the stable verb id");
+
+            // 3. The whole month still reconciles, service and deficit included.
+            Assert.AreEqual(before, record.previous, 0.0005f,
+                "the record does not open at the pre-restructure stock");
+            Assert.AreEqual(Player.fiscal.sovereignDebt, record.resulting, 0.0005f);
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f, "the restructure month does not reconcile");
+        }
+
+        [Test]
+        public void AnAnsweredCrisisBelongsToTheMonthItWasAnsweredIn()
+        {
+            // The real verb, not a raw write: answering a crisis moves approval
+            // on the operator's turn through an uninstrumented site. The
+            // movement must land in the month about to resolve, with the record
+            // opening at the value the operator saw when their turn began.
+            RunMonths(1);
+            float opened = Player.governmentApproval;
+
+            ActiveCrisis crisis = null;
+            int option = -1;
+            foreach (var definition in EventCatalog.Definitions)
+            {
+                var candidate = CrisisSystem.Create(state, definition.id);
+                for (int i = 0; i < candidate.options.Count && option < 0; i++)
+                    if (Math.Abs(candidate.options[i].approvalDelta) >= 2f) { crisis = candidate; option = i; }
+                if (crisis != null) break;
+            }
+            Assert.IsNotNull(crisis, "no authored crisis option moves approval, so this test cannot run");
+
+            state.activeCrises.Add(crisis);
+            CrisisSystem.Resolve(state, crisis, option);
+            Assert.AreNotEqual(opened, Player.governmentApproval,
+                "the answer did not move approval, so the fixture proves nothing");
+
+            int resolving = state.date.year * 12 + state.date.month;
+            turns.EndMonth();
+            float closed = Player.governmentApproval;
+
+            var record = state.causal.Latest(Player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            Assert.AreEqual(resolving, record.MonthIndex, "the answer was booked to the wrong month");
+            Assert.AreEqual(opened, record.previous, 0.0005f,
+                "the record does not open where the operator's turn began");
+            Assert.AreEqual(closed, record.resulting, 0.0005f);
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f, "the answered month does not reconcile");
+        }
+
+        [Test]
+        public void AYearEndConsequenceIsInsideDecembersBracket()
+        {
+            // `YearEnded` fires after every `ResolveMonth` handler. If the causal
+            // month closed as the last of those, anything the annual evaluation
+            // did to a metric would fall after December's record closed and
+            // before January's opened. The bracket is `EndMonth` itself, so a
+            // year-end consequence belongs to December.
+            RunMonths(11);
+            Assert.IsTrue(state.date.IsYearEnd, "the clock should read December");
+
+            float opened = Player.governmentApproval;
+            bool fired = false;
+            turns.YearEnded += _ =>
+            {
+                fired = true;
+                Player.governmentApproval = Math.Min(100f, Player.governmentApproval + 3f);
+            };
+
+            int december = state.date.year * 12 + state.date.month;
+            turns.EndMonth();
+            Assert.IsTrue(fired, "the year-end hook never ran, so this test proves nothing");
+            float closed = Player.governmentApproval;
+
+            var record = state.causal.Latest(Player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            Assert.AreEqual(december, record.MonthIndex);
+            Assert.AreEqual(opened, record.previous, 0.0005f);
+            Assert.AreEqual(closed, record.resulting, 0.0005f,
+                "December's record closed before the year-end consequence landed");
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f);
+
+            // And January opens where December closed — after the evaluation.
+            Assert.IsTrue(Causal.TryOpening(state, Player.id, CausalMetric.GovernmentApproval, out var next));
+            Assert.AreEqual(closed, next, 0.0005f, "the next month did not open where this one closed");
+        }
+
+        [Test]
+        public void AMidTurnSaveResumesTheSameCausalMonth()
+        {
+            // The game autosaves after every player verb, so a save can be taken
+            // after the operator acted and before they ended the month. The
+            // snapshot travels with the save, or the reload would open the
+            // causal month on the post-verb values and lose the verb.
+            RunMonths(1);
+            float opened = Player.governmentApproval;
+
+            Player.governmentApproval = opened + 3f;   // an uninstrumented act on the operator's turn
+            Assert.AreNotEqual(opened, Player.governmentApproval, "the write did not take");
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(Causal.TryOpening(loaded, loaded.playerCountryId, CausalMetric.GovernmentApproval, out var carried),
+                "the month-open snapshot did not survive the save");
+            Assert.AreEqual(opened, carried, 0.0005f, "the snapshot came back as a different value");
+
+            var resumed = new TurnManager(loaded);
+            SimulationPipeline.Wire(resumed, loaded);
+            Assert.IsTrue(Causal.TryOpening(loaded, loaded.playerCountryId, CausalMetric.GovernmentApproval, out var afterWire));
+            Assert.AreEqual(opened, afterWire, 0.0005f, "wiring overwrote the carried snapshot");
+
+            resumed.EndMonth();
+
+            var record = loaded.causal.Latest(loaded.playerCountryId, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            Assert.AreEqual(opened, record.previous, 0.0005f,
+                "the resumed month did not open where the operator's turn began");
+            Assert.AreEqual(loaded.PlayerCountry.governmentApproval, record.resulting, 0.0005f);
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.delta, sum, 0.01f);
+        }
+
+        [Test]
         public void OneRecordPerMetricPerMonthEvenWhenManySystemsTouchIt()
         {
             // War exhaustion is written at eleven sites across six systems. Two
@@ -293,16 +512,117 @@ namespace Brink.Tests
                 CausalReason.CovertAction, -8.2f, CausalCategory.Intelligence,
                 CausalKind.Direct, CausalVisibility.Classified)
             { sourceCountryId = "CHN" });
+            // The record itself is complete — the simulation explains itself to
+            // itself in full — so its endpoints include the classified movement.
+            record.delta = -7.2f;
+            record.resulting = record.previous + record.delta;
 
             var view = CausalDisclosure.Disclose(state, record);
             string text = CausalExplanation.Render(view, 52);
 
-            Assert.AreEqual(1, view.withheld, "the classified cause was not withheld");
+            // Never named, and never *counted* — a withheld tally that ticks up
+            // when a classified cause is present is an existence flag, which is
+            // exactly what classification must not produce (spec 26 §4).
+            Assert.AreEqual(0, view.withheld,
+                "a classified cause was counted — the count is an existence side-channel");
             StringAssert.DoesNotContain("COVERT", text);
-            StringAssert.DoesNotContain("8.2", text);
             StringAssert.DoesNotContain("CHN", text);
-            StringAssert.Contains("NOT REPORTED", text,
-                "the reader was not told that something is missing");
+            StringAssert.DoesNotContain("NOT REPORTED", text,
+                "the reader was told something is missing, which reveals that it exists");
+
+            // The magnitude rides inside OTHER so the column still adds up —
+            // the net movement is on the operator's screen regardless.
+            float sum = 0f;
+            foreach (var cause in view.causes) { Assert.IsTrue(cause.sized); sum += cause.value; }
+            Assert.AreEqual(view.delta, sum, 0.01f,
+                "hiding the classified cause broke the column");
+        }
+
+        [Test]
+        public void ClassifiedLeavesNoExistenceSideChannel()
+        {
+            // The strong form: a record whose movement is partly classified must
+            // be *indistinguishable* from one with the same ordinary
+            // unattributed movement. If any pixel differs, the difference is a
+            // side-channel.
+            var classified = Fabricate(new[] { (CausalReason.EconomicGrowth, +1.0f) });
+            classified.contributions.Add(new CausalContribution(
+                CausalReason.CovertAction, -8.2f, CausalCategory.Intelligence,
+                CausalKind.Direct, CausalVisibility.Classified)
+            { sourceCountryId = "CHN" });
+            classified.delta = -7.2f;
+            classified.resulting = classified.previous + classified.delta;
+
+            var mundane = Fabricate(new[] { (CausalReason.EconomicGrowth, +1.0f) });
+            mundane.contributions.Add(new CausalContribution(
+                CausalReason.Unattributed, -8.2f, CausalCategory.Other));
+            mundane.delta = -7.2f;
+            mundane.resulting = mundane.previous + mundane.delta;
+
+            var viewClassified = CausalDisclosure.Disclose(state, classified);
+            var viewMundane = CausalDisclosure.Disclose(state, mundane);
+
+            Assert.AreEqual(viewMundane.withheld, viewClassified.withheld);
+            Assert.AreEqual(viewMundane.reconciliation, viewClassified.reconciliation);
+            Assert.AreEqual(
+                CausalExplanation.Render(viewMundane, 52),
+                CausalExplanation.Render(viewClassified, 52),
+                "a classified cause rendered differently from ordinary unattributed movement");
+        }
+
+        [Test]
+        public void AForeignReaderWithConfirmedCollectionCannotTellClassifiedFromUnattributed()
+        {
+            // The case the first fix missed: a foreign reader with confirmed
+            // collection is handed sized figures and an additive total. Dropping
+            // the classified cause there would leave a column that no longer
+            // summed to the net change — the existence flag by another route.
+            var rival = state.countries.Find(c => c.id != state.playerCountryId);
+            Assert.IsNotNull(rival);
+            state.estimates.Add(new IntelEstimate
+            {
+                observerId = Player.id,
+                targetId = rival.id,
+                domain = IntelDomain.Political,
+                confidence = ConfidenceGrade.Confirmed,
+                everCollected = true,
+                reportedValue = 50f,
+            });
+
+            var classified = Fabricate(new[] { (CausalReason.Deprivation, -1.0f) });
+            classified.countryId = rival.id;
+            classified.contributions.Add(new CausalContribution(
+                CausalReason.CovertAction, -8.2f, CausalCategory.Intelligence,
+                CausalKind.Direct, CausalVisibility.Classified)
+            { sourceCountryId = Player.id });
+            classified.delta = -9.2f;
+            classified.resulting = classified.previous + classified.delta;
+
+            var mundane = Fabricate(new[] { (CausalReason.Deprivation, -1.0f) });
+            mundane.countryId = rival.id;
+            mundane.contributions.Add(new CausalContribution(
+                CausalReason.Unattributed, -8.2f, CausalCategory.Other));
+            mundane.delta = -9.2f;
+            mundane.resulting = mundane.previous + mundane.delta;
+
+            var viewClassified = CausalDisclosure.Disclose(state, classified, Player.id);
+            var viewMundane = CausalDisclosure.Disclose(state, mundane, Player.id);
+
+            // Non-vacuity: the reader really is being shown figures.
+            Assert.Greater(viewMundane.causes.Count, 0, "confirmed collection showed the reader nothing");
+            Assert.AreNotEqual(CausalReconciliation.Qualitative, viewMundane.reconciliation,
+                "the reader was not handed an additive column, so a short column could not have leaked");
+
+            Assert.AreEqual(0, viewClassified.withheld);
+            Assert.AreEqual(viewMundane.reconciliation, viewClassified.reconciliation);
+            Assert.AreEqual(
+                CausalExplanation.Render(viewMundane, 52),
+                CausalExplanation.Render(viewClassified, 52),
+                "a foreign reader could tell a classified cause from unattributed movement");
+
+            float sum = 0f;
+            foreach (var cause in viewClassified.causes) sum += cause.value;
+            Assert.AreEqual(viewClassified.delta, sum, 0.01f, "the disclosed column fell short of the net change");
         }
 
         [Test]
@@ -501,15 +821,145 @@ namespace Brink.Tests
         [Test]
         public void ContributionsWithinARecordAreCapped()
         {
-            var record = new CausalRecord { metric = CausalMetric.Treasury, countryId = Player.id };
-            for (int i = 0; i < CausalLedger.MaxContributions + 10; i++)
+            int planted = CausalLedger.MaxContributions + 10;
+            var record = new CausalRecord
+            { metric = CausalMetric.Treasury, countryId = Player.id, previous = 100f };
+            for (int i = 0; i < planted; i++)
                 record.contributions.Add(new CausalContribution(
                     CausalReason.GovernmentSpending, -1f, CausalCategory.Fiscal));
+            record.delta = -planted;
+            record.resulting = record.previous + record.delta;
 
             var ledger = new CausalLedger();
             ledger.Add(record);
 
             Assert.LessOrEqual(record.contributions.Count, CausalLedger.MaxContributions);
+
+            // Capped by folding, never by dropping: the magnitude is all there.
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.resulting, record.previous + sum, 0.001f,
+                "the cap threw contributions away instead of folding them");
+        }
+
+        [Test]
+        public void FoldingKeepsTheLargestNamedCausesInOrderAndOneOtherRow()
+        {
+            // Twenty distinct named causes of distinct size, alternating sign.
+            // The thirteen largest must survive, in the order they were
+            // recorded, with exactly one OTHER row carrying the sum of the seven
+            // smallest — and folding again must change nothing.
+            int planted = CausalLedger.MaxContributions + 6;
+            var reasons = NamedReasons(planted);
+            var record = new CausalRecord
+            { metric = CausalMetric.GovernmentApproval, countryId = Player.id, previous = 50f };
+            float total = 0f;
+            for (int i = 0; i < planted; i++)
+            {
+                float value = (i + 1) * 0.5f * (i % 2 == 0 ? 1f : -1f);
+                total += value;
+                record.contributions.Add(new CausalContribution(reasons[i], value, CausalCategory.Other));
+            }
+            record.delta = total;
+            record.resulting = record.previous + total;
+
+            CausalLedger.FoldToCap(record);
+
+            Assert.AreEqual(CausalLedger.MaxContributions, record.contributions.Count);
+
+            int folded = planted - (CausalLedger.MaxContributions - 1);
+            float expectedOther = 0f;
+            for (int i = 0; i < folded; i++) expectedOther += (i + 1) * 0.5f * (i % 2 == 0 ? 1f : -1f);
+
+            int others = 0;
+            int expectedNext = folded;   // the first surviving named cause
+            for (int i = 0; i < record.contributions.Count; i++)
+            {
+                var c = record.contributions[i];
+                if (c.reason == CausalReason.Unattributed)
+                {
+                    others++;
+                    Assert.AreEqual(expectedOther, c.value, 0.001f, "OTHER does not carry the folded magnitude");
+                    continue;
+                }
+                Assert.AreEqual(reasons[expectedNext], c.reason,
+                    "a smaller cause survived while a larger one was folded, or the order was rewritten");
+                expectedNext++;
+            }
+            Assert.AreEqual(1, others, "folding minted more than one OTHER row");
+            Assert.AreEqual(planted, expectedNext, "a large named cause went missing");
+
+            float sum = 0f;
+            foreach (var c in record.contributions) sum += c.value;
+            Assert.AreEqual(record.resulting, record.previous + sum, 0.001f);
+
+            // Idempotent, and therefore deterministic across repeated folds.
+            var before = new List<(CausalReason, float)>();
+            foreach (var c in record.contributions) before.Add((c.reason, c.value));
+            CausalLedger.FoldToCap(record);
+            Assert.AreEqual(before.Count, record.contributions.Count);
+            for (int i = 0; i < before.Count; i++)
+            {
+                Assert.AreEqual(before[i].Item1, record.contributions[i].reason);
+                Assert.AreEqual(before[i].Item2, record.contributions[i].value, 0f);
+            }
+        }
+
+        [Test]
+        public void AnOverflowingMonthFoldsIntoOtherAndStillReconciles()
+        {
+            // The live path: more named causes in one month than a record may
+            // hold, through `Causal.Apply`, then the pipeline adds its own on
+            // top. `previous + Σ contributions == resulting` has to survive it.
+            RunMonths(1);
+            float opened = Player.governmentApproval;
+
+            int planted = CausalLedger.MaxContributions + 6;
+            var reasons = NamedReasons(planted);
+            for (int i = 0; i < planted; i++)
+            {
+                float step = 0.1f * (i + 1) * (i % 2 == 0 ? 1f : -1f);
+                Causal.Apply(state, Player.id, CausalMetric.GovernmentApproval, reasons[i],
+                    ref Player.governmentApproval, Player.governmentApproval + step, CausalCategory.Other);
+            }
+
+            turns.EndMonth();
+
+            var record = state.causal.Latest(Player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            Assert.LessOrEqual(record.contributions.Count, CausalLedger.MaxContributions,
+                "the record grew past its bound");
+
+            int others = 0;
+            float sum = 0f;
+            foreach (var c in record.contributions)
+            {
+                sum += c.value;
+                if (c.reason == CausalReason.Unattributed) others++;
+            }
+            Assert.AreEqual(1, others, "a busy month should carry exactly one OTHER row");
+            Assert.AreEqual(opened, record.previous, 0.0005f);
+            Assert.AreEqual(Player.governmentApproval, record.resulting, 0.0005f);
+            Assert.AreEqual(record.resulting, record.previous + sum, 0.01f,
+                "an overflowing month stopped adding up");
+
+            // The largest planted cause is the one worth keeping, and it was kept.
+            Assert.IsNotNull(record.contributions.Find(c => c.reason == reasons[planted - 1]),
+                "the largest named cause was folded away while smaller ones survived");
+        }
+
+        /// <summary>`count` distinct, non-structural reasons, in enum order.</summary>
+        static CausalReason[] NamedReasons(int count)
+        {
+            var picked = new List<CausalReason>();
+            foreach (CausalReason reason in Enum.GetValues(typeof(CausalReason)))
+            {
+                if (reason == CausalReason.Unspecified || CausalReasons.IsStructural(reason)) continue;
+                picked.Add(reason);
+                if (picked.Count == count) break;
+            }
+            Assert.AreEqual(count, picked.Count, "not enough distinct reasons exist for this test");
+            return picked.ToArray();
         }
 
         // ---- 9. provenance ----

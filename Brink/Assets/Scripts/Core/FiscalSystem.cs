@@ -489,7 +489,15 @@ namespace Brink.Core
             var country = state.FindCountry(actorId);
             if (country == null || country.fiscal.sovereignDebt <= 0f) return false;
 
-            country.fiscal.sovereignDebt *= 0.5f;
+            // SovereignDebt is a pilot metric, so the write-down is recorded
+            // where it is applied — an uninstrumented halving left a restructure
+            // month's debt explanation silently short by half the stock (spec 26
+            // §3). `Apply` assigns the caller's expression untouched, for the
+            // player and the AI alike; recording itself is player-only as ever.
+            Causal.Apply(state, actorId, CausalMetric.SovereignDebt,
+                CausalReason.DebtRestructured, ref country.fiscal.sovereignDebt,
+                country.fiscal.sovereignDebt * 0.5f, CausalCategory.Fiscal,
+                sourceActionId: nameof(GameController.RestructureDebt));
             country.fiscal.creditStanding = Clamp(country.fiscal.creditStanding - 30f, 0f, 100f);
             country.fiscal.restructuringMemoryMonths = RestructuringMemoryMonths;
             country.economy.confidence = Clamp(country.economy.confidence - 14f, 0f, 100f);
