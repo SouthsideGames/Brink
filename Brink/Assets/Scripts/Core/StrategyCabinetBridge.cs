@@ -34,16 +34,26 @@ namespace Brink.Core
             }
         }
 
+        /// <summary>
+        /// Read-only preview used by the forecast UI. It returns the exact same
+        /// id Prepare would write, so what-if text cannot drift away from runtime
+        /// behaviour.
+        /// </summary>
+        public static string PreviewDirective(StrategicDoctrine doctrine, Pillar pillar)
+            => DefaultDirective(doctrine, pillar);
+
+        public static string PreviewLabel(StrategicDoctrine doctrine, Pillar pillar)
+        {
+            string id = DefaultDirective(doctrine, pillar);
+            if (string.IsNullOrEmpty(id)) return "ordinary ministerial judgement";
+            return CabinetSystem.FindDirective(pillar, id)?.label ?? id;
+        }
+
         static string DefaultDirective(StrategicDoctrine doctrine, Pillar pillar)
         {
             switch (doctrine)
             {
                 case StrategicDoctrine.Deterrence:
-                    // Autonomous MIL_READINESS paid the directive's Cabinet cost
-                    // while MilitarySystem withheld its readiness-target benefit
-                    // from non-Directed officials. PREPARE FOR WAR is an actual
-                    // existing delegated path: it fills force shortfalls and then
-                    // naturally stops buying when establishment is met.
                     if (pillar == Pillar.Military) return MilitaryAdvice.PrepareForWar;
                     if (pillar == Pillar.Economy) return "ECO_AUSTERITY";
                     if (pillar == Pillar.Diplomacy) return "DIP_PRESSURE";
@@ -86,9 +96,6 @@ namespace Brink.Core
 
         static string StrainedDirective(Pillar pillar)
         {
-            // Strain is expressed as a competing use of the same ministry, not a
-            // hidden negative modifier. Every Standard policy therefore changes
-            // both sides of its declared trade-off.
             switch (pillar)
             {
                 case Pillar.Military: return "MIL_CONSERVE";
