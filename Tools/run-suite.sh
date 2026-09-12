@@ -1,20 +1,5 @@
 #!/usr/bin/env bash
 # Run the full EditMode suite as three partitioned Unity invocations.
-#
-# WHY NOT ONE RUN: the editor session *ages* — per-test cost grows with how
-# many tests have already run in the session, with flat process memory (GC
-# scan cost over the retained set, not a leak). Measured 2026-08-25 on
-# CommandPointsAreABindingConstraint: 12s in a small partition, 41.6s at
-# position ~970 of a healthy 999-test run, and 9+ minutes at position ~974
-# once the suite grew past ~1,050 tests — at which point a single full run
-# never finishes. Three fresh editor sessions stay fast and are the same
-# 15–25 minutes a single run used to be.
-#
-# The frozen-log trap: fixtures silence GameLog mirroring, so a hung run's
-# log looks identical to a healthy one's. TestProgressLogger stamps a
-# [TEST] line per test start — the last one in a stalled log names the
-# culprit.
-#
 # Usage: bash Tools/run-suite.sh   (Unity editor must be CLOSED)
 
 set -u
@@ -23,13 +8,10 @@ PROJECT='D:\Southside Games\Brink\Brink'
 OUT=/c/Temp
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-PART_A='Brink.Tests.AllianceCascadeTests|Brink.Tests.MultilateralAllianceTests|Brink.Tests.CorruptionTests|Brink.Tests.RecognitionAndMediationTests|Brink.Tests.FiscalTests|Brink.Tests.IntelProductTests|Brink.Tests.MandateTests|Brink.Tests.StandingDirectiveTests|Brink.Tests.CareerRecordTests|Brink.Tests.ActionIndexTests|Brink.Tests.DossierTests|Brink.Tests.HoldTests|Brink.Tests.HistoryCatalogTests|Brink.Tests.OppositionTests|Brink.Tests.CouncilTests|Brink.Tests.AttentionSystemTests|Brink.Tests.ForceInventoryTests|Brink.Tests.GovernmentSystemTests|Brink.Tests.MapAndLayoutTests|Brink.Tests.OperationCatalogTests'
+PART_A='Brink.Tests.StrategyTests|Brink.Tests.AllianceCascadeTests|Brink.Tests.MultilateralAllianceTests|Brink.Tests.CorruptionTests|Brink.Tests.RecognitionAndMediationTests|Brink.Tests.FiscalTests|Brink.Tests.IntelProductTests|Brink.Tests.MandateTests|Brink.Tests.StandingDirectiveTests|Brink.Tests.CareerRecordTests|Brink.Tests.ActionIndexTests|Brink.Tests.DossierTests|Brink.Tests.HoldTests|Brink.Tests.HistoryCatalogTests|Brink.Tests.OppositionTests|Brink.Tests.CouncilTests|Brink.Tests.AttentionSystemTests|Brink.Tests.ForceInventoryTests|Brink.Tests.GovernmentSystemTests|Brink.Tests.MapAndLayoutTests|Brink.Tests.OperationCatalogTests'
 PART_B='Brink.Tests.CausalityTests|Brink.Tests.InsurgencyTests|Brink.Tests.BlocTests|Brink.Tests.DisplacementTests|Brink.Tests.VerticalSliceValidationTests|Brink.Tests.WorldInvariantTests|Brink.Tests.AISystemTests|Brink.Tests.BugRegressionTests|Brink.Tests.PartialSystemsTests|Brink.Tests.WorldHeatTests'
 PART_C='Brink.Tests.SettlementFogTests|Brink.Tests.StabilityRepairTests|Brink.Tests.AIInformationTests|Brink.Tests.DiplomacySecondActTests|Brink.Tests.AccessionTests|Brink.Tests.AIStrategyTests|Brink.Tests.AIDomesticTests|Brink.Tests.AgentSystemTests|Brink.Tests.AllianceSystemTests|Brink.Tests.AsciiChartTests|Brink.Tests.BreakpointTests|Brink.Tests.AsciiWorldMapTests|Brink.Tests.AssessmentSystemTests|Brink.Tests.AudioSystemTests|Brink.Tests.CabinetAdviceTests|Brink.Tests.CabinetLifecycleTests|Brink.Tests.CabinetSystemTests|Brink.Tests.ChronicleTests|Brink.Tests.CommunicationTests|Brink.Tests.CrisisChainTests|Brink.Tests.CrisisEffectTests|Brink.Tests.CrisisSystemTests|Brink.Tests.NotificationTests|Brink.Tests.DiplomacySystemTests|Brink.Tests.RealWorldRosterTests|Brink.Tests.EconomySystemTests|Brink.Tests.MarketChartTests|Brink.Tests.EndgameSystemTests|Brink.Tests.ExerciseSystemTests|Brink.Tests.FoodSecurityTests|Brink.Tests.EventCatalogTests|Brink.Tests.FactionTests|Brink.Tests.ForeignCabinetTests|Brink.Tests.ForeignCrisisTests|Brink.Tests.GeographySystemTests|Brink.Tests.GameDateTests|Brink.Tests.GovernmentVerbTests|Brink.Tests.IndustrialSystemTests|Brink.Tests.IntelligenceSystemTests|Brink.Tests.MilitarySystemTests|Brink.Tests.MilitaryAdviceTests|Brink.Tests.MilitaryVerbsTests|Brink.Tests.OperationVerbTests|Brink.Tests.PeaceSystemTests|Brink.Tests.PipelineWiringTests|Brink.Tests.ProgressionSystemTests|Brink.Tests.ReadabilityTests|Brink.Tests.RegimeSystemTests|Brink.Tests.ReportingSystemTests|Brink.Tests.SaveMigrationTests|Brink.Tests.SaveSystemTests|Brink.Tests.StrategyAndAuthorityTests|Brink.Tests.TechnologySystemTests|Brink.Tests.TelemetryTests|Brink.Tests.TerritorySystemTests|Brink.Tests.TextPolicyTests|Brink.Tests.TouchTargetTests|Brink.Tests.TradeAndConquestTests|Brink.Tests.TreatyNegotiationTests|Brink.Tests.TurnManagerTests|Brink.Tests.TutorialSystemTests|Brink.Tests.VeterancyTests|Brink.Tests.WorldSizeTests|Brink.Tests.WorldStructureTests'
 
-# NOTE: a class added to Assets/Tests/EditMode must be added to a partition
-# above, or it silently never runs. VerifyCoverage below fails the script if
-# the partitions and the test directory disagree.
 verify_coverage() {
     local missing=0
     for f in "$(dirname "$HERE")"/Brink/Assets/Tests/EditMode/*.cs; do
