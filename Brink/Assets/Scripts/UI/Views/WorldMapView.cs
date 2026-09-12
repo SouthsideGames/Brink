@@ -6,23 +6,19 @@ using UnityEngine.UIElements;
 namespace Brink.UI.Views
 {
     /// <summary>
-    /// The strategic map (GDD §16). Two scales: the world chart, and — on
-    /// selecting a nation — that country's own chart, showing as much of its
-    /// interior as our collection supports. Foreign detail always comes through
-    /// the intelligence layer, never raw.
+    /// Strategic world/country map. The world layer now has selectable map modes
+    /// so the same geography can answer political, military, trade, intelligence
+    /// and bloc questions without creating five separate screens.
     /// </summary>
     public class WorldMapView : TerminalView
     {
         public override string Id => "MAP";
         public override string ShortCode => "MAP";
-
-        /// <summary>Terminal width, measured from the real panel (see TerminalMetrics).</summary>
         static int W => TerminalMetrics.Columns;
 
         string selectedCountryId;
-
-        /// <summary>False = world chart, true = the selected country's own chart.</summary>
         bool zoomed;
+        WorldMapMode mapMode = WorldMapMode.Political;
 
         protected override void Build()
         {
@@ -38,15 +34,16 @@ namespace Brink.UI.Views
             else BuildWorldChart(state);
         }
 
-        // ---------- world scale ----------
-
         void BuildWorldChart(GameState state)
         {
             AddText("terminal-text-bright").text =
                 AsciiChart.BoxHeader($"STRATEGIC SITUATION — {state.date.DisplayString}", W);
 
-            AddFigure().text = AsciiWorldMap.Render(state, selectedCountryId, W, TerminalMetrics.MapRows);
-            AddText("terminal-text-dim").text = AsciiWorldMap.Legend;
+            BuildModeSelector();
+            AddText("terminal-text-dim").text = " " + AsciiMapModes.Summary(state, mapMode);
+            AddFigure().text = AsciiMapModes.Render(
+                state, selectedCountryId, mapMode, W, TerminalMetrics.MapRows);
+            AddText("terminal-text-dim").text = AsciiMapModes.Legend(mapMode);
 
             BuildSelector(state, zoomOnSelect: false);
 
@@ -65,7 +62,22 @@ namespace Brink.UI.Views
             BuildChokepoints(state);
         }
 
-        // ---------- country scale ----------
+        void BuildModeSelector()
+        {
+            var row = MakeRow();
+            foreach (WorldMapMode mode in System.Enum.GetValues(typeof(WorldMapMode)))
+            {
+                var captured = mode;
+                bool current = mapMode == mode;
+                var button = new Button(() => { mapMode = captured; Refresh(); })
+                {
+                    text = (current ? "► " : "") + mode.ToString().ToUpperInvariant()
+                };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                row.Add(button);
+            }
+        }
 
         void BuildCountryChart(GameState state)
         {
@@ -95,15 +107,9 @@ namespace Brink.UI.Views
 
             AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("INSTALLATIONS", W);
             AddText().text = AsciiCountryMap.DescribeSites(state, selectedCountryId);
-
             BuildForeignPresence(state);
         }
 
-        /// <summary>
-        /// Who else is operating from this country's soil. Worth its own panel:
-        /// a partner's bases are the clearest single indicator of whose orbit a
-        /// state is actually in, and it is only visible with real collection.
-        /// </summary>
         void BuildForeignPresence(GameState state)
         {
             if (AsciiCountryMap.LevelFor(state, selectedCountryId) < AsciiCountryMap.DetailLevel.Detailed)
@@ -115,9 +121,7 @@ namespace Brink.UI.Views
             int found = 0;
             foreach (var location in state.locations)
             {
-                if (location.ownerId != selectedCountryId) continue;
-                if (!location.HasForeignBase) continue;
-
+                if (location.ownerId != selectedCountryId || !location.HasForeignBase) continue;
                 found++;
                 var op = state.FindCountry(location.foreignOperatorId);
                 sb.AppendLine($"  {op?.displayName.ToUpperInvariant(),-18} operates from {location.displayName}");
@@ -129,12 +133,9 @@ namespace Brink.UI.Views
             AddText(found > 0 ? "terminal-text-bright" : "terminal-text-dim").text = sb.ToString();
         }
 
-        // ---------- shared ----------
-
         void BuildSelector(GameState state, bool zoomOnSelect)
         {
             var row = MakeRow();
-
             foreach (var profile in WorldFactory.Profiles)
             {
                 var country = state.FindCountry(profile.id);
@@ -150,20 +151,12 @@ namespace Brink.UI.Views
                 })
                 { text = (current ? "► " : "") + (profile.mapCode ?? profile.id) };
                 button.AddToClassList("cmd-button");
-
-                // Standing as colour, so sixteen two-letter codes stop being a
-                // wall of identical text. The glyph legend still carries the
-                // same reading for anyone the colour does not reach.
                 button.AddToClassList(AsciiWorldMap.StandingClass(state, profile.id));
                 if (current || country.isPlayer) button.AddToClassList("primary");
                 row.Add(button);
             }
         }
 
-        /// <summary>
-        /// Chokepoints and contested ground — the geography that actually
-        /// changes hands (GDD §16).
-        /// </summary>
         void BuildChokepoints(GameState state)
         {
             var text = AddText("terminal-text-dim");
