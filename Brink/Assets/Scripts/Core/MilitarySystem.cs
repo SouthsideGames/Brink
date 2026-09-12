@@ -660,7 +660,8 @@ namespace Brink.Core
             {
                 date = state.date,
                 locationId = target.id,
-                operationType = operationType.ToString().ToUpperInvariant()
+                operationType = operationType.ToString().ToUpperInvariant(),
+                attackerId = attackerId ?? ""
             };
 
             if (operationType == OperationType.Withdraw)

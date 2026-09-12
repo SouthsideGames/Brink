@@ -121,7 +121,7 @@ namespace Brink.Tests
             rusChn.threatPerceptionOfB = 0f;
             var rus = state.FindCountry("RUS");
             rus.warExhaustion = 90f; rus.stability = 20f; rus.warSupport = 10f;
-            float diplomacyBefore = rus.pillars.diplomacy;
+            float threatBefore = rusInd.ThreatPerceivedBy("IND");
 
             var usaRus = state.FindRelationship("USA", "RUS");
             float thirdPartyTrustBefore = usaRus.trust;
@@ -130,7 +130,15 @@ namespace Brink.Tests
 
             Assert.IsNull(state.FindTreaty("RUS", "IND"), "A repudiated pact is no longer in force.");
             Assert.Less(rusInd.trust, 20f);
-            Assert.Less(rus.pillars.diplomacy, diplomacyBefore);
+            // The cost is standing, never capability: the −8 diplomacy pillar
+            // was deliberately removed (a capability hit has no recovery path
+            // for the state that incurred it) and replaced by what the world
+            // *does* — sanctions from the state let down, and a betrayed ally
+            // that starts to see the abandoner as a threat.
+            Assert.IsNotNull(state.FindSanction("IND", "RUS"),
+                "The state that was let down answers with sanctions.");
+            Assert.Greater(rusInd.ThreatPerceivedBy("IND"), threatBefore,
+                "A betrayed ally comes to regard the abandoner as a threat.");
             Assert.Less(usaRus.trust, thirdPartyTrustBefore,
                 "Every state discounts a guarantee that was not honored.");
         }
@@ -206,7 +214,13 @@ namespace Brink.Tests
 
             Assert.IsNull(state.FindTreaty("USA", "IND"));
             Assert.Less(usaInd.trust, 30f);
-            Assert.Less(state.PlayerCountry.pillars.diplomacy, diplomacyBefore);
+            // Standing, never capability (see UnwillingAlly_RepudiatesAndPaysReputationally):
+            // the pillar is untouched by design, and the bill arrives as sanctions
+            // and withdrawn trade from the state we let down.
+            Assert.AreEqual(diplomacyBefore, state.PlayerCountry.pillars.diplomacy, 0.0001f,
+                "Walking away costs standing, not national capability.");
+            Assert.IsNotNull(state.FindSanction("IND", "USA"),
+                "The state we abandoned answers with sanctions.");
             Assert.Less(usaChn.trust, chnTrustBefore, "Even our rivals revise their view of us.");
             Assert.IsTrue(turns.EndMonth(), "The month proceeds once we have answered.");
         }

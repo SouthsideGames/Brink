@@ -816,6 +816,20 @@ Seeded lazily by `EnsureFactions` and deterministically from the country id, so
 an old save gains a coalition on load — **no migration** — and gains the same
 one every time.
 
+### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
+
+`RegimeSystem.UpdateConspiracy` decayed conspiracy *only* below a pressure of
+0.25; above it the level was a pure accumulator with two sources (its own
+pressure terms and unrest above 55) and no sink short of a coup. Measured worlds
+reached ~100 coups in forty years, and every second coup refilled from 25 in
+under three years because the coup itself degraded the terms that feed it. Now
+`recovery = ConspiracyBaseDecay 0.25 + conspiracy × ConspiracyProportionalDecay
+0.010` every month, plus the old bonus below 0.25 — the shape grievance,
+corruption and food already use. A plot at steady pressure settles where its
+pressure holds it: moderate, steady failure (stability 40, approval 35) rests
+below the coup threshold; severe failure still reaches it within four years.
+Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
+
 ## 8. Extension points
 
 - **Adding a government verb.** Write the `…By(state, countryId)` implementation,

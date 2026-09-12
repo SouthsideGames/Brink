@@ -1127,6 +1127,54 @@ continues the cascade. See spec 04 §8.
 hand you belligerents you never declared against, "who am I fighting" stops being
 answerable from the front selector alone.
 
+## 5c. Satellite fronts, and the settlement fog restored (core stability repair, 2026-09)
+
+**A front opened by honouring a guarantee is a satellite of the war it was
+joined for.** `Confrontation.obligationRootId` names that war and
+`obligationOnBehalfOfId` names the ally; both are empty on a war of the
+initiator's own choosing and on every old save (correct, not merely blank —
+those fronts were never satellites). Two things hang on it:
+
+- **It closes with the war it was joined for.** `ConfrontationSystem.Close`
+  finishes every unresolved satellite of a closing root war ("the war X joined
+  in defence of Y has ended; the front closes with it"). Before this an
+  obligation front carried `Deterrence` and no location, was never the war the
+  AI managed (it managed the first in the list) and so had no exit at all — it
+  drained exhaustion and treasury on both sides for the rest of the save.
+  Measured: 21 of 22 AI wars in a world were these.
+- **It tells a defensive call from an offensive one** — see spec 04 §8a.
+
+`BeginObligationBy` no longer erases the settlement truce between the entering
+ally and the aggressor (a sanctions truce still does not survive a shooting
+war); the truce stops that pair *choosing* a new war with each other, which a
+call-in is not.
+
+**The AI seeks terms on every front** (`AISystem.SeekTermsIfWorn`), not only on
+`ActiveConfrontationFor`, the first unresolved war in list order. Operations
+still go to one front — that is what an army does; seeking terms on all of them
+is what a foreign ministry does.
+
+**The settlement oracle is closed again.** The player-facing surface reads only
+the assessment layer:
+
+| Surface | Was | Now |
+|---|---|---|
+| "THEY WOULD SIGN THIS TODAY" + ACCEPT | `PeaceSystem.BestAcceptableProposal` (walks `WouldAccept`) | `PeaceSystem.RecommendedProposal` (walks `Assess`); "OUR STAFF'S RECOMMENDATION — THEY WOULD LIKELY / MIGHT SIGN"; no recommendation without reporting |
+| OPPONENT POSTURE: OPEN TO TERMS / RESISTING | `ConfrontationSystem.OpponentWouldAccept` (true bit) | `PeaceSystem.AssessDisposition` → `SettlementDisposition` (LIKELY RECEPTIVE … HIGHLY RESISTANT, five bands with High/Confirmed reporting, three with Moderate/Low, NO READ with none) |
+| THEIR EXHAUSTION 41.3 | true float | `IntelReadout.ForeignExhaustion` — a bin on a fixed grid (5/10/20/25 wide by grade), never centred on the truth |
+| After-action LOSSES … / ENEMY 7.3 | true per-operation figure | `IntelReadout.OperationLosses` — banded, and sided by `OperationRecord.attackerId` (an enemy assault on our position reads OWN for *our* losses) |
+| ATTENTION "They would accept terms" | true bit | disposition ≥ POTENTIALLY RECEPTIVE |
+
+`PeaceSystem.Assess` now keeps a dead-band at every grade (`DeadBandFor`:
+Confirmed ±4, High ±10, Moderate ±25, Low ±35) — Confirmed/High used to answer
+the exact sign of the margin, so a well-collected operator could walk the term
+list to the precise acceptance boundary. Better reporting narrows the band of
+doubt; it never removes it. `SettlementFogTests` scans every file under
+`Scripts/UI` (plus `AttentionSystem`) for the oracle identifiers and fails the
+build on a new one; `IntelReadout.cs` is the fog boundary and is exempt. The
+"OPPONENT SIGNALS TERMS" notification stands: a government choosing to signal is
+a public act — but its wording no longer promises what they would sign.
+
 ## 6. Joint exercises (GDD §15.3)
 
 Requires a partner at `Cooperative` or better, not currently an opponent, and off

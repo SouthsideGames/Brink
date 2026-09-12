@@ -236,7 +236,7 @@ namespace Brink.Core
         /// opening a period of tension.
         /// </summary>
         public static Confrontation BeginObligationBy(GameState state, string allyId,
-            string aggressorId, string onBehalfOfId)
+            string aggressorId, string onBehalfOfId, string rootConfrontationId = null)
         {
             if (allyId == aggressorId) return null;
 
@@ -259,16 +259,22 @@ namespace Brink.Core
                 primaryStrategy = PrimaryStrategy.Military,
                 escalation = EscalationState.LimitedConflict,
                 startDate = state.date,
-                theatre = TheatreSystem.Of(aggressorId)
+                theatre = TheatreSystem.Of(aggressorId),
+                // A satellite of the war it was joined for: it closes with it,
+                // and the cascade reads it to tell a defensive call from an
+                // offensive one.
+                obligationRootId = rootConfrontationId ?? "",
+                obligationOnBehalfOfId = onBehalfOfId ?? ""
             };
             state.confrontations.Add(confrontation);
 
+            // A sanctions truce does not survive a shooting war. The *settlement*
+            // truce is left standing: it stops this pair choosing a new war with
+            // each other, which is not what this is, and erasing it meant two
+            // states that had settled last year were put back at war with no
+            // memory of having made peace.
             var pair = state.FindRelationship(allyId, aggressorId);
-            if (pair != null)
-            {
-                pair.sanctionsTruceMonths = 0;
-                pair.settlementTruceMonths = 0;
-            }
+            if (pair != null) pair.sanctionsTruceMonths = 0;
 
             ally.military.alertPosture = true;
 
@@ -754,11 +760,14 @@ namespace Brink.Core
             // Say where and what to press. "They are prepared to negotiate" told
             // the operator an opportunity existed and left them hunting for a
             // verb that, at the time, did not exist.
+            // A government choosing to signal is a public act, so the signal is
+            // theirs to send — but what they would actually sign is a matter for
+            // our reporting, and the wording must not promise otherwise.
             state.AddNotification(NotificationClass.Priority, "OPPONENT SIGNALS TERMS",
-                $"{opponent.displayName} is prepared to negotiate a settlement. " +
-                "Open MILITARY and scroll to NEGOTIATED SETTLEMENT — the terms they would " +
-                "sign today are listed there, with one control to accept them.", opponent.id,
-                desk: ReportingDesk.Military);
+                $"{opponent.displayName} is signalling readiness to negotiate a settlement. " +
+                "Open MILITARY and scroll to NEGOTIATED SETTLEMENT to put terms to them; " +
+                "our staff's recommendation there is only as good as our reporting on their politics.",
+                opponent.id, desk: ReportingDesk.Military);
         }
 
         /// <summary>
@@ -1376,6 +1385,34 @@ namespace Brink.Core
         }
 
         static void Close(GameState state, Confrontation confrontation, string proposerId,
+            bool objectiveAchieved, string summary)
+        {
+            Finish(state, confrontation, proposerId, objectiveAchieved, summary);
+
+            // **A guarantor's war ends with the war it was joined for.** A front
+            // opened by honouring a guarantee has no objective of its own — it
+            // exists to defend an ally — so once that ally has settled, the
+            // satellite front is fighting for nothing. Before this, obligation
+            // fronts carried Deterrence and no location, were never the war the
+            // AI managed (it manages the first in the list), and so had no exit
+            // at all: they drained exhaustion and treasury on both sides for the
+            // rest of the save. Measured: 21 of 22 AI wars in a world were these.
+            if (confrontation.IsObligationEntry) return;
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var satellite = state.confrontations[i];
+                if (satellite.resolved || satellite.obligationRootId != confrontation.id) continue;
+
+                var ally = state.FindCountry(satellite.initiatorId);
+                var behalf = state.FindCountry(satellite.obligationOnBehalfOfId);
+                string text = $"The war {ally?.displayName ?? satellite.initiatorId} joined" +
+                              (behalf != null ? $" in defence of {behalf.displayName}" : "") +
+                              " has ended; the front closes with it.";
+                Finish(state, satellite, satellite.initiatorId, false, text);
+            }
+        }
+
+        static void Finish(GameState state, Confrontation confrontation, string proposerId,
             bool objectiveAchieved, string summary)
         {
             confrontation.resolved = true;

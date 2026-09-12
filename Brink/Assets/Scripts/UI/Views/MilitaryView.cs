@@ -112,9 +112,29 @@ namespace Brink.UI.Views
                 $" OUR RECORD  {player.WarRecordText}  (won–lost–drawn)"
                 + $"   FORCE {player.military.TotalPower * MilitarySystem.PowerScale:F0}";
 
+            AddFigure().text = StandingFigure(state, W);
+
+            AddText("terminal-text-dim").text =
+                " Ranked by our own reporting. A state we are not collecting against cannot be "
+                + "placed, and a state running deception will not be where it looks.";
+        }
+
+        /// <summary>
+        /// The STANDING table, built to <paramref name="width"/> columns and never
+        /// wider (spec 09). A figure, so nothing downstream wraps it: the
+        /// assessment cell used to be a fixed 28 columns beside a name cell and a
+        /// record — roughly 57 columns on a 49-column phone, running off the
+        /// right edge under the file's own comment warning about exactly that.
+        /// The assessment now takes whatever the row has left, and when that is
+        /// too little to read it moves to a second indented line rather than
+        /// being truncated to nothing.
+        /// </summary>
+        public static string StandingFigure(GameState state, int width)
+        {
+            width = System.Math.Max(TerminalMetrics.MinColumns, width);
+
             var ranked = new System.Collections.Generic.List<CountryState>();
             var unranked = new System.Collections.Generic.List<CountryState>();
-
             foreach (var country in state.countries)
             {
                 if (country.isPlayer) continue;
@@ -126,25 +146,41 @@ namespace Brink.UI.Views
             ranked.Sort((a, b) => IntelReadout.EstimatedMilitary(state, b.id)
                 .CompareTo(IntelReadout.EstimatedMilitary(state, a.id)));
 
+            int nameWidth = AsciiChart.NameWidth(width, 0.34f);
+            int recordWidth = 5;
+            foreach (var country in state.countries)
+                recordWidth = System.Math.Max(recordWidth, country.WarRecordText.Length);
+
+            // " NN  name assessment record": 5 columns of rank, a space each side
+            // of the assessment, the record at the end.
+            const int RankColumns = 5;
+            int assessWidth = width - RankColumns - nameWidth - 2 - recordWidth;
+            bool twoLine = assessWidth < 14;
+            const int Indent = 6;
+            if (twoLine) assessWidth = width - Indent;
+
             var sb = new StringBuilder();
-            int nameWidth = AsciiChart.NameWidth(W, 0.34f);
+            void Row(string rank, CountryState country, string assessment)
+            {
+                string name = AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth);
+                if (twoLine)
+                {
+                    sb.AppendLine($"{rank}{name} {country.WarRecordText}");
+                    sb.AppendLine(new string(' ', Indent) + AsciiChart.Cell(assessment, assessWidth).TrimEnd());
+                }
+                else
+                {
+                    sb.AppendLine($"{rank}{name} {AsciiChart.Cell(assessment, assessWidth)} {country.WarRecordText}");
+                }
+            }
 
             int place = 1;
             foreach (var country in ranked)
-                sb.AppendLine($" {place++,2}  {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
-                              + $" {AsciiChart.Cell(IntelReadout.ForDomain(state, country.id, IntelDomain.Military), 28)}"
-                              + $" {country.WarRecordText}");
-
+                Row($" {place++,2}  ", country, IntelReadout.ForDomain(state, country.id, IntelDomain.Military));
             foreach (var country in unranked)
-                sb.AppendLine($"  —  {AsciiChart.Cell(country.displayName.ToUpperInvariant(), nameWidth)}"
-                              + $" {AsciiChart.Cell(IntelReadout.WhyNoAssessment(state, country.id), 28)}"
-                              + $" {country.WarRecordText}");
+                Row("  —  ", country, IntelReadout.WhyNoAssessment(state, country.id));
 
-            AddFigure().text = sb.ToString();
-
-            AddText("terminal-text-dim").text =
-                " Ranked by our own reporting. A state we are not collecting against cannot be "
-                + "placed, and a state running deception will not be where it looks.";
+            return sb.ToString();
         }
 
         /// <summary>
@@ -574,13 +610,39 @@ namespace Brink.UI.Views
             var viewing = state.FindCountry(inventorySubjectId) ?? player;
             bool ours = viewing.id == player.id;
 
+            // A figure, not prose: the columns are built to an exact grid and
+            // wrapping would break the alignment that makes it readable.
+            AddFigure(ours ? "terminal-text" : "terminal-text-dim").text =
+                InventoryFigure(state, viewing, ours, W);
+
+            if (!ours)
+                AddText("terminal-text-dim").text =
+                    "   Foreign figures are estimates. Better collection narrows the band; it never " +
+                    "produces the true number.";
+        }
+
+        /// <summary>
+        /// The ORDER OF BATTLE figure, built to <paramref name="width"/> columns
+        /// and never wider. The rows were a fixed 14-column label plus an
+        /// 18-column value plus an ON-ORDER suffix — ~56 columns on a 49-column
+        /// phone. Label and value now share the width, and an ON-ORDER note that
+        /// does not fit beside its row goes on its own indented line.
+        /// </summary>
+        public static string InventoryFigure(GameState state, CountryState viewing, bool ours, int width)
+        {
+            width = System.Math.Max(TerminalMetrics.MinColumns, width);
+            const int Indent = 3;
+            int labelWidth = AsciiChart.NameWidth(width, 0.30f);
+            int valueWidth = System.Math.Max(6, width - Indent - labelWidth - 1);
+
             var sb = new StringBuilder();
             foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
             {
                 var force = viewing.military.Get(branch);
                 sb.AppendLine();
-                sb.AppendLine($" {branch.ToString().ToUpperInvariant()}"
-                              + (ours ? $"   STRENGTH {force.strength:F0}" : ""));
+                sb.AppendLine(AsciiChart.Cell(
+                    $" {branch.ToString().ToUpperInvariant()}" + (ours ? $"   STRENGTH {force.strength:F0}" : ""),
+                    width).TrimEnd());
 
                 foreach (var asset in AssetCatalog.InBranch(branch))
                 {
@@ -588,25 +650,31 @@ namespace Brink.UI.Views
                         ? AssetCatalog.Format(force.inventory.CountOf(asset.kind))
                         : IntelReadout.ForeignAssetCount(state, viewing.id, asset.kind);
 
+                    string line = new string(' ', Indent)
+                                  + AsciiChart.Cell(asset.label, labelWidth) + " "
+                                  + AsciiChart.Cell(value, valueWidth).TrimEnd();
+
                     string ordered = "";
                     if (ours)
                     {
                         float onOrder = force.inventory.OnOrderOf(asset.kind);
-                        if (onOrder > 0.5f) ordered = $"   (+{AssetCatalog.Format(onOrder)} ON ORDER)";
+                        if (onOrder > 0.5f) ordered = $"(+{AssetCatalog.Format(onOrder)} ON ORDER)";
                     }
 
-                    sb.AppendLine($"   {AsciiChart.Cell(asset.label, 14)} {value,-18}{ordered}");
+                    if (ordered.Length > 0 && line.Length + 3 + ordered.Length <= width)
+                    {
+                        sb.AppendLine(line + "   " + ordered);
+                    }
+                    else
+                    {
+                        sb.AppendLine(line);
+                        if (ordered.Length > 0)
+                            sb.AppendLine(new string(' ', Indent + 3)
+                                          + AsciiChart.Cell(ordered, width - Indent - 3).TrimEnd());
+                    }
                 }
             }
-
-            // A figure, not prose: the columns are built to an exact grid and
-            // wrapping would break the alignment that makes it readable.
-            AddFigure(ours ? "terminal-text" : "terminal-text-dim").text = sb.ToString();
-
-            if (!ours)
-                AddText("terminal-text-dim").text =
-                    "   Foreign figures are estimates. Better collection narrows the band; it never " +
-                    "produces the true number.";
+            return sb.ToString();
         }
 
         /// <summary>
@@ -862,6 +930,23 @@ namespace Brink.UI.Views
         /// How our analysts phrase a draft settlement's prospects. Political
         /// collection on the opponent is what buys a sharp answer.
         /// </summary>
+        /// <summary>
+        /// Their disposition toward ending the war, as our reporting reads it
+        /// (GDD §26). Never the acceptance test.
+        /// </summary>
+        static string DispositionText(SettlementDisposition disposition)
+        {
+            switch (disposition)
+            {
+                case SettlementDisposition.LikelyReceptive: return "LIKELY RECEPTIVE";
+                case SettlementDisposition.PotentiallyReceptive: return "POTENTIALLY RECEPTIVE";
+                case SettlementDisposition.Uncertain: return "UNCERTAIN";
+                case SettlementDisposition.Resistant: return "RESISTANT";
+                case SettlementDisposition.HighlyResistant: return "HIGHLY RESISTANT";
+                default: return "NO READ — COLLECT AGAINST THEM";
+            }
+        }
+
         static string OutlookText(SettlementOutlook outlook)
         {
             switch (outlook)
@@ -1101,8 +1186,11 @@ namespace Brink.UI.Views
         {
             var opponent = state.FindCountry(confrontation.OpponentOf(state.playerCountryId));
             bool playerIsInitiator = state.playerCountryId == confrontation.initiatorId;
-            float ourExhaustion = playerIsInitiator ? confrontation.initiatorWarExhaustion : confrontation.defenderWarExhaustion;
-            float theirExhaustion = playerIsInitiator ? confrontation.defenderWarExhaustion : confrontation.initiatorWarExhaustion;
+            float ourExhaustion = IntelReadout.OwnExhaustion(state, confrontation);
+            // Theirs is a bin our reporting supports, never the figure — the
+            // exact value was the largest term of the acceptance test, printed
+            // to one decimal beside casualties this same block bands.
+            string theirExhaustion = IntelReadout.ForeignExhaustion(state, confrontation);
             float ourMomentum = playerIsInitiator ? confrontation.momentum : -confrontation.momentum;
 
             var header = AddText("terminal-text-bright");
@@ -1113,7 +1201,7 @@ namespace Brink.UI.Views
             sb.AppendLine($" ESCALATION:      {EscalationBar(confrontation.escalation)}");
             sb.AppendLine($" MONTHS ACTIVE:   {confrontation.monthsActive}");
             sb.AppendLine($" MOMENTUM:        {ourMomentum,+6:F1}");
-            sb.AppendLine($" OUR EXHAUSTION:  {ourExhaustion,6:F1}    THEIR EXHAUSTION: {theirExhaustion,6:F1}");
+            sb.AppendLine($" OUR EXHAUSTION:  {ourExhaustion,6:F1}    THEIRS (EST): {theirExhaustion}");
             sb.AppendLine($" CIVILIAN HARM:   {confrontation.civilianHarmTotal,6:F1}");
 
             // The human cost of the war, which was counted every single operation
@@ -1135,7 +1223,10 @@ namespace Brink.UI.Views
 
             sb.AppendLine($" OUR LOSSES:      {IntelReadout.OwnCasualties(ourDead),-10}"
                           + $"THEIR LOSSES (EST): {IntelReadout.ForeignCasualties(state, opponent?.id, theirDead)}");
-            sb.AppendLine($" OPPONENT POSTURE:{(ConfrontationSystem.OpponentWouldAccept(state, confrontation) ? " OPEN TO TERMS" : " RESISTING")}");
+            // Our reporting's read of their mood, never the acceptance test.
+            // "OPEN TO TERMS / RESISTING" was the true willingness bit, and
+            // watching it flip told the operator the month they became willing.
+            sb.AppendLine($" THEIR DISPOSITION (OUR READ): {DispositionText(PeaceSystem.AssessDisposition(state, confrontation, state.playerCountryId))}");
             header.text = sb.ToString();
 
             // Strategic Pivot (GDD §18.2): the approach can be changed, at a
@@ -1509,7 +1600,8 @@ namespace Brink.UI.Views
 
             AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("NEGOTIATED SETTLEMENT", W);
 
-            // The one-press way out, offered first.
+            // The one-press way out, offered first — from our **assessment**,
+            // never from the acceptance test.
             //
             // The game told the operator "they are prepared to negotiate" and
             // then offered only PUT TERMS TO THEM — so the answer to "how do I
@@ -1517,14 +1609,22 @@ namespace Brink.UI.Views
             // Naming an opportunity the interface cannot act on reads as a
             // missing button, not as a deep negotiation system.
             //
-            // The detailed table below is still the real instrument; this is the
-            // floor, for an operator who wants out on the best terms available
-            // rather than the best terms imaginable.
-            var readyDeal = PeaceSystem.BestAcceptableProposal(state, confrontation, state.playerCountryId);
+            // The first version of this drafted the offer from
+            // `BestAcceptableProposal`, which walks `WouldAccept` — ground
+            // truth — and printed it under "THEY WOULD SIGN THIS TODAY", with no
+            // collection at all. That was the settlement oracle the fog design
+            // had closed once, re-shipped as a button. The recommendation now
+            // stops where our *reporting* says they would likely sign, which
+            // with poor reporting means giving more ground than strictly
+            // necessary and with none means no recommendation.
+            var readyDeal = PeaceSystem.RecommendedProposal(
+                state, confrontation, state.playerCountryId, out var readyOutlook);
             if (readyDeal != null)
             {
                 var summary = new StringBuilder();
-                summary.AppendLine("  THEY WOULD SIGN THIS TODAY:");
+                summary.AppendLine(readyOutlook == SettlementOutlook.Likely
+                    ? "  OUR STAFF'S RECOMMENDATION — THEY WOULD LIKELY SIGN:"
+                    : "  OUR STAFF'S RECOMMENDATION — THEY MIGHT SIGN:");
                 foreach (var term in readyDeal.terms)
                     summary.AppendLine($"    · {PeaceSystem.Describe(term)}");
                 AddText("terminal-text-bright").text = summary.ToString().TrimEnd();
@@ -1536,14 +1636,23 @@ namespace Brink.UI.Views
                     draftTerms.Clear();
                     Refresh();
                 })
-                { text = "ACCEPT THESE TERMS — END THE WAR" };
+                { text = "PUT THESE TERMS TO THEM" };
                 accept.AddToClassList("cmd-button");
                 accept.AddToClassList("primary");
                 acceptRow.Add(accept);
 
                 AddText("terminal-text-dim").text =
-                    "  These are the best terms they would actually take. Build your own below " +
-                    "if you want more — but more may be refused, and the war continues.";
+                    "  Our staff's reading of what they would take, at the precision our reporting " +
+                    "on their politics allows. Build your own below if you want more — but more may " +
+                    "be refused, and the war continues.";
+            }
+            else
+            {
+                AddText("terminal-text-dim").text = readyOutlook == SettlementOutlook.Unknown
+                    ? "  NO RECOMMENDATION: we have no read on their politics. Terms can still be put " +
+                      "to them below; whether they sign is a guess until we collect against them."
+                    : "  NO RECOMMENDATION: on what we hold, nothing we would offer reads as signable " +
+                      "yet. Terms can still be put to them below.";
             }
 
             var demandRow = MakeRow();
@@ -1633,9 +1742,12 @@ namespace Brink.UI.Views
                     $" {op.date.SortKey} {op.operationType} — {(op.success ? "SUCCESS" : "FAILURE")}"
                     + (op.oddsAtOrder > 0f ? $"   (assessed {op.oddsAtOrder * 100f:F0}%)" : "");
 
+                // Ours exact, theirs banded — the same rule as the war's totals
+                // above. Per-operation enemy losses used to print to one decimal
+                // here, so summing the log reconstructed the banded total.
                 AddText("terminal-text-dim").text =
                     $"   {op.summary}\n"
-                    + $"   LOSSES OWN {op.attackerLosses:F1} / ENEMY {op.defenderLosses:F1}"
+                    + $"   {IntelReadout.OperationLosses(GameController.Instance.State, confrontation, op)}"
                     + $" / CIV {op.civilianHarm:F1}";
 
                 // The explanation is the point of the panel. Without it the log

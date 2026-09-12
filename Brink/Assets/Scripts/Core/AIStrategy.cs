@@ -319,7 +319,7 @@ namespace Brink.Core
         /// same reach model operations do, so "regional" means the region the
         /// force can be brought to bear in rather than a hand-drawn one.
         /// </summary>
-        static float NeighbourhoodDominance(GameState state, CountryState country)
+        public static float NeighbourhoodDominance(GameState state, CountryState country)
         {
             float weighted = 0f;
             float total = 0f;
@@ -331,7 +331,12 @@ namespace Brink.Core
                 if (reach < 0.6f) continue; // not our neighbourhood
 
                 float relationship = state.FindRelationship(country.id, other.id)?.relations ?? 50f;
-                float edge = country.pillars.military - other.pillars.military;
+                // Our own pillar against our *estimate* of theirs — the fog every
+                // other read in this file already uses. Reading the neighbour's
+                // true military figure here decided which path a government
+                // adopted and whether it judged the path to be failing.
+                float edge = country.pillars.military
+                             - AISystem.PerceivedStrength(state, country.id, other, IntelDomain.Military);
 
                 weighted += reach * (Clamp(50f + edge) * 0.6f + relationship * 0.4f);
                 total += reach;

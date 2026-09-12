@@ -440,6 +440,47 @@ how somebody ends up in a war they declined to enter. Empty on an old save falls
 back to that scan. This crisis is built directly rather than drawn from `EventCatalog`; see
 spec 11 §1.
 
+### 8a. The cascade, damped (core stability repair, 2026-09)
+
+The audit measured ~11 AI wars per 30-year world against a baseline of 1.25,
+21 of 22 being obligation entries, and single states carrying eight fronts. The
+mechanism was correct; the decision under it was near-unconditional. Four
+repairs, all systemic:
+
+- **Warmth relative to neutral.** `HonorWillingness` read `30 + relations×0.35 +
+  trust×0.25 − …`, which at the world's 50/50 defaults was 60 against a
+  threshold of 50: two states with no history honoured a pact with ten points
+  to spare and a bloc member started near 80. Now `18 + (relations−50)×0.55 +
+  (trust−50)×0.45 + …`: an indifferent signatory declines, a warm bilateral
+  partner honours when free, a bloc member (+8 + cohesion×0.18) honours through
+  a second front and hesitates at a third. Load weighs `LoadWeight` 12 per unit
+  of `TotalCommitment` (was 9), a war of one's own just ended weighs
+  `RecoveryWeight` 10, and distance weighs `(1 − reach) × DistanceWeight 25` —
+  a guarantor across an ocean used to answer identically to a neighbour.
+- **Defensive versus offensive.** `AllianceSystem.IsDirectCall` reads the
+  satellite chain (spec 01 §5c): on the original war the defender is the
+  victim and the call is direct; on a front a guarantor opened, the "defender"
+  is the original aggressor or a state that came in on its side, and the call
+  is **offensive**. An offensive call is a war of choice: judged at
+  `willingness − IndirectPenalty (20)`, held to `CanJoinOffensively` (the
+  ceiling, the domestic bar, `WarRecoveryMonths`), and declining it costs
+  standing with the asker alone (`Decline`: relations −10, trust −8, a memory)
+  — no treaty broken, no bloc expulsion, no sanctions. The player is asked in
+  those words ("AN ALLY ASKS US INTO ITS WAR"). A bloc-versus-bloc war is still
+  possible; it is chosen, not switched.
+- **The depth guard defers rather than burns** — `obligationsInvoked` is set
+  after the depth check.
+- **A satellite closes with its root, and the AI seeks terms on every front**
+  (spec 01 §5c).
+
+Measured after, eight 30-year worlds: AI-vs-AI root wars 2–7 per world (the
+design's ~1.25 plus the wars a healthier world can afford), satellite fronts
+3–10 per world, all defensive, max simultaneous fronts 3–5 (one seed 10, an
+aggressor swarmed by a large bloc), confrontation-months 71–152 per decade (was
+110–246). `WorldHeatTests.TheWorldFightsItsOwnWars` now counts wars and fronts
+separately: wars a government chose against the old ceiling of 40 across six
+worlds, fronts against 72.
+
 ## 9. Joint exercises (GDD §15.3)
 
 `Core/ExerciseSystem.cs` is documented in full in **spec 01 §6** because its
@@ -523,6 +564,41 @@ dominated the bilateral one, and let the operator quietly collect the map again.
 That is the exact failure the world-heat work was built to close. What is counted
 is how many governments would come, which does not care how the promise was
 papered.
+
+## 9b. Gravity reads acts, and cold alignment thaws (core stability repair, 2026-09)
+
+Three changes to the monthly bilateral tick, each a value-versus-target fix:
+
+- **Sanctions chill relations to a target.** A sanctioned pair's relations
+  approach `strategicAlignment − SanctionChill (8)` at the ordinary 0.02
+  rate, instead of losing 1.2 a month and being excluded from the recovery
+  branch. Trust erodes 0.15 a month under sanctions toward
+  `SanctionTrustFloor` (15), not to zero. Sized so a pair at the alignment
+  baseline settles above `EconomySystem.SanctionHostilityLine` — a neutral
+  pair is not a hostile one, and its measures lapse at review.
+- **Rival gravity caps alignment; it no longer drains it.** The old
+  `alignment −= gravity × 0.3` had no floor; gravity attracts where relations
+  are cold, cold pairs are what sanctions make, so every sanctioned pair's
+  alignment ran to zero and the chill target ran to zero with it — the
+  "relations 0 on every standing regime" the sanction dump showed, and the
+  feedback that froze the planet in the first calibration. Now
+  `alignment ≤ 100 − gravity × AlignmentGravityWeight (85)`, approached at 0.1.
+- **Cold alignment thaws, upward only.** Below `AlignmentBaseline` (40), and
+  absent a war between the pair, alignment approaches the baseline at
+  `AlignmentReversion` 0.004 a month (~20 years). Warm alignment is earned by
+  treaties and blocs and keeps until something spends it: a symmetric pull held
+  every alliance at ~75, under the 68 line gravity radiates from.
+
+And gravity itself now reads **acts** on both sides. `Warmth` is the larger of
+the alignment reading, `PactWarmth` (0.6) for a signed mutual-defence treaty
+and `BlocWarmth` (0.75) for a shared bloc — a treaty partner's alignment sits in
+the low seventies, barely over the line, so gravity from a signed pact was a
+rounding error. `Coldness` is 1 for a pair at war and at least `SanctionEnmity`
+(0.5) for a pair under standing measures. The relations ceiling is approached at
+`GravityCeilingRate` 0.35, fast enough to outrun a monthly outreach call — at
+0.12 the befriend-everyone bot held every partner just over the friendship
+line. Measured: the bot tops out at ≤ 13 of 15 again, in a world that no longer
+resists it by sanctioning it for other reasons.
 
 ## 10. Extension points
 

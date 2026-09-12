@@ -1,6 +1,7 @@
 using Brink.Core;
 using Brink.Data;
 using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
 using UnityEngine.UIElements;
 
@@ -21,6 +22,106 @@ namespace Brink.Tests
         {
             GameLog.MirrorToUnityConsole = false;
             state = WorldFactory.CreateDebugWorld(seed: 3131);
+        }
+
+        // ---------- the crisis modal reaches its own bottom ----------
+
+        [Test]
+        public void CrisisModal_EveryOptionIsReachableOnAShortScreen()
+        {
+            // The one overlay that stands between the operator and END MONTH
+            // had no scroller and no height cap — a long body plus four options
+            // clipped below the fold of a short screen with nothing scrollable.
+            // The tutorial and settings panels already learned this; the
+            // blocking modal is the worst place to have not.
+            var crisis = new ActiveCrisis
+            {
+                defId = "TEST",
+                title = "A LONG SITUATION",
+                body = string.Join(" ", System.Linq.Enumerable.Repeat(
+                    "A paragraph of situation report that runs well past a phone's height.", 12)),
+            };
+            for (int i = 0; i < 4; i++)
+                crisis.options.Add(new CrisisOption
+                {
+                    label = $"OPTION {i + 1}",
+                    description = "A consequence hint that also wraps across several lines on a narrow panel.",
+                });
+
+            var panel = new CrisisPanel();
+            int decided = -1;
+            panel.Show(crisis, index => decided = index);
+
+            var reader = panel.Root.Q<ScrollView>();
+            Assert.IsNotNull(reader, "The crisis body no longer scrolls — on a short screen an option is unreachable.");
+            Assert.Greater(reader.style.maxHeight.value.value, 0f,
+                "The scroller has no height cap, so it will not scroll.");
+            Assert.Less(reader.style.maxHeight.value.value, TerminalMetrics.PanelHeight,
+                "The scroller is allowed to be as tall as the screen, leaving no room for the pinned header.");
+
+            int inReader = 0;
+            reader.Query<Button>().ForEach(_ => inReader++);
+            Assert.AreEqual(4, inReader, "Every option must sit inside the scroller, where it can be reached.");
+
+            // The FLASH line and the title stay pinned outside the scroller.
+            bool titlePinned = false;
+            foreach (var child in panel.Root.Children())
+            {
+                if (child == reader) continue;
+                if (child is Label label && label.text == "A LONG SITUATION") titlePinned = true;
+            }
+            Assert.IsTrue(titlePinned, "The title scrolled away with the body.");
+
+            Assert.AreEqual(-1, decided, "showing the crisis must not decide it");
+
+            // A cover display gets a tighter budget than a tablet, and both leave headroom.
+            Assert.Less(CrisisPanel.ReaderHeightFor(320f, true), 320f * 0.7f);
+            Assert.Less(CrisisPanel.ReaderHeightFor(800f, false), 800f * 0.75f);
+        }
+
+        // ---------- view-built figures never exceed the columns they were given ----------
+
+        [Test]
+        public void TheStandingTable_NeverExceedsTheColumnsItWasGiven()
+        {
+            // A fixed 28-column assessment cell beside a name and a record ran
+            // ~57 columns wide on a 49-column phone, inside a figure nothing
+            // downstream wraps. Every width the shell can measure must fit.
+            var turns = new TurnManager(state);
+            SimulationPipeline.Wire(turns, state);
+            turns.EndMonth();   // so some states are collected against and ranked
+
+            foreach (int width in new[] { TerminalMetrics.MinColumns, 40, 49, 64, 80, TerminalMetrics.MaxColumns })
+            {
+                string figure = MilitaryView.StandingFigure(state, width);
+                Assert.IsTrue(figure.Contains("\n"), "the standing table is empty");
+                foreach (var line in figure.Split('\n'))
+                    Assert.LessOrEqual(line.TrimEnd('\r').Length, width,
+                        $"STANDING at {width} columns overflows: \"{line}\"");
+            }
+        }
+
+        [Test]
+        public void TheOrderOfBattle_NeverExceedsTheColumnsItWasGiven()
+        {
+            var player = state.PlayerCountry;
+            var rival = state.countries.Find(c => !c.isPlayer);
+
+            // Something on order, so the ON ORDER suffix has to find room.
+            player.military.ground.inventory.Ensure(AssetKind.Tanks).onOrder = 120f;
+
+            foreach (int width in new[] { TerminalMetrics.MinColumns, 40, 49, 64, 80, TerminalMetrics.MaxColumns })
+            {
+                foreach (var line in MilitaryView.InventoryFigure(state, player, true, width).Split('\n'))
+                    Assert.LessOrEqual(line.TrimEnd('\r').Length, width,
+                        $"OWN ORDER OF BATTLE at {width} columns overflows: \"{line}\"");
+                foreach (var line in MilitaryView.InventoryFigure(state, rival, false, width).Split('\n'))
+                    Assert.LessOrEqual(line.TrimEnd('\r').Length, width,
+                        $"FOREIGN ORDER OF BATTLE at {width} columns overflows: \"{line}\"");
+            }
+
+            string own = MilitaryView.InventoryFigure(state, player, true, 49);
+            StringAssert.Contains("ON ORDER", own, "the on-order note was dropped rather than moved to its own line");
         }
 
         // ---------- the settings panel reaches its own bottom ----------

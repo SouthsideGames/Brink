@@ -239,7 +239,7 @@ namespace Brink.Core
                 : 0f;
             float economy = 50f + gdpGrowth * 3f + marketMove * 0.6f
                             - Math.Max(0f, player.economy.inflation - 5f) * 2.5f
-                            - SolvencyPenalty(player);
+                            - SolvencyPenalty(state, player);
 
             // --- stability: the state held together ---
             float stability = 50f
@@ -377,7 +377,9 @@ namespace Brink.Core
                 if (component.score < worst.score) worst = component;
             }
             record.summary += $" Carried by {best.name} ({best.score:F0}); held back by {worst.name} ({worst.score:F0}).";
-            if (SolvencyPenalty(player) > 0f) record.summary += " The treasury is in the red, and it shows.";
+            var fiscalCondition = FiscalSystem.ConditionOf(state, player);
+            if (fiscalCondition >= FiscalCondition.DeficitFinanced)
+                record.summary += $" The public finances read {FiscalSystem.ConditionText(fiscalCondition)}, and it shows.";
 
             state.evaluations.Add(record);
             CareerRecord.Record(state);   // spec 24 §2 — refreshed yearly, so an abandoned posting still shows what it was
@@ -414,12 +416,34 @@ namespace Brink.Core
         /// and graded B. A government that has spent money it does not have is
         /// not running its economy well, whatever GDP did.
         /// </summary>
-        public static float SolvencyPenalty(CountryState country)
+        public static float SolvencyPenalty(CountryState country) => SolvencyPenalty(null, country);
+
+        /// <summary>
+        /// Read from <see cref="FiscalSystem.ConditionOf"/>, never from the
+        /// balance alone. Deficit financing zeroes the account every month, so a
+        /// posting 30,000 in debt read as solvent to this penalty — the exact
+        /// failure it was written to catch, restored by a different route. A
+        /// government living on credit pays a little; one whose debt is heavy or
+        /// whose creditors are wary pays more; one in arrears or fresh from a
+        /// default pays the full twenty.
+        /// </summary>
+        public static float SolvencyPenalty(GameState state, CountryState country)
         {
-            if (country.resources.treasury >= 0f) return 0f;
-            float annualIncome = Math.Max(50f, country.economy.gdp * EconomySystem.TreasuryIncomeRate * 12f);
-            float yearsInTheRed = -country.resources.treasury / annualIncome;
-            return Math.Min(20f, yearsInTheRed * 8f);
+            if (country == null) return 0f;
+            float annualIncome = FiscalSystem.AnnualIncome(country);
+            float yearsInTheRed = Math.Max(0f, -country.resources.treasury) / annualIncome;
+            float arrears = Math.Min(20f, yearsInTheRed * 8f);
+
+            switch (FiscalSystem.ConditionOf(state, country))
+            {
+                case FiscalCondition.CashNegativeButCreditworthy: return Math.Max(arrears, 2f);
+                case FiscalCondition.DeficitFinanced:
+                    return Math.Max(arrears, 6f + Math.Min(6f, country.fiscal.deficitFinancedMonths / 6f));
+                case FiscalCondition.DebtStressed:
+                    return Math.Max(arrears, 12f + Math.Min(6f, Math.Max(0f, FiscalSystem.DebtToGdp(country) - 120f) / 20f));
+                case FiscalCondition.Crisis: return 20f;
+                default: return arrears;
+            }
         }
 
         /// <summary>

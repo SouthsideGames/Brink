@@ -83,6 +83,12 @@ namespace Brink.Core
 
         // ---------- conspiracy ----------
 
+        /// <summary>Conspiracy that dissipates every month regardless of level.</summary>
+        public const float ConspiracyBaseDecay = 0.25f;
+
+        /// <summary>Share of the standing conspiracy that dissipates each month.</summary>
+        public const float ConspiracyProportionalDecay = 0.010f;
+
         static void UpdateConspiracy(GameState state, CountryState country)
         {
             var gov = country.government;
@@ -105,10 +111,20 @@ namespace Brink.Core
             if (foreign > 0f && string.IsNullOrEmpty(gov.conspiracyBackerId))
                 gov.conspiracyBackerId = StrongestSubverter(state, country.id);
 
-            // A government that is governing well starves conspiracy of oxygen.
-            float recovery = 0f;
+            // A government that is governing well starves conspiracy of oxygen —
+            // and every level of conspiracy has a resting point. The decay used
+            // to exist *only* below a pressure of 0.25; above it conspiracy was a
+            // pure accumulator with two sources (this, and unrest above 55) and
+            // no sink short of a coup, which is how measured worlds reached ~100
+            // coups in forty years and every second one refilled from 25 in
+            // under three years. Proportional decay is the shape the codebase
+            // already settled on for grievance, corruption and food: a plot at
+            // steady pressure now settles where its pressure holds it, which is
+            // above the coup threshold for a truly failing state and below it
+            // for a merely troubled one.
+            float recovery = ConspiracyBaseDecay + gov.conspiracyLevel * ConspiracyProportionalDecay;
             if (pressure < 0.25f)
-                recovery = 1.2f + country.stability * 0.02f + gov.militaryLoyalty * 0.015f;
+                recovery += 1.2f + country.stability * 0.02f + gov.militaryLoyalty * 0.015f;
 
             // How the state holds its society decides how easily a plot can
             // organise at all (GDD §12). This is the whole case for governing

@@ -117,17 +117,21 @@ namespace Brink.Core
         /// balance of what they have visibly been doing rather than from their
         /// actual `AIState` — reading that would be telepathy.
         /// </summary>
-        static StrategicPath InferPath(GameState state, AIState ai, CountryState other,
+        public static StrategicPath InferPath(GameState state, AIState ai, CountryState other,
             OpponentModel model)
         {
             float military = AISystem.PerceivedStrength(state, ai.countryId, other, IntelDomain.Military);
             float economic = AISystem.PerceivedStrength(state, ai.countryId, other, IntelDomain.Economic);
+            float political = AISystem.PerceivedStrength(state, ai.countryId, other, IntelDomain.Political);
 
             if (model.aggression > 55f && military > 55f) return StrategicPath.MilitaryDominance;
             if (model.diplomaticActivity > 55f) return StrategicPath.InstitutionalWeight;
             if (model.economicCoercion > 50f || economic > military + 12f)
                 return StrategicPath.EconomicPrimacy;
-            if (other.stability < 45f) return StrategicPath.Survival;
+            // Their fragility as our political reporting has it — the one line
+            // in this function that used to read the true figure, directly
+            // under the comment calling that telepathy.
+            if (political < 45f) return StrategicPath.Survival;
             if (model.aggression > 35f) return StrategicPath.RegionalHegemony;
             return StrategicPath.TechnologicalEdge;
         }

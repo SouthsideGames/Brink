@@ -548,10 +548,14 @@ namespace Brink.Core
                                           * (1f - GovernmentSystem.RevenueLeakage(country));
 
             // ---- confidence ----
+            // Arrears are the creditors' verdict, and they reach confidence
+            // here — as a term in the target, so the pull lifts the month the
+            // account is back in the black (spec 02 §9a).
             float targetConfidence = 50f + eco.growthRate * 6f - Math.Max(0f, eco.inflation - 4f) * 3.5f
                                      - sanctionPressure * 6f - blowback * 3f
                                      + (country.stability - 50f) * 0.25f
-                                     - (atWar ? 8f : 0f);
+                                     - (atWar ? 8f : 0f)
+                                     - (country.fiscal.arrearsMonths > 0 ? FiscalSystem.ArrearsConfidenceDrag : 0f);
             eco.confidence = Clamp(Approach(eco.confidence, targetConfidence, 0.25f), 0f, 100f);
 
             // ---- sectors ----
@@ -816,14 +820,15 @@ namespace Brink.Core
             if (!turns.SpendCommandPoints(cost, $"Impose {severity} sanctions on {target.displayName}"))
                 return false;
 
-            bool imposed = ImposeSanctionsBy(state, state.playerCountryId, targetId, severity);
+            bool imposed = ImposeSanctionsBy(state, state.playerCountryId, targetId, severity, "PLAYER");
             if (imposed) ProgressionSystem.AwardXP(state, 12, "Sanctions imposed");
             if (imposed) ProgressionSystem.RecordInitiative(state);
             return imposed;
         }
 
         /// <summary>Sanctions imposed by any state. AI coercion uses the same model.</summary>
-        public static bool ImposeSanctionsBy(GameState state, string senderId, string targetId, SanctionSeverity severity)
+        public static bool ImposeSanctionsBy(GameState state, string senderId, string targetId, SanctionSeverity severity,
+            string cause = "")
         {
             if (senderId == targetId) return false;
             if (state.FindSanction(senderId, targetId) != null) return false;
@@ -849,7 +854,8 @@ namespace Brink.Core
                 senderId = senderId,
                 targetId = targetId,
                 severity = severity,
-                imposedDate = state.date
+                imposedDate = state.date,
+                cause = cause ?? ""
             });
 
             var link = state.FindTrade(senderId, targetId);
@@ -1088,6 +1094,67 @@ namespace Brink.Core
             return willingness;
         }
 
+        /// <summary>
+        /// What the *target* believes about a sender's readiness to lift its
+        /// measures, at the precision its diplomatic reporting on that sender
+        /// supports. `ReliefWillingness` is the sender's own decision and is
+        /// ground truth; this is the assessment layer over it, the same shape
+        /// as `PeaceSystem.Assess` and `TradeSystem.Assess`.
+        /// </summary>
+        public static SettlementOutlook AssessRelief(GameState state, string senderId, string targetId)
+        {
+            if (state.FindSanction(senderId, targetId) == null) return SettlementOutlook.NoTerms;
+
+            float margin = ReliefMargin(state, senderId, targetId);
+            var estimate = IntelligenceSystem.GetEstimate(state, targetId, senderId, IntelDomain.Diplomatic);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            if (grade == ConfidenceGrade.None) return SettlementOutlook.Unknown;
+
+            float deadBand = PeaceSystem.DeadBandFor(grade);
+            if (margin > deadBand) return SettlementOutlook.Likely;
+            if (margin < -deadBand) return SettlementOutlook.Unlikely;
+            return SettlementOutlook.Uncertain;
+        }
+
+        /// <summary>Willingness at or above which a sender lifts its measures when asked.</summary>
+        public const float ReliefThreshold = 50f;
+
+        /// <summary>
+        /// The sender's decision when asked (ground truth). A request is an
+        /// early review: measures whose cause is gone are lifted when asked,
+        /// exactly as they would lapse at the scheduled review — otherwise the
+        /// negotiated door only opened where the scheduled one already would,
+        /// and thirty measured years produced no détente at all. Measures whose
+        /// cause still stands are lifted only when the sender is worn down
+        /// enough (fatigue, blowback, what warmth survives) to take the deal.
+        /// </summary>
+        public static bool WouldGrantRelief(GameState state, string senderId, string targetId)
+            => ReliefMargin(state, senderId, targetId) >= 0f;
+
+        /// <summary>Signed distance from the point at which relief is granted.</summary>
+        public static float ReliefMargin(GameState state, string senderId, string targetId)
+        {
+            float willingness = ReliefWillingness(state, senderId, targetId) - ReliefThreshold;
+
+            // The early review is a foreign government's judgement, not the
+            // operator's: the player's own measures are lifted by the player.
+            // And a sender that still regards the target as a major threat does
+            // not lift on request however the relationship reads — relief must
+            // be earned by conduct, which is what the threat figure tracks.
+            bool aiSender = senderId != state.playerCountryId;
+            var relationship = state.FindRelationship(senderId, targetId);
+            bool feared = relationship != null && relationship.ThreatPerceivedBy(senderId) > ReliefFearLine;
+            if (aiSender && !feared && !SanctionCauseStands(state, senderId, targetId))
+                return Math.Max(willingness, ReliefGrantedMargin);
+            return willingness;
+        }
+
+        /// <summary>Threat perception above which a request for relief is refused on principle.</summary>
+        public const float ReliefFearLine = 55f;
+
+        /// <summary>The margin a request carries once the regime's cause is gone.</summary>
+        public const float ReliefGrantedMargin = 15f;
+
         /// <summary>Ask a state to lift its measures against us and hold a détente.</summary>
         public static bool SeekSanctionsRelief(GameState state, TurnManager turns, string senderId)
         {
@@ -1128,8 +1195,7 @@ namespace Brink.Core
                 return false;
             }
 
-            float willingness = ReliefWillingness(state, senderId, targetId);
-            if (willingness < 50f)
+            if (!WouldGrantRelief(state, senderId, targetId))
             {
                 relationship.AddMemory(state.date, "Rebuffed a request for sanctions relief", -0.4f);
                 if (targetId == state.playerCountryId)
@@ -1192,14 +1258,10 @@ namespace Brink.Core
 
                 var sender = state.FindCountry(sanction.senderId);
                 var target = state.FindCountry(sanction.targetId);
-                var relationship = state.FindRelationship(sanction.senderId, sanction.targetId);
                 if (sender == null || target == null) continue;
 
-                // Kept in force while they are still regarded as a threat.
-                bool stillHostile = relationship != null
-                                    && (relationship.relations < 30f
-                                        || relationship.ThreatPerceivedBy(sanction.senderId) > 55f);
-                if (stillHostile) continue;
+                // Kept in force while the cause stands; lapses when it does not.
+                if (SanctionCauseStands(state, sanction.senderId, sanction.targetId)) continue;
 
                 state.sanctions.RemoveAt(i);
                 var link = state.FindTrade(sanction.senderId, sanction.targetId);
@@ -1218,6 +1280,31 @@ namespace Brink.Core
 
         /// <summary>Months after which a foreign government revisits a sanctions regime.</summary>
         public const int SanctionReviewMonths = 36;
+
+        /// <summary>
+        /// **One definition of "hostile enough to sanction"**, read by the AI
+        /// when it imposes measures and by the review when it decides whether to
+        /// keep them. A regime stands while its cause stands — the pair is at
+        /// war, or the sender's relations with the target are genuinely cold.
+        ///
+        /// Two things are deliberately *not* here. Threat perception, which the
+        /// old review read: it tracks military capability and never fades, so
+        /// measures against any strong state could never lapse and the world's
+        /// sanction count could only grow. And the chill the sanction itself
+        /// puts on relations: that is now a bounded target
+        /// (`DiplomacySystem.SanctionChill`), so a regime can no longer keep
+        /// itself alive by driving the relationship it is judged against to zero.
+        /// </summary>
+        public static bool SanctionCauseStands(GameState state, string senderId, string targetId)
+        {
+            if (ConfrontationSystem.ExistingBetween(state, senderId, targetId) is Confrontation war
+                && war.escalation >= EscalationState.LimitedConflict) return true;
+            var relationship = state.FindRelationship(senderId, targetId);
+            return relationship != null && relationship.relations < SanctionHostilityLine;
+        }
+
+        /// <summary>Relations below which a government sanctions and keeps sanctioning.</summary>
+        public const float SanctionHostilityLine = 30f;
 
         static float Approach(float current, float target, float rate) => current + (target - current) * rate;
 

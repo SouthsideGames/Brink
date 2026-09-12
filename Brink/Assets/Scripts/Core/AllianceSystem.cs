@@ -140,6 +140,81 @@ namespace Brink.Core
             public string sourceName = "";
             public bool fromBloc;
             public string blocId = "";
+
+            /// <summary>
+            /// Whether this call is *defensive* — the guaranteed state was
+            /// attacked — or *offensive*: the guaranteed state is fighting on
+            /// the side that started the war and has now been answered. See
+            /// <see cref="IsDirectCall"/>.
+            /// </summary>
+            public bool direct = true;
+        }
+
+        /// <summary>
+        /// How much less willing a signatory is to enter a war on the side that
+        /// started it. A mutual defence guarantee is a promise to a state that
+        /// is attacked, not to one that attacks; answering an offensive call is
+        /// a choice, judged like any other war of choice.
+        /// </summary>
+        public const float IndirectPenalty = 20f;
+
+        /// <summary>
+        /// Whether a call-in on this confrontation is defensive.
+        ///
+        /// **This is the defensive / offensive distinction the cascade lacked.**
+        /// `InvokeObligations` walks the confrontation's `defenderId`, whoever
+        /// that is. On the original war the defender is the victim, so the call
+        /// is defensive. On a front opened by a guarantor, the "defender" is the
+        /// original aggressor (or a state that came in on its side) — the same
+        /// guarantee then read as an obligation to fight *for* the state that
+        /// started the shooting, which is how a defensive pact became an
+        /// unconditional recursive world-war switch (21 of 22 AI wars measured
+        /// were such entries).
+        ///
+        /// The call is direct when the newly attacked party stands on the
+        /// defending side of the root war; offensive when it stands on the
+        /// aggressing side. Sides are read from the satellite chain, never
+        /// stored twice.
+        /// </summary>
+        public static bool IsDirectCall(GameState state, Confrontation confrontation)
+        {
+            if (confrontation == null) return true;
+            if (!confrontation.IsObligationEntry) return true;
+            var root = state.FindConfrontation(confrontation.obligationRootId);
+            if (root == null) return true;
+            return SideOf(state, root, confrontation.defenderId, 0) >= 0;
+        }
+
+        /// <summary>
+        /// Whether a front opened by honouring a guarantee was a *defensive*
+        /// entry — the state it was joined for stood on the defending side of
+        /// the root war. The measurement counterpart of <see cref="IsDirectCall"/>,
+        /// which asks the forward question (is a further call-in on this front
+        /// defensive?); this asks the backward one (was this front's own entry?).
+        /// </summary>
+        public static bool IsDefensiveEntry(GameState state, Confrontation confrontation)
+        {
+            if (confrontation == null || !confrontation.IsObligationEntry) return false;
+            var root = state.FindConfrontation(confrontation.obligationRootId);
+            if (root == null) return true;
+            return SideOf(state, root, confrontation.obligationOnBehalfOfId, 0) >= 0;
+        }
+
+        /// <summary>+1 on the defending side of `root`, −1 on the aggressing side, 0 unknown.</summary>
+        static int SideOf(GameState state, Confrontation root, string countryId, int depth)
+        {
+            if (string.IsNullOrEmpty(countryId) || depth > 8) return 0;
+            if (countryId == root.defenderId) return 1;
+            if (countryId == root.initiatorId) return -1;
+
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var c = state.confrontations[i];
+                if (c.obligationRootId != root.id) continue;
+                if (c.initiatorId == countryId)
+                    return SideOf(state, root, c.obligationOnBehalfOfId, depth + 1);
+            }
+            return 0;
         }
 
         /// <summary>
@@ -151,17 +226,21 @@ namespace Brink.Core
         {
             if (confrontation == null || confrontation.resolved) return;
             if (confrontation.obligationsInvoked) return;
-            confrontation.obligationsInvoked = true;
 
+            // Depth is checked *before* the flag is set: a war that hit the
+            // guard used to be marked as handled and permanently skipped its
+            // guarantors, rather than simply not propagating this tick.
             if (cascadeDepth >= MaxCascadeDepth)
             {
                 GameLog.Warn("ALLIANCE",
                     $"Cascade depth {MaxCascadeDepth} reached; obligations not propagated further.");
                 return;
             }
+            confrontation.obligationsInvoked = true;
 
             string defenderId = confrontation.defenderId;
             string aggressorId = confrontation.initiatorId;
+            bool direct = IsDirectCall(state, confrontation);
 
             // Copy first: honoring opens confrontations and can modify state.
             var guarantors = GuarantorsOf(state, defenderId, aggressorId);
@@ -172,6 +251,7 @@ namespace Brink.Core
             {
                 foreach (var guarantor in guarantors)
                 {
+                    guarantor.direct = direct;
                     // Already fighting the aggressor: the obligation is discharged
                     // by the war they are in, and asking again would raise a crisis
                     // over a decision already taken.
@@ -224,13 +304,25 @@ namespace Brink.Core
                             + "same question to them.";
             }
 
+            // An offensive call reads differently and costs differently: our
+            // partner is fighting on the side that started this war, and a
+            // defence guarantee is not a promise to join an attack. Declining
+            // costs standing with them alone.
+            bool direct = guarantor.direct;
+            string body = direct
+                ? $"{aggressor?.displayName} has opened hostilities against " +
+                  $"{defender?.displayName}. Our commitment under {guarantor.sourceName} " +
+                  $"has been invoked.{warning} The treaty is explicit. The decision is not."
+                : $"{defender?.displayName} is fighting on the side that started this war, and " +
+                  $"{aggressor?.displayName} has now engaged them. They ask us to come in under " +
+                  $"{guarantor.sourceName}. A defence guarantee does not oblige us to join an " +
+                  $"attack; joining is a choice, and declining costs us standing with them alone.{warning}";
+
             var crisis = new ActiveCrisis
             {
                 defId = PlayerObligationCrisisId,
-                title = "ALLIANCE OBLIGATION INVOKED",
-                body = $"{aggressor?.displayName} has opened hostilities against " +
-                       $"{defender?.displayName}. Our commitment under {guarantor.sourceName} " +
-                       $"has been invoked.{warning} The treaty is explicit. The decision is not.",
+                title = direct ? "ALLIANCE OBLIGATION INVOKED" : "AN ALLY ASKS US INTO ITS WAR",
+                body = body,
                 startDate = state.date,
                 subjectCountryId = confrontation.defenderId,
                 contextId = confrontation.id,
@@ -238,19 +330,21 @@ namespace Brink.Core
                 {
                     new CrisisOption
                     {
-                        label = "HONOR THE COMMITMENT",
+                        label = direct ? "HONOR THE COMMITMENT" : "JOIN THEIR WAR",
                         description = "Enter the war on their side. A real front opens against "
                                     + $"{aggressor?.displayName}.",
                         resultText = $"We have entered the conflict alongside {defender?.displayName}.",
-                        approvalDelta = -4, stabilityDelta = -2
+                        approvalDelta = direct ? -4 : -6, stabilityDelta = -2
                     },
                     new CrisisOption
                     {
-                        label = "REPUDIATE THE COMMITMENT",
-                        description = "Stay out. Expect sanctions, cancelled trade, and a "
-                                    + "signature nobody values.",
+                        label = direct ? "REPUDIATE THE COMMITMENT" : "DECLINE",
+                        description = direct
+                            ? "Stay out. Expect sanctions, cancelled trade, and a "
+                              + "signature nobody values."
+                            : "Stay out of a war they chose. They will remember; nobody else will hold it against us.",
                         resultText = $"We have declined to act. {defender?.displayName} stands alone.",
-                        approvalDelta = 2
+                        approvalDelta = direct ? 2 : 1
                     }
                 }
             };
@@ -384,16 +478,67 @@ namespace Brink.Core
 
         static void ResolveAiObligation(GameState state, Confrontation confrontation, Guarantor guarantor)
         {
-            if (HonorWillingness(state, confrontation, guarantor.countryId) >= 50f)
+            float willingness = HonorWillingness(state, confrontation, guarantor.countryId);
+
+            if (guarantor.direct)
+            {
+                if (willingness >= 50f) Honor(state, confrontation, guarantor);
+                else Repudiate(state, confrontation, guarantor);
+                return;
+            }
+
+            // An offensive call is a war of choice and is judged like one: the
+            // same gates `AssertClaim` puts on a war the government picks for
+            // itself, and a stiffer bar on top. Declining is not a betrayal.
+            if (willingness - IndirectPenalty >= 50f
+                && CanJoinOffensively(state, guarantor.countryId))
                 Honor(state, confrontation, guarantor);
             else
                 Repudiate(state, confrontation, guarantor);
         }
 
         /// <summary>
+        /// The gates a government puts on a war of its own choosing, applied to
+        /// joining an ally's offensive war: room for another front, a domestic
+        /// base that will carry it, and no war of its own just ended.
+        /// </summary>
+        public static bool CanJoinOffensively(GameState state, string countryId)
+        {
+            var country = state.FindCountry(countryId);
+            if (country == null) return false;
+            if (!ConfrontationSystem.CanOpenAnother(state, countryId, out _)) return false;
+            if (country.stability < 35f || country.warExhaustion > 55f) return false;
+            return !RecentlyAtWar(state, countryId);
+        }
+
+        /// <summary>A war of this state's own ended inside `AISystem.WarRecoveryMonths`.</summary>
+        public static bool RecentlyAtWar(GameState state, string countryId)
+        {
+            foreach (var past in state.confrontations)
+                if (past.resolved && past.Involves(countryId)
+                    && state.date.MonthsSince(past.startDate) - past.monthsActive < AISystem.WarRecoveryMonths)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
         /// How willing a signatory is to actually fight. Warmth and shared threat
-        /// argue for honoring; exhaustion, instability and dependence on the
-        /// aggressor argue for finding a reason not to.
+        /// argue for honoring; exhaustion, instability, dependence on the
+        /// aggressor, distance and the wars already being fought argue for
+        /// finding a reason not to.
+        ///
+        /// **Recalibrated 2026-09.** The old form was `30 + relations×0.35 +
+        /// trust×0.25 − …`, which at the world's neutral defaults (50/50) read
+        /// 60 against a threshold of 50 — two states with no history and no
+        /// shared enemy honoured a defence pact with ten points to spare, a
+        /// bloc member started near 80, and the only brake was −9 per front.
+        /// It took ~3.4 concurrent wars to make a bare signatory hesitate, and
+        /// states were measured carrying eight. Warmth is now counted *relative
+        /// to neutral*, so an indifferent signatory declines; a warm bilateral
+        /// partner honours when it is free to; a bloc member honours through a
+        /// second front and hesitates at a third. Distance and a war just
+        /// finished weigh too — both were absent, so a guarantor on the far side
+        /// of the planet answered identically to a neighbour.
         /// </summary>
         public static float HonorWillingness(GameState state, Confrontation confrontation, string allyId)
         {
@@ -404,13 +549,13 @@ namespace Brink.Core
             var toAggressor = state.FindRelationship(allyId, confrontation.initiatorId);
             if (toDefender == null || toAggressor == null) return 0f;
 
-            float willingness = 30f
-                                + toDefender.relations * 0.35f
-                                + toDefender.trust * 0.25f
+            float willingness = 18f
+                                + (toDefender.relations - 50f) * 0.55f
+                                + (toDefender.trust - 50f) * 0.45f
                                 + toDefender.interoperability * 0.15f
                                 + toAggressor.ThreatPerceivedBy(allyId) * 0.30f
                                 - toAggressor.DependenceOf(allyId) * 0.45f
-                                - ally.warExhaustion * 0.35f
+                                - ally.warExhaustion * 0.45f
                                 - Math.Max(0f, 55f - ally.stability) * 0.5f
                                 - Math.Max(0f, 45f - ally.warSupport) * 0.3f;
 
@@ -429,10 +574,27 @@ namespace Brink.Core
             // What we are already carrying. A state fighting two wars is not
             // eager for a third, and this is where the multi-front pressure
             // reaches the diplomacy of it rather than only the fighting.
-            willingness -= TheatreSystem.TotalCommitment(state, allyId) * 9f;
+            willingness -= TheatreSystem.TotalCommitment(state, allyId) * LoadWeight;
+
+            // A war just finished: the army is home, the public is tired of it.
+            if (RecentlyAtWar(state, allyId)) willingness -= RecoveryWeight;
+
+            // How far away the fighting is. A guarantee is easier to honour on
+            // the border than across an ocean, and reach is what says which.
+            float reach = GeographySystem.ReachFactorTo(state, allyId, confrontation.initiatorId);
+            willingness -= (1f - reach) * DistanceWeight;
 
             return willingness;
         }
+
+        /// <summary>Willingness lost per unit of commitment already carried.</summary>
+        public const float LoadWeight = 12f;
+
+        /// <summary>Willingness lost while recovering from a war of one's own.</summary>
+        public const float RecoveryWeight = 10f;
+
+        /// <summary>Willingness lost at the far end of the reach scale.</summary>
+        public const float DistanceWeight = 25f;
 
         // ---------- outcomes ----------
 
@@ -513,8 +675,11 @@ namespace Brink.Core
 
             // And now they are actually at war — a front they can fight on, not a
             // line in a notification. This is also what continues the cascade.
+            // The new front is a satellite of the *root* war, so it closes when
+            // that war closes and the cascade can tell which side it is on.
+            string rootId = confrontation.IsObligationEntry ? confrontation.obligationRootId : confrontation.id;
             ConfrontationSystem.BeginObligationBy(
-                state, allyId, confrontation.initiatorId, confrontation.defenderId);
+                state, allyId, confrontation.initiatorId, confrontation.defenderId, rootId);
         }
 
         /// <summary>
@@ -534,6 +699,16 @@ namespace Brink.Core
             var ally = state.FindCountry(allyId);
             var defender = state.FindCountry(confrontation.defenderId);
             if (ally == null) return;
+
+            // Declining to join an ally's *offensive* war is not repudiating a
+            // guarantee. The guarantee was to defend them; they were not
+            // attacked, they attacked. It costs standing with the state that
+            // asked, and nothing with anyone else.
+            if (!guarantor.direct || !IsDirectCall(state, confrontation))
+            {
+                Decline(state, confrontation, guarantor);
+                return;
+            }
 
             var treaty = state.FindTreaty(allyId, confrontation.defenderId);
             if (treaty != null && treaty.Has(TreatyCommitment.MutualDefense))
@@ -586,6 +761,37 @@ namespace Brink.Core
             state.AddChronicle(ChronicleCategory.Diplomatic, allyId,
                 $"Repudiated defense commitment to {defender?.displayName}.", Publicity.Public);
             GameLog.Warn("ALLIANCE", $"{allyId} repudiated its commitment to {confrontation.defenderId}.");
+        }
+
+        /// <summary>
+        /// Staying out of a war an ally chose. No treaty is broken, no bloc
+        /// expels, nobody else recalculates our signature — the partner who asked
+        /// remembers, and that is the whole bill.
+        /// </summary>
+        static void Decline(GameState state, Confrontation confrontation, Guarantor guarantor)
+        {
+            string allyId = guarantor.countryId;
+            var ally = state.FindCountry(allyId);
+            var asker = state.FindCountry(confrontation.defenderId);
+            if (ally == null) return;
+
+            var toAsker = state.FindRelationship(allyId, confrontation.defenderId);
+            if (toAsker != null)
+            {
+                toAsker.relations = Clamp(toAsker.relations - 10f);
+                toAsker.trust = Clamp(toAsker.trust - 8f);
+                toAsker.AddMemory(state.date, "Would not join our war", -3f);
+            }
+
+            bool playerInvolved = allyId == state.playerCountryId
+                                  || confrontation.Involves(state.playerCountryId);
+            state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
+                "STAYS OUT OF AN ALLY'S WAR",
+                $"{ally.displayName} declines to join {asker?.displayName}'s war. A defence " +
+                "guarantee was not a promise to attack.", allyId, desk: ReportingDesk.Diplomacy);
+            state.AddChronicle(ChronicleCategory.Diplomatic, allyId,
+                $"Declined to join {asker?.displayName}'s offensive war.", Publicity.Public);
+            GameLog.Info("ALLIANCE", $"{allyId} declined an offensive call from {confrontation.defenderId}.");
         }
 
         /// <summary>
@@ -665,7 +871,7 @@ namespace Brink.Core
                 var severity = closeness >= 70f ? SanctionSeverity.Coercive
                              : closeness >= 40f ? SanctionSeverity.Pressure
                              : SanctionSeverity.Routine;
-                EconomySystem.ImposeSanctionsBy(state, angryId, allyId, severity);
+                EconomySystem.ImposeSanctionsBy(state, angryId, allyId, severity, "REPUDIATION");
 
                 CancelPreferentialTrade(state, angryId, allyId);
             }

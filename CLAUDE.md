@@ -2704,6 +2704,56 @@ for every figure in the table above.
       test script gets to take. Same sources, same editor binary; only the
       Library was regenerated.
 
+- [x] **Core stability repair (2026-09-12)** — the audit's verdict was that the
+      systems connect exactly as designed and the connected loop has no damping:
+      cascade heat feeds sanctions feeds ruin feeds coups feeds heat, and every
+      unattended 40-year world converged on the same collapse. Seven repairs on
+      one branch, each systemic rather than a cap. Specs: 01 §5c, 02 §9a,
+      04 §8a/§9b, 05 §7b, 06 §7d, 09 (crisis modal), 16 (sponsorship).
+      - **Settlement oracle closed** (spec 01 §5c): four ground-truth leaks on
+        the negotiation surfaces replaced by the assessment layer;
+        `SettlementFogTests` scans `Scripts/UI` for the oracle identifiers.
+      - **Cascade damped** (spec 04 §8a): willingness counted relative to
+        neutral, load/distance/recovery weigh, offensive calls are a choice
+        with a soft price, satellite fronts close with the war they were joined
+        for, the AI seeks terms on every front. AI root wars 2–7 per 30-year
+        world; confrontation-months 71–152/decade (was 110–246).
+      - **Debt / sanction / collapse loop** (spec 02 §9a, 04 §9b, 05 §7b):
+        credit-gated deficit financing with visible arrears; one
+        `FiscalCondition` read by grade, mandate and both finance ministries;
+        austerity never prescribed into a depression; sanctions imposed and
+        lifted on one definition of hostility, chilling relations to a target;
+        gravity caps alignment instead of draining it; cold alignment thaws;
+        conspiracy has a resting point. **40 years: 3 of 16 ruined on each
+        audit seed (was 13–15), coups 24–48 (was 95–114), median debt 0%.**
+      - **AI point-reads removed** (spec 06 §7d): seven sites, each with a
+        same-truth / different-estimate test pair.
+      - **Crisis modal scrolls; STANDING and ORDER OF BATTLE derive their
+        widths** (spec 09).
+      **Three lessons worth keeping.** (1) A recurring cost on a drifting value
+      was written *again* in this pass — the arrears confidence drain — and
+      caught by the isolated recovery arm; the value-versus-target family is
+      now at thirteen instances and it is still the first thing to suspect.
+      (2) A fiscal programme can be its own ratchet: austerity in a collapsed
+      economy shrank the denominator that kept the state in crisis. **When a
+      response to a condition can sustain the condition, look for the exit.**
+      (3) Making the world calmer weakened a mechanic that was quietly riding on
+      the heat: universal friendship was resisted mostly by hostile AI acts, not
+      by the friend-of-my-enemy cap — the cap engaged only after it learned to
+      read pacts and blocs as commitment and sanctions and war as enmity.
+      **Measurement:** `Tools/Stability.cs` (build recipe as `Tools/Wars.cs`;
+      `BRINK_SANCTION_DETAIL=1` dumps every standing regime with its cause,
+      age, relations, threat and relief margin). `Sanction.cause` exists for it.
+      **Not done, deliberately:** `HardshipEventuallyOrganises` still fails —
+      the same severe fixture now peaks at unrest 34.5 because the USA's
+      authored unity and volatility damp it and lighter foreign sanctions no
+      longer add to it; that is national character, and retuning the social
+      layer is out of this pass's scope. Balance (`Report_MultiSeedBalance`) is
+      **unmeasured** since every figure above; the world it measured no longer
+      exists. RNG consumption changed where gameplay did (per-front settlement
+      seeking, the AI's tax and crisis responses), so fingerprints are not
+      comparable to pre-repair worlds.
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

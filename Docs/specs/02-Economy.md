@@ -594,6 +594,95 @@ that would not exist. The step seeds the stock from the save's own ratio and
 GDP, so a migrated world lands where it stood and migrating twice gives the same
 answer.
 
+## 9a. Fiscal condition, arrears, and the sanction cause (core stability repair, 2026-09)
+
+The audit measured every unattended 40-year world converging on sovereign debt
+at 300–700% of GDP, a sanction count that only grew, ~100 coups and 13–15 of 16
+states ruined. Three things in this pillar were the loop's edges.
+
+### Deficits answer to creditworthiness
+
+The automatic deficit financing in `FiscalSystem.Tick` had no gate at all — the
+voluntary verb answered to `MinimumCreditToIssue` (18) and a 200% ceiling, the
+deficit did not. Now the deficit is financed only while `creditStanding >=
+MinimumCreditToIssue`; below it the shortfall is **arrears**: the account stays
+negative, `FiscalState.arrearsMonths` counts, and confidence's target carries
+`ArrearsConfidenceDrag` (12) while it lasts. `FiscalState.deficitFinancedMonths`
+counts consecutive financed months. Both fields are additive, zero on old saves,
+no version bump.
+
+### One fiscal condition
+
+`FiscalSystem.ConditionOf` is the only definition of solvency, read by the
+annual grade (`ProgressionSystem.SolvencyPenalty`), the `Solvent` mandate
+objective, the AI's books and the operator's desk:
+
+| `FiscalCondition` | Meaning |
+|---|---|
+| `Sound` | balanced or in surplus, nothing borrowed lately |
+| `CashNegativeButCreditworthy` | a financed shortfall this month or last |
+| `DeficitFinanced` | ≥ 6 consecutive financed months, or ≥ 3 at ≥ 80% of GDP |
+| `DebtStressed` | ≥ 120% of GDP, or credit < 35, or shallow arrears |
+| `Crisis` | deep arrears (> ¼ year's income), shut out *and* in arrears, or restructured within the last year |
+
+A heavy debt nobody will lend into, with the account in the black, is
+`DebtStressed` rather than `Crisis` — the ordinary budget's problem, not the
+emergency programme's. `SolvencyPenalty` ranks the profiles (0 / ≥2 / 6–12 /
+12–18 / 20); a posting three times its GDP in debt with a zeroed balance used to
+grade penalty-free. `MandateObjectiveKind.Solvent` is met at
+`CashNegativeButCreditworthy` or better — it was a free tick in five authored
+mandates.
+
+### The finance ministry answers a crisis
+
+`FiscalSystem.SteadyTheBooks` runs from the fiscal tick for every non-player
+state and from the operator's **autonomous** Economy desk (`CabinetSystem`;
+a directed desk leaves the budget to the operator who is directing it). At
+`DebtStressed` or worse: austerity where the economy can bear it, the tax rate
+stepped (`CrisisTaxStep` 2/month) toward `CrisisTaxCeiling` 46 — or
+`DepressionTaxCeiling` 40 — and a write-down once arrears exceed
+`DefaultArrearsShare` (½ a year's income) or a state shut out of credit sits
+above `DefaultRatio` (200% of GDP). **Austerity is not prescribed into a
+depression** (`DepressionLine`: market index 55): the first version cut spending
+whatever the economy was doing and a ruined state never left crisis — the cuts
+held growth at −4% a year, the shrinking economy raised the ratio through the
+denominator, the ratio kept the state in crisis, and the crisis kept the cuts;
+twenty measured years of it. `AusterityAdvisable` is shared with the AI's
+budget review, and the AI now also moves its tax rate (`SetTaxRateBy` had no AI
+caller at all). The isolated recovery arm of `NoSocialValueRunsAwayInEitherDirection`
+climbs from index 8 to 78 and debt 149% to zero over twenty years with these in
+place.
+
+### Sanctions: a cause, a chill, a lapse
+
+`EconomySystem.SanctionCauseStands` is the one definition of "hostile enough to
+sanction": the pair is at war, or the sender's relations with the target are
+below `SanctionHostilityLine` (30). The AI's `CounterRival` imposes only while it
+stands (at 20% a month, was 35%), and `AgeSanctions` lifts a regime at its
+36-month review when it does not. Threat perception is deliberately not part of
+it: it tracks capability and never fades, so measures against any strong state
+could never lapse. `Sanction.cause` (RIVALRY / REPUDIATION / CRISIS / PLAYER)
+is recorded for the long-run probe and read by nothing else.
+
+The self-lock is broken on the diplomacy side (spec 04 §9b): a sanctioned pair's
+relations settle `SanctionChill` (8) below alignment as a target, instead of
+draining 1.2 a month to zero and being excluded from the recovery branch.
+
+`EconomySystem.WouldGrantRelief` / `ReliefMargin`: a request for relief is an
+early review — a foreign sender whose cause is gone lifts when asked (unless it
+still regards the target as a major threat, `ReliefFearLine` 55), and the
+player's own measures are never lifted by a computed rule. `AssessRelief` is the
+assessment layer over it, gated on the target's *Diplomatic* reporting on the
+sender, and `AISystem.ConsiderDetente` screens through it rather than through
+the sender's acceptance function.
+
+**Measured after (40 years, seeds 5171 / 1212 / 9090):** ruined states 3 / 3 / 3
+of 16 (was 15 / 14 / 13), mean market index 85–97 (was 16–27), sanctions 28–34
+(was 72–99), coups 24–48 (was 95–114), median debt 0% with a maximum of
+246–333% (was 340–692% mean). The count still creeps; the residual regimes are
+RIVALRY ones on pairs that stay genuinely cold, which is the intended reading.
+Probe: `Tools/Stability.cs`.
+
 ## 7. Extension points
 
 - **Specific dependencies** (oil, grain, semiconductors) — GDD §10 says these
