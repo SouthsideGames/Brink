@@ -48,5 +48,15 @@ namespace Brink.Data
         public List<StrategicPolicyChoice> policies = new List<StrategicPolicyChoice>();
         public List<PlayerObjective> objectives = new List<PlayerObjective>();
         public int revisionCount;
+
+        /// <summary>
+        /// The operator's own name for the plan and how far ahead it is meant to
+        /// organise decisions. This is planning context, not a timer: reaching
+        /// the horizon neither rewards nor punishes the player, and changing it
+        /// never touches national state.
+        /// </summary>
+        public string planTitle = "Standing strategy";
+        public int horizonMonths = 60;
+        public GameDate horizonSet;
     }
 }
