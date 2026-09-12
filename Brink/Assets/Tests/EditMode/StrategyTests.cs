@@ -27,13 +27,16 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void FirstDoctrineIsFreeRevisionCostsInfluence()
+        public void FirstDoctrineIsFreeRevisionCostsInfluenceButNeverInitiative()
         {
             int before = state.influence;
+            int initiative = state.initiativesThisYear;
             Assert.IsTrue(StrategySystem.SetDoctrine(state, StrategicDoctrine.Prosperity));
             Assert.AreEqual(before, state.influence);
+            Assert.AreEqual(initiative, state.initiativesThisYear);
             Assert.IsTrue(StrategySystem.SetDoctrine(state, StrategicDoctrine.Deterrence));
             Assert.AreEqual(before - StrategySystem.DoctrineRevisionInfluence, state.influence);
+            Assert.AreEqual(initiative, state.initiativesThisYear);
         }
 
         [Test]
@@ -50,33 +53,69 @@ namespace Brink.Tests
 
             StrategyCabinetBridge.Prepare(state);
 
-            Assert.AreEqual("MIL_READINESS", military.directiveId);
+            Assert.AreEqual(MilitaryAdvice.PrepareForWar, military.directiveId);
             Assert.AreEqual("ECO_AUSTERITY", economy.directiveId);
             Assert.AreEqual("DIP_OUTREACH", diplomacy.directiveId, "Standing strategy must not overwrite an explicit order.");
         }
 
         [Test]
-        public void CountryPolicyIsActuallyCountrySpecific()
+        public void CountryPolicyIsActuallyCountrySpecificAndNotInitiative()
         {
             var policies = StrategySystem.AvailablePolicies(state);
             Assert.AreEqual(1, policies.Length);
             Assert.AreEqual("USA", policies[0].countryId);
             Assert.IsFalse(StrategySystem.SetPolicy(state, "CHN_INDUSTRIAL_SECURITY"));
+            int initiative = state.initiativesThisYear;
             Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
+            Assert.AreEqual(initiative, state.initiativesThisYear);
         }
 
         [Test]
-        public void PlayerObjectivesHaveNoRewardAndAreBounded()
+        public void PlayerObjectivesAreBoundedStandingAndNotAnInitiativeFarm()
         {
             int xp = state.strategistXP;
+            int initiative = state.initiativesThisYear;
             for (int i = 0; i < StrategySystem.MaxObjectives; i++)
                 Assert.IsTrue(StrategySystem.AddObjective(state, "Goal " + i,
                     new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=1f, text="Stability at 1." }));
             Assert.IsFalse(StrategySystem.AddObjective(state, "Too many",
                 new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=1f, text="Stability at 1." }));
+
             StrategySystem.MonthlyUpdate(state);
-            Assert.AreEqual(xp, state.strategistXP, "Self-authored goals define success; they are not an XP farm.");
-            foreach (var objective in state.mandate.strategy.objectives) Assert.IsTrue(objective.achieved);
+            Assert.AreEqual(xp, state.strategistXP);
+            Assert.AreEqual(initiative, state.initiativesThisYear);
+            foreach (var objective in state.mandate.strategy.objectives)
+            {
+                Assert.IsTrue(objective.achieved);
+                Assert.IsTrue(objective.everAchieved);
+            }
+
+            state.PlayerCountry.stability = 0f;
+            StrategySystem.MonthlyUpdate(state);
+            foreach (var objective in state.mandate.strategy.objectives)
+            {
+                Assert.IsFalse(objective.achieved, "Standing objectives must become unmet again when the world moves away from the target.");
+                Assert.IsTrue(objective.everAchieved, "First attainment remains part of the record.");
+            }
+        }
+
+        [Test]
+        public void StandingStrategyReportingDoesNotPretendItWasMinisterialJudgement()
+        {
+            StrategySystem.SetDoctrine(state, StrategicDoctrine.Prosperity);
+            StrategyCabinetBridge.Prepare(state);
+            CabinetSystem.MonthlyAct(state);
+            StrategySystem.ClarifyCabinetReport(state);
+
+            bool found = false;
+            foreach (var line in state.cabinetReport)
+            {
+                if (line.pillar != Pillar.Economy) continue;
+                found = true;
+                Assert.IsFalse(line.ownJudgement);
+                StringAssert.Contains("standing strategy", line.summary);
+            }
+            Assert.IsTrue(found);
         }
 
         [Test]
