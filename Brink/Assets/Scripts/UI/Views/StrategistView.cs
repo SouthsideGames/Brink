@@ -12,6 +12,8 @@ namespace Brink.UI.Views
         public override string ShortCode => "OPR";
         static int W => TerminalMetrics.Columns;
         Pillar selectedTree = Pillar.Government;
+        StrategicDoctrine previewDoctrine = StrategicDoctrine.Balanced;
+        int previewHorizon;
 
         protected override void Build()
         {
@@ -22,6 +24,7 @@ namespace Brink.UI.Views
             BuildStanding(state);
             BuildMandate(state);
             BuildStrategy(state);
+            BuildForecast(state);
             BuildDirectives(state);
             BuildCareer(state);
             BuildEvaluations(state);
@@ -47,6 +50,22 @@ namespace Brink.UI.Views
             sb.AppendLine(" The mandate says what the posting owes. Strategy says what unattended government should favour.");
             foreach (var line in StrategySystem.StatusText(state).Split('\n')) sb.AppendLine(" " + line);
             text.text = sb.ToString();
+
+            if (plan != null)
+            {
+                AddText("terminal-text-dim").text = " LONG-TERM PLAN — a name and horizon for organising decisions; no score or timer.";
+                var planName = new TextField("PLAN NAME") { value = plan.planTitle }; planName.AddToClassList("terminal-input"); Root.Add(planName);
+                var horizons = new List<string> { "12 months", "36 months", "60 months", "120 months" };
+                int hIndex = plan.horizonMonths <= 12 ? 0 : plan.horizonMonths <= 36 ? 1 : plan.horizonMonths <= 60 ? 2 : 3;
+                var horizon = new DropdownField("HORIZON", horizons, hIndex); Root.Add(horizon);
+                var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
+                var save = new Button(() =>
+                {
+                    int months = horizon.index == 0 ? 12 : horizon.index == 1 ? 36 : horizon.index == 2 ? 60 : 120;
+                    if (StrategySystem.SetPlanFrame(state, planName.value, months)) Refresh();
+                }) { text = "SET PLAN FRAME" };
+                save.AddToClassList("cmd-button"); row.Add(save);
+            }
 
             AddText("terminal-text-dim").text = " DOCTRINE — first adoption is free; revising it costs 2 Influence.";
             var doctrineRow = new VisualElement(); doctrineRow.AddToClassList("button-row"); Root.Add(doctrineRow);
@@ -111,6 +130,39 @@ namespace Brink.UI.Views
                     { text = "REMOVE — " + captured.title };
                     remove.AddToClassList("cmd-button"); row.Add(remove);
                 }
+        }
+
+        void BuildForecast(GameState state)
+        {
+            var plan = StrategySystem.Ensure(state);
+            if (plan == null) return;
+            if (previewHorizon == 0) previewHorizon = plan.horizonMonths;
+            if (previewDoctrine == StrategicDoctrine.Balanced && plan.doctrineChosen)
+                previewDoctrine = plan.doctrine;
+
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("STRATEGIC FORECAST / WHAT-IF", W);
+            AddText("terminal-text-dim").text = " Staff estimate only. Changing the preview changes no state and spends nothing.";
+
+            var doctrineRow = new VisualElement(); doctrineRow.AddToClassList("button-row"); Root.Add(doctrineRow);
+            foreach (StrategicDoctrine doctrine in System.Enum.GetValues(typeof(StrategicDoctrine)))
+            {
+                var captured = doctrine;
+                bool active = previewDoctrine == doctrine;
+                var button = new Button(() => { previewDoctrine = captured; Refresh(); })
+                { text = (active ? "► " : "") + doctrine.ToString().ToUpperInvariant() };
+                button.AddToClassList("cmd-button"); if (active) button.AddToClassList("primary"); doctrineRow.Add(button);
+            }
+
+            var horizonRow = new VisualElement(); horizonRow.AddToClassList("button-row"); Root.Add(horizonRow);
+            foreach (int months in new[] { 12, 36, 60, 120 })
+            {
+                int captured = months; bool active = previewHorizon == months;
+                var button = new Button(() => { previewHorizon = captured; Refresh(); })
+                { text = (active ? "► " : "") + months + " MO" };
+                button.AddToClassList("cmd-button"); if (active) button.AddToClassList("primary"); horizonRow.Add(button);
+            }
+
+            AddFigure().text = StrategicForecastSystem.Render(state, previewDoctrine, previewHorizon, W);
         }
 
         static MandateObjective ObjectiveCondition(string measure, float target, string param)
