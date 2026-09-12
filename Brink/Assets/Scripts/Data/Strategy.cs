@@ -3,12 +3,6 @@ using System.Collections.Generic;
 
 namespace Brink.Data
 {
-    /// <summary>
-    /// The government's standing strategic posture. Doctrine is not a victory
-    /// path: it tells delegated institutions what to favour when several sound
-    /// choices compete. The operator can still contradict it through ordinary
-    /// directives or Direct Control and live with that friction.
-    /// </summary>
     public enum StrategicDoctrine
     {
         Balanced,
@@ -27,7 +21,12 @@ namespace Brink.Data
         public GameDate adopted;
     }
 
-    /// <summary>A goal written by the player rather than handed down by the game.</summary>
+    /// <summary>
+    /// A goal written by the player rather than handed down by the game.
+    /// `achieved` means the condition is true now; `everAchieved` records whether
+    /// the posting has ever reached it. This keeps objectives standing rather
+    /// than turning them into one-shot quest checkboxes.
+    /// </summary>
     [Serializable]
     public class PlayerObjective
     {
@@ -36,14 +35,10 @@ namespace Brink.Data
         public MandateObjective condition;
         public GameDate created;
         public bool achieved;
+        public bool everAchieved;
         public GameDate achievedDate;
     }
 
-    /// <summary>
-    /// Persistent strategy for this posting. It grants no magic national bonus;
-    /// doctrine changes delegated emphasis, policies exchange one priority for
-    /// another, and objectives are measurements only.
-    /// </summary>
     [Serializable]
     public class StrategicPlan
     {
