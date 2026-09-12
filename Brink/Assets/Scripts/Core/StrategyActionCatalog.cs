@@ -4,9 +4,9 @@ using Brink.Data;
 namespace Brink.Core
 {
     /// <summary>
-    /// Phase B operator verbs live in StrategySystem rather than GameController,
-    /// so they are kept beside ActionCatalog without pretending they are controller
-    /// commands. ACTIONS merges this reference list into the permanent index.
+    /// Posting-level strategy verbs kept beside ActionCatalog. ACTIONS merges
+    /// this list into the permanent command reference without pretending these
+    /// planning verbs are GameController simulation commands.
     /// </summary>
     public static class StrategyActionCatalog
     {
@@ -15,6 +15,28 @@ namespace Brink.Core
             var result = new List<ActionEntry>();
             var plan = StrategySystem.Ensure(state);
             bool hasPlan = plan != null;
+
+            result.Add(new ActionEntry
+            {
+                pillar = Pillar.Government,
+                viewId = "OPERATOR",
+                label = "Set plan frame",
+                cost = "Free",
+                description = "Name the long-term plan and choose a 1, 3, 5 or 10-year horizon. The horizon organises decisions; it is not a deadline or scoring rule.",
+                available = hasPlan,
+                blockedReason = hasPlan ? "" : "No posting mandate is active."
+            });
+
+            result.Add(new ActionEntry
+            {
+                pillar = Pillar.Government,
+                viewId = "OPERATOR",
+                label = "Run a strategic what-if",
+                cost = "Free",
+                description = "Preview current-course arithmetic and the exact Cabinet intent of another doctrine without advancing the simulation or changing the save.",
+                available = hasPlan,
+                blockedReason = hasPlan ? "" : "No posting mandate is active."
+            });
 
             result.Add(new ActionEntry
             {
