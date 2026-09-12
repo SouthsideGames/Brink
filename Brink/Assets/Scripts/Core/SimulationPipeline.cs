@@ -14,10 +14,14 @@ namespace Brink.Core
             turns.ResolveMonth += Causal.OpenMonth;
 
             turns.ResolveMonth += CabinetLifecycle.MonthlyUpdate;
-            // Phase B strategy supplies default instructions only after lifecycle
-            // has filled seats and before those officials work the month.
+            // Strategy prepares only default intent for Autonomous player desks.
+            // Explicit direction and Direct Control remain untouched.
             turns.ResolveMonth += StrategyCabinetBridge.Prepare;
             turns.ResolveMonth += CabinetSystem.MonthlyAct;
+            // CabinetSystem predates standing strategy, so correct the rebuilt
+            // monthly report immediately after Cabinet work rather than letting
+            // strategy-steered actions masquerade as ministerial judgement.
+            turns.ResolveMonth += StrategySystem.ClarifyCabinetReport;
 
             turns.ResolveMonth += MilitarySystem.MonthlyUpkeep;
             turns.ResolveMonth += AcquisitionSystem.MonthlyDeliveries;
@@ -50,8 +54,7 @@ namespace Brink.Core
             turns.ResolveMonth += CrisisSystem.SystemicCheck;
             turns.ResolveMonth += MandateSystem.MonthlyUpdate;
             turns.ResolveMonth += StandingDirectiveSystem.MonthlyUpdate;
-            // Evaluate self-authored goals after the world has resolved, so a
-            // goal reached this month is recognized this month.
+            // Player-authored goals are judged after the month's consequences.
             turns.ResolveMonth += StrategySystem.MonthlyUpdate;
             turns.ResolveMonth += Telemetry.RecordMonth;
 
