@@ -41,6 +41,7 @@ namespace Brink.UI.Views
 
             BuildModeSelector();
             AddText("terminal-text-dim").text = " " + AsciiMapModes.Summary(state, mapMode);
+            AddFigure("terminal-text-dim").text = AsciiMapModes.Signature(state, mapMode, W);
             AddFigure().text = AsciiMapModes.Render(
                 state, selectedCountryId, mapMode, W, TerminalMetrics.MapRows);
             AddText("terminal-text-dim").text = AsciiMapModes.Legend(mapMode);
