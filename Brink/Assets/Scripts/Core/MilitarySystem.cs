@@ -362,8 +362,7 @@ namespace Brink.Core
                 // This does not repay the programme — the treasury cost is far
                 // larger — but defense spending is not purely extractive, and
                 // modelling it as such made armament strictly self-defeating.
-                country.resources.industrialCapacity =
-                    Growth.Apply(country.resources.industrialCapacity, program.strengthPerMonth * 0.25f);
+                EconomySystem.BuildIndustry(country, program.strengthPerMonth * 0.25f);
 
                 program.monthsRemaining--;
 

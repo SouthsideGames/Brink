@@ -246,12 +246,13 @@ namespace Brink.Core
             // The two sectors that are physically productive feed the country's
             // ability to build. Technology feeds it less directly and Finance not
             // at all — a bigger bank does not make more aircraft.
+            // Through `BuildIndustry`, so what was built also raises what the
+            // country can hold — otherwise the monthly drift toward the
+            // endowment would take the programme's yield straight back.
             if (programme.sector == EconomicSector.Industry)
-                country.resources.industrialCapacity =
-                    Growth.Apply(country.resources.industrialCapacity, yield * 0.45f);
+                EconomySystem.BuildIndustry(country, yield * 0.45f);
             else if (programme.sector == EconomicSector.Technology)
-                country.resources.industrialCapacity =
-                    Growth.Apply(country.resources.industrialCapacity, yield * 0.20f);
+                EconomySystem.BuildIndustry(country, yield * 0.20f);
 
             // Energy work raises what the country can hold, which is the one
             // authored vulnerability several states are built around.

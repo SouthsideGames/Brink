@@ -290,11 +290,16 @@ namespace Brink.Tests
         {
             Player.fiscal.sovereignDebt = 5000f;
             Player.fiscal.creditStanding = 60f;
+            Player.resources.treasury = -900f;
 
             Assert.IsTrue(FiscalSystem.RestructureDebtBy(state, state.playerCountryId));
 
             Assert.Less(Player.fiscal.sovereignDebt, 5000f, "The write-down wrote nothing down.");
             Assert.Less(Player.fiscal.creditStanding, 60f, "Defaulting cost no standing.");
+            Assert.GreaterOrEqual(Player.resources.treasury, 0f,
+                "A default that leaves the arrears standing is half a default: the creditors who "
+                + "were not being paid go on not being paid, and the month the standing recovers "
+                + "the whole hole is borrowed at once and the debt is back at the ceiling.");
             Assert.Greater(Player.fiscal.restructuringMemoryMonths, 0,
                 "The default was forgotten immediately, which makes it a free reset.");
 

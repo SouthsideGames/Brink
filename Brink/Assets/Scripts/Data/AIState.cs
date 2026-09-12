@@ -235,6 +235,21 @@ namespace Brink.Data
         public float pathProgress = 50f;
 
         /// <summary>
+        /// Month index of the last strategic review, kept or changed. A failing
+        /// path is reconsidered once per `AIStrategy.FailingReviewMonths`, not
+        /// every month the reading stays low. Zero on an old save, which at worst
+        /// delays one review.
+        /// </summary>
+        public int lastReviewMonthIndex;
+
+        /// <summary>
+        /// The lost war whose shock this government has already rethought its
+        /// strategy over. A defeat forces one review, not one a month for the
+        /// whole shock window. Empty on an old save.
+        /// </summary>
+        public string lastDefeatReviewedId = "";
+
+        /// <summary>
         /// A hidden per-game shift in how this government weighs the paths.
         ///
         /// Two countries with similar endowments would otherwise always reach the

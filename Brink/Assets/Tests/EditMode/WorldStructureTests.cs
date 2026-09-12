@@ -302,7 +302,21 @@ namespace Brink.Tests
             // healthy economy, and then blaming the social layer for the mild
             // result. Starving the economy of energy and gutting its sectors
             // makes EconomySystem *produce* the hardship instead.
-            for (int month = 0; month < 48; month++)
+            // Six years, not four (2026-09). The claim is that *sustained severe*
+            // hardship organises, and the bar (40) is a level, not a date: the
+            // window has to be as long as the chain it measures. The market
+            // index is fundamentals-anchored with a multi-year lead time
+            // (CLAUDE.md: "a test wanting to observe a real collapse must run
+            // four years, not two"), living standards fall at 0.045/month, and
+            // unrest then rises at 0.11/month toward its pressure target — so
+            // this fixture's economy is only *severe* from about month 36
+            // (standards 27, index 16), and unrest was still climbing 1.6 a
+            // month at 48 with a dozen points to go. It used to cross 40 inside
+            // four years only because the world's AI sanctioned a collapsing
+            // power at 35% a month from year one and food pressure did the rest;
+            // sanctions now answer to a cause (spec 02 §9a), so the fixture's
+            // own hardship has to do the work on the model's own timescale.
+            for (int month = 0; month < 72; month++)
             {
                 country.resources.energy = 8f;
                 country.economy.confidence = 12f;
@@ -359,22 +373,50 @@ namespace Brink.Tests
             // was right and the window was wrong. These systems are documented to
             // work on multi-year and decade scales, so the divergence has to be
             // measured on theirs rather than on one that felt tidy.
+            //
+            // **And in isolation** (2026-09), on the relief-arm precedent of
+            // `NoSocialValueRunsAwayInEitherDirection`. The claim is about the
+            // unrest *mechanic* — that organisation disperses once its cause is
+            // gone — and under the full pipeline the recovery was being measured
+            // on a country the hardship had broken: six years of it took this
+            // world's USA to unity 24 and stability 13, so it fell into civil
+            // conflict twice during the recovery, a rival opened a war on the
+            // weakened power (exhaustion 32–51 for most of the eight years), and
+            // it took in fifty points of displaced people from a collapsing
+            // world. Unrest read 42 at the end and every point of it was a new
+            // cause: war exhaustion, a rising, the hosting strain. Those are
+            // the design working, and they are not what this test claims. The
+            // first version got the same recovery clean only because the world's
+            // wars happened to fall elsewhere on that trajectory — which is a
+            // coin flip, not a statement about the layer.
+            //
+            // NARROW PIPELINE: the recovery mechanics only — economy, public
+            // finance and the social layer — exactly the relief arm below.
+            // Everything that generates new adversity is omitted, and the causes
+            // already running are ended the way the relief arm ends them.
+            world.sanctions.RemoveAll(s => s.targetId == country.id);
+            world.insurgencies.RemoveAll(i =>
+            {
+                var location = world.FindLocation(i.locationId);
+                return location != null && location.ownerId == country.id;
+            });
+            foreach (var confrontation in world.confrontations)
+                if (confrontation.Involves(country.id)) confrontation.resolved = true;
+            country.warExhaustion = 0f;
+            country.government.inCivilConflict = false;
+            country.government.civilConflictMonthsRemaining = 0;
+
+            var recovery = new TurnManager(world);
+            recovery.ResolveMonth += EconomySystem.MonthlyUpdate;
+            recovery.ResolveMonth += FiscalSystem.MonthlyUpdate;
+            recovery.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+
             for (int month = 0; month < 96; month++)
             {
                 country.resources.energy = 90f;
                 country.economy.confidence = 85f;
                 foreach (var sector in country.economy.sectors) sector.health = 92f;
-
-                // Recovery means the causes *end* — including the siege. The AI
-                // sanctions a collapsing power heavily (measured: pressure 3.0
-                // for 237 of 240 months on this seed), and food now genuinely
-                // responds to sanctions, so people hungry under an ongoing
-                // blockade staying angry is the design working, not unrest
-                // failing to subside. This fixture predates economic warfare
-                // being able to reach a population at all.
-                world.sanctions.RemoveAll(s => s.targetId == country.id);
-
-                turns.EndMonth();
+                recovery.EndMonth();
             }
 
             Assert.Less(country.socialUnrest, unrestAtWorst * 0.4f,
@@ -495,8 +537,24 @@ namespace Brink.Tests
             // civil conflict. Ruin does not have to arrive through the economy,
             // and an exemption that only knows one route to it will keep
             // reporting the others as ratchets.
+            //
+            // And destitution itself (2026-09): grievance approaches its ceiling
+            // only under "permanent total deprivation" by the design's own
+            // words (`GovernmentSystem`), and living standards are what
+            // deprivation *is* — so a population at standards 0.2 pinning
+            // grievance at 100 is the model reading total deprivation
+            // correctly, whatever the market index says. Russia arrived here at
+            // an index of 24, four points above the line, with standards 0.2,
+            // unemployment 16 and fifteen years of lost wars behind it, and the
+            // ceiling check called that a country in good order pinning a value.
+            // A country whose people have nothing is under conditions the relief
+            // run lifts, and it is the relief arm's assertion that applies. The
+            // line is the relief arm's own line for standards that were actually
+            // wrong (30), not a new number: below it the arm demands recovery,
+            // above it nothing was wrong to recover from.
             bool UnderRuin(CountryState c)
                 => c.economy.marketIndex < 20f
+                   || c.livingStandards < 30f
                    || c.warExhaustion > 70f
                    || c.government.inCivilConflict;
 
@@ -739,6 +797,83 @@ namespace Brink.Tests
             Assert.IsNotNull(successor, "A state that had entirely failed did not fracture.");
             Assert.AreEqual(before + 1, state.countries.Count);
             Assert.IsFalse(gov.inCivilConflict, "The fracture has to resolve the conflict.");
+        }
+
+        [Test]
+        public void ABreakawayIsBornWithAnEconomyItCanRecoverOn()
+        {
+            // Measured in Unity (seed 1212, the isolated recovery arm): a
+            // breakaway of a ruined parent was born with no sectors, an economy
+            // pillar of 6 and industrial capacity of 6 — both under the floor a
+            // downturn cannot take capability below, which only ever stops a
+            // drag and never gives — and a treasury that was a fifth of its
+            // parent's overdraft. Growth sat at −1.6 for twenty years and living
+            // standards settled at a target of 32. Three of the recurring bug
+            // families in one constructor.
+            var country = state.FindCountry("NGA");
+            var gov = country.government;
+            gov.inCivilConflict = true;
+            gov.civilConflictMonthsElapsed = 12;
+            gov.civilConflictMonthsRemaining = 12;
+            country.nationalUnity = 10f;
+            gov.militaryLoyalty = 20f;
+
+            // A ruined parent: gutted pillar and industry, deep in arrears.
+            country.pillars.economy = 18f;
+            country.resources.industrialCapacity = 15f;
+            country.resources.treasury = -7000f;
+
+            var successor = SecessionSystem.Fracture(state, country, new System.Random(7));
+            Assert.IsNotNull(successor);
+
+            Assert.AreEqual(System.Enum.GetValues(typeof(EconomicSector)).Length, successor.economy.sectors.Count,
+                "a state with no sectors has no economy for sabotage, subsidies or displacement to touch");
+            Assert.GreaterOrEqual(successor.pillars.economy, EconomySystem.StagnationFloor(successor) - 0.001f,
+                "born under the stagnation floor, with nothing to lift it back");
+            Assert.GreaterOrEqual(successor.resources.industrialCapacity, SecessionSystem.MinimumBirthIndustry - 0.001f);
+            Assert.GreaterOrEqual(successor.resources.treasury, 0f,
+                "a successor owes nothing, so it must not inherit a share of an overdraft either");
+
+            // And in isolation — economy, finance, government — it does not
+            // slide: the recovery mechanics have something to work with.
+            // NARROW PIPELINE: the same three systems as the relief arm of
+            // NoSocialValueRunsAwayInEitherDirection, for the same reason.
+            var relief = new TurnManager(state);
+            relief.ResolveMonth += EconomySystem.MonthlyUpdate;
+            relief.ResolveMonth += FiscalSystem.MonthlyUpdate;
+            relief.ResolveMonth += GovernmentSystem.MonthlyUpdate;
+            float bornPillar = successor.pillars.economy;
+            float bornIndustry = successor.resources.industrialCapacity;
+            float growthAtOneYear = 0f;
+            for (int month = 0; month < 120; month++)
+            {
+                relief.EndMonth();
+                if (month == 11) growthAtOneYear = successor.economy.growthRate;
+            }
+
+            // What the arm can and cannot show, stated exactly. The economy
+            // pillar's recovery writer is the ministry (`CabinetSystem`), which
+            // is outside the arm, so the pillar is not expected to *rise* here
+            // — a breakaway is born at a third of its parent's capability by
+            // design, and the growth formula's structural term reads that as a
+            // contraction until the capability is rebuilt. What the arm must
+            // show is that nothing *erodes* it, that the industrial base
+            // regrows toward what the ground can hold, that the contraction is
+            // easing as it does, and that a state with nothing pressing on it
+            // does not fall into the crisis regime. Measured before the fixes:
+            // pillar 15.5 → 6.6, industry 10 → 10, growth −4.1, index 24,
+            // living standards 0.3.
+            Assert.GreaterOrEqual(successor.pillars.economy, bornPillar - 0.5f,
+                $"the breakaway's economy pillar slid from {bornPillar:F1} to {successor.pillars.economy:F1} in ten isolated years");
+            Assert.Greater(successor.resources.industrialCapacity, bornIndustry + 8f,
+                $"ten years on, the breakaway's industry was still {successor.resources.industrialCapacity:F1}: "
+                + "plant that was never rebuilt toward what the ground can hold");
+            Assert.Greater(successor.economy.growthRate, growthAtOneYear + 0.1f,
+                $"the contraction was not easing as industry rebuilt ({growthAtOneYear:F2} → {successor.economy.growthRate:F2})");
+            Assert.Greater(successor.economy.marketIndex, FiscalSystem.DepressionLine,
+                $"a breakaway left alone sat in a depression (index {successor.economy.marketIndex:F1})");
+            Assert.Greater(successor.livingStandards, 25f,
+                $"a breakaway left alone fell into deprivation (living standards {successor.livingStandards:F1})");
         }
 
         [Test]

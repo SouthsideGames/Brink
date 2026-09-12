@@ -366,7 +366,12 @@ namespace Brink.Core
             target.pillars.military = Clamp(target.pillars.military - 40f);
             target.military.ground.SetStrength(target.military.ground.strength - 45f);
             target.military.air.SetStrength(target.military.air.strength - 45f);
+            // The one industrial loss that is permanent: a strategic instrument
+            // takes the endowment with it, so the plant does not regrow toward
+            // what it was (`EconomySystem.BuildIndustry` for the reasoning).
+            EconomySystem.EnsureIndustrialEndowment(target);
             target.resources.industrialCapacity = Clamp(target.resources.industrialCapacity - 30f);
+            target.resources.industrialEndowment = Clamp(target.resources.industrialEndowment - 30f);
             target.resources.manpower = Math.Max(0f, target.resources.manpower - 300f);
             target.stability = Clamp(target.stability - 30f);
             target.economy.confidence = Clamp(target.economy.confidence - 40f);
@@ -556,7 +561,7 @@ namespace Brink.Core
                 country.governmentApproval = Clamp(country.governmentApproval - 1.2f);
                 country.nationalUnity = Clamp(country.nationalUnity - 0.8f);
                 country.pillars.military = Growth.Apply(country.pillars.military, 0.5f);
-                country.resources.industrialCapacity = Growth.Apply(country.resources.industrialCapacity, 0.3f);
+                EconomySystem.BuildIndustry(country, 0.3f);
 
                 if (endgames.mobilizationMonthsRemaining > 0) continue;
 

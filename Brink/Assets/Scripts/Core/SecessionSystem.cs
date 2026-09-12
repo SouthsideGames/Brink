@@ -57,6 +57,9 @@ namespace Brink.Core
         /// condition describes a government that has already failed at something,
         /// so fragmentation reads as the end of a story rather than a dice roll.
         /// </summary>
+        /// <summary>The least industrial capacity a breakaway is born with.</summary>
+        public const float MinimumBirthIndustry = 10f;
+
         public static bool IsFracturing(GameState state, CountryState country)
         {
             var gov = country.government;
@@ -193,15 +196,67 @@ namespace Brink.Core
                 foundedDate = state.date
             };
 
-            successor.resources.treasury = parent.resources.treasury * 0.20f;
+            // A share of what is in the account — never a share of an overdraft.
+            // The debt stays with the rump (a successor is born owing nothing),
+            // and a state that inherits arrears without the debt behind them is
+            // born in a fiscal crisis it never ran up. Measured: a breakaway of
+            // a ruined parent opened at −1,576.
+            successor.resources.treasury = Math.Max(0f, parent.resources.treasury) * 0.20f;
             successor.resources.manpower = parent.resources.manpower * 0.28f;
+            // The same land and the same people, so the same *position* on
+            // every resource, not only the same endowments. The first version
+            // copied the endowments and left the levels at their zero default:
+            // a breakaway opened at energy 0 against an endowment of 82, which
+            // is the largest single term in the growth formula (−2.0 a year),
+            // and at a food endowment of 0 with food security 56, so its own
+            // ceiling was below what it had. The field-initialised-under-its-
+            // floor family, four fields at once.
             successor.resources.energyEndowment = parent.resources.energyEndowment;
             successor.resources.materialsEndowment = parent.resources.materialsEndowment;
-            successor.resources.industrialCapacity = Clamp(parent.resources.industrialCapacity * 0.3f);
+            successor.resources.foodEndowment = parent.resources.foodEndowment;
+            successor.resources.energy = parent.resources.energy;
+            successor.resources.strategicMaterials = parent.resources.strategicMaterials;
             successor.resources.foodSecurity = parent.resources.foodSecurity;
+            EconomySystem.EnsureIndustrialEndowment(parent);
+            successor.resources.industrialEndowment = parent.resources.industrialEndowment;
+
+            // **Born at the floor, not under it.** `StagnationFloor` bounds how
+            // far a downturn can take national economic capability, and it only
+            // ever stops a drag — it never gives. A breakaway of a ruined parent
+            // was born at 30% of an already-ruined pillar (6) and 30% of a gutted
+            // industrial capacity (6): below the floor, with the distress and
+            // stagnation drags still pulling, and nothing that could lift either
+            // — so growth sat at −1.6 for twenty isolated years and living
+            // standards settled at a target of 32. A new state starts with the
+            // capability its ground can hold at the least.
+            successor.resources.industrialCapacity =
+                Clamp(Math.Max(parent.resources.industrialCapacity * 0.3f, MinimumBirthIndustry));
+            successor.pillars.economy =
+                Clamp(Math.Max(successor.pillars.economy, EconomySystem.StagnationFloor(successor)));
 
             successor.economy.gdp = parent.economy.gdp * 0.25f;
             successor.economy.confidence = 45f;
+
+            // **An economy with sectors in it.** `WorldFactory` builds the seven
+            // sectors for every authored state; the successor had none, so
+            // sabotage, subsidies, import displacement and the endgame's sector
+            // damage all fell on an empty list and `SectorStrength` read a flat
+            // neutral 55 forever. Anchored to the same level the monthly tick
+            // reverts toward, with the parent's health — the same industries,
+            // in the same condition. No random draw: the successor's RNG stream
+            // is what the names below are seeded from.
+            foreach (EconomicSector sector in Enum.GetValues(typeof(EconomicSector)))
+            {
+                float parentHealth = 80f;
+                foreach (var parentSector in parent.economy.sectors)
+                    if (parentSector.sector == sector) parentHealth = parentSector.health;
+                successor.economy.sectors.Add(new SectorState
+                {
+                    sector = sector,
+                    output = Clamp(EconomySystem.SectorAnchor(successor, sector)),
+                    health = Clamp(parentHealth)
+                });
+            }
 
             // A breakaway is born fractious and suspicious of everyone. It is the
             // one place a trait is assigned rather than authored, because the

@@ -430,19 +430,67 @@ foodDrift   = clamp((foodTarget − food) × 0.03, −0.60, +0.30)
 `FoodCeilingFor` is public and is the single definition of the ceiling, same
 rule as energy and materials. Covered by `FoodSecurityTests`.
 
-### Industrial capacity
+### Industrial capacity approaches an endowment (2026-09)
 
-Two inputs, both drifts rather than jumps:
+The fourth resource to get the idiom, and the last:
 
 ```
-industrialCapacity = Growth.Apply(industrialCapacity, CAP_ADVMFG effectiveness × 0.12)
-industrialCapacity → approach(industrialCapacity + IndustrySwing, rate 0.05)
+industryCeiling = clamp(industrialEndowment + TerritorySystem.IndustrySwing, 0, 100)
+industrialCapacity += clamp((industryCeiling − industrialCapacity) × 0.03, −0.4, +0.25)
 ```
 
-Capability compounds slowly into real capacity (GDD §11) — it unlocks the ability
-to build, it does not hand over the result. Territory is applied as a slow drift
-so seizing a works does not teleport its output home the month it falls.
-`MilitarySystem`'s procurement adds a third input (spec 01 §2).
+`NationalResources.industrialEndowment` is authored (`profile.industry`) and
+**seeded from the authored profile** on the first tick of a save that predates
+it — not from the current value like the other three, because this one arrives
+after measured decades in which the bug below ran countries to zero, and
+"current value" would enshrine the damage the endowment exists to repair
+(`EconomySystem.EnsureIndustrialEndowment`; a state with no profile seeds from
+what it has). Additive field, no version bump.
+
+**What it replaces.** `approach(capacity, capacity + IndustrySwing, 0.05)` was
+not a target but an accumulating *rate* wearing a target's clothes — the
+sector-capacity bug one level up. A works lost, or in revolt
+(`InsurgencySystem.Denies`), subtracted 5% of its value every month with nothing
+to stop at: measured on seed 1212, one contested industrial centre took India
+from 58 to literal zero in six years and held it there, and a lost works ran
+China from 92 to 1 in Unity. `StagnationFloor` is anchored on this figure, so
+the economy pillar followed it down to 12 and a country that had lost one
+province could never grow again — the absorbing state under
+`NoSocialValueRunsAwayInEitherDirection`'s relief arm for CHN, IND and MEX. And
+plant destroyed by bombing, sabotage or a civil conflict had **no recovery path
+for a non-player state**: programmes are the operator's, procurement and
+research need a treasury the collapse has emptied.
+
+**Builders raise the endowment too.** `EconomySystem.BuildIndustry(country,
+amount)` applies `Growth.Apply` to the value and adds the same gain to the
+endowment, so what was built is not taken back by the next month's drift. Its
+five callers: industrial programmes (Industry × 0.45, Technology × 0.20),
+procurement (`strengthPerMonth × 0.25`), a matured `CAP_ADVMFG` (× 0.12 a
+month), arrivals put to work (`hosted × 0.010`), and mobilisation (+0.3).
+Damage writes the value alone and heals toward the ceiling; a strategic
+instrument's destruction (−30) takes the endowment with it, so it stays the
+permanent loss it was. Tests: `EconomySystemTests.LosingAWorksCostsWhatItWasWorth…`,
+`PlantDestroyedByAShockRegrowsTowardWhatTheCountryCanHold`,
+`WhatIsBuiltRaisesWhatTheCountryCanHold`, `AnOldSaveSeedsTheIndustrialEndowment…`.
+
+### A breakaway is born with an economy (2026-09)
+
+`SecessionSystem.MakeSuccessor` used to hand a successor 30% of its parent's
+economy pillar and industrial capacity, no sectors, a fifth of the parent's
+*overdraft*, the parent's energy and materials endowments with the levels left
+at zero, and food security with no food endowment. Measured in Unity (seed 1212):
+born at pillar 6, industry 6, treasury −1,576, growth −1.6 for twenty isolated
+years. Now: the pillar is born at `StagnationFloor` at the least (the floor
+never gives, so a state born under it stayed there), industry at
+`MinimumBirthIndustry` (10) at the least, the seven sectors at their anchors
+with the parent's sector health, a share of the account only when it is in
+credit (the debt stays with the rump; a successor is born owing nothing), every
+resource *level* and endowment copied from the parent — including the
+industrial endowment, so the breakaway's plant regrows toward what the ground
+can hold. Still by design: a third of the parent's *capability*, which the
+growth formula's structural term reads as a contraction until a ministry rebuilds
+it; the isolated arm (no ministry) shows industry regrowing, the contraction
+easing, and no crisis regime (`ABreakawayIsBornWithAnEconomyItCanRecoverOn`).
 
 ## 5a. The treasury trend readout
 
@@ -611,6 +659,21 @@ negative, `FiscalState.arrearsMonths` counts, and confidence's target carries
 counts consecutive financed months. Both fields are additive, zero on old saves,
 no version bump.
 
+**And only up to the ceiling** (2026-09). The credit gate was applied to the
+automatic path and `IssueDebtCeiling` (200%) was not, so the deficit had a
+second, looser definition of what the market will absorb. Measured on seed
+6301: Turkey, shut out for three years of war, accrued a hole of −4,633, and
+the month its standing crossed the issuing line the whole of it was borrowed at
+once — 88% → 400% of GDP in one tick, standing back to zero, shut out again — a
+ratchet with the five-year period of the restructuring memory. Financing now
+stops at the ceiling; whatever the market will not absorb stays arrears, where
+a default can reach it. **A default settles the arrears as well as the stock**:
+`RestructureDebtBy` floors the account at zero, because a write-down that left
+the hole standing kept the creditors unpaid through the whole memory and set up
+the same lump the month credit returned (measured on a 400% case: three
+write-downs in twenty years, arrears counted to 233 months, the ratio back to
+400 the moment credit recovered). The reputational price is unchanged.
+
 ### One fiscal condition
 
 `FiscalSystem.ConditionOf` is the only definition of solvency, read by the
@@ -651,7 +714,9 @@ twenty measured years of it. `AusterityAdvisable` is shared with the AI's
 budget review, and the AI now also moves its tax rate (`SetTaxRateBy` had no AI
 caller at all). The isolated recovery arm of `NoSocialValueRunsAwayInEitherDirection`
 climbs from index 8 to 78 and debt 149% to zero over twenty years with these in
-place.
+place; re-measured after the ceiling and the endowment (2026-09, harness, seed
+1212, India entering at index 8, debt 66%, credit 12, −332 in arrears): `Sound`
+by year 3, debt zero by year 5, index 95 and living standards 42 by year 20.
 
 ### Sanctions: a cause, a chill, a lapse
 

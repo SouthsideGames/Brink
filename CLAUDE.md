@@ -2754,6 +2754,85 @@ for every figure in the table above.
       seeking, the AI's tax and crisis responses), so fingerprints are not
       comparable to pre-repair worlds.
 
+- [x] **The three failures the stability repair left, run down in Unity
+      (2026-09-12).** Each reproduced with a `[DIAG]` trace on the real
+      trajectory, classified, and fixed at the mechanism rather than the
+      assertion. Specs: 06 §7a (review cadence), 02 §5 (industrial endowment,
+      successor birth), 02 §9a (financing ceiling, defaults settle arrears).
+      - **Strategy churn was three conditions that never stopped being true.**
+        The scheduled review re-fired every month past thirty, the failing
+        review every month of the second year, and a defeat stripped the
+        inertia bonus for thirty months running — China flipped Survival ↔
+        TechnologicalEdge eighteen months in a row with the scores three
+        points apart. `AIState.lastReviewMonthIndex` / `lastDefeatReviewedId`
+        make each cause buy one review (`FailingReviewMonths = 12`;
+        `RecentDefeat` returns a war id). Probe worlds: 47 → 22 strategy
+        changes per 30 years. **A trigger that is a condition is a trigger
+        that fires every month** — the "written but never cleared" cousin of
+        the ratchet family.
+      - **The successor's non-recovery was not the successor.** Born at 30%
+        of a ruined pillar, no sectors, a fifth of the parent's overdraft,
+        energy and food endowments with the levels at zero — all fixed in
+        `MakeSuccessor` — but the relief arm still could not lift it, and the
+        trace showed why: **`industrialCapacity` had no recovery path and a
+        territory swing applied as a rate.** `approach(v, v + swing, 0.05)`
+        subtracted 5% of a works' value every month with nothing to stop at,
+        so one *contested* industrial centre took India from 58 to literal
+        zero in six years and a lost one took China from 92 to 1; the
+        stagnation floor is anchored on it, the pillar followed it to 12, and
+        the country could never grow again. Bombing, sabotage and civil
+        conflict wrote it down and nothing a non-player state could reach
+        wrote it back. Now the fourth resource with an endowment
+        (`industrialEndowment`, ceiling = endowment + swing, drift 0.03
+        capped +0.25/−0.4), `BuildIndustry` for the five builders so what is
+        built is not drifted away, seeded **from the authored profile** on an
+        old save because "current value" would enshrine the damage. Relief
+        arm after: CHN 0 → recovers, IND index 8 → 95 and standards 0 → 42.
+        **Fifteenth instance of the value-versus-target family**, and the one
+        the whole economy is derived from.
+      - **Two fiscal ratchets with a five-year period**, found by the same
+        arm on a 400%-of-GDP case: a write-down left the arrears standing, and
+        the month credit returned the *whole* hole was borrowed at once
+        because the automatic financing answered to the credit gate but not
+        the 200% ceiling (Turkey: 88% → 400% in one tick). Defaults now settle
+        the account; financing stops at `IssueDebtCeiling`, the rest stays
+        arrears where a default can reach it. Probe worlds: debt maximum
+        463–927% → 124–216%.
+      - **`HardshipEventuallyOrganises`** was a fixture window (48 months)
+        shorter than the crisis regime's own lead time — the old window
+        passed only because the AI sanctioned a collapsing power at 35% a
+        month — and then, at 72 months, a recovery half measured on a country
+        the hardship had broken: two civil conflicts, a war opened on the
+        weakened power, fifty points of refugees. The recovery half now runs
+        the relief arm's isolated pipeline; the hardship half stays live.
+      - **`NoSocialValueRunsAwayInEitherDirection`'s ruin predicate** missed
+        Russia at index 24 with living standards 0.2 — grievance approaches
+        its ceiling only under total deprivation by the model's own words, and
+        standards are what deprivation *is*. The predicate now uses the arm's
+        own line for standards that were actually wrong (30).
+      **Also found, not fixed:** `IndustrialSystem.BeginBy` has no AI caller —
+      no foreign government has ever launched an industrial programme (the
+      player-verb lockout family); and a successor's economy pillar is still
+      30% of an *index*, which the growth formula reads as a structural
+      contraction until its ministry rebuilds it. Both recorded, neither in
+      this pass's scope. **Probe worlds after, 8 seeds × 30 years vs the
+      repair commit:** ruined at end 35 → 28, coups 175 → 147, wars fought
+      100 → 76 (AI root wars 13 → 8), confrontation-months 127 → 100 per
+      decade, sanctions 244 → 264, mean index 82 → 84. Balance still
+      unmeasured.
+      **Verified in Unity on the project copy:** the three original failures
+      and every fixture they touch green (260/260 across 14 fixtures); full
+      suite **1374 tests, 1372 passed, 0 failed, 1 inconclusive by design**
+      after one new test was corrected to measure against a control arm (the
+      authored start value is jittered ±5 around an unjittered endowment, so a
+      country opening above it settles a few points whether or not anything
+      was built — the same first-years drift energy has always had). Unity
+      relief arm, seed 1212 after 240 live months: USA standards 0 → 30, IND
+      0 → 47 (index 8 → 101), MEX 0 → 49, POL 0 → 48; before the industry fix
+      the same arm read CHN 0 → 0 and IND 0 → 9. That seed no longer produces
+      a breakaway inside 240 months; the successor case is the deterministic
+      `ABreakawayIsBornWithAnEconomyItCanRecoverOn` fixture.
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

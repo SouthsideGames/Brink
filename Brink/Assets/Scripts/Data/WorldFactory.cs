@@ -896,7 +896,8 @@ namespace Brink.Data
                     // resource profile over a long save.
                     energyEndowment = profile.energy,
                     materialsEndowment = profile.materials,
-                    foodEndowment = profile.food
+                    foodEndowment = profile.food,
+                    industrialEndowment = profile.industry
                 },
                 military = new MilitaryState
                 {

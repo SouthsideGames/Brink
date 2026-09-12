@@ -416,7 +416,22 @@ namespace Brink.Core
                 // Below it the shortfall is **arrears**: the account stays
                 // negative, which is what a fiscal crisis looks like, and the
                 // creditors who will not lend say so through confidence.
-                if (fiscal.creditStanding >= MinimumCreditToIssue)
+                // **And only up to the ceiling the voluntary verb answers to.**
+                // The credit gate was applied here and the debt ceiling was
+                // not, so the automatic path had a second, looser definition of
+                // what the market will lend into — the same repeal the endgame
+                // pre-check once made of `DiscretionaryReserve`. Measured (seed
+                // 6301): a state shut out for three years of war accrued a hole
+                // of −4,633, and the month its standing crossed the issuing line
+                // the whole of it was borrowed at once, 88% → 400% of GDP in one
+                // tick, standing back to zero, shut out again — a ratchet with a
+                // five-year period. Whatever the market will not absorb stays
+                // arrears, where a default can reach it.
+                float room = Math.Max(0f,
+                    country.economy.gdp * IssueDebtCeiling / 100f - fiscal.sovereignDebt);
+                float shortfall = -country.resources.treasury;
+                float financed = Math.Min(shortfall, room);
+                if (fiscal.creditStanding >= MinimumCreditToIssue && financed > 0f)
                 {
                     // Indirect on purpose: the deficit is the *mechanism*, but
                     // what caused it is whatever this government spent the month
@@ -424,11 +439,12 @@ namespace Brink.Core
                     // upstream of it are Phase B's chain to complete (spec 26 §8).
                     Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
                         CausalReason.FiscalDeficit, ref fiscal.sovereignDebt,
-                        fiscal.sovereignDebt + -country.resources.treasury,
+                        fiscal.sovereignDebt + financed,
                         CausalCategory.Fiscal, CausalKind.Indirect);
-                    country.resources.treasury = 0f;
+                    country.resources.treasury += financed;
                     fiscal.deficitFinancedMonths++;
-                    fiscal.arrearsMonths = 0;
+                    if (country.resources.treasury >= 0f) fiscal.arrearsMonths = 0;
+                    else fiscal.arrearsMonths++;
                 }
                 else
                 {
@@ -683,6 +699,21 @@ namespace Brink.Core
             country.fiscal.restructuringMemoryMonths = RestructuringMemoryMonths;
             country.economy.confidence = Clamp(country.economy.confidence - 14f, 0f, 100f);
             country.economy.debtToGdp = DebtToGdp(country);
+
+            // **A default settles the arrears as well as the stock.** Written
+            // down without this, the account stayed in the red and the
+            // creditors who were not being paid went on not being paid — so
+            // a government shut out of the market kept accruing arrears
+            // through the whole five-year memory, and the month its standing
+            // crossed the issuing line every one of them was borrowed at once
+            // (`MonthlyUpdate` finances the entire shortfall) and the debt was
+            // back at the ceiling. Measured on a 400%-of-GDP case: three
+            // write-downs in twenty years, arrears counted to 233 months, and
+            // the ratio back to 400 the moment credit recovered — an absorbing
+            // cycle, the ratchet family with a five-year period. The hole is
+            // what the creditors take the haircut on; the reputational price
+            // above is unchanged and is paid whether or not there was one.
+            country.resources.treasury = Math.Max(0f, country.resources.treasury);
 
             // Somebody was holding that paper. Standing, not capability — the
             // exposure-penalty lesson (spec 03): a cost with no recovery path in
