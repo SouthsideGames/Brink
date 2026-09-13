@@ -60,35 +60,55 @@ namespace Brink.UI.Views
             operationPlanning.Root.style.display = front == null ? DisplayStyle.None : DisplayStyle.Flex;
             if (front != null) operationPlanning.Build(state, front);
 
-            var strategy = new StringBuilder();
-            strategy.AppendLine(AsciiChart.BoxHeader("STANDING COURSE", w));
-            var era = StrategicEraSystem.Current(state);
-            if (era == null) strategy.AppendLine(" NO NAMED STRATEGIC ERA YET — SET OR REVISE THE COURSE FROM OPERATOR.");
-            else
-            {
-                strategy.AppendLine($" ERA: {era.name.ToUpperInvariant()}");
-                if (!string.IsNullOrEmpty(era.character)) strategy.AppendLine(" " + era.character);
-            }
-            course.text = strategy.ToString();
+            bool compact = TerminalMetrics.Size == SizeClass.Compact;
+            bool large = TerminalMetrics.Size == SizeClass.Large;
 
-            var mandateText = new StringBuilder();
-            mandateText.AppendLine(AsciiChart.BoxHeader("MANDATE", w));
-            if (state.mandate == null) mandateText.AppendLine(" NO MANDATE ON FILE.");
-            else
+            // Compact screens are an attention surface, not a shrunk desktop.
+            // The standing course and mandate remain fully available from OPERATOR;
+            // medium restores the course, while large uses the extra information
+            // space to keep both strategic horizons visible at once.
+            course.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+            mandate.style.display = large ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (!compact)
             {
-                mandateText.AppendLine(" " + state.mandate.title.ToUpperInvariant());
-                if (state.mandateRecord != null)
-                    mandateText.AppendLine($" VERDICT: {state.mandateRecord.verdict.ToString().ToUpperInvariant()}   {state.mandateRecord.met}/{state.mandateRecord.total}");
+                var strategy = new StringBuilder();
+                strategy.AppendLine(AsciiChart.BoxHeader("STANDING COURSE", w));
+                var era = StrategicEraSystem.Current(state);
+                if (era == null) strategy.AppendLine(" NO NAMED STRATEGIC ERA YET — SET OR REVISE THE COURSE FROM OPERATOR.");
                 else
                 {
-                    int remaining = Math.Max(0, state.mandate.reviewMonths - state.date.MonthsSince(state.startDate));
-                    mandateText.AppendLine($" {MandateSystem.MetCount(state)}/{state.mandate.objectives.Count} CURRENTLY MET   REVIEW IN {remaining} MO");
+                    strategy.AppendLine($" ERA: {era.name.ToUpperInvariant()}");
+                    if (!string.IsNullOrEmpty(era.character)) strategy.AppendLine(" " + era.character);
                 }
-                mandateText.AppendLine(" FULL BRIEF AND STRATEGY → OPERATOR");
+                course.text = strategy.ToString();
             }
-            mandate.text = mandateText.ToString();
 
-            guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER answers what needs you, what changed, what can wait, and where the standing course is headed. It prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations still execute from the MILITARY desk and pay normal CP. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
+            if (large)
+            {
+                var mandateText = new StringBuilder();
+                mandateText.AppendLine(AsciiChart.BoxHeader("MANDATE", w));
+                if (state.mandate == null) mandateText.AppendLine(" NO MANDATE ON FILE.");
+                else
+                {
+                    mandateText.AppendLine(" " + state.mandate.title.ToUpperInvariant());
+                    if (state.mandateRecord != null)
+                        mandateText.AppendLine($" VERDICT: {state.mandateRecord.verdict.ToString().ToUpperInvariant()}   {state.mandateRecord.met}/{state.mandateRecord.total}");
+                    else
+                    {
+                        int remaining = Math.Max(0, state.mandate.reviewMonths - state.date.MonthsSince(state.startDate));
+                        mandateText.AppendLine($" {MandateSystem.MetCount(state)}/{state.mandate.objectives.Count} CURRENTLY MET   REVIEW IN {remaining} MO");
+                    }
+                    mandateText.AppendLine(" FULL BRIEF AND STRATEGY → OPERATOR");
+                }
+                mandate.text = mandateText.ToString();
+            }
+
+            guidance.text = AsciiChart.WrapBlock(compact
+                ? " COMMAND CENTER is attention-first on this display: what needs you, what changed, and campaign intent. Standing course and mandate detail remain in OPERATOR. END MONTH remains a valid choice."
+                : large
+                    ? " COMMAND CENTER uses the wider display for attention plus strategic context. It prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations execute from MILITARY and pay normal CP."
+                    : " COMMAND CENTER shows attention plus the standing course on this display. Full mandate detail remains in OPERATOR. It prioritizes and explains; it does not decide. END MONTH remains available.", w);
         }
 
         void BuildAttentionHierarchy(System.Collections.Generic.List<CommandCenterSystem.Section> report)
@@ -111,10 +131,12 @@ namespace Brink.UI.Views
 
             AddLine(waitList, " WHAT CAN WAIT", "terminal-text-bright");
             int deferred = 0;
+            int deferredLimit = TerminalMetrics.Size == SizeClass.Compact ? 2 : TerminalMetrics.Size == SizeClass.Medium ? 4 : int.MaxValue;
             foreach (var item in report)
             {
                 if (item.urgency >= 2) continue;
                 deferred++;
+                if (deferred > deferredLimit) continue;
                 AddLine(waitList, $"  · {item.title.ToUpperInvariant()}   → {item.viewId}", "terminal-text-dim");
                 if (!string.IsNullOrEmpty(item.summary)) AddLine(waitList, "    " + item.summary, "terminal-text-dim");
             }
@@ -122,6 +144,8 @@ namespace Brink.UI.Views
                 AddLine(waitList, urgent == 0
                     ? "  NO EXCEPTIONAL PRESSURE. END MONTH IS A VALID CHOICE."
                     : "  EVERYTHING CURRENTLY TRACKED IS MATERIAL ENOUGH TO REVIEW.", "terminal-text-dim");
+            else if (deferred > deferredLimit)
+                AddLine(waitList, $"  + {deferred - deferredLimit} MORE LOWER-PRIORITY ITEM{(deferred - deferredLimit == 1 ? "" : "S")} IN BRIEFING.", "terminal-text-dim");
         }
 
         void BuildPressureBoard(GameState state)
@@ -157,6 +181,8 @@ namespace Brink.UI.Views
                     AddLine(pressureBoard, line, option.available ? "terminal-text" : "terminal-text-dim");
                 }
             }
+            if (board.Count > shown)
+                AddLine(pressureBoard, $" + {board.Count - shown} MORE STRATEGIC PRESSURE{(board.Count - shown == 1 ? "" : "S")} IN BRIEFING / PILLAR DESKS.", "terminal-text-dim");
             AddLine(pressureBoard, " READOUT RANKS ATTENTION. OPTIONS ARE NAVIGATION, NOT GUARANTEED FIXES.", "terminal-text-dim");
         }
 
