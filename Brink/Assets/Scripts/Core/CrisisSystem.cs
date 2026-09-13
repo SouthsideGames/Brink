@@ -114,11 +114,15 @@ namespace Brink.Core
                     // Named, not left to the month's OTHER line: letting a
                     // crisis lapse is the operator's own non-decision, and the
                     // WHY panel should say so (spec 26 §3a). The arithmetic is
-                    // the caller's expression, untouched.
+                    // the caller's expression, untouched. Provenance is attached
+                    // here because this path can only be reached by the operator
+                    // leaving a Crisis Turn unanswered; it is not an actor-generic
+                    // simulation verb that Cabinet or AI can invoke independently.
                     Causal.Apply(state, player.id, CausalMetric.GovernmentApproval,
                         CausalReason.CrisisLapsed, ref player.governmentApproval,
                         Clamp(player.governmentApproval - 5f * resilience),
-                        CausalCategory.PlayerDecision);
+                        CausalCategory.PlayerDecision,
+                        sourceActionId: "CrisisLapsed");
                     player.nationalUnity = Clamp(player.nationalUnity - 2f * resilience);
                 }
 
