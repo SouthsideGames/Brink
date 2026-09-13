@@ -20,6 +20,7 @@ namespace Brink.Core
             if (state == null || string.IsNullOrEmpty(confrontationId)) return null;
             var strategy = Strategy(state);
             if (strategy == null) return null;
+            if (strategy.operationPlans == null) strategy.operationPlans = new System.Collections.Generic.List<OperationPlan>();
             foreach (var p in strategy.operationPlans)
                 if (p != null && p.confrontationId == confrontationId) return p;
             return null;
@@ -36,6 +37,7 @@ namespace Brink.Core
             if (existing != null) return existing;
             var strategy = Strategy(state);
             if (strategy == null) return null;
+            if (strategy.operationPlans == null) strategy.operationPlans = new System.Collections.Generic.List<OperationPlan>();
 
             var plan = new OperationPlan
             {
@@ -96,6 +98,12 @@ namespace Brink.Core
             return null;
         }
 
+        public static bool IsNext(GameState state, string confrontationId, string locationId, OperationType type)
+        {
+            var next = Next(state, confrontationId);
+            return next != null && next.locationId == locationId && Matches(next, type);
+        }
+
         /// <summary>
         /// Reconcile an operation that was actually launched through the normal
         /// command path. Planning itself never calls this unless a real record exists.
@@ -105,7 +113,7 @@ namespace Brink.Core
             if (record == null) return;
             var next = Next(state, confrontationId);
             if (next == null) return;
-            if (next.locationId != record.locationId || next.operationType != record.operationType) return;
+            if (next.locationId != record.locationId || !Matches(next, record.operationType)) return;
             next.completed = true;
             next.completedDate = record.date;
             var plan = For(state, confrontationId);
@@ -137,6 +145,9 @@ namespace Brink.Core
                  + $"CAS {plan.directive.casualtyTolerance:F0}  CIV {plan.directive.civilianRiskLimit:F0}  "
                  + $"INTENT {plan.directive.territorialIntent.ToString().ToUpperInvariant()}";
         }
+
+        static bool Matches(PlannedOperation step, OperationType type)
+            => step != null && string.Equals(step.operationType, type.ToString(), StringComparison.Ordinal);
 
         static OperationDirective CopyDirective(OperationDirective source)
         {
