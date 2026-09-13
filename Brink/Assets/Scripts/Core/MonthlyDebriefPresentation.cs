@@ -25,7 +25,7 @@ namespace Brink.Core
             involvementLimit = involvementLimit < 0 ? 0 : involvementLimit;
 
             for (int i = 0; i < report.consequences.Count && sections.whatHappened.Count < consequenceLimit; i++)
-                sections.whatHappened.Add(report.consequences[i]);
+                if (report.consequences[i] != null) sections.whatHappened.Add(report.consequences[i]);
 
             foreach (var consequence in report.consequences)
             {
@@ -45,6 +45,25 @@ namespace Brink.Core
             }
 
             return sections;
+        }
+
+        public static string InvolvementLabel(MonthlyDebriefSystem.Consequence consequence)
+        {
+            if (consequence == null) return "";
+            switch (consequence.involvement)
+            {
+                case MonthlyDebriefSystem.Involvement.PlayerDriven: return "DRIVEN BY YOUR ORDER";
+                case MonthlyDebriefSystem.Involvement.Mixed: return "YOUR ORDER CONTRIBUTED";
+                default: return "WORLD-DRIVEN";
+            }
+        }
+
+        public static string ProvenanceLabel(MonthlyDebriefSystem.Consequence consequence)
+        {
+            if (consequence == null || !consequence.playerLinked || string.IsNullOrEmpty(consequence.sourceActionId)) return "";
+            return consequence.involvement == MonthlyDebriefSystem.Involvement.PlayerDriven
+                ? "YOUR ORDER: " + consequence.sourceActionId
+                : "YOUR CONTRIBUTION: " + consequence.sourceActionId;
         }
     }
 }
