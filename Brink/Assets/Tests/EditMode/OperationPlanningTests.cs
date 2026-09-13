@@ -45,11 +45,15 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void PlanPersistsUnderPostingStrategyAndIsBounded()
+        public void PlanPersistsUnderPostingStrategyAndOldNullCollectionRepairsLazily()
         {
             var plan = OperationPlanningSystem.Create(state, confrontation.id, "Campaign");
             Assert.AreSame(plan, StrategySystem.Ensure(state).operationPlans[0]);
             Assert.AreSame(plan, OperationPlanningSystem.For(state, confrontation.id));
+
+            StrategySystem.Ensure(state).operationPlans = null;
+            Assert.IsNull(OperationPlanningSystem.For(state, confrontation.id));
+            Assert.NotNull(StrategySystem.Ensure(state).operationPlans);
         }
 
         [Test]
@@ -65,6 +69,7 @@ namespace Brink.Tests
 
             Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, type));
             var step = plan.steps[0];
+            Assert.IsTrue(OperationPlanningSystem.IsNext(state, confrontation.id, target.id, type));
             OperationPlanningSystem.RecordExecution(state, confrontation.id,
                 new OperationRecord { date=state.date, locationId=target.id, operationType=OperationType.AirStrike.ToString() });
             Assert.IsFalse(step.completed);
