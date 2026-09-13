@@ -6,10 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Brink.UI
 {
-    /// <summary>
-    /// Player-facing editor for the certified OperationPlanningSystem. Planning is
-    /// intent only: this panel never launches an operation or spends CP.
-    /// </summary>
     public sealed class OperationPlanningPanel
     {
         readonly VisualElement root;
@@ -52,9 +48,9 @@ namespace Brink.UI
                 for (int i = 0; i < plan.steps.Count; i++)
                 {
                     var step = plan.steps[i]; if (step == null) continue;
-                    var location = state.FindLocation(step.locationId);
+                    var stepLocation = state.FindLocation(step.locationId);
                     string marker = step.completed ? "[X]" : OperationPlanningSystem.Next(state, confrontation.id) == step ? "[>]" : "[ ]";
-                    Add($"  {i + 1}. {marker} {step.operationType.ToUpperInvariant()} — {(location?.displayName ?? step.locationId).ToUpperInvariant()}" + (step.completed ? $"  {step.completedDate.DisplayString}" : ""), step.completed ? "sig-friendly" : "terminal-text");
+                    Add($"  {i + 1}. {marker} {step.operationType.ToUpperInvariant()} — {(stepLocation?.displayName ?? step.locationId).ToUpperInvariant()}" + (step.completed ? $"  {step.completedDate.DisplayString}" : ""), step.completed ? "sig-friendly" : "terminal-text");
                     if (!step.completed)
                     {
                         string captured = step.id;
@@ -94,19 +90,24 @@ namespace Brink.UI
                 b.AddToClassList("cmd-button"); if (current) b.AddToClassList("primary"); domainRow.Add(b);
             }
 
-            var location = state.FindLocation(selectedLocationId);
+            var selectedLocation = state.FindLocation(selectedLocationId);
             var opRow = Row();
             foreach (var profile in OperationCatalog.InDomain(selectedDomain))
             {
                 var captured = profile.type; bool current = selectedOperation == captured;
-                bool possible = OperationCatalog.CanOrder(state, state.playerCountryId, location, captured, out string blocked);
+                bool possible = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, captured, out string blocked);
                 var b = new Button(() => { selectedOperation = captured; refresh?.Invoke(); }) { text = (current ? "► " : "") + profile.displayName };
                 b.AddToClassList("cmd-button"); if (current) b.AddToClassList("primary");
-                if (!possible) { b.SetEnabled(false); b.tooltip = blocked; }
+                if (!possible)
+                {
+                    b.SetEnabled(false);
+                    b.tooltip = blocked;
+                    Add(" BLOCKED — " + profile.displayName.ToUpperInvariant() + ": " + blocked, "terminal-text-dim");
+                }
                 opRow.Add(b);
             }
 
-            bool canAdd = OperationCatalog.CanOrder(state, state.playerCountryId, location, selectedOperation, out string whyNot);
+            bool canAdd = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, selectedOperation, out string whyNot);
             var addRow = Row();
             var add = new Button(() => { OperationPlanningSystem.AddStep(state, confrontation.id, selectedLocationId, selectedOperation); refresh?.Invoke(); }) { text = "ADD TO PLAN [NO CP]" };
             add.AddToClassList("cmd-button"); add.AddToClassList("primary");
