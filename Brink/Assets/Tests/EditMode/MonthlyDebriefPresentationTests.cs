@@ -72,11 +72,26 @@ namespace Brink.Tests
             var world = Item(CausalMetric.SocialUnrest, MonthlyDebriefSystem.Involvement.World, 7);
 
             Assert.AreEqual("DRIVEN BY YOUR ORDER", MonthlyDebriefPresentation.InvolvementLabel(driven));
-            Assert.AreEqual("YOUR ORDER: StimulusPackage", MonthlyDebriefPresentation.ProvenanceLabel(driven));
+            Assert.AreEqual("YOUR ORDER: STIMULUS PACKAGE", MonthlyDebriefPresentation.ProvenanceLabel(driven));
             Assert.AreEqual("YOUR ORDER CONTRIBUTED", MonthlyDebriefPresentation.InvolvementLabel(mixed));
-            Assert.AreEqual("YOUR CONTRIBUTION: TariffOrder", MonthlyDebriefPresentation.ProvenanceLabel(mixed));
+            Assert.AreEqual("YOUR CONTRIBUTION: TARIFF ORDER", MonthlyDebriefPresentation.ProvenanceLabel(mixed));
             Assert.AreEqual("WORLD-DRIVEN", MonthlyDebriefPresentation.InvolvementLabel(world));
             Assert.AreEqual("", MonthlyDebriefPresentation.ProvenanceLabel(world));
+        }
+
+        [Test]
+        public void HumanizesStableActionIdentifiersWithoutChangingStoredProvenance()
+        {
+            Assert.AreEqual("STIMULUS PACKAGE", MonthlyDebriefPresentation.HumanizeActionId("StimulusPackage"));
+            Assert.AreEqual("SET TAX RATE", MonthlyDebriefPresentation.HumanizeActionId("set_tax_rate"));
+            Assert.AreEqual("RUN COVERT OPERATION", MonthlyDebriefPresentation.HumanizeActionId("Run-CovertOperation"));
+            Assert.AreEqual("GDP SHOCK", MonthlyDebriefPresentation.HumanizeActionId("GDPShock"));
+            Assert.AreEqual("", MonthlyDebriefPresentation.HumanizeActionId(""));
+
+            var consequence = Item(CausalMetric.MarketIndex, MonthlyDebriefSystem.Involvement.PlayerDriven, 9);
+            consequence.sourceActionId = "StimulusPackage";
+            MonthlyDebriefPresentation.ProvenanceLabel(consequence);
+            Assert.AreEqual("StimulusPackage", consequence.sourceActionId);
         }
 
         [Test]
