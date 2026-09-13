@@ -10,11 +10,50 @@ namespace Brink.Core
     /// </summary>
     public static class MonthlyDebriefPresentation
     {
+        public enum Density
+        {
+            Compact = 0,
+            Medium,
+            Large
+        }
+
+        public struct Limits
+        {
+            public int consequenceLimit;
+            public int involvementLimit;
+
+            public Limits(int consequenceLimit, int involvementLimit)
+            {
+                this.consequenceLimit = consequenceLimit;
+                this.involvementLimit = involvementLimit;
+            }
+        }
+
         public sealed class Sections
         {
             public readonly List<MonthlyDebriefSystem.Consequence> whatHappened = new List<MonthlyDebriefSystem.Consequence>();
             public readonly List<MonthlyDebriefSystem.Consequence> yourHand = new List<MonthlyDebriefSystem.Consequence>();
             public readonly List<MonthlyDebriefSystem.Consequence> worldMoved = new List<MonthlyDebriefSystem.Consequence>();
+        }
+
+        /// <summary>
+        /// Canonical rollover density. Small screens prioritize; larger screens
+        /// add context without changing any underlying simulation or causality.
+        /// </summary>
+        public static Limits LimitsFor(Density density)
+        {
+            switch (density)
+            {
+                case Density.Compact: return new Limits(3, 1);
+                case Density.Medium: return new Limits(4, 2);
+                default: return new Limits(5, 3);
+            }
+        }
+
+        public static Sections Build(MonthlyDebriefSystem.Report report, Density density)
+        {
+            var limits = LimitsFor(density);
+            return Build(report, limits.consequenceLimit, limits.involvementLimit);
         }
 
         public static Sections Build(MonthlyDebriefSystem.Report report, int consequenceLimit, int involvementLimit)
@@ -46,6 +85,14 @@ namespace Brink.Core
             }
 
             return sections;
+        }
+
+        public static int HiddenConsequenceCount(MonthlyDebriefSystem.Report report, Sections sections)
+        {
+            if (report == null) return 0;
+            int shown = sections?.whatHappened?.Count ?? 0;
+            int hidden = report.consequences.Count - shown;
+            return hidden > 0 ? hidden : 0;
         }
 
         public static string InvolvementLabel(MonthlyDebriefSystem.Consequence consequence)
