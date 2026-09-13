@@ -56,6 +56,8 @@ namespace Brink.Tests
 
             Assert.AreEqual(1, report.PlayerLinkedCount);
             Assert.IsTrue(report.consequences[0].playerLinked);
+            Assert.IsTrue(report.consequences[0].dominantPlayerLinked);
+            Assert.IsFalse(report.consequences[0].autonomousDominant);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
         }
 
@@ -74,8 +76,11 @@ namespace Brink.Tests
             var report = MonthlyDebriefSystem.Build(state);
 
             Assert.AreEqual(1, report.PlayerLinkedCount);
+            Assert.AreEqual(1, report.AutonomousDominantCount);
             Assert.AreEqual("MARKET CONFIDENCE", report.consequences[0].driver);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
+            Assert.IsFalse(report.consequences[0].dominantPlayerLinked);
+            Assert.IsTrue(report.consequences[0].autonomousDominant);
         }
 
         [Test]
