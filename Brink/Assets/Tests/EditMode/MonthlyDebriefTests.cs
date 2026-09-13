@@ -43,6 +43,31 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ClassifiedPlayerDecisionDoesNotLeakProvenanceOrInvolvement()
+        {
+            var state = WorldFactory.CreateDebugWorld(947);
+            state.causal.records.Clear();
+            var record = Record(state, CausalMetric.MarketIndex, 70f, 76f, CausalReason.FiscalStimulus, 2040, 3);
+            record.contributions[0].category = CausalCategory.PlayerDecision;
+            record.contributions[0].sourceActionId = "StimulusPackage";
+            record.contributions[0].visibility = CausalVisibility.Classified;
+            state.causal.Add(record);
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(1, report.consequences.Count);
+            Assert.AreEqual(0, report.PlayerLinkedCount);
+            Assert.AreEqual(0, report.PlayerDrivenCount);
+            Assert.AreEqual(0, report.MixedCount);
+            Assert.AreEqual(1, report.WorldDrivenCount);
+            Assert.IsFalse(report.consequences[0].playerLinked);
+            Assert.IsFalse(report.consequences[0].playerDominant);
+            Assert.AreEqual(MonthlyDebriefSystem.Involvement.World, report.consequences[0].involvement);
+            Assert.IsTrue(string.IsNullOrEmpty(report.consequences[0].sourceActionId));
+            Assert.IsTrue(report.consequences[0].incomplete);
+        }
+
+        [Test]
         public void DebriefCarriesKnownPlayerActionProvenance()
         {
             var state = WorldFactory.CreateDebugWorld(943);
@@ -84,6 +109,28 @@ namespace Brink.Tests
             Assert.IsFalse(report.consequences[0].playerDominant);
             Assert.AreEqual(MonthlyDebriefSystem.Involvement.Mixed, report.consequences[0].involvement);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
+        }
+
+        [Test]
+        public void StrongestDisclosedPlayerContributionSuppliesProvenance()
+        {
+            var state = WorldFactory.CreateDebugWorld(948);
+            state.causal.records.Clear();
+            var record = Record(state, CausalMetric.MarketIndex, 70f, 78f, CausalReason.MarketConfidence, 2040, 7);
+            record.contributions[0].value = 4f;
+            record.contributions.Add(new CausalContribution(
+                CausalReason.FiscalStimulus, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+            { sourceActionId = "SmallStimulus" });
+            record.contributions.Add(new CausalContribution(
+                CausalReason.FiscalStimulus, 3f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+            { sourceActionId = "LargeStimulus" });
+            state.causal.Add(record);
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(1, report.PlayerLinkedCount);
+            Assert.AreEqual(MonthlyDebriefSystem.Involvement.Mixed, report.consequences[0].involvement);
+            Assert.AreEqual("LargeStimulus", report.consequences[0].sourceActionId);
         }
 
         [Test]
