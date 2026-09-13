@@ -6,11 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Brink.UI.Views
 {
-    /// <summary>
-    /// Vertical-slice home surface. It composes existing certified readers into
-    /// one operator-facing answer to what changed, what needs attention, why,
-    /// and where the operator can act. Read-only: no command is executed here.
-    /// </summary>
     public sealed class CommandCenterView : TerminalView
     {
         public override string Id => "COMMAND CENTER";
@@ -20,6 +15,7 @@ namespace Brink.UI.Views
         readonly Label summary;
         readonly VisualElement priorityList;
         readonly VisualElement pressureBoard;
+        readonly OperationPlanningPanel operationPlanning;
         readonly Label course;
         readonly Label guidance;
 
@@ -29,6 +25,7 @@ namespace Brink.UI.Views
             summary = AddText();
             priorityList = new VisualElement(); Root.Add(priorityList);
             pressureBoard = new VisualElement(); Root.Add(pressureBoard);
+            operationPlanning = new OperationPlanningPanel(Refresh); Root.Add(operationPlanning.Root);
             course = AddText();
             guidance = AddText("terminal-text-dim");
         }
@@ -63,6 +60,10 @@ namespace Brink.UI.Views
 
             BuildPressureBoard(state);
 
+            var front = state.ActiveConfrontation;
+            operationPlanning.Root.style.display = front == null ? DisplayStyle.None : DisplayStyle.Flex;
+            if (front != null) operationPlanning.Build(state, front);
+
             var strategy = new StringBuilder();
             strategy.AppendLine(AsciiChart.BoxHeader("STANDING COURSE", w));
             strategy.AppendLine($" DOCTRINE: {report.doctrine.ToUpperInvariant()}");
@@ -71,7 +72,7 @@ namespace Brink.UI.Views
             strategy.AppendLine($" ERA: {report.era.ToUpperInvariant()}");
             course.text = strategy.ToString();
 
-            guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER prioritizes and explains; it does not decide. Suggested commands are places to investigate, not promises of outcome. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
+            guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations still execute from the MILITARY desk and pay normal CP. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
         }
 
         void BuildPressureBoard(GameState state)
@@ -93,17 +94,11 @@ namespace Brink.UI.Views
                 var item = board[i];
                 string flag = item.urgency >= 3 ? "!!" : item.urgency == 2 ? "! " : "  ";
                 string cls = item.urgency >= 3 ? "sig-hostile" : "terminal-text";
-                AddLine(pressureBoard,
-                    $" {flag} {item.label.ToUpperInvariant()}   {item.value:F1}   {(item.delta >= 0 ? "+" : "")}{item.delta:F1}   {item.direction}", cls);
+                AddLine(pressureBoard, $" {flag} {item.label.ToUpperInvariant()}   {item.value:F1}   {(item.delta >= 0 ? "+" : "")}{item.delta:F1}   {item.direction}", cls);
                 AddLine(pressureBoard, "    WHY: " + item.driver + (item.incomplete ? "  [REPORTING INCOMPLETE]" : ""), "terminal-text-dim");
 
                 var options = ActionFinderSystem.ForMetric(state, item.metric, optionLimit);
-                if (options.Count == 0)
-                {
-                    AddLine(pressureBoard, "    RESPONSE: NO RELEVANT COMMANDS INDEXED.", "terminal-text-dim");
-                    continue;
-                }
-
+                if (options.Count == 0) { AddLine(pressureBoard, "    RESPONSE: NO RELEVANT COMMANDS INDEXED.", "terminal-text-dim"); continue; }
                 AddLine(pressureBoard, "    POSSIBLE RESPONSES:", "terminal-text-dim");
                 foreach (var option in options)
                 {
