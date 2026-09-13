@@ -17,7 +17,7 @@
     -unity-font-definition: url("Fonts/JetBrainsMono-Regular.ttf");
 }
 
-.terminal-input:focus-within {
+.terminal-input:focus {
     border-color: rgb(120, 255, 160);
 }
 
