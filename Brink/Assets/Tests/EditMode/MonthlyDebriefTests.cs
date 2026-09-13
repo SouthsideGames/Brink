@@ -60,6 +60,25 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void PlayerProvenanceSurvivesWhenWorldCauseIsDominant()
+        {
+            var state = WorldFactory.CreateDebugWorld(945);
+            state.causal.records.Clear();
+            var record = Record(state, CausalMetric.MarketIndex, 70f, 76f, CausalReason.MarketConfidence, 2040, 5);
+            record.contributions[0].value = 5f;
+            record.contributions.Add(new CausalContribution(
+                CausalReason.FiscalStimulus, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+            { sourceActionId = "StimulusPackage" });
+            state.causal.Add(record);
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(1, report.PlayerLinkedCount);
+            Assert.AreEqual("MARKET CONFIDENCE", report.consequences[0].driver);
+            Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
+        }
+
+        [Test]
         public void EmptyLedgerProducesEmptyHonestReport()
         {
             var state = WorldFactory.CreateDebugWorld(944);
