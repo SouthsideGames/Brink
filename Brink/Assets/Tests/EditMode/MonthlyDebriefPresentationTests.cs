@@ -46,12 +46,48 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void NullReportProducesEmptySections()
+        public void NegativeLimitsClampToZeroAndNullConsequencesAreSkipped()
+        {
+            var report = new MonthlyDebriefSystem.Report();
+            report.consequences.Add(null);
+            report.consequences.Add(Item(CausalMetric.Treasury, MonthlyDebriefSystem.Involvement.PlayerDriven, 7));
+
+            var hidden = MonthlyDebriefPresentation.Build(report, -1, -2);
+            Assert.AreEqual(0, hidden.whatHappened.Count);
+            Assert.AreEqual(0, hidden.yourHand.Count);
+            Assert.AreEqual(0, hidden.worldMoved.Count);
+
+            var visible = MonthlyDebriefPresentation.Build(report, 1, 1);
+            Assert.AreEqual(1, visible.whatHappened.Count);
+            Assert.AreEqual(CausalMetric.Treasury, visible.whatHappened[0].metric);
+        }
+
+        [Test]
+        public void InvolvementAndProvenanceLabelsDistinguishPlayerMixedAndWorld()
+        {
+            var driven = Item(CausalMetric.Treasury, MonthlyDebriefSystem.Involvement.PlayerDriven, 9);
+            driven.sourceActionId = "StimulusPackage";
+            var mixed = Item(CausalMetric.MarketIndex, MonthlyDebriefSystem.Involvement.Mixed, 8);
+            mixed.sourceActionId = "TariffOrder";
+            var world = Item(CausalMetric.SocialUnrest, MonthlyDebriefSystem.Involvement.World, 7);
+
+            Assert.AreEqual("DRIVEN BY YOUR ORDER", MonthlyDebriefPresentation.InvolvementLabel(driven));
+            Assert.AreEqual("YOUR ORDER: StimulusPackage", MonthlyDebriefPresentation.ProvenanceLabel(driven));
+            Assert.AreEqual("YOUR ORDER CONTRIBUTED", MonthlyDebriefPresentation.InvolvementLabel(mixed));
+            Assert.AreEqual("YOUR CONTRIBUTION: TariffOrder", MonthlyDebriefPresentation.ProvenanceLabel(mixed));
+            Assert.AreEqual("WORLD-DRIVEN", MonthlyDebriefPresentation.InvolvementLabel(world));
+            Assert.AreEqual("", MonthlyDebriefPresentation.ProvenanceLabel(world));
+        }
+
+        [Test]
+        public void NullReportAndNullConsequenceProduceEmptyPresentation()
         {
             var sections = MonthlyDebriefPresentation.Build(null, 5, 3);
             Assert.AreEqual(0, sections.whatHappened.Count);
             Assert.AreEqual(0, sections.yourHand.Count);
             Assert.AreEqual(0, sections.worldMoved.Count);
+            Assert.AreEqual("", MonthlyDebriefPresentation.InvolvementLabel(null));
+            Assert.AreEqual("", MonthlyDebriefPresentation.ProvenanceLabel(null));
         }
 
         static MonthlyDebriefSystem.Consequence Item(CausalMetric metric, MonthlyDebriefSystem.Involvement involvement, int importance)
