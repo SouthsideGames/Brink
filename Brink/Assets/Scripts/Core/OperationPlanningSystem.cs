@@ -12,7 +12,8 @@ namespace Brink.Core
     {
         public const int MaxSteps = 6;
 
-        static StrategicPlan Strategy(GameState state) => StrategySystem.Ensure(state);
+        static StrategicPlan Strategy(GameState state)
+            => state == null ? null : StrategySystem.Ensure(state);
 
         public static OperationPlan For(GameState state, string confrontationId)
         {
@@ -30,10 +31,12 @@ namespace Brink.Core
             if (state == null || string.IsNullOrEmpty(confrontationId)) return null;
             var confrontation = state.FindConfrontation(confrontationId);
             if (confrontation == null || confrontation.resolved || !confrontation.Involves(state.playerCountryId)) return null;
-            var strategy = Strategy(state);
-            if (strategy == null) return null;
+
             var existing = For(state, confrontationId);
             if (existing != null) return existing;
+            var strategy = Strategy(state);
+            if (strategy == null) return null;
+
             var plan = new OperationPlan
             {
                 title = string.IsNullOrWhiteSpace(title) ? "Campaign plan" : title.Trim(),
@@ -58,7 +61,12 @@ namespace Brink.Core
         public static bool AddStep(GameState state, string confrontationId, string locationId, OperationType type)
         {
             var plan = For(state, confrontationId);
-            if (plan == null || plan.steps.Count >= MaxSteps || state.FindLocation(locationId) == null) return false;
+            if (plan == null || plan.steps.Count >= MaxSteps || string.IsNullOrEmpty(locationId)) return false;
+            var confrontation = state.FindConfrontation(confrontationId);
+            var location = state.FindLocation(locationId);
+            if (confrontation == null || confrontation.resolved || location == null) return false;
+            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, out _)) return false;
+
             plan.steps.Add(new PlannedOperation
             {
                 id = "PLAN_" + state.NextActionSequence(),
@@ -88,11 +96,16 @@ namespace Brink.Core
             return null;
         }
 
+        /// <summary>
+        /// Reconcile an operation that was actually launched through the normal
+        /// command path. Planning itself never calls this unless a real record exists.
+        /// </summary>
         public static void RecordExecution(GameState state, string confrontationId, OperationRecord record)
         {
             if (record == null) return;
             var next = Next(state, confrontationId);
-            if (next == null || next.locationId != record.locationId || next.operationType != record.operationType) return;
+            if (next == null) return;
+            if (next.locationId != record.locationId || next.operationType != record.operationType) return;
             next.completed = true;
             next.completedDate = record.date;
             var plan = For(state, confrontationId);
@@ -103,6 +116,26 @@ namespace Brink.Core
         {
             var plan = For(state, confrontationId);
             return plan == null ? new OperationDirective() : CopyDirective(plan.directive);
+        }
+
+        public static string StatusText(GameState state, string confrontationId)
+        {
+            var plan = For(state, confrontationId);
+            if (plan == null) return "NO CAMPAIGN PLAN ON FILE.";
+            int complete = 0;
+            foreach (var step in plan.steps) if (step.completed) complete++;
+            var next = Next(state, confrontationId);
+            string nextText = "NONE";
+            if (next != null)
+            {
+                var location = state.FindLocation(next.locationId);
+                nextText = $"{next.operationType.ToUpperInvariant()} — {(location?.displayName ?? next.locationId).ToUpperInvariant()}";
+            }
+            return $"PLAN: {plan.title.ToUpperInvariant()}   STEPS {complete}/{plan.steps.Count}\n"
+                 + $"NEXT: {nextText}\n"
+                 + $"LIMITS: ESC {plan.directive.escalationLimit.ToString().ToUpperInvariant()}  "
+                 + $"CAS {plan.directive.casualtyTolerance:F0}  CIV {plan.directive.civilianRiskLimit:F0}  "
+                 + $"INTENT {plan.directive.territorialIntent.ToString().ToUpperInvariant()}";
         }
 
         static OperationDirective CopyDirective(OperationDirective source)
