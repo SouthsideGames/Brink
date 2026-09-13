@@ -12,10 +12,14 @@ namespace Brink.Core
     {
         public const int MaxSteps = 6;
 
+        static StrategicPlan Strategy(GameState state) => StrategySystem.Ensure(state);
+
         public static OperationPlan For(GameState state, string confrontationId)
         {
             if (state == null || string.IsNullOrEmpty(confrontationId)) return null;
-            foreach (var p in state.operationPlans)
+            var strategy = Strategy(state);
+            if (strategy == null) return null;
+            foreach (var p in strategy.operationPlans)
                 if (p != null && p.confrontationId == confrontationId) return p;
             return null;
         }
@@ -24,12 +28,12 @@ namespace Brink.Core
             OperationDirective directive = null)
         {
             if (state == null || string.IsNullOrEmpty(confrontationId)) return null;
-            var confrontation = state.confrontations.Find(c => c.id == confrontationId && !c.resolved);
-            if (confrontation == null || !confrontation.Involves(state.playerCountryId)) return null;
-
+            var confrontation = state.FindConfrontation(confrontationId);
+            if (confrontation == null || confrontation.resolved || !confrontation.Involves(state.playerCountryId)) return null;
+            var strategy = Strategy(state);
+            if (strategy == null) return null;
             var existing = For(state, confrontationId);
             if (existing != null) return existing;
-
             var plan = new OperationPlan
             {
                 title = string.IsNullOrWhiteSpace(title) ? "Campaign plan" : title.Trim(),
@@ -38,7 +42,7 @@ namespace Brink.Core
                 created = state.date,
                 revised = state.date
             };
-            state.operationPlans.Add(plan);
+            strategy.operationPlans.Add(plan);
             return plan;
         }
 
@@ -54,8 +58,7 @@ namespace Brink.Core
         public static bool AddStep(GameState state, string confrontationId, string locationId, OperationType type)
         {
             var plan = For(state, confrontationId);
-            if (plan == null || plan.steps.Count >= MaxSteps || string.IsNullOrEmpty(locationId)) return false;
-            if (state.locations.Find(l => l.id == locationId) == null) return false;
+            if (plan == null || plan.steps.Count >= MaxSteps || state.FindLocation(locationId) == null) return false;
             plan.steps.Add(new PlannedOperation
             {
                 id = "PLAN_" + state.NextActionSequence(),
@@ -85,16 +88,11 @@ namespace Brink.Core
             return null;
         }
 
-        /// <summary>
-        /// Reconcile an operation that was actually launched through the normal
-        /// command path. Planning itself never calls this unless a real record exists.
-        /// </summary>
         public static void RecordExecution(GameState state, string confrontationId, OperationRecord record)
         {
             if (record == null) return;
             var next = Next(state, confrontationId);
-            if (next == null) return;
-            if (next.locationId != record.locationId || next.operationType != record.operationType) return;
+            if (next == null || next.locationId != record.locationId || next.operationType != record.operationType) return;
             next.completed = true;
             next.completedDate = record.date;
             var plan = For(state, confrontationId);
