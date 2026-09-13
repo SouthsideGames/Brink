@@ -16,7 +16,7 @@ namespace Brink.Tests
 
             var model = MonthlyDebriefViewModel.Build(report, MonthlyDebriefPresentation.Density.Large);
 
-            Assert.AreEqual("JUNE 2042", model.resolvedMonth.ToUpperInvariant());
+            Assert.AreEqual("JUN 2042", model.resolvedMonth.ToUpperInvariant());
             Assert.AreEqual(2, model.trackedCount);
             Assert.AreEqual(3, model.sections.Count);
             Assert.AreEqual("LAST MONTH — WHAT HAPPENED", model.sections[0].heading);

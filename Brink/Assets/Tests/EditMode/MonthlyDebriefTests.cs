@@ -74,7 +74,8 @@ namespace Brink.Tests
             Assert.AreEqual(before, state.causal.records.Count);
             Assert.AreEqual(1, report.consequences.Count);
             Assert.AreNotEqual("COVERT ACTION", report.consequences[0].driver);
-            Assert.IsTrue(report.consequences[0].incomplete);
+            Assert.IsFalse(report.consequences[0].incomplete,
+                "Classified causes must not reveal their existence through an incompleteness side-channel.");
         }
 
         [Test]
@@ -99,7 +100,8 @@ namespace Brink.Tests
             Assert.IsFalse(report.consequences[0].playerDominant);
             Assert.AreEqual(MonthlyDebriefSystem.Involvement.World, report.consequences[0].involvement);
             Assert.IsTrue(string.IsNullOrEmpty(report.consequences[0].sourceActionId));
-            Assert.IsTrue(report.consequences[0].incomplete);
+            Assert.IsFalse(report.consequences[0].incomplete,
+                "Classified player involvement must not leak through an incompleteness marker.");
         }
 
         [Test]
