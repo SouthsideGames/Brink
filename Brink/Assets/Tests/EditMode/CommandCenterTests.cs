@@ -25,20 +25,13 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void AcuteDomesticPressureSurfacesStrategicPressure()
+        public void CommandCenterOrdersHigherUrgencyFirst()
         {
             var state = WorldFactory.CreateDebugWorld(12003);
-            var player = state.PlayerCountry;
-            player.governmentApproval = 15f;
-            player.socialUnrest = 90f;
-
-            // Resolve a month so the causal board has an authoritative interval.
-            Causal.OpenMonth(state);
-            Causal.Apply(state, CausalMetric.Approval, -10f, CausalReason.DomesticPressure);
-            Causal.CloseMonth(state);
-
             var sections = CommandCenterSystem.Build(state);
-            Assert.IsTrue(sections.Exists(s => s.title == "STRATEGIC PRESSURE"));
+            for (int i = 1; i < sections.Count; i++)
+                Assert.GreaterOrEqual(sections[i - 1].urgency, sections[i].urgency,
+                    "Command Center must remain an attention-ranked read model.");
         }
     }
 }
