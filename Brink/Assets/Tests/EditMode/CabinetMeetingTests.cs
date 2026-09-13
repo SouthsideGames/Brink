@@ -39,7 +39,7 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void DirectedOfficialAcknowledgesOperatorInstruction()
+        public void DirectedOfficialAcknowledgesOperatorInstructionByHumanLabel()
         {
             var state = WorldFactory.CreateDebugWorld(833);
             var official = state.PlayerCountry.FindOfficial(Pillar.Economy);
@@ -49,7 +49,63 @@ namespace Brink.Tests
             var positions = CabinetMeetingSystem.Build(state);
             var economy = positions.Find(p => p.pillar == Pillar.Economy);
 
-            Assert.IsTrue(economy.position.Contains("ECO_AUSTERITY"));
+            Assert.IsTrue(economy.position.Contains("AUSTERITY"));
+            Assert.IsFalse(economy.position.Contains("ECO_AUSTERITY"));
+        }
+
+        [Test]
+        public void PersonalityIsStableAndReadOnly()
+        {
+            var state = WorldFactory.CreateDebugWorld(834);
+            var official = state.PlayerCountry.FindOfficial(Pillar.Military);
+            string before = SaveSystem.ToJson(state);
+
+            var first = InstitutionalPersonalitySystem.ProfileFor(state, official);
+            var second = InstitutionalPersonalitySystem.ProfileFor(state, official);
+
+            Assert.IsNotNull(first);
+            Assert.AreEqual(first.identity, second.identity);
+            Assert.AreEqual(first.temperament, second.temperament);
+            Assert.AreEqual(first.relationship, second.relationship);
+            Assert.AreEqual(first.resistance, second.resistance);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void LowTrustAndRiskGapCreateVisibleCabinetFaultLine()
+        {
+            var state = WorldFactory.CreateDebugWorld(835);
+            var military = state.PlayerCountry.FindOfficial(Pillar.Military);
+            var economy = state.PlayerCountry.FindOfficial(Pillar.Economy);
+            military.riskTolerance = 90f;
+            military.trust = 25f;
+            economy.riskTolerance = 20f;
+            economy.trust = 70f;
+
+            var frictions = InstitutionalPersonalitySystem.Frictions(state);
+            var fault = frictions.Find(f =>
+                (f.first == Pillar.Military && f.second == Pillar.Economy) ||
+                (f.first == Pillar.Economy && f.second == Pillar.Military));
+
+            Assert.IsNotNull(fault);
+            Assert.GreaterOrEqual(fault.intensity, 3);
+            Assert.IsTrue(CabinetMeetingSystem.Render(state).Contains("CABINET FAULT LINES"));
+        }
+
+        [Test]
+        public void ForeignOfficialCannotBeProfiledThroughPlayerLayer()
+        {
+            var state = WorldFactory.CreateDebugWorld(836);
+            Official foreign = null;
+            foreach (var country in state.countries)
+            {
+                if (country.id == state.playerCountryId || country.cabinet.Count == 0) continue;
+                foreign = country.cabinet[0];
+                break;
+            }
+
+            Assert.IsNotNull(foreign);
+            Assert.IsNull(InstitutionalPersonalitySystem.ProfileFor(state, foreign));
         }
     }
 }
