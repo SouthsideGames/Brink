@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Generic;
 using Brink.Core;
 using Brink.Data;
 using UnityEngine.UIElements;
@@ -7,23 +8,16 @@ namespace Brink.UI.Views
 {
     /// <summary>
     /// Everything the operator can do, and what is currently out of reach
-    /// (GDD §28.1).
-    ///
-    /// This panel exists because the author of the game — who designed every one
-    /// of these verbs — reported forgetting what was possible. That is a
-    /// reference problem, not an onboarding one: onboarding fades, and this does
-    /// not. So it is a permanent screen rather than a tutorial step, and it
-    /// shows unavailable actions with the reason rather than hiding them,
-    /// because a hidden verb teaches the player it does not exist.
+    /// (GDD §28.1). Runtime-system verbs come from ActionCatalog; posting-level
+    /// strategy verbs come from StrategyActionCatalog and are merged here into
+    /// one permanent reference.
     /// </summary>
     public class ActionsView : TerminalView
     {
         public override string Id => "ACTIONS";
         public override string ShortCode => "ACT";
-
         static int W => TerminalMetrics.Columns;
-
-        Pillar? filter; // null = everything
+        Pillar? filter;
 
         protected override void Build()
         {
@@ -39,12 +33,12 @@ namespace Brink.UI.Views
 
         void BuildHeader(GameState state)
         {
+            int open = ActionCatalog.AvailableCount(state) + StrategyActionCatalog.AvailableCount(state);
             var header = AddText("terminal-text-bright");
             header.text =
                 AsciiChart.BoxHeader("COMMAND INDEX — EVERY AVAILABLE ACTION", W) + "\n" +
                 $" CP {state.commandPoints.current}   INF {state.influence}   " +
-                $"PC {state.politicalCapital:F0}   " +
-                $"{ActionCatalog.AvailableCount(state)} action(s) open to you now";
+                $"PC {state.politicalCapital:F0}   {open} action(s) open to you now";
 
             AddText("terminal-text-dim").text =
                 " Greyed entries are real actions that something currently prevents. " +
@@ -77,9 +71,12 @@ namespace Brink.UI.Views
 
         void BuildEntries(GameState state)
         {
-            var lastPillar = (Pillar?)null;
+            var entries = new List<ActionEntry>();
+            entries.AddRange(ActionCatalog.All(state));
+            entries.AddRange(StrategyActionCatalog.All(state));
 
-            foreach (var entry in ActionCatalog.All(state))
+            Pillar? lastPillar = null;
+            foreach (var entry in entries)
             {
                 if (filter.HasValue && entry.pillar != filter.Value) continue;
 

@@ -6,46 +6,37 @@ namespace Brink.Data
     /// <summary>
     /// What a mandate asks of a posting. Each kind is a claim the ten-year
     /// review can test against the world; none is a conquest checklist (GDD §25).
+    /// Append only: these values are serialized by ordinal.
     /// </summary>
     public enum MandateObjectiveKind
     {
-        /// <summary>A pillar at or above <c>threshold</c>. <c>param</c> names the pillar.</summary>
+        /// <summary>A pillar at or above threshold; param names the pillar.</summary>
         PillarAtLeast,
-        /// <summary>Unbroken treaties held with at least <c>threshold</c> states.</summary>
+        /// <summary>Unbroken treaties held with at least threshold states.</summary>
         TreatiesAtLeast,
         /// <summary>Every location held at the start of the posting is still held.</summary>
         HoldOriginalGround,
-        /// <summary>GDP has grown by at least <c>threshold</c> percent since the posting began.</summary>
+        /// <summary>GDP growth versus the posting's captured start GDP.</summary>
         GdpGrowthAtLeast,
-        /// <summary>Stability at or above <c>threshold</c>.</summary>
         StabilityAtLeast,
-        /// <summary>Government approval at or above <c>threshold</c>.</summary>
         ApprovalAtLeast,
-        /// <summary>National unity at or above <c>threshold</c>.</summary>
         UnityAtLeast,
-        /// <summary>The energy resource at or above <c>threshold</c>.</summary>
         EnergyAtLeast,
-        /// <summary>Food security at or above <c>threshold</c>.</summary>
         FoodAtLeast,
-        /// <summary>Strategic materials at or above <c>threshold</c>.</summary>
         MaterialsAtLeast,
-        /// <summary>Industrial capacity at or above <c>threshold</c>.</summary>
         IndustryAtLeast,
-        /// <summary>At least <c>threshold</c> wars won, and none lost.</summary>
+        /// <summary>At least threshold wars won, with no recorded loss.</summary>
         WarsWonWithoutLoss,
-        /// <summary>No war lost.</summary>
         NoWarLost,
-        /// <summary>A strategic instrument used by this posting.</summary>
         InstrumentUsed,
-        /// <summary>Relations with the state named in <c>param</c> at or above <c>threshold</c>.</summary>
+        /// <summary>Relationship with param country at or above threshold.</summary>
         RelationsAtLeast,
-        /// <summary>Relations with the state named in <c>param</c> at or below <c>threshold</c> — a rival kept at arm's length, never courted.</summary>
+        /// <summary>Relationship with param country at or below threshold.</summary>
         RelationsAtMost,
-        /// <summary>Holds at least <c>threshold</c> capabilities.</summary>
         CapabilitiesAtLeast,
-        /// <summary>The treasury is not in the red.</summary>
+        /// <summary>Fiscal condition is healthy enough to be considered solvent.</summary>
         Solvent,
-        /// <summary>The government in place at the start is still the constitutional order — no coup.</summary>
+        /// <summary>The constitutional order captured at posting start remains.</summary>
         ConstitutionalOrderKept
     }
 
@@ -53,23 +44,18 @@ namespace Brink.Data
     public class MandateObjective
     {
         public MandateObjectiveKind kind;
-        /// <summary>The line the operator reads. Written in the terminal's voice.</summary>
+        /// <summary>The line the operator reads.</summary>
         public string text;
         public float threshold;
-        /// <summary>Pillar name, country id, or empty — depends on <see cref="kind"/>.</summary>
+        /// <summary>Pillar name, country id, or empty depending on kind.</summary>
         public string param = "";
     }
 
     /// <summary>
-    /// The brief a posting opens with (GDD §25 amendment, 2026-08).
-    ///
-    /// The game had annual grades, a forty-year tenure review and five strategic
-    /// instruments, and nothing that ever said what the operator was there to
-    /// do. A mandate is three to four claims about the world the government
-    /// expects to be true after ten years — drawn from the country's authored
-    /// character and vulnerability (spec 08), never from conquest — and a
-    /// verdict on them at the review. Everything else in the game is a way of
-    /// getting there.
+    /// The brief a posting opens with. It states what the government expects to
+    /// be true at the ten-year review; the save continues whatever the verdict.
+    /// Historical baselines live here because several objective types cannot be
+    /// evaluated correctly from current state alone.
     /// </summary>
     [Serializable]
     public class Mandate
@@ -81,10 +67,21 @@ namespace Brink.Data
         /// <summary>Months into the posting at which the verdict is delivered.</summary>
         public int reviewMonths = 120;
 
-        // Captured when the mandate is assigned, so growth claims have a base.
+        // Captured when assigned so historical objective types have a baseline.
         public float startGdp;
         public List<string> startLocationIds = new List<string>();
         public string startGovernmentType = "";
+
+        /// <summary>
+        /// The operator's answer to the mandate: persistent doctrine, national
+        /// policy choice and self-authored standing objectives (Phase B).
+        ///
+        /// It belongs to the posting rather than global/meta progression. A
+        /// mandate reissue changes what the administration asks for without
+        /// erasing the strategy the operator has chosen to pursue. Null on an old
+        /// save is valid; StrategySystem creates the neutral plan lazily.
+        /// </summary>
+        public StrategicPlan strategy;
     }
 
     public enum MandateVerdict
@@ -92,9 +89,9 @@ namespace Brink.Data
         Pending,
         /// <summary>Every objective met.</summary>
         Fulfilled,
-        /// <summary>Most objectives met: the posting held its ground.</summary>
+        /// <summary>Most objectives met.</summary>
         Held,
-        /// <summary>The posting did not deliver.</summary>
+        /// <summary>The posting did not deliver enough of the brief.</summary>
         Failed
     }
 
