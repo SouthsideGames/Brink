@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 
 namespace Brink.Core
 {
@@ -61,9 +62,41 @@ namespace Brink.Core
         public static string ProvenanceLabel(MonthlyDebriefSystem.Consequence consequence)
         {
             if (consequence == null || !consequence.playerLinked || string.IsNullOrEmpty(consequence.sourceActionId)) return "";
+            string action = HumanizeActionId(consequence.sourceActionId);
             return consequence.involvement == MonthlyDebriefSystem.Involvement.PlayerDriven
-                ? "YOUR ORDER: " + consequence.sourceActionId
-                : "YOUR CONTRIBUTION: " + consequence.sourceActionId;
+                ? "YOUR ORDER: " + action
+                : "YOUR CONTRIBUTION: " + action;
+        }
+
+        /// <summary>
+        /// Causal provenance is stored as a stable action identifier. The rollover
+        /// should not expose implementation-shaped PascalCase/snake_case tokens to
+        /// the operator, so convert them to terminal copy without changing the
+        /// authoritative identifier kept on the consequence itself.
+        /// </summary>
+        public static string HumanizeActionId(string actionId)
+        {
+            if (string.IsNullOrEmpty(actionId)) return "";
+            var output = new StringBuilder(actionId.Length + 8);
+            char previous = '\0';
+            for (int i = 0; i < actionId.Length; i++)
+            {
+                char current = actionId[i];
+                if (current == '_' || current == '-')
+                {
+                    if (output.Length > 0 && output[output.Length - 1] != ' ') output.Append(' ');
+                    previous = current;
+                    continue;
+                }
+
+                bool boundary = i > 0 && char.IsUpper(current) &&
+                    (char.IsLower(previous) || char.IsDigit(previous) ||
+                     (i + 1 < actionId.Length && char.IsLower(actionId[i + 1])));
+                if (boundary && output.Length > 0 && output[output.Length - 1] != ' ') output.Append(' ');
+                output.Append(current);
+                previous = current;
+            }
+            return output.ToString().Trim().ToUpperInvariant();
         }
     }
 }
