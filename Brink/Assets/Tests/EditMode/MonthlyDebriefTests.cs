@@ -37,7 +37,7 @@ namespace Brink.Tests
             Assert.AreEqual(1, report.consequences.Count);
             Assert.AreEqual(-5f, report.consequences[0].delta);
             Assert.AreEqual(67f, report.consequences[0].resulting);
-            Assert.AreEqual("ORGANISED UNREST", report.consequences[0].driver);
+            Assert.AreEqual("SOCIAL UNREST", report.consequences[0].driver);
             Assert.AreEqual("DETERIORATED", report.consequences[0].direction);
         }
 
@@ -82,7 +82,7 @@ namespace Brink.Tests
         {
             var state = WorldFactory.CreateDebugWorld(947);
             state.causal.records.Clear();
-            var record = Record(state, CausalMetric.MarketIndex, 70f, 76f, CausalReason.FiscalStimulus, 2040, 3);
+            var record = Record(state, CausalMetric.MarketIndex, 70f, 76f, CausalReason.GovernmentSpending, 2040, 3);
             record.contributions[0].category = CausalCategory.PlayerDecision;
             record.contributions[0].sourceActionId = "StimulusPackage";
             record.contributions[0].visibility = CausalVisibility.Classified;
@@ -131,7 +131,7 @@ namespace Brink.Tests
             var record = Record(state, CausalMetric.MarketIndex, 70f, 76f, CausalReason.MarketConfidence, 2040, 5);
             record.contributions[0].value = 5f;
             record.contributions.Add(new CausalContribution(
-                CausalReason.FiscalStimulus, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+                CausalReason.GovernmentSpending, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
             { sourceActionId = "StimulusPackage" });
             state.causal.Add(record);
 
@@ -140,7 +140,7 @@ namespace Brink.Tests
             Assert.AreEqual(1, report.PlayerLinkedCount);
             Assert.AreEqual(0, report.PlayerDrivenCount);
             Assert.AreEqual(1, report.MixedCount);
-            Assert.AreEqual("MARKET CONFIDENCE", report.consequences[0].driver);
+            Assert.AreEqual("INVESTOR CONFIDENCE", report.consequences[0].driver);
             Assert.IsFalse(report.consequences[0].playerDominant);
             Assert.AreEqual(MonthlyDebriefSystem.Involvement.Mixed, report.consequences[0].involvement);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
@@ -154,10 +154,10 @@ namespace Brink.Tests
             var record = Record(state, CausalMetric.MarketIndex, 70f, 78f, CausalReason.MarketConfidence, 2040, 7);
             record.contributions[0].value = 4f;
             record.contributions.Add(new CausalContribution(
-                CausalReason.FiscalStimulus, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+                CausalReason.GovernmentSpending, 1f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
             { sourceActionId = "SmallStimulus" });
             record.contributions.Add(new CausalContribution(
-                CausalReason.FiscalStimulus, 3f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
+                CausalReason.GovernmentSpending, 3f, CausalCategory.PlayerDecision, CausalKind.Direct, CausalVisibility.Known)
             { sourceActionId = "LargeStimulus" });
             state.causal.Add(record);
 
@@ -176,13 +176,13 @@ namespace Brink.Tests
             var record = Record(state, CausalMetric.SocialUnrest, 40f, 46f, CausalReason.OrganisedUnrest, 2040, 9);
             record.contributions[0].value = 2f;
             record.contributions.Add(new CausalContribution(
-                CausalReason.StructuralPressure, 4f, CausalCategory.Structural, CausalKind.Structural, CausalVisibility.Known));
+                CausalReason.Reversion, 4f, CausalCategory.Other, CausalKind.Indirect, CausalVisibility.Known));
             state.causal.Add(record);
 
             var report = MonthlyDebriefSystem.Build(state);
 
             Assert.AreEqual(1, report.consequences.Count);
-            Assert.AreEqual("ORGANISED UNREST", report.consequences[0].driver);
+            Assert.AreEqual("SOCIAL UNREST", report.consequences[0].driver);
         }
 
         [Test]
