@@ -43,7 +43,7 @@ namespace Brink.UI
             if (model.hiddenCount > 0)
             {
                 AddLine(body,
-                    $"  + {model.hiddenCount} lower-priority consequence{(model.hiddenCount == 1 ? "" : "s")} remain on record.",
+                    $"  + {model.hiddenCount} lower-priority consequence{(model.hiddenCount == 1 ? "" : "s")} {(model.hiddenCount == 1 ? "remains" : "remain")} on record.",
                     "terminal-text-dim");
             }
 
