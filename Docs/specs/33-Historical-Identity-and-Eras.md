@@ -1,10 +1,10 @@
-# 33 — Historical Identity, Precedent, and Strategic Eras
+# 33 — Historical Identity, Precedent, Credibility, and Strategic Eras
 
 ## Status
-Phase G implementation specification.
+Phase G implementation specification — feature-complete pending certification.
 
 ## Purpose
-A long-running Brink save should feel as though it is accumulating political-strategic history, not merely advancing a calendar. Phase G turns the Chronicle and standing strategy into legible historical identity, precedent, named strategic eras, and visible strategic reversals.
+A long-running Brink save should feel as though it is accumulating political-strategic history, not merely advancing a calendar. Phase G turns existing authoritative records into legible historical identity, precedent, named strategic eras, visible strategic reversals, diplomatic credibility memory, and recovery history.
 
 ## Historical identity
 - Identity is interpreted from the player's own recorded Chronicle plus a small number of visible inherited national characteristics.
@@ -31,11 +31,23 @@ A long-running Brink save should feel as though it is accumulating political-str
 - Revising doctrine does not erase the earlier course. The reversal becomes part of how the posting is described.
 - A crowded political Chronicle can make repeated revision read as part of a broader period of adjustment, but this remains interpretation rather than a penalty.
 
+## Credibility and promise memory
+- Brink already stores bilateral `Relationship.memory`, `memoryWeight`, trust, treaty commitments, and who broke a treaty. Phase G exposes that authoritative record instead of creating another credibility meter.
+- The player can see which partners carry durable history, how many commitments remain active, and whether past treaties were broken by us or by them.
+- Trust remains the simulation's existing diplomatic variable. The credibility file explains the record; it does not secretly modify trust or create a parallel score.
+
+## Failure and recovery
+- Failure is allowed to remain history rather than becoming a forced game-over.
+- Durable setback evidence such as wars won/lost and administrations served remains visible.
+- The recent causal ledger supplies an explicitly labelled twelve-month recovery/pressure reading. Metrics whose increase is harmful (unrest, grievance, debt, war exhaustion) are interpreted in the correct direction.
+- Recovery never deletes the setback. A state can be described as recovering after defeat while the defeat remains part of its record.
+- The reader does not manufacture long-range causal history beyond the ledger's actual retention window.
+
 ## Information and determinism
 All Phase G readers are read-only. They consume no RNG, spend no player resource, advance no date, and mutate no save state. They interpret only information already legitimately available in the player's own state and historical record.
 
 ## Design intent
-The player should be able to look back after twenty years and say not only what happened, but what kind of government and strategic period those events amounted to. A war, settlement, political rupture, economic choice, or doctrinal reversal should remain something later leaders can point back to. Brink's history should acquire names and patterns without those labels becoming character classes.
+The player should be able to look back after twenty years and say not only what happened, but what kind of government and strategic period those events amounted to. A war, settlement, promise, broken treaty, political rupture, economic choice, defeat, recovery, or doctrinal reversal should remain something later leaders can point back to. Brink's history should acquire names and patterns without those labels becoming character classes.
 
 ## Tests
 `HistoricalIdentityTests` covers identity emerging from repeated player-country history, the foreign-history boundary, and non-mutation.
@@ -45,3 +57,7 @@ The player should be able to look back after twenty years and say not only what 
 `PrecedentTests` covers player-country military precedent, the foreign-history boundary, and non-mutation.
 
 `StrategicReversalTests` covers revision history and continuity when no revision has occurred.
+
+`CredibilityMemoryTests` covers existing bilateral memory becoming legible, broken-treaty attribution, and preservation of the authoritative trust/memory values.
+
+`RecoveryHistoryTests` covers recovery coexisting with a recorded setback and whole-state non-mutation.
