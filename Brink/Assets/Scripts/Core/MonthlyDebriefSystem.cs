@@ -64,7 +64,8 @@ namespace Brink.Core
                 var disclosed = CausalDisclosure.Disclose(state, record);
                 if (disclosed == null) continue;
                 var best = Dominant(disclosed);
-                bool playerLinked = best != null && best.category == CausalCategory.PlayerDecision && !string.IsNullOrEmpty(best.sourceActionId);
+                var playerCause = DominantPlayerCause(disclosed);
+                bool playerLinked = playerCause != null;
 
                 report.consequences.Add(new Consequence
                 {
@@ -74,7 +75,7 @@ namespace Brink.Core
                     delta = record.delta,
                     direction = Direction(metric, record.delta),
                     driver = best != null ? CausalReasons.Label(best.reason) : (disclosed.withheld > 0 ? "CAUSE NOT AVAILABLE TO THIS DESK" : "NO DOMINANT REPORTED DRIVER"),
-                    sourceActionId = playerLinked ? best.sourceActionId : "",
+                    sourceActionId = playerLinked ? playerCause.sourceActionId : "",
                     playerLinked = playerLinked,
                     incomplete = disclosed.withheld > 0 || disclosed.Opaque,
                     importance = Importance(metric, record.resulting, record.delta, playerLinked)
@@ -96,6 +97,20 @@ namespace Brink.Core
             foreach (var cause in disclosed.causes)
             {
                 if (cause == null || CausalReasons.IsStructural(cause.reason)) continue;
+                float current = cause.sized ? Math.Abs(cause.value) : 0.0001f;
+                if (current <= magnitude) continue;
+                best = cause; magnitude = current;
+            }
+            return best;
+        }
+
+        static DisclosedCause DominantPlayerCause(DisclosedExplanation disclosed)
+        {
+            DisclosedCause best = null;
+            float magnitude = -1f;
+            foreach (var cause in disclosed.causes)
+            {
+                if (cause == null || cause.category != CausalCategory.PlayerDecision || string.IsNullOrEmpty(cause.sourceActionId)) continue;
                 float current = cause.sized ? Math.Abs(cause.value) : 0.0001f;
                 if (current <= magnitude) continue;
                 best = cause; magnitude = current;
