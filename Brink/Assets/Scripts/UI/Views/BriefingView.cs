@@ -115,7 +115,7 @@ namespace Brink.UI.Views
             BuildWire(state, compact ? 4 : large ? 10 : 7);
         }
 
-        static void AppendTreasuryWarning(StringBuilder sb, GameState state, Country player)
+        static void AppendTreasuryWarning(StringBuilder sb, GameState state, CountryState player)
         {
             if (!state.treasuryTrendSeeded || state.treasuryTrend >= -4f) return;
             if (player.resources.treasury <= 0f)
