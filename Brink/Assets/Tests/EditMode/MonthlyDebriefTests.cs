@@ -55,9 +55,11 @@ namespace Brink.Tests
             var report = MonthlyDebriefSystem.Build(state);
 
             Assert.AreEqual(1, report.PlayerLinkedCount);
+            Assert.AreEqual(1, report.PlayerDrivenCount);
+            Assert.AreEqual(0, report.MixedCount);
             Assert.IsTrue(report.consequences[0].playerLinked);
-            Assert.IsTrue(report.consequences[0].dominantPlayerLinked);
-            Assert.IsFalse(report.consequences[0].autonomousDominant);
+            Assert.IsTrue(report.consequences[0].playerDominant);
+            Assert.AreEqual(MonthlyDebriefSystem.Involvement.PlayerDriven, report.consequences[0].involvement);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
         }
 
@@ -76,11 +78,26 @@ namespace Brink.Tests
             var report = MonthlyDebriefSystem.Build(state);
 
             Assert.AreEqual(1, report.PlayerLinkedCount);
-            Assert.AreEqual(1, report.AutonomousDominantCount);
+            Assert.AreEqual(0, report.PlayerDrivenCount);
+            Assert.AreEqual(1, report.MixedCount);
             Assert.AreEqual("MARKET CONFIDENCE", report.consequences[0].driver);
+            Assert.IsFalse(report.consequences[0].playerDominant);
+            Assert.AreEqual(MonthlyDebriefSystem.Involvement.Mixed, report.consequences[0].involvement);
             Assert.AreEqual("StimulusPackage", report.consequences[0].sourceActionId);
-            Assert.IsFalse(report.consequences[0].dominantPlayerLinked);
-            Assert.IsTrue(report.consequences[0].autonomousDominant);
+        }
+
+        [Test]
+        public void AutonomousConsequenceIsClassifiedAsWorldDriven()
+        {
+            var state = WorldFactory.CreateDebugWorld(946);
+            state.causal.records.Clear();
+            state.causal.Add(Record(state, CausalMetric.SocialUnrest, 40f, 46f, CausalReason.OrganisedUnrest, 2040, 6));
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(0, report.PlayerLinkedCount);
+            Assert.AreEqual(1, report.WorldDrivenCount);
+            Assert.AreEqual(MonthlyDebriefSystem.Involvement.World, report.consequences[0].involvement);
         }
 
         [Test]
