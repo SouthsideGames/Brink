@@ -1,0 +1,81 @@
+/* Vertical-slice control skin.
+ *
+ * TextField, DropdownField and FloatField are functional terminal controls,
+ * not default Unity editor widgets.  The wrapper owns the border and touch
+ * target; the inner input stays transparent so every theme can supply the
+ * foreground through normal inheritance. */
+.terminal-input {
+    min-height: 44px;
+    margin: 2px 3px;
+    padding: 4px 8px;
+    background-color: rgb(10, 22, 14);
+    border-width: 1px;
+    border-color: rgb(60, 155, 88);
+    border-radius: 0;
+    color: rgb(200, 255, 210);
+    font-size: 13px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Regular.ttf");
+}
+
+.terminal-input:focus-within {
+    border-color: rgb(120, 255, 160);
+}
+
+.terminal-input .unity-base-field__label {
+    color: rgb(70, 180, 105);
+    font-size: 12px;
+    min-width: 96px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Bold.ttf");
+}
+
+.terminal-input .unity-base-text-field__input,
+.terminal-input .unity-base-popup-field__input,
+.terminal-input .unity-text-input {
+    min-height: 34px;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    color: rgb(200, 255, 210);
+    font-size: 13px;
+    -unity-font-definition: url("Fonts/JetBrainsMono-Regular.ttf");
+}
+
+/* Compact/short displays save vertical space around controls without ever
+ * reducing the 44px interaction floor. */
+.bp-compact .terminal-input,
+.bp-short .terminal-input {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+.bp-short .terminal-input,
+.bp-short .terminal-input .unity-base-text-field__input,
+.bp-short .terminal-input .unity-base-popup-field__input,
+.bp-short .terminal-input .unity-text-input {
+    font-size: 11px;
+}
+
+/* Palette-specific input chrome.  These mirror the terminal panel/nav
+ * families so inputs remain visually native instead of looking like a Unity
+ * inspector embedded in the command terminal. */
+.theme-green .terminal-input  { background-color: rgb(10, 22, 14); border-color: rgb(60, 155, 88); color: rgb(200, 255, 210); }
+.theme-amber .terminal-input  { background-color: rgb(24, 16, 4); border-color: rgb(158, 108, 24); color: rgb(255, 224, 170); }
+.theme-soft .terminal-input   { background-color: rgb(26, 34, 28); border-color: rgb(100, 144, 112); color: rgb(222, 246, 228); }
+.theme-signal .terminal-input { background-color: rgb(22, 26, 28); border-color: rgb(104, 114, 108); color: rgb(245, 248, 244); }
+
+.theme-green .terminal-input .unity-base-field__label  { color: rgb(70, 180, 105); }
+.theme-amber .terminal-input .unity-base-field__label  { color: rgb(205, 142, 30); }
+.theme-soft .terminal-input .unity-base-field__label   { color: rgb(138, 182, 150); }
+.theme-signal .terminal-input .unity-base-field__label { color: rgb(163, 170, 164); }
+
+.theme-green .terminal-input .unity-base-text-field__input,
+.theme-green .terminal-input .unity-base-popup-field__input,
+.theme-green .terminal-input .unity-text-input { color: rgb(200, 255, 210); }
+.theme-amber .terminal-input .unity-base-text-field__input,
+.theme-amber .terminal-input .unity-base-popup-field__input,
+.theme-amber .terminal-input .unity-text-input { color: rgb(255, 224, 170); }
+.theme-soft .terminal-input .unity-base-text-field__input,
+.theme-soft .terminal-input .unity-base-popup-field__input,
+.theme-soft .terminal-input .unity-text-input { color: rgb(222, 246, 228); }
+.theme-signal .terminal-input .unity-base-text-field__input,
+.theme-signal .terminal-input .unity-base-popup-field__input,
+.theme-signal .terminal-input .unity-text-input { color: rgb(245, 248, 244); }
