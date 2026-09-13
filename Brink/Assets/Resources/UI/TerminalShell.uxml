@@ -1,5 +1,6 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="TerminalShell.uss" />
+    <Style src="VerticalSliceControls.uss" />
     <ui:VisualElement name="terminal-root" class="terminal-root bp-large">
         <ui:VisualElement name="status-bar" class="status-bar">
             <ui:Label name="classification-label" text="UNKNOWN GAME // CLASSIFIED█" class="classification" />
@@ -15,10 +16,6 @@
             <ui:VisualElement name="content-host" class="content-host" />
         </ui:VisualElement>
 
-        <!-- The monthly briefing. Presented after a month resolves: what the
-             world saw, what is waiting on this desk, and what the Cabinet
-             thinks is worth doing. Always dismissable, and switchable off
-             entirely in display settings. -->
         <ui:VisualElement name="rollover-overlay" class="crisis-overlay" style="display: none;">
             <ui:VisualElement name="rollover-panel" class="crisis-panel">
                 <ui:Label name="rollover-title" text="MONTHLY BRIEFING" class="crisis-title" />
@@ -27,9 +24,6 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- The Crisis Turn modal. Only the overlay lives here: the panel is
-             built by CrisisPanel so its scroller can be capped against the
-             measured screen height and tested without a UIDocument. -->
         <ui:VisualElement name="crisis-overlay" class="crisis-overlay" style="display: none;" />
     </ui:VisualElement>
 </ui:UXML>
