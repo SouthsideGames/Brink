@@ -102,26 +102,10 @@ namespace Brink.UI
             void Line(string text, string cls = "terminal-text") { var l = new Label(text); l.AddToClassList("terminal-text"); if (cls != "terminal-text") l.AddToClassList(cls); body.Add(l); }
 
             var debrief = MonthlyDebriefSystem.Build(state);
-            Section(" LAST MONTH — WHAT HAPPENED / WHY");
-            if (debrief.consequences.Count == 0)
-            {
-                Line("  No resolved-month consequence record is available yet.", "terminal-text-dim");
-            }
-            else
-            {
-                Line($"  {new GameDate(debrief.year, debrief.month).DisplayString} — {debrief.consequences.Count} tracked consequence{(debrief.consequences.Count == 1 ? "" : "s")}.", "terminal-text-dim");
-                int shown = sizeClass == SizeClass.Compact ? 3 : sizeClass == SizeClass.Medium ? 4 : 5;
-                for (int i = 0; i < debrief.consequences.Count && i < shown; i++)
-                {
-                    var c = debrief.consequences[i];
-                    string marker = c.direction == "DETERIORATED" ? "!" : c.direction == "IMPROVED" ? "+" : ".";
-                    string cls = c.direction == "DETERIORATED" ? "sig-hostile" : "terminal-text";
-                    Line($"  {marker} {c.label.ToUpperInvariant()} {c.delta:+0.0;-0.0;0.0} — {c.direction}", cls);
-                    Line($"     WHY: {c.driver}{(c.incomplete ? " [REPORTING INCOMPLETE]" : "")}", "terminal-text-dim");
-                    if (c.playerLinked) Line($"     YOUR ORDER: {c.sourceActionId}", "terminal-text-bright");
-                }
-                if (debrief.consequences.Count > shown) Line($"  + {debrief.consequences.Count - shown} lower-priority consequence{(debrief.consequences.Count - shown == 1 ? "" : "s")} remain on record.", "terminal-text-dim");
-            }
+            var density = sizeClass == SizeClass.Compact ? MonthlyDebriefPresentation.Density.Compact
+                : sizeClass == SizeClass.Medium ? MonthlyDebriefPresentation.Density.Medium
+                : MonthlyDebriefPresentation.Density.Large;
+            MonthlyDebriefRenderer.Render(body, debrief, density);
 
             if (DisplaySettings.WorldWire) { var wire = WorldWire.LastMonth(state); Section("\n WORLD WIRE — LAST MONTH"); if (wire.Count == 0) Line("  A quiet month. Nothing of note reached the wire.", "terminal-text-dim"); else foreach (var item in wire) Line("  " + WorldWire.Format(state, item), item.involvesUs ? "sig-rival" : "terminal-text"); }
             var attention = AttentionSystem.Collect(state); Section("\n NEW MONTH — YOUR DESK"); if (attention.Count == 0) Line("  Nothing is waiting on you. Ending the month without intervention is a valid choice.", "terminal-text-dim"); else foreach (var item in attention) Line($"  {(item.level == AttentionLevel.Decision ? "!" : ".")} [{item.viewId}] {item.summary}", item.level == AttentionLevel.Decision ? "sig-hostile" : "terminal-text-dim");
