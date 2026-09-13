@@ -100,11 +100,18 @@ namespace Brink.UI
             var state = gc.State; body.Clear(); actions.Clear(); if (title != null) title.text = $"MONTHLY BRIEFING — {state.date.DisplayString}";
             void Section(string heading) { var l = new Label(heading); l.AddToClassList("terminal-text-bright"); body.Add(l); }
             void Line(string text, string cls = "terminal-text") { var l = new Label(text); l.AddToClassList("terminal-text"); if (cls != "terminal-text") l.AddToClassList(cls); body.Add(l); }
-            if (DisplaySettings.WorldWire) { var wire = WorldWire.LastMonth(state); Section(" WORLD WIRE"); if (wire.Count == 0) Line("  A quiet month. Nothing of note reached the wire.", "terminal-text-dim"); else foreach (var item in wire) Line("  " + WorldWire.Format(state, item), item.involvesUs ? "sig-rival" : "terminal-text"); }
-            var attention = AttentionSystem.Collect(state); Section("\n YOUR DESK"); if (attention.Count == 0) Line("  Nothing is waiting on you.", "terminal-text-dim"); else foreach (var item in attention) Line($"  {(item.level == AttentionLevel.Decision ? "!" : ".")} [{item.viewId}] {item.summary}", item.level == AttentionLevel.Decision ? "sig-hostile" : "terminal-text-dim");
+
+            var debrief = MonthlyDebriefSystem.Build(state);
+            var density = sizeClass == SizeClass.Compact ? MonthlyDebriefPresentation.Density.Compact
+                : sizeClass == SizeClass.Medium ? MonthlyDebriefPresentation.Density.Medium
+                : MonthlyDebriefPresentation.Density.Large;
+            MonthlyDebriefRenderer.Render(body, debrief, density);
+
+            if (DisplaySettings.WorldWire) { var wire = WorldWire.LastMonth(state); Section("\n WORLD WIRE — LAST MONTH"); if (wire.Count == 0) Line("  A quiet month. Nothing of note reached the wire.", "terminal-text-dim"); else foreach (var item in wire) Line("  " + WorldWire.Format(state, item), item.involvesUs ? "sig-rival" : "terminal-text"); }
+            var attention = AttentionSystem.Collect(state); Section("\n NEW MONTH — YOUR DESK"); if (attention.Count == 0) Line("  Nothing is waiting on you. Ending the month without intervention is a valid choice.", "terminal-text-dim"); else foreach (var item in attention) Line($"  {(item.level == AttentionLevel.Decision ? "!" : ".")} [{item.viewId}] {item.summary}", item.level == AttentionLevel.Decision ? "sig-hostile" : "terminal-text-dim");
             if (state.cabinetReport.Count > 0) { Section("\n YOUR CABINET"); foreach (var line in state.cabinetReport) Line($"  {line.pillar.ToString().ToUpperInvariant()} — {line.officialName} {line.summary}", line.ownJudgement ? "terminal-text" : "terminal-text-dim"); }
             var directives = DirectiveSystem.Collect(state); if (directives.Count > 0) { Section("\n CABINET RECOMMENDS"); foreach (var d in directives) { Line($"  ▸ {d.title.ToUpperInvariant()}   → {d.viewId}"); Line($"     {d.suggestion}", "terminal-text-dim"); } }
-            var dismiss = new Button(() => overlay.style.display = DisplayStyle.None) { text = "CONTINUE" }; dismiss.AddToClassList("cmd-button"); dismiss.AddToClassList("primary"); actions.Add(dismiss); ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns); overlay.style.display = DisplayStyle.Flex;
+            var dismiss = new Button(() => overlay.style.display = DisplayStyle.None) { text = "ENTER NEW MONTH" }; dismiss.AddToClassList("cmd-button"); dismiss.AddToClassList("primary"); actions.Add(dismiss); ApplyTextPolicy(overlay, DisplaySettings.ParagraphSpacing, TerminalMetrics.OverlayColumns); overlay.style.display = DisplayStyle.Flex;
         }
 
         string lastVerdictShownFor = ""; bool tenureShown;
