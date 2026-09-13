@@ -30,10 +30,27 @@ namespace Brink.Core
             if (state == null)
                 throw new InvalidDataException("Save data could not be parsed.");
 
+            // JsonUtility materializes a null serializable class field as a
+            // default object on round-trip. mandateRecord is intentionally null
+            // until the ten-year verdict, so that behaviour used to turn every
+            // resumed campaign into a fake PENDING (0/0) verdict and permanently
+            // suppress MandateSystem.MonthlyUpdate/Reissue. A real record is only
+            // created by DeliverVerdict and therefore always has a non-Pending
+            // verdict, a positive objective total and a summary.
+            if (IsPhantomMandateRecord(state.mandateRecord))
+                state.mandateRecord = null;
+
             // Walk older saves forward to the current schema. Throws rather than
             // loading a mismatched world (see SaveMigration).
             return SaveMigration.Migrate(state);
         }
+
+        static bool IsPhantomMandateRecord(MandateRecord record)
+            => record != null
+               && record.verdict == MandateVerdict.Pending
+               && record.met == 0
+               && record.total == 0
+               && string.IsNullOrEmpty(record.summary);
 
         public static void Save(GameState state, int slot = 0)
         {
