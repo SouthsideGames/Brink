@@ -119,6 +119,40 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ReloadBeforeReview_DoesNotInventAPendingVerdict()
+        {
+            Assert.IsNull(state.mandateRecord, "Fresh posting should not already have a verdict record.");
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+
+            Assert.IsNull(loaded.mandateRecord,
+                "JsonUtility's default MandateRecord must not turn an unfinished mandate into a closed verdict.");
+            StringAssert.Contains("REVIEW IN", MandateSystem.StatusText(loaded));
+            StringAssert.DoesNotContain("VERDICT: PENDING", MandateSystem.StatusText(loaded));
+        }
+
+        [Test]
+        public void ReloadAfterReview_PreservesTheRealVerdictRecord()
+        {
+            state.mandateRecord = new MandateRecord
+            {
+                date = state.date,
+                verdict = MandateVerdict.Held,
+                met = 2,
+                total = 4,
+                summary = "MANDATE HELD — regression record."
+            };
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+
+            Assert.NotNull(loaded.mandateRecord);
+            Assert.AreEqual(MandateVerdict.Held, loaded.mandateRecord.verdict);
+            Assert.AreEqual(2, loaded.mandateRecord.met);
+            Assert.AreEqual(4, loaded.mandateRecord.total);
+            Assert.AreEqual("MANDATE HELD — regression record.", loaded.mandateRecord.summary);
+        }
+
+        [Test]
         public void StatusText_ReadsInTheTerminalsVoice()
         {
             string text = MandateSystem.StatusText(state);
