@@ -26,6 +26,48 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void CanonicalDensityPolicyAddsContextAsSpaceIncreases()
+        {
+            var compact = MonthlyDebriefPresentation.LimitsFor(MonthlyDebriefPresentation.Density.Compact);
+            var medium = MonthlyDebriefPresentation.LimitsFor(MonthlyDebriefPresentation.Density.Medium);
+            var large = MonthlyDebriefPresentation.LimitsFor(MonthlyDebriefPresentation.Density.Large);
+
+            Assert.AreEqual(3, compact.consequenceLimit);
+            Assert.AreEqual(1, compact.involvementLimit);
+            Assert.AreEqual(4, medium.consequenceLimit);
+            Assert.AreEqual(2, medium.involvementLimit);
+            Assert.AreEqual(5, large.consequenceLimit);
+            Assert.AreEqual(3, large.involvementLimit);
+            Assert.Less(compact.consequenceLimit, medium.consequenceLimit);
+            Assert.Less(medium.consequenceLimit, large.consequenceLimit);
+            Assert.Less(compact.involvementLimit, medium.involvementLimit);
+            Assert.Less(medium.involvementLimit, large.involvementLimit);
+        }
+
+        [Test]
+        public void DensityBuildUsesCanonicalLimitsAndReportsHiddenConsequences()
+        {
+            var report = new MonthlyDebriefSystem.Report();
+            report.consequences.Add(Item(CausalMetric.GovernmentApproval, MonthlyDebriefSystem.Involvement.World, 9));
+            report.consequences.Add(Item(CausalMetric.MarketIndex, MonthlyDebriefSystem.Involvement.Mixed, 8));
+            report.consequences.Add(Item(CausalMetric.Treasury, MonthlyDebriefSystem.Involvement.PlayerDriven, 7));
+            report.consequences.Add(Item(CausalMetric.SocialUnrest, MonthlyDebriefSystem.Involvement.World, 6));
+            report.consequences.Add(Item(CausalMetric.WarExhaustion, MonthlyDebriefSystem.Involvement.World, 5));
+            report.consequences.Add(Item(CausalMetric.LivingStandards, MonthlyDebriefSystem.Involvement.World, 4));
+
+            var compact = MonthlyDebriefPresentation.Build(report, MonthlyDebriefPresentation.Density.Compact);
+            var medium = MonthlyDebriefPresentation.Build(report, MonthlyDebriefPresentation.Density.Medium);
+            var large = MonthlyDebriefPresentation.Build(report, MonthlyDebriefPresentation.Density.Large);
+
+            Assert.AreEqual(3, compact.whatHappened.Count);
+            Assert.AreEqual(3, MonthlyDebriefPresentation.HiddenConsequenceCount(report, compact));
+            Assert.AreEqual(4, medium.whatHappened.Count);
+            Assert.AreEqual(2, MonthlyDebriefPresentation.HiddenConsequenceCount(report, medium));
+            Assert.AreEqual(5, large.whatHappened.Count);
+            Assert.AreEqual(1, MonthlyDebriefPresentation.HiddenConsequenceCount(report, large));
+        }
+
+        [Test]
         public void DensityLimitsAreIndependentAndZeroIsHonoured()
         {
             var report = new MonthlyDebriefSystem.Report();
@@ -101,6 +143,7 @@ namespace Brink.Tests
             Assert.AreEqual(0, sections.whatHappened.Count);
             Assert.AreEqual(0, sections.yourHand.Count);
             Assert.AreEqual(0, sections.worldMoved.Count);
+            Assert.AreEqual(0, MonthlyDebriefPresentation.HiddenConsequenceCount(null, sections));
             Assert.AreEqual("", MonthlyDebriefPresentation.InvolvementLabel(null));
             Assert.AreEqual("", MonthlyDebriefPresentation.ProvenanceLabel(null));
         }
