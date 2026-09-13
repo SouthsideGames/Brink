@@ -39,23 +39,25 @@ namespace Brink.UI.Views
             if (player == null) return;
 
             int w = TerminalMetrics.Columns;
-            var report = CommandCenterSystem.Read(state);
+            var report = CommandCenterSystem.Build(state);
+            int decisionCount = AttentionSystem.DecisionCount(AttentionSystem.Collect(state));
             header.text = AsciiChart.BoxHeader($"COMMAND CENTER — {state.date.DisplayString}", w);
 
             var top = new StringBuilder();
             top.AppendLine($" {player.displayName.ToUpperInvariant()}   CP {state.commandPoints.current}");
-            top.AppendLine($" {report.decisionCount} DECISION{(report.decisionCount == 1 ? "" : "S")} WAITING   {report.priorityCount} PRIORIT{(report.priorityCount == 1 ? "Y" : "IES")} SHOWN");
-            top.AppendLine(report.decisionCount > 0 ? " OPERATOR STATUS: ATTENTION REQUIRED" : " OPERATOR STATUS: NO REQUIRED DECISION — THE WORLD STILL MOVES");
+            top.AppendLine($" {decisionCount} DECISION{(decisionCount == 1 ? "" : "S")} WAITING   {report.Count} PRIORIT{(report.Count == 1 ? "Y" : "IES")} SHOWN");
+            top.AppendLine(decisionCount > 0 ? " OPERATOR STATUS: ATTENTION REQUIRED" : " OPERATOR STATUS: NO REQUIRED DECISION — THE WORLD STILL MOVES");
             summary.text = top.ToString();
 
             priorityList.Clear();
             AddLine(priorityList, " PRIORITY BOARD", "terminal-text-bright");
-            if (report.priorities.Count == 0) AddLine(priorityList, "  NO MATERIAL PRESSURE IDENTIFIED.", "terminal-text-dim");
-            else foreach (var item in report.priorities)
+            if (report.Count == 0) AddLine(priorityList, "  NO MATERIAL PRESSURE IDENTIFIED.", "terminal-text-dim");
+            else foreach (var item in report)
             {
-                string glyph = item.required ? "!" : ">";
-                AddLine(priorityList, $"  {glyph} {item.title.ToUpperInvariant()}   → {item.viewId}", item.required ? "sig-hostile" : "terminal-text");
-                if (!string.IsNullOrEmpty(item.detail)) AddLine(priorityList, "    " + item.detail, "terminal-text-dim");
+                bool required = item.urgency >= 4;
+                string glyph = required ? "!" : ">";
+                AddLine(priorityList, $"  {glyph} {item.title.ToUpperInvariant()}   → {item.viewId}", required ? "sig-hostile" : "terminal-text");
+                if (!string.IsNullOrEmpty(item.summary)) AddLine(priorityList, "    " + item.summary, "terminal-text-dim");
             }
 
             BuildPressureBoard(state);
@@ -66,10 +68,13 @@ namespace Brink.UI.Views
 
             var strategy = new StringBuilder();
             strategy.AppendLine(AsciiChart.BoxHeader("STANDING COURSE", w));
-            strategy.AppendLine($" DOCTRINE: {report.doctrine.ToUpperInvariant()}");
-            if (!string.IsNullOrEmpty(report.policy)) strategy.AppendLine($" NATIONAL POLICY: {report.policy.ToUpperInvariant()}");
-            if (!string.IsNullOrEmpty(report.plan)) strategy.AppendLine($" PLAN: {report.plan.ToUpperInvariant()}");
-            strategy.AppendLine($" ERA: {report.era.ToUpperInvariant()}");
+            var era = StrategicEraSystem.Current(state);
+            if (era == null) strategy.AppendLine(" NO NAMED STRATEGIC ERA YET — SET OR REVISE THE COURSE FROM OPERATOR.");
+            else
+            {
+                strategy.AppendLine($" ERA: {era.name.ToUpperInvariant()}");
+                if (!string.IsNullOrEmpty(era.character)) strategy.AppendLine(" " + era.character);
+            }
             course.text = strategy.ToString();
 
             guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations still execute from the MILITARY desk and pay normal CP. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
@@ -86,8 +91,8 @@ namespace Brink.UI.Views
                 return;
             }
 
-            int issueLimit = TerminalMetrics.SizeClass == SizeClass.Compact ? 2 : TerminalMetrics.SizeClass == SizeClass.Medium ? 3 : 4;
-            int optionLimit = TerminalMetrics.SizeClass == SizeClass.Compact ? 2 : 3;
+            int issueLimit = TerminalMetrics.Size == SizeClass.Compact ? 2 : TerminalMetrics.Size == SizeClass.Medium ? 3 : 4;
+            int optionLimit = TerminalMetrics.Size == SizeClass.Compact ? 2 : 3;
             int shown = Math.Min(issueLimit, board.Count);
             for (int i = 0; i < shown; i++)
             {
