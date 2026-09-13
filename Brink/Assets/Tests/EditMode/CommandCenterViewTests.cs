@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Brink.UI.Views;
 using NUnit.Framework;
 
-namespace Brink.Tests.EditMode
+namespace Brink.Tests
 {
     public class CommandCenterViewTests
     {
