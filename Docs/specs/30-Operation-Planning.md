@@ -32,7 +32,7 @@ Creating, revising, or reading a plan must not:
 - roll RNG;
 - award XP or annual initiative credit.
 
-Actual execution remains on the existing confrontation command path. `OperationPlanningSystem.RecordExecution` can mark the *next* planned step complete only after it receives a real `OperationRecord` whose location and operation type match that step.
+Actual execution remains on the existing confrontation command path. `OperationPlanningSystem.RecordExecution` can mark the *next* planned step complete only after it receives a real `OperationRecord` whose location and operation type match that step **and whose `attackerId` is the player** — a confrontation's diary holds both sides' operations, and the enemy assaulting the ground we meant to assault is not our plan being carried out. The type comparison is case-insensitive because `MilitarySystem` files records upper-cased (`ASSAULT`) while a step stores `OperationType.ToString()` (`Assault`); the first build compared ordinally and no real operation could complete a step (found at the C–E midpoint check, 2026-09-13).
 
 This preserves Brink's attention economy: a staff can remember what the operator intends, but the operator still decides whether the next step deserves scarce attention this month.
 

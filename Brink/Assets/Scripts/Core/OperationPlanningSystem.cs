@@ -114,6 +114,10 @@ namespace Brink.Core
         public static void RecordExecution(GameState state, string confrontationId, OperationRecord record)
         {
             if (record == null) return;
+            // Only our own operations can carry out our plan. A war diary holds
+            // both sides' records, so without this an enemy assault on the ground
+            // we intended to assault would tick our step off for us.
+            if (record.attackerId != state.playerCountryId) return;
             var next = Next(state, confrontationId);
             if (next == null) return;
             if (next.locationId != record.locationId || !Matches(next, record.operationType)) return;
@@ -177,11 +181,15 @@ namespace Brink.Core
                  + $"INTENT {directive.territorialIntent.ToString().ToUpperInvariant()}";
         }
 
+        // Case-insensitive on purpose: a planned step stores `OperationType.ToString()`
+        // ("Assault") while `MilitarySystem` files the real record upper-cased
+        // ("ASSAULT"). An ordinal compare here meant no real operation could ever
+        // complete a planned step, while a fixture record in mixed case passed.
         static bool Matches(PlannedOperation step, OperationType type)
-            => step != null && string.Equals(step.operationType, type.ToString(), StringComparison.Ordinal);
+            => step != null && string.Equals(step.operationType, type.ToString(), StringComparison.OrdinalIgnoreCase);
 
         static bool Matches(PlannedOperation step, string type)
-            => step != null && string.Equals(step.operationType, type, StringComparison.Ordinal);
+            => step != null && string.Equals(step.operationType, type, StringComparison.OrdinalIgnoreCase);
 
         static OperationDirective CopyDirective(OperationDirective source)
         {
