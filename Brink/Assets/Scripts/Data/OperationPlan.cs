@@ -28,5 +28,11 @@ namespace Brink.Data
         public List<PlannedOperation> steps = new List<PlannedOperation>();
         public GameDate created;
         public GameDate revised;
+
+        // Number of real confrontation operation records already examined by the
+        // planner. Additive save field: old saves default to zero and reconcile
+        // safely on the next resolved month. This prevents one real operation
+        // from satisfying the same planned step more than once.
+        public int reconciledOperationCount;
     }
 }
