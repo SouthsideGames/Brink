@@ -13,10 +13,9 @@ namespace Brink.UI
     }
 
     /// <summary>
-    /// Live overlays for the strategic map. The base silhouette remains the same
-    /// orientation aid; modes answer different strategic questions with routes
-    /// and signals drawn from the current save. Player-private layers only read
-    /// information the player's government actually owns.
+    /// Live overlays for the strategic map. Overlay glyphs are deliberately
+    /// distinct from the base political grammar (! ~ + - and #) so a mode never
+    /// asks one character to mean two strategic facts at once.
     /// </summary>
     public static class AsciiMapModes
     {
@@ -37,11 +36,6 @@ namespace Brink.UI
             return canvas.ToString();
         }
 
-        /// <summary>
-        /// The same five visual grammars used elsewhere in Phase C, paired to the
-        /// question this map mode asks. Political is the Government picture;
-        /// Trade is Economy; Blocs is Diplomacy.
-        /// </summary>
         public static string Signature(GameState state, WorldMapMode mode, int width)
         {
             Pillar pillar;
@@ -61,13 +55,13 @@ namespace Brink.UI
             switch (mode)
             {
                 case WorldMapMode.Military:
-                    return "  × active confrontation   * total-war front   ! occupied ground";
+                    return "  × confrontation   * total-war front   O occupied ground";
                 case WorldMapMode.Trade:
-                    return "  · our trade route   x embargoed route   ! sanctions involving us";
+                    return "  · our trade route   x embargoed route   $ sanctions involving us";
                 case WorldMapMode.Intelligence:
-                    return "  : collection network   ? thin access   + established access   # deep access";
+                    return "  : collection route   ? thin access   ^ established access   @ deep access";
                 case WorldMapMode.Blocs:
-                    return "  = members of the same standing bloc   uppercase code = state";
+                    return "  = standing bloc connection   uppercase code = state";
                 default:
                     return AsciiWorldMap.Legend;
             }
@@ -130,7 +124,7 @@ namespace Brink.UI
             {
                 if (!location.IsOccupied) continue;
                 if (!Point(location.ownerId, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Min(canvas.Height - 1, y + 1), '!', overwrite: true);
+                canvas.Plot(x, Math.Min(canvas.Height - 1, y + 1), 'O', overwrite: true);
             }
         }
 
@@ -149,7 +143,7 @@ namespace Brink.UI
                 if (sanction.senderId != state.playerCountryId && sanction.targetId != state.playerCountryId) continue;
                 string other = sanction.senderId == state.playerCountryId ? sanction.targetId : sanction.senderId;
                 if (!Point(other, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Max(0, y - 1), '!', overwrite: true);
+                canvas.Plot(x, Math.Max(0, y - 1), '$', overwrite: true);
             }
         }
 
@@ -161,8 +155,8 @@ namespace Brink.UI
                 if (network.ownerId != state.playerCountryId || network.compromised) continue;
                 if (!Point(network.targetId, canvas, out int tx, out int ty)) continue;
                 canvas.Line(px, py, tx, ty, ':', overwrite: false);
-                char access = network.penetration >= 55f ? '#'
-                    : network.penetration >= 20f ? '+' : '?';
+                char access = network.penetration >= 55f ? '@'
+                    : network.penetration >= 20f ? '^' : '?';
                 canvas.Plot(tx, Math.Max(0, ty - 1), access, overwrite: true);
             }
         }
