@@ -21,6 +21,8 @@ namespace Brink.Core
             public string driver;
             public string sourceActionId;
             public bool playerLinked;
+            public bool dominantPlayerLinked;
+            public bool autonomousDominant;
             public bool incomplete;
             public int importance;
         }
@@ -33,6 +35,10 @@ namespace Brink.Core
             public int PlayerLinkedCount
             {
                 get { int n = 0; foreach (var c in consequences) if (c.playerLinked) n++; return n; }
+            }
+            public int AutonomousDominantCount
+            {
+                get { int n = 0; foreach (var c in consequences) if (c.autonomousDominant) n++; return n; }
             }
         }
 
@@ -66,6 +72,7 @@ namespace Brink.Core
                 var best = Dominant(disclosed);
                 var playerCause = DominantPlayerCause(disclosed);
                 bool playerLinked = playerCause != null;
+                bool dominantPlayerLinked = best != null && best.category == CausalCategory.PlayerDecision && !string.IsNullOrEmpty(best.sourceActionId);
 
                 report.consequences.Add(new Consequence
                 {
@@ -77,6 +84,8 @@ namespace Brink.Core
                     driver = best != null ? CausalReasons.Label(best.reason) : (disclosed.withheld > 0 ? "CAUSE NOT AVAILABLE TO THIS DESK" : "NO DOMINANT REPORTED DRIVER"),
                     sourceActionId = playerLinked ? playerCause.sourceActionId : "",
                     playerLinked = playerLinked,
+                    dominantPlayerLinked = dominantPlayerLinked,
+                    autonomousDominant = best != null && !dominantPlayerLinked,
                     incomplete = disclosed.withheld > 0 || disclosed.Opaque,
                     importance = Importance(metric, record.resulting, record.delta, playerLinked)
                 });
