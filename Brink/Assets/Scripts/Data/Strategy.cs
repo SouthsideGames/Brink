@@ -58,5 +58,12 @@ namespace Brink.Data
         public string planTitle = "Standing strategy";
         public int horizonMonths = 60;
         public GameDate horizonSet;
+
+        /// <summary>
+        /// Staff campaign plans written during this posting. They are nested in
+        /// the posting strategy deliberately: a plan is the operator's intent,
+        /// not world state, and an old save correctly begins with none.
+        /// </summary>
+        public List<OperationPlan> operationPlans = new List<OperationPlan>();
     }
 }
