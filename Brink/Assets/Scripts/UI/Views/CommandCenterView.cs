@@ -14,9 +14,11 @@ namespace Brink.UI.Views
         readonly Label header;
         readonly Label summary;
         readonly VisualElement priorityList;
+        readonly VisualElement waitList;
         readonly VisualElement pressureBoard;
         readonly OperationPlanningPanel operationPlanning;
         readonly Label course;
+        readonly Label mandate;
         readonly Label guidance;
 
         public CommandCenterView()
@@ -24,9 +26,11 @@ namespace Brink.UI.Views
             header = AddText("terminal-text-bright");
             summary = AddText();
             priorityList = new VisualElement(); Root.Add(priorityList);
+            waitList = new VisualElement(); Root.Add(waitList);
             pressureBoard = new VisualElement(); Root.Add(pressureBoard);
             operationPlanning = new OperationPlanningPanel(Refresh); Root.Add(operationPlanning.Root);
             course = AddText();
+            mandate = AddText();
             guidance = AddText("terminal-text-dim");
         }
 
@@ -45,21 +49,11 @@ namespace Brink.UI.Views
 
             var top = new StringBuilder();
             top.AppendLine($" {player.displayName.ToUpperInvariant()}   CP {state.commandPoints.current}");
-            top.AppendLine($" {decisionCount} DECISION{(decisionCount == 1 ? "" : "S")} WAITING   {report.Count} PRIORIT{(report.Count == 1 ? "Y" : "IES")} SHOWN");
+            top.AppendLine($" {decisionCount} DECISION{(decisionCount == 1 ? "" : "S")} WAITING   {report.Count} PRIORIT{(report.Count == 1 ? "Y" : "IES")} TRACKED");
             top.AppendLine(decisionCount > 0 ? " OPERATOR STATUS: ATTENTION REQUIRED" : " OPERATOR STATUS: NO REQUIRED DECISION — THE WORLD STILL MOVES");
             summary.text = top.ToString();
 
-            priorityList.Clear();
-            AddLine(priorityList, " PRIORITY BOARD", "terminal-text-bright");
-            if (report.Count == 0) AddLine(priorityList, "  NO MATERIAL PRESSURE IDENTIFIED.", "terminal-text-dim");
-            else foreach (var item in report)
-            {
-                bool required = item.urgency >= 4;
-                string glyph = required ? "!" : ">";
-                AddLine(priorityList, $"  {glyph} {item.title.ToUpperInvariant()}   → {item.viewId}", required ? "sig-hostile" : "terminal-text");
-                if (!string.IsNullOrEmpty(item.summary)) AddLine(priorityList, "    " + item.summary, "terminal-text-dim");
-            }
-
+            BuildAttentionHierarchy(report);
             BuildPressureBoard(state);
 
             var front = state.ActiveConfrontation;
@@ -77,7 +71,57 @@ namespace Brink.UI.Views
             }
             course.text = strategy.ToString();
 
-            guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations still execute from the MILITARY desk and pay normal CP. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
+            var mandateText = new StringBuilder();
+            mandateText.AppendLine(AsciiChart.BoxHeader("MANDATE", w));
+            if (state.mandate == null) mandateText.AppendLine(" NO MANDATE ON FILE.");
+            else
+            {
+                mandateText.AppendLine(" " + state.mandate.title.ToUpperInvariant());
+                if (state.mandateRecord != null)
+                    mandateText.AppendLine($" VERDICT: {state.mandateRecord.verdict.ToString().ToUpperInvariant()}   {state.mandateRecord.met}/{state.mandateRecord.total}");
+                else
+                {
+                    int remaining = Math.Max(0, state.mandate.reviewMonths - state.date.MonthsSince(state.startDate));
+                    mandateText.AppendLine($" {MandateSystem.MetCount(state)}/{state.mandate.objectives.Count} CURRENTLY MET   REVIEW IN {remaining} MO");
+                }
+                mandateText.AppendLine(" FULL BRIEF AND STRATEGY → OPERATOR");
+            }
+            mandate.text = mandateText.ToString();
+
+            guidance.text = AsciiChart.WrapBlock(" COMMAND CENTER answers what needs you, what changed, what can wait, and where the standing course is headed. It prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations still execute from the MILITARY desk and pay normal CP. END MONTH remains available when you choose to leave matters delegated or unresolved.", w);
+        }
+
+        void BuildAttentionHierarchy(System.Collections.Generic.List<CommandCenterSystem.Section> report)
+        {
+            priorityList.Clear();
+            waitList.Clear();
+            AddLine(priorityList, " WHAT NEEDS ME", "terminal-text-bright");
+
+            int urgent = 0;
+            foreach (var item in report)
+            {
+                if (item.urgency < 2) continue;
+                urgent++;
+                string glyph = item.urgency >= 4 ? "!" : ">";
+                AddLine(priorityList, $"  {glyph} {item.title.ToUpperInvariant()}   → {item.viewId}", item.urgency >= 4 ? "sig-hostile" : "terminal-text");
+                if (!string.IsNullOrEmpty(item.summary)) AddLine(priorityList, "    " + item.summary, "terminal-text-dim");
+            }
+            if (urgent == 0)
+                AddLine(priorityList, "  NOTHING REQUIRES OPERATOR ATTENTION RIGHT NOW.", "terminal-text-dim");
+
+            AddLine(waitList, " WHAT CAN WAIT", "terminal-text-bright");
+            int deferred = 0;
+            foreach (var item in report)
+            {
+                if (item.urgency >= 2) continue;
+                deferred++;
+                AddLine(waitList, $"  · {item.title.ToUpperInvariant()}   → {item.viewId}", "terminal-text-dim");
+                if (!string.IsNullOrEmpty(item.summary)) AddLine(waitList, "    " + item.summary, "terminal-text-dim");
+            }
+            if (deferred == 0)
+                AddLine(waitList, urgent == 0
+                    ? "  NO EXCEPTIONAL PRESSURE. END MONTH IS A VALID CHOICE."
+                    : "  EVERYTHING CURRENTLY TRACKED IS MATERIAL ENOUGH TO REVIEW.", "terminal-text-dim");
         }
 
         void BuildPressureBoard(GameState state)
