@@ -25,6 +25,41 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void LatestRecordForMetricWinsWithinResolvedMonth()
+        {
+            var state = WorldFactory.CreateDebugWorld(949);
+            state.causal.records.Clear();
+            state.causal.Add(Record(state, CausalMetric.MarketIndex, 70f, 72f, CausalReason.MarketConfidence, 2040, 8));
+            state.causal.Add(Record(state, CausalMetric.MarketIndex, 72f, 67f, CausalReason.OrganisedUnrest, 2040, 8));
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(1, report.consequences.Count);
+            Assert.AreEqual(-5f, report.consequences[0].delta);
+            Assert.AreEqual(67f, report.consequences[0].resulting);
+            Assert.AreEqual("ORGANISED UNREST", report.consequences[0].driver);
+            Assert.AreEqual("DETERIORATED", report.consequences[0].direction);
+        }
+
+        [Test]
+        public void OtherCountriesCannotSelectOrPopulatePlayerDebriefMonth()
+        {
+            var state = WorldFactory.CreateDebugWorld(950);
+            state.causal.records.Clear();
+            state.causal.Add(Record(state, CausalMetric.GovernmentApproval, 50f, 45f, CausalReason.OrganisedUnrest, 2040, 2));
+            var foreign = Record(state, CausalMetric.MarketIndex, 70f, 50f, CausalReason.MarketConfidence, 2041, 9);
+            foreign.countryId = state.playerCountryId + "_FOREIGN";
+            state.causal.Add(foreign);
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(2040, report.year);
+            Assert.AreEqual(2, report.month);
+            Assert.AreEqual(1, report.consequences.Count);
+            Assert.AreEqual(CausalMetric.GovernmentApproval, report.consequences[0].metric);
+        }
+
+        [Test]
         public void DebriefIsReadOnlyAndDoesNotExposeClassifiedCause()
         {
             var state = WorldFactory.CreateDebugWorld(942);
@@ -134,6 +169,23 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void StructuralCauseDoesNotBecomeDominantDriver()
+        {
+            var state = WorldFactory.CreateDebugWorld(951);
+            state.causal.records.Clear();
+            var record = Record(state, CausalMetric.SocialUnrest, 40f, 46f, CausalReason.OrganisedUnrest, 2040, 9);
+            record.contributions[0].value = 2f;
+            record.contributions.Add(new CausalContribution(
+                CausalReason.StructuralPressure, 4f, CausalCategory.Structural, CausalKind.Structural, CausalVisibility.Known));
+            state.causal.Add(record);
+
+            var report = MonthlyDebriefSystem.Build(state);
+
+            Assert.AreEqual(1, report.consequences.Count);
+            Assert.AreEqual("ORGANISED UNREST", report.consequences[0].driver);
+        }
+
+        [Test]
         public void AutonomousConsequenceIsClassifiedAsWorldDriven()
         {
             var state = WorldFactory.CreateDebugWorld(946);
@@ -148,8 +200,11 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void EmptyLedgerProducesEmptyHonestReport()
+        public void NullStateAndEmptyLedgerProduceEmptyHonestReports()
         {
+            var nullReport = MonthlyDebriefSystem.Build(null);
+            Assert.AreEqual(0, nullReport.consequences.Count);
+
             var state = WorldFactory.CreateDebugWorld(944);
             state.causal.records.Clear();
             var report = MonthlyDebriefSystem.Build(state);
