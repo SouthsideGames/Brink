@@ -1,5 +1,6 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <Style src="TerminalShell.uss" />
+    <Style src="VerticalSliceControls.uss" />
     <ui:VisualElement name="terminal-root" class="terminal-root bp-large">
         <ui:VisualElement name="status-bar" class="status-bar">
             <ui:Label name="classification-label" text="UNKNOWN GAME // CLASSIFIED█" class="classification" />

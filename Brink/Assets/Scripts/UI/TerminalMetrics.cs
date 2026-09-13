@@ -85,6 +85,10 @@ namespace Brink.UI
 
         public static SizeClass Size { get; private set; } = SizeClass.Compact;
 
+        // Compatibility name used by vertical-slice views. Keep Size as the
+        // authoritative stored value so there is still one responsive metric.
+        public static SizeClass SizeClass => Size;
+
         /// <summary>Raised when the usable grid changes, so open views can rebuild.</summary>
         public static event Action Changed;
 

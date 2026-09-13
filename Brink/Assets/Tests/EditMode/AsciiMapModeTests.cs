@@ -57,6 +57,23 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void OverlayLegendsDoNotReusePoliticalOrChokepointGlyphs()
+        {
+            string military = AsciiMapModes.Legend(WorldMapMode.Military);
+            string trade = AsciiMapModes.Legend(WorldMapMode.Trade);
+            string intel = AsciiMapModes.Legend(WorldMapMode.Intelligence);
+
+            StringAssert.Contains("O occupied", military);
+            StringAssert.Contains("$ sanctions", trade);
+            StringAssert.Contains("^ established", intel);
+            StringAssert.Contains("@ deep", intel);
+            StringAssert.DoesNotContain("! occupied", military);
+            StringAssert.DoesNotContain("! sanctions", trade);
+            StringAssert.DoesNotContain("+ established", intel);
+            StringAssert.DoesNotContain("# deep", intel);
+        }
+
+        [Test]
         public void BlocAndTradeModesRespondToLiveState()
         {
             string blocBefore = AsciiMapModes.Render(state, null, WorldMapMode.Blocs, 78, 21);
