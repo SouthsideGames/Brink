@@ -6,10 +6,9 @@ using Brink.Data;
 namespace Brink.Core
 {
     /// <summary>
-    /// Phase F institutional personality. A cabinet meeting is a read-only clash
-    /// of the government's existing officials: who is pressing for attention,
-    /// where they disagree, and whose advice carries institutional weight.
-    /// It does not invent hidden facts or create a second decision economy.
+    /// Phase F cabinet meeting: the same five offices now arrive with stable
+    /// institutional identities, relationship posture and visible disagreements.
+    /// Read-only: this explains the government the player already has.
     /// </summary>
     public static class CabinetMeetingSystem
     {
@@ -20,6 +19,9 @@ namespace Brink.Core
             public string title;
             public string position;
             public string concern;
+            public string identity;
+            public string relationship;
+            public int resistance;
             public int pressure;
         }
 
@@ -32,6 +34,7 @@ namespace Brink.Core
             foreach (var official in country.cabinet)
             {
                 if (official == null) continue;
+                var profile = InstitutionalPersonalitySystem.ProfileFor(state, official);
                 result.Add(new Position
                 {
                     pillar = official.office,
@@ -39,6 +42,9 @@ namespace Brink.Core
                     title = official.title ?? official.office.ToString(),
                     position = PositionText(state, country, official),
                     concern = ConcernText(state, country, official.office),
+                    identity = profile?.identity ?? "institutional voice",
+                    relationship = profile?.relationship ?? "relationship unknown",
+                    resistance = profile?.resistance ?? 0,
                     pressure = Pressure(state, country, official)
                 });
             }
@@ -62,8 +68,20 @@ namespace Brink.Core
                 sb.Append(item.pressure >= 3 ? "!! " : item.pressure == 2 ? "!  " : "   ")
                   .Append(item.title.ToUpperInvariant()).Append(" — ")
                   .Append(item.officialName.ToUpperInvariant()).AppendLine();
+                sb.Append("   ").Append(item.identity.ToUpperInvariant()).Append(" | ").Append(item.relationship).AppendLine();
                 sb.Append("   ").Append(item.position).AppendLine();
                 sb.Append("   CONCERN: ").Append(item.concern).AppendLine();
+                if (item.resistance >= 2)
+                    sb.Append("   FRICTION: This office is increasingly protective of its own judgement.").AppendLine();
+            }
+
+            var frictions = InstitutionalPersonalitySystem.Frictions(state);
+            if (frictions.Count > 0)
+            {
+                sb.AppendLine("CABINET FAULT LINES");
+                int shown = Math.Min(3, frictions.Count);
+                for (int i = 0; i < shown; i++)
+                    sb.Append(frictions[i].intensity >= 4 ? "!! " : "!  ").AppendLine(frictions[i].summary);
             }
             sb.Append("THIS IS ADVICE, NOT CONSENSUS. THE GOVERNMENT MAY WANT INCOMPATIBLE THINGS.");
             return sb.ToString();
@@ -72,26 +90,18 @@ namespace Brink.Core
         static string PositionText(GameState state, CountryState country, Official official)
         {
             if (official.mode == ControlMode.Directed && !string.IsNullOrEmpty(official.directiveId))
-                return "Working to your standing instruction: " + official.directiveId + ".";
+                return "Working to your standing instruction: " + InstitutionalPersonalitySystem.DirectiveLabel(official) + ".";
+
+            var profile = InstitutionalPersonalitySystem.ProfileFor(state, official);
+            if (profile != null) return char.ToUpperInvariant(profile.instinct[0]) + profile.instinct.Substring(1) + ".";
 
             switch (official.office)
             {
-                case Pillar.Military:
-                    return country.warExhaustion > 60f
-                        ? "The force can keep acting, but political endurance is becoming the constraint."
-                        : "Preserve readiness and room to respond before accepting new commitments.";
-                case Pillar.Economy:
-                    return state.treasuryTrendSeeded && state.treasuryTrend < -4f
-                        ? "The current fiscal path is consuming strategic freedom faster than it creates it."
-                        : "Protect growth and reserves; every other pillar eventually sends us a bill.";
-                case Pillar.Intelligence:
-                    return "Do not convert uncertainty into confidence merely because a decision is urgent.";
-                case Pillar.Diplomacy:
-                    return "Spend credibility deliberately; partners remember demands as well as promises.";
-                default:
-                    return country.socialUnrest > 55f
-                        ? "Domestic consent is becoming an operational constraint on the entire government."
-                        : "Preserve authority and public tolerance for decisions that may become necessary later.";
+                case Pillar.Military: return "Preserve readiness and room to respond before accepting new commitments.";
+                case Pillar.Economy: return "Protect growth and reserves; every other pillar eventually sends us a bill.";
+                case Pillar.Intelligence: return "Do not convert uncertainty into confidence merely because a decision is urgent.";
+                case Pillar.Diplomacy: return "Spend credibility deliberately; partners remember demands as well as promises.";
+                default: return "Preserve authority and public tolerance for decisions that may become necessary later.";
             }
         }
 
