@@ -55,5 +55,45 @@ namespace Brink.Tests
             Assert.AreEqual("CrisisLapsed", lapsed.sourceActionId,
                 "the player decision has no production action provenance");
         }
+
+        [Test]
+        public void PlayerDecisionWithoutActionIdDoesNotInventProvenance()
+        {
+            var player = state.PlayerCountry;
+            float before = player.governmentApproval;
+
+            Causal.Note(state, player.id, CausalMetric.GovernmentApproval,
+                CausalReason.CrisisLapsed, before, before - 1f,
+                CausalCategory.PlayerDecision);
+
+            var record = state.causal.Latest(player.id, CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(record);
+            var contribution = record.contributions.Find(c => c.reason == CausalReason.CrisisLapsed);
+            Assert.IsNotNull(contribution);
+            Assert.AreEqual(CausalCategory.PlayerDecision, contribution.category);
+            Assert.AreEqual("", contribution.sourceActionId,
+                "the causal layer must not infer operator provenance from category alone");
+        }
+
+        [Test]
+        public void NonPlayerCategoryWithActionIdDoesNotBecomePlayerDecision()
+        {
+            var player = state.PlayerCountry;
+            float before = player.fiscal.sovereignDebt;
+
+            Causal.Note(state, player.id, CausalMetric.SovereignDebt,
+                CausalReason.DebtRestructured, before, before + 1f,
+                CausalCategory.Fiscal,
+                sourceActionId: "RestructureDebt");
+
+            var record = state.causal.Latest(player.id, CausalMetric.SovereignDebt);
+            Assert.IsNotNull(record);
+            var contribution = record.contributions.Find(c => c.reason == CausalReason.DebtRestructured);
+            Assert.IsNotNull(contribution);
+            Assert.AreEqual(CausalCategory.Fiscal, contribution.category,
+                "an action id is metadata; it must never promote an autonomous/system cause to player authorship");
+            Assert.AreEqual("RestructureDebt", contribution.sourceActionId,
+                "the causal layer should preserve explicit metadata and leave authorship classification to the caller");
+        }
     }
 }
