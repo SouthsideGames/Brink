@@ -1410,7 +1410,25 @@ namespace Brink.Core
                 if (sender == null || target == null) continue;
 
                 // Kept in force while the cause stands; lapses when it does not.
-                if (SanctionCauseStands(state, sanction.senderId, sanction.targetId)) continue;
+                //
+                // **Unless the cause is only that it is still standing.** The
+                // relations arm of `SanctionCauseStands` is self-fulfilling: a
+                // sanctioned pair settles at `strategicAlignment − SanctionChill`
+                // (DiplomacySystem), so once alignment is below about 38 the pair
+                // can never clear the 30 line, the cause never stops standing,
+                // and the regime runs for the rest of the save. Measured at
+                // Challenging: 345 standing regimes at month 360, median age 232
+                // months, 93% on pairs whose alignment is below that threshold —
+                // and only 1% of them on a pair actually at war. What keeps them
+                // alive is not a live quarrel; it is the coldness they cause.
+                //
+                // So a *rivalry* regime that has outlived its confrontation by a
+                // full review period is allowed to lapse on its own terms. An
+                // active war still holds it (`RivalryRegimeHasOutlivedItsWar`
+                // returns false), a recent war still holds it, and nothing here
+                // changes what a regime costs while it stands.
+                if (SanctionCauseStands(state, sanction.senderId, sanction.targetId)
+                    && !RivalryRegimeHasOutlivedItsWar(state, sanction)) continue;
 
                 state.sanctions.RemoveAt(i);
                 var link = state.FindTrade(sanction.senderId, sanction.targetId);
@@ -1454,6 +1472,57 @@ namespace Brink.Core
 
         /// <summary>Relations below which a government sanctions and keeps sanctioning.</summary>
         public const float SanctionHostilityLine = 30f;
+
+        /// <summary>The cause string a government's own rivalry regimes carry.</summary>
+        public const string RivalrySanctionCause = "RIVALRY";
+
+        /// <summary>
+        /// Whether a rivalry regime has outlived the confrontation it belongs to,
+        /// and may therefore lapse even though the pair is still cold.
+        ///
+        /// Read by the monthly review only. `SanctionCauseStands` itself is left
+        /// alone deliberately: the AI's decision to *impose* (AISystem) and the
+        /// détente path both read it, and widening it there would change how
+        /// often measures are applied rather than how long they last.
+        ///
+        /// Three conditions, all of them about the war rather than the mood:
+        /// the pair is not fighting now, they have not fought within a review
+        /// period, and the regime itself is old. `SanctionReviewMonths` is reused
+        /// rather than adding a second timer — it is already the interval at
+        /// which a government revisits a regime, the measured median war runs
+        /// 21.5 months so 36 clears a typical war and its settlement, and 99% of
+        /// post-war standing regimes are already past it, so the constant is not
+        /// what decides the outcome.
+        ///
+        /// Narrow on purpose. REPUDIATION regimes are untouched: they are the
+        /// price of breaking a guarantee rather than the residue of a war, and
+        /// nothing measured says they share this pathology. The player's own
+        /// measures never reach here — the review skips them above — so an
+        /// operator's standing sanction is never lifted out from under them.
+        /// </summary>
+        public static bool RivalryRegimeHasOutlivedItsWar(GameState state, Sanction sanction)
+        {
+            if (state == null || sanction == null) return false;
+            if (sanction.cause != RivalrySanctionCause) return false;
+            if (sanction.monthsActive < SanctionReviewMonths) return false;
+
+            // Fighting now keeps it, whatever its age.
+            var live = ConfrontationSystem.ExistingBetween(state, sanction.senderId, sanction.targetId);
+            if (live != null && !live.resolved
+                && live.escalation >= EscalationState.LimitedConflict) return false;
+
+            // And so does a war they have only just stopped fighting.
+            foreach (var confrontation in state.confrontations)
+            {
+                if (!confrontation.Involves(sanction.senderId)) continue;
+                if (!confrontation.Involves(sanction.targetId)) continue;
+                int endedMonthsAgo = state.date.MonthsSince(confrontation.startDate)
+                                     - confrontation.monthsActive;
+                if (endedMonthsAgo < SanctionReviewMonths) return false;
+            }
+
+            return true;
+        }
 
         static float Approach(float current, float target, float rate) => current + (target - current) * rate;
 
