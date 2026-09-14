@@ -291,7 +291,12 @@ namespace Brink.Tests
             Causal.SnapshotOpenings(state);   // the world as given
 
             float before = Player.fiscal.sovereignDebt;
-            Assert.IsTrue(FiscalSystem.RestructureDebtBy(state, Player.id),
+            // Provenance is supplied by the caller, as the operator's own wrapper
+            // supplies it. The generic verb used to stamp the player's action id
+            // on every write-down in the world, including the AI's own; this test
+            // asserted that, so it moved when the contract did.
+            Assert.IsTrue(FiscalSystem.RestructureDebtBy(state, Player.id,
+                    CausalCategory.PlayerDecision, nameof(GameController.RestructureDebt)),
                 "the restructure was refused, so this test proves nothing");
 
             // 1. The debt changed exactly as it always did.
