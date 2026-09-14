@@ -811,6 +811,16 @@ namespace Brink.Core
             float indexBlowback = -blowback * 4f;
             float indexWar = -(atWar ? 12f : 0f);
 
+            // **Attribution split, not a second calculation.** `indexBlowback`
+            // above remains the authoritative term the fundamentals are built
+            // from; these two only decide how it is *explained*. The world share
+            // is the remainder rather than its own sum, so the pair adds back to
+            // exactly the figure the simulation used and no floating-point
+            // difference can reach the reconciliation.
+            float playerBlowback = PlayerSanctionBlowbackFor(state, country.id);
+            float indexPlayerBlowback = -playerBlowback * 4f;
+            float indexWorldBlowback = indexBlowback - indexPlayerBlowback;
+
             float fundamentals = 45f
                                  + indexConfidence
                                  + indexGrowth
@@ -830,18 +840,24 @@ namespace Brink.Core
 
             // `+= (fundamentals - value) * rate` is the same shape as
             // `Approach`, so the decomposition of the fundamentals scales into
-            // the month's movement exactly (spec 26 §3). Our own sanctions'
-            // blowback is filed as a player decision: it is the cost of
-            // something this government chose, and an operator wondering why
-            // their market is soft is entitled to see their own foreign policy
-            // in the list.
+            // the month's movement exactly (spec 26 §3). Blowback is split by
+            // who ordered the measures: an operator wondering why their market
+            // is soft is entitled to see their own foreign policy in the list,
+            // but the same line used to be filed as a player decision for every
+            // country in the world — including the AI's own coercion against
+            // third parties, which no operator ever ordered. Zero terms are
+            // dropped by the builder, so a country with only one kind of
+            // sanction still shows one line.
             if (Causal.Records(state, country.id))
                 Causal.Begin(state, country.id, CausalMetric.MarketIndex, marketBefore)
                     .Add(CausalReason.MarketConfidence, indexConfidence, CausalCategory.Economic)
                     .Add(CausalReason.EconomicGrowth, indexGrowth, CausalCategory.Economic)
                     .Add(CausalReason.Inflation, indexInflation, CausalCategory.Economic)
                     .Add(CausalReason.SanctionPressure, indexSanctions, CausalCategory.Diplomatic)
-                    .Add(CausalReason.SanctionBlowback, indexBlowback, CausalCategory.PlayerDecision,
+                    .Add(CausalReason.SanctionBlowback, indexPlayerBlowback, CausalCategory.PlayerDecision,
+                         CausalKind.Indirect, CausalVisibility.Known, null,
+                         nameof(GameController.ImposeSanctions))
+                    .Add(CausalReason.SanctionBlowback, indexWorldBlowback, CausalCategory.Diplomatic,
                          CausalKind.Indirect)
                     .Add(CausalReason.AtWar, indexWar, CausalCategory.Military)
                     .CommitApproach(fundamentals, 0.14f, eco.marketIndex, 45f);
@@ -1092,11 +1108,46 @@ namespace Brink.Core
             => Clamp(12f + country.resources.industrialCapacity * 0.35f, 0f, 100f);
 
         public static float SanctionBlowbackFor(GameState state, string countryId)
+            => BlowbackSum(state, countryId, operatorOrderedOnly: false);
+
+        /// <summary>
+        /// The share of <see cref="SanctionBlowbackFor"/> that came from regimes
+        /// the operator personally ordered.
+        ///
+        /// **Provenance only — never the simulation's total.** The economic model
+        /// keeps using the full figure; this exists so the monthly debrief can say
+        /// which part of that cost was the player's own foreign policy and which
+        /// part their government imposed without being asked. It shares
+        /// <see cref="BlowbackSum"/> with the authoritative call so the two can
+        /// never disagree about what a sanction costs.
+        ///
+        /// Authorship comes from the persisted <see cref="Sanction.cause"/>
+        /// marker, not from the sender being the player's country: the player's
+        /// own government sanctions on its own initiative through crises and
+        /// alliance repudiation, and that is not an order anybody gave.
+        /// </summary>
+        public static float PlayerSanctionBlowbackFor(GameState state, string countryId)
+            => BlowbackSum(state, countryId, operatorOrderedOnly: true);
+
+        /// <summary>The <see cref="Sanction.cause"/> written by the operator's own sanctions command.</summary>
+        public const string OperatorSanctionCause = "PLAYER";
+
+        /// <summary>
+        /// Whether this regime was ordered at the terminal. Anything else —
+        /// "RIVALRY", "CRISIS", "REPUDIATION", an empty cause on an old save, or
+        /// a marker a later version writes — is autonomous by default. Unknown
+        /// provenance must never become player provenance.
+        /// </summary>
+        static bool IsOperatorOrdered(Sanction sanction)
+            => sanction != null && sanction.cause == OperatorSanctionCause;
+
+        static float BlowbackSum(GameState state, string countryId, bool operatorOrderedOnly)
         {
             float total = 0f;
             foreach (var sanction in state.sanctions)
                 if (sanction.senderId == countryId)
                 {
+                    if (operatorOrderedOnly && !IsOperatorOrdered(sanction)) continue;
                     var link = state.FindTrade(countryId, sanction.targetId);
                     // Sanctioning a major trade partner hurts far more.
                     float exposure = link != null ? 0.5f + link.volume / 100f : 0.4f;

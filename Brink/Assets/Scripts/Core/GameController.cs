@@ -462,7 +462,10 @@ namespace Brink.Core
             }
             if (!Turns.SpendCommandPoints(FiscalSystem.IssueDebtCost, "Issue sovereign debt")) return false;
 
-            bool ok = FiscalSystem.IssueSovereignDebtBy(State, State.playerCountryId);
+            // Authorship asserted here, not inside the generic verb: the AI
+            // borrows through the same call when its treasury runs dry.
+            bool ok = FiscalSystem.IssueSovereignDebtBy(State, State.playerCountryId,
+                Data.CausalCategory.PlayerDecision, nameof(IssueSovereignDebt));
             if (ok)
             {
                 ProgressionSystem.RecordInitiative(State);
@@ -539,7 +542,10 @@ namespace Brink.Core
             if (!GovernmentSystem.SpendPoliticalCapital(State, FiscalSystem.RestructureCost, "Restructure debt"))
                 return false;
 
-            bool ok = FiscalSystem.RestructureDebtBy(State, State.playerCountryId);
+            // The operator boundary is the only place authorship is asserted:
+            // the generic verb serves the AI and the finance ministry too.
+            bool ok = FiscalSystem.RestructureDebtBy(State, State.playerCountryId,
+                Data.CausalCategory.PlayerDecision, nameof(RestructureDebt));
             if (ok)
             {
                 ProgressionSystem.RecordInitiative(State);
