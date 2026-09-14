@@ -356,10 +356,42 @@ namespace Brink.Core
             // once, so this has to be the action budget itself. It used to cap at
             // two while Ruthless was given three actions, which meant the hardest
             // difficulty's extra action point was unreachable through this path.
+            // **One pre-emption at a time.**
+            //
+            // `PreemptProgramme` is raised once per detected foreign programme
+            // and scores `60 + programme × 1.6` — a floor of 84, above almost
+            // anything else the ladder produces. A state that had detected three
+            // programmes therefore raised three objectives of the same type,
+            // each of which outscored everything else, and they filled all two
+            // or three slots between them.
+            //
+            // Measured (B1A, 8 seeds × 360 months): of 7,029 country-months
+            // where a live `AssertClaim` lost the budget cut, `PreemptProgramme`
+            // won 6,340 — 90.2% — and only 26 claims survived the cut in 240
+            // world-years. The objective was not outranked by a government
+            // weighing different priorities; it was crowded out by repeated
+            // copies of one priority.
+            //
+            // The fix is to the *selection*, not the scoring: nothing here
+            // changes what a candidate is worth, how many objectives a
+            // government may hold, or what it knows about foreign programmes.
+            // The strongest pre-emption still takes its slot — the list is
+            // already sorted, so the first one reached is the highest-priority
+            // one — and the slots it used to duplicate into are returned to the
+            // ladder beneath it.
             int keep = ActionBudget(state.difficulty);
             var kept = new List<AIObjective>();
-            for (int i = 0; i < Math.Min(keep, candidates.Count); i++)
-                kept.Add(candidates[i]);
+            bool preemptionTaken = false;
+            for (int i = 0; i < candidates.Count && kept.Count < keep; i++)
+            {
+                var candidate = candidates[i];
+                if (candidate.type == AIObjectiveType.PreemptProgramme)
+                {
+                    if (preemptionTaken) continue;
+                    preemptionTaken = true;
+                }
+                kept.Add(candidate);
+            }
             ai.objectives = kept;
         }
 
