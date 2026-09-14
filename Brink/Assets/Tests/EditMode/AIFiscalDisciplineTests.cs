@@ -130,6 +130,18 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void PlayerResearchEligibilityIgnoresAiFiscalGate()
+        {
+            var player = state.PlayerCountry;
+            var definition = FreshBaseCapability(player);
+            MakeSound(player, 180f);
+            player.fiscal.creditStanding = 5f;
+            MeetResearchRequirements(player, definition);
+
+            Assert.IsTrue(TechnologySystem.CanResearch(state, player, definition.id, out string reason), reason);
+        }
+
+        [Test]
         public void ActorGenericResearchRefusesFreshAiProgrammeAtCeiling()
         {
             var definition = FreshBaseCapability(ai);
