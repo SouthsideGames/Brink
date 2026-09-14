@@ -994,6 +994,33 @@ namespace Brink.Tests
                 "a restrictive posture suppresses the expression of unrest");
         }
 
+        /// <summary>
+        /// Provenance ids that are legitimate operator authorship without being
+        /// an executed command.
+        ///
+        /// **"CrisisLapsed" is the operator's responsibility for a decision they
+        /// did not take.** A Crisis Turn left unanswered is still the operator's
+        /// — §28.2 reserves FLASH precisely for a turn that cannot be taken
+        /// without deciding, and declining to decide is one of the ways it can
+        /// end. So there is no honest `GameController` command to name: the verb
+        /// that exists is `ResolveCrisis`, and stamping that would claim the
+        /// operator answered a crisis they let lapse. Dropping the id instead
+        /// would cost the debrief the one thing it is for here, since
+        /// `MonthlyDebriefSystem` requires an id before it will call a
+        /// consequence the player's — a lapse would read as world-driven and the
+        /// operator would never learn that their silence cost them approval.
+        ///
+        /// **An exact-match set, deliberately.** No prefix or suffix rule, no
+        /// "contains", nothing a future string could satisfy by accident: an id
+        /// earns its place here only by being written down here. Adding one is a
+        /// design decision about operator responsibility, which is why it should
+        /// cost a line in this file and a reviewer's attention.
+        /// </summary>
+        static readonly HashSet<string> OperatorNonActionProvenance = new HashSet<string>
+        {
+            "CrisisLapsed",
+        };
+
         [Test]
         public void ProvenanceIsAStableVerbIdNotADisplayString()
         {
@@ -1005,12 +1032,37 @@ namespace Brink.Tests
             {
                 if (string.IsNullOrEmpty(c.sourceActionId)) continue;
 
-                // `nameof` on a real verb, so renaming the verb breaks the build
-                // here rather than orphaning the provenance — the ActionCatalog
-                // discipline, reused.
+                // An operator non-action carries no command to name. Everything
+                // else must still be `nameof` on a real verb, so renaming the
+                // verb breaks the build here rather than orphaning the
+                // provenance — the ActionCatalog discipline, reused.
+                if (OperatorNonActionProvenance.Contains(c.sourceActionId)) continue;
+
                 Assert.IsNotNull(
                     typeof(GameController).GetMethod(c.sourceActionId),
                     $"provenance '{c.sourceActionId}' names no GameController verb");
+            }
+        }
+
+        /// <summary>
+        /// The exemption above must stay an exemption: every id in it has to be
+        /// a real operator non-action, not a verb somebody forgot to rename and
+        /// not a display string that slipped past the guard by being listed.
+        /// </summary>
+        [Test]
+        public void TheOperatorNonActionExemptionIsNarrowAndDeliberate()
+        {
+            Assert.AreEqual(1, OperatorNonActionProvenance.Count,
+                "the non-action exemption grew; each entry is a decision about operator "
+                + "responsibility and must be argued for in the comment above it");
+            Assert.Contains("CrisisLapsed", new List<string>(OperatorNonActionProvenance));
+
+            foreach (string id in OperatorNonActionProvenance)
+            {
+                Assert.IsNull(typeof(GameController).GetMethod(id),
+                    $"'{id}' names a real GameController verb, so it belongs under the "
+                    + "ordinary rule rather than the exemption");
+                Assert.IsFalse(string.IsNullOrWhiteSpace(id), "an empty exemption would match nothing");
             }
         }
 
