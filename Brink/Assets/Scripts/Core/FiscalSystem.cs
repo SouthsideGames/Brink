@@ -574,7 +574,16 @@ namespace Brink.Core
             return true;
         }
 
-        public static bool IssueSovereignDebtBy(GameState state, string actorId)
+        /// <param name="category">
+        /// Authorship. Defaults to <see cref="CausalCategory.Fiscal"/>: this verb
+        /// is reached autonomously by `AISystem.ManageTheBooks`, which borrows
+        /// before a government's lights go out. Only an explicit operator wrapper
+        /// may raise it to <see cref="CausalCategory.PlayerDecision"/>.
+        /// </param>
+        /// <param name="sourceActionId">The operator action that ordered it, or null.</param>
+        public static bool IssueSovereignDebtBy(GameState state, string actorId,
+            CausalCategory category = CausalCategory.Fiscal,
+            string sourceActionId = null)
         {
             if (!CanIssueDebt(state, actorId, out _)) return false;
             var country = state.FindCountry(actorId);
@@ -583,9 +592,9 @@ namespace Brink.Core
             country.resources.treasury += raised;
             Causal.Apply(state, country.id, CausalMetric.SovereignDebt,
                 CausalReason.BondIssue, ref country.fiscal.sovereignDebt,
-                country.fiscal.sovereignDebt + raised, CausalCategory.Fiscal,
+                country.fiscal.sovereignDebt + raised, category,
                 CausalKind.Direct, CausalVisibility.Known, null,
-                nameof(GameController.IssueSovereignDebt));
+                sourceActionId);
 
             // Issuing is itself a signal. The standing falls now rather than
             // only through next month's ratio, so a government cannot raise four
@@ -681,7 +690,23 @@ namespace Brink.Core
         /// everyone who has to price this government's paper — plus the trading
         /// partners who were holding it.
         /// </summary>
-        public static bool RestructureDebtBy(GameState state, string actorId)
+        /// <param name="category">
+        /// Authorship of this write-down. Defaults to <see cref="CausalCategory.Fiscal"/>
+        /// because this verb is actor-generic: the AI's own books
+        /// (`AISystem.ManageTheBooks`) and the finance ministry running itself
+        /// (`SteadyTheBooks`, reached for the player's country through
+        /// `CabinetSystem`) both reach it. Only an explicit operator wrapper may
+        /// raise it to <see cref="CausalCategory.PlayerDecision"/>.
+        /// </param>
+        /// <param name="sourceActionId">
+        /// The operator action that ordered it, or null when nobody did. It used
+        /// to be stamped with `nameof(GameController.RestructureDebt)` here, which
+        /// told the monthly debrief that every autonomous write-down in the world
+        /// was an order the player had given.
+        /// </param>
+        public static bool RestructureDebtBy(GameState state, string actorId,
+            CausalCategory category = CausalCategory.Fiscal,
+            string sourceActionId = null)
         {
             var country = state.FindCountry(actorId);
             if (country == null || country.fiscal.sovereignDebt <= 0f) return false;
@@ -693,8 +718,8 @@ namespace Brink.Core
             // player and the AI alike; recording itself is player-only as ever.
             Causal.Apply(state, actorId, CausalMetric.SovereignDebt,
                 CausalReason.DebtRestructured, ref country.fiscal.sovereignDebt,
-                country.fiscal.sovereignDebt * 0.5f, CausalCategory.Fiscal,
-                sourceActionId: nameof(GameController.RestructureDebt));
+                country.fiscal.sovereignDebt * 0.5f, category,
+                sourceActionId: sourceActionId);
             country.fiscal.creditStanding = Clamp(country.fiscal.creditStanding - 30f, 0f, 100f);
             country.fiscal.restructuringMemoryMonths = RestructuringMemoryMonths;
             country.economy.confidence = Clamp(country.economy.confidence - 14f, 0f, 100f);
