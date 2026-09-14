@@ -63,6 +63,15 @@ namespace Brink.Tests
             return war;
         }
 
+        /// <summary>A war between the pair, long enough ago to have been outlived.</summary>
+        void OldWar(string a, string b)
+        {
+            var war = OpenWar(a, b);
+            war.resolved = true;
+            war.monthsActive = 6;
+            war.startDate = Rewind(state.date, EconomySystem.SanctionReviewMonths + 120);
+        }
+
         static bool Stands(GameState s, Sanction x)
             => EconomySystem.SanctionCauseStands(s, x.senderId, x.targetId);
 
@@ -138,16 +147,20 @@ namespace Brink.Tests
 
         // ---------- 4. generic rivalry cannot make a regime immortal ----------
 
+        /// <summary>
+        /// A standing grievance with no war behind it is allowed to stand: it is
+        /// part of what keeps a bloc's rivals cold, and lifting it let a
+        /// befriend-everyone operator reach 15/15 warm friendships.
+        /// </summary>
         [Test]
-        public void GenericRivalryAloneCannotMakeARegimeImmortal()
+        public void APurelyColdPairWithNoWarBehindItKeepsItsRegime()
         {
-            // A pair that never fought at all, permanently cold — the 69% case.
             MakeCold("CHN", "IND");
-            var s = Impose("CHN", "IND", "RIVALRY", age: EconomySystem.SanctionReviewMonths);
+            var s = Impose("CHN", "IND", "RIVALRY", age: 300);
 
             Assert.IsTrue(Stands(state, s), "the pair is cold, so the cause stands");
-            Assert.IsTrue(EconomySystem.RivalryRegimeHasOutlivedItsWar(state, s),
-                "coldness alone must not keep a regime in force indefinitely");
+            Assert.IsFalse(EconomySystem.RivalryRegimeHasOutlivedItsWar(state, s),
+                "a regime with no war behind it has nothing to outlive");
         }
 
         [Test]
@@ -216,6 +229,7 @@ namespace Brink.Tests
         {
             MakeCold("CHN", "IND");
             var s = Impose("CHN", "IND", "RIVALRY", age: 240);
+            OldWar("CHN", "IND");
             float before = EconomySystem.SanctionPressureOn(state, "IND");
             Assert.Greater(before, 0f, "the fixture applied no pressure, so this proves nothing");
 
@@ -230,6 +244,7 @@ namespace Brink.Tests
         {
             MakeCold("CHN", "IND");
             var s = Impose("CHN", "IND", "RIVALRY", age: 240);
+            OldWar("CHN", "IND");
 
             int sequence = state.actionSequence;
             string sender = s.senderId, target = s.targetId;

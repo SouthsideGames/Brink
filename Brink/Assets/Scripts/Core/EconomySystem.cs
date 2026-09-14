@@ -1511,17 +1511,34 @@ namespace Brink.Core
             if (live != null && !live.resolved
                 && live.escalation >= EscalationState.LimitedConflict) return false;
 
-            // And so does a war they have only just stopped fighting.
+            // **There has to have been a war for the regime to have outlived.**
+            //
+            // The first version of this rule let any old rivalry regime lapse,
+            // including the 69% imposed on pairs that never fought at all. That
+            // reaches further than the pathology it was written for, and it
+            // breaks something the world-heat work paid for: standing measures
+            // are part of what keeps a bloc's rivals cold, and lifting them let
+            // a befriend-everyone operator reach 15/15 warm friendships where
+            // `UniversalFriendshipIsStructurallyImpossible` requires at most 13.
+            // Permanent hostility with no war behind it is a standing grievance,
+            // and a standing grievance is allowed to stand.
+            //
+            // So the rule is exactly what its name says: a regime may outlive
+            // *its war*, and a regime with no war behind it has nothing to
+            // outlive.
+            bool foughtLongEnoughAgo = false;
             foreach (var confrontation in state.confrontations)
             {
                 if (!confrontation.Involves(sanction.senderId)) continue;
                 if (!confrontation.Involves(sanction.targetId)) continue;
                 int endedMonthsAgo = state.date.MonthsSince(confrontation.startDate)
                                      - confrontation.monthsActive;
+                // A war they have only just stopped fighting still holds it.
                 if (endedMonthsAgo < SanctionReviewMonths) return false;
+                foughtLongEnoughAgo = true;
             }
 
-            return true;
+            return foughtLongEnoughAgo;
         }
 
         static float Approach(float current, float target, float rate) => current + (target - current) * rate;
