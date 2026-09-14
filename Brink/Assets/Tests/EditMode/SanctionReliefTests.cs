@@ -269,7 +269,12 @@ namespace Brink.Tests
 
         // ---------- the rule actually fires in a real world ----------
 
-        [Test]
+        // Thirty years of the full pipeline. The horizon is the claim — a rule
+        // about regimes outliving their wars cannot be shown in a short run — so
+        // the timeout is raised rather than the run shortened, on the same
+        // reasoning as the other long-run fixtures. Unity's editor session slows
+        // as a partition fills, so the 180s default is not a useful bound here.
+        [Test, Timeout(600000)]
         public void OverALongRunTheWorldNoLongerAccumulatesImmortalRivalryRegimes()
         {
             var turns = new TurnManager(state);
