@@ -49,16 +49,6 @@ namespace Brink.Core
             if (country.technology.Has(capabilityId)) { reason = "Already held."; return false; }
             if (country.technology.IsResearching(capabilityId)) { reason = "Already under way."; return false; }
 
-            // C4 fiscal discipline is an AI commitment rule, not a player rule.
-            // CanResearch is only used to begin a new programme, so enforcing it
-            // here catches every AI research entry point without touching work
-            // already in progress. The helper explicitly exempts the player.
-            if (!AIFiscalDiscipline.CanStartNewDiscretionaryProgramme(state, country))
-            {
-                reason = "The government will not add a new programme while its finances are stressed.";
-                return false;
-            }
-
             if (country.technology.programs.Count >= MaxPrograms)
             {
                 reason = "The research base cannot carry another programme.";
@@ -136,6 +126,13 @@ namespace Brink.Core
         {
             var actor = state.FindCountry(actorId);
             if (actor == null) return false;
+
+            // C4 belongs at the AI commitment boundary, not in CanResearch.
+            // The shared eligibility rule therefore remains exactly the same for
+            // the player while actor-generic AI starts acquire the fiscal guard.
+            if (!actor.isPlayer && !AIFiscalDiscipline.CanStartNewDiscretionaryProgramme(state, actor))
+                return false;
+
             if (!CanResearch(state, actor, capabilityId, out _)) return false;
 
             var definition = CapabilityCatalog.Find(capabilityId);
@@ -370,6 +367,7 @@ namespace Brink.Core
         {
             if (country.isPlayer) return;
             if (country.technology.programs.Count >= MaxPrograms) return;
+            if (!AIFiscalDiscipline.CanStartNewDiscretionaryProgramme(state, country)) return;
             if (rng.NextDouble() >= 0.06) return;
 
             var priority = country.government.leader.priority;
