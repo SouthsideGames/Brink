@@ -149,6 +149,38 @@ namespace Brink.Tests
         {
             // The reported playthrough, replayed exactly: outreach to the
             // coldest every month, treaties to the warm, forever.
+            //
+            // **What this asserts is the rule, not a headcount (2026-09).** It
+            // used to require at most 13 warm friendships at month 240. That
+            // tally sits on a knife-edge: adding one unit of treasury to the AI
+            // states in a single month flipped it between 13 and 14 in 4 of 13
+            // sampled base trajectories, so it passed or failed on which
+            // trajectory a runtime happened to follow, not on whether the
+            // structure worked. It also looked at the wrong moment: measured
+            // across 28 base and C4 trajectories, this bot holds all fifteen for
+            // stretches of 38–109 months in the middle of the run, and the rule
+            // that breaks the map apart is what the old end-of-run count was
+            // indirectly — and fragilely — observing.
+            //
+            // The structure is the friend-of-my-enemy ceiling
+            // (`DiplomacySystem.RivalGravity`, spec 04 §8a): committed alignment
+            // with a state's genuine enemy caps the relationship at
+            // 100 − gravity × 85 and closes on that cap every month. So:
+            //   1. a friendship under committed rival gravity cannot persist —
+            //      at 0.5 the ceiling is 57.5, below the friendship line, and no
+            //      partner may stay a warm friend under it for half a year
+            //      (measured worst case: 3 consecutive months);
+            //   2. that gravity genuinely engages against this playthrough, or
+            //      rule 1 is vacuous (measured: 76–173 months of 240);
+            //   3. universal friendship is not a held outcome — it does not
+            //      survive into the final two years (measured: last seen by
+            //      month 181);
+            //   4. the world refuses treaties by structure, not by pacing.
+            const float CommittedRivalGravity = 0.5f;
+            const int MonthsAFriendshipMaySurviveIt = 6;
+            const int MonthsGravityMustEngage = 60;
+            const int FinalMonthsWithoutUniversalFriendship = 24;
+
             var state = WorldFactory.CreateDebugWorld(seed: 1212);
             var turns = new TurnManager(state);
             SimulationPipeline.Wire(turns, state);
@@ -156,6 +188,9 @@ namespace Brink.Tests
                 { TreatyCommitment.NonAggression, TreatyCommitment.MutualDefense };
 
             int rejections = 0;
+            var survivingUnderGravity = new Dictionary<string, int>();
+            int longestSurvival = 0, monthsGravityEngaged = 0, lastUniversalMonth = 0;
+            string longestSurvivor = "none";
             for (int m = 0; m < 240; m++)
             {
                 while (state.HasOpenCrisis)
@@ -182,18 +217,46 @@ namespace Brink.Tests
                 }
 
                 turns.EndMonth();
+
+                int partners = 0, friends = 0;
+                bool engaged = false;
+                foreach (var r in state.relationships)
+                {
+                    if (!r.Involves(state.playerCountryId)) continue;
+                    string other = r.PartnerOf(state.playerCountryId);
+                    bool friend = r.relations > 65f && r.trust > 50f;
+                    float gravity = DiplomacySystem.RivalGravity(state, state.playerCountryId, other);
+                    partners++;
+                    if (friend) friends++;
+                    if (gravity >= CommittedRivalGravity) engaged = true;
+
+                    survivingUnderGravity.TryGetValue(other, out int survived);
+                    survived = friend && gravity >= CommittedRivalGravity ? survived + 1 : 0;
+                    survivingUnderGravity[other] = survived;
+                    if (survived > longestSurvival)
+                    {
+                        longestSurvival = survived;
+                        longestSurvivor = $"{other} (month {m + 1}, relations {r.relations:F1}, gravity {gravity:F2})";
+                    }
+                }
+                if (engaged) monthsGravityEngaged++;
+                if (partners > 0 && friends == partners) lastUniversalMonth = m + 1;
             }
 
-            int friends = 0;
-            foreach (var r in state.relationships)
-                if (r.Involves(state.playerCountryId) && r.relations > 65f && r.trust > 50f)
-                    friends++;
-
-            Assert.LessOrEqual(friends, 13,
-                $"Twenty years of doing nothing but diplomacy produced {friends}/15 warm " +
-                "friendships. Universal friendship is supposed to be structurally impossible — " +
-                "the friend of my enemy cannot also be my friend — or a diplomatic " +
-                "playthrough solves itself and the game ends in boredom, as reported.");
+            Assert.LessOrEqual(longestSurvival, MonthsAFriendshipMaySurviveIt,
+                $"A warm friendship survived {longestSurvival} consecutive months under committed rival " +
+                $"gravity ≥ {CommittedRivalGravity} — {longestSurvivor}. The friend of my enemy cannot also be " +
+                "my friend: the ceiling is supposed to pull that relationship below the friendship line within " +
+                "months, or bloc politics decorates the thing it exists to prevent.");
+            Assert.GreaterOrEqual(monthsGravityEngaged, MonthsGravityMustEngage,
+                $"Bloc gravity reached {CommittedRivalGravity} against this playthrough in only {monthsGravityEngaged} " +
+                "of 240 months. Nothing structural is resisting universal friendship — the befriend-everyone " +
+                "bot is simply meeting a world with no committed sides.");
+            Assert.LessOrEqual(lastUniversalMonth, 240 - FinalMonthsWithoutUniversalFriendship,
+                $"All {state.relationships.FindAll(r => r.Involves(state.playerCountryId)).Count} states were still " +
+                $"warm friends at month {lastUniversalMonth}. Universal friendship is supposed to be structurally " +
+                "impossible to hold — or a diplomatic playthrough solves itself and the game ends in boredom, " +
+                "as reported.");
             Assert.Greater(rejections, 30,
                 "The world never refused anything — friendship is being resisted by " +
                 "accident of pacing rather than by structure.");
