@@ -89,6 +89,17 @@ namespace Brink.Core
         /// <summary>Whether a state could even begin preparing this instrument.</summary>
         public static bool CanPrepare(GameState state, CountryState country, EndgameType type, out string reason)
         {
+            // Starting a fresh strategic preparation is the second long-horizon
+            // commitment covered by C4. Work already under way is allowed to
+            // continue; a spent instrument sits back at zero and therefore needs
+            // a fresh fiscal authorization before it can be prepared again.
+            if (country.endgames.ProgressFor(type) <= 0f
+                && !AIFiscalDiscipline.CanStartNewDiscretionaryProgramme(state, country))
+            {
+                reason = "The government will not add a new strategic programme while its finances are stressed.";
+                return false;
+            }
+
             string capability = RequiredCapability(type);
             if (!TechnologySystem.Has(country, capability))
             {

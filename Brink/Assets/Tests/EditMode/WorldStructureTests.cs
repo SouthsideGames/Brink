@@ -924,11 +924,79 @@ namespace Brink.Tests
         public void AHealthyStateDoesNotFracture()
         {
             // Fragmentation must be the end of a story, not a dice roll.
-            var world = Run(1212, 240);
-            foreach (var country in world.countries)
-                Assert.IsFalse(country.id.EndsWith("_S", StringComparison.Ordinal)
-                               && country.nationalUnity > 60f,
-                    "A state fractured without ever having failed at anything.");
+            //
+            // **Judged on the parent at the moment it split, never on the
+            // successor afterwards.** This used to fail the run whenever a
+            // breakaway read national unity above 60 at month 240. That is a
+            // fact about the *successor*, which is born with a unity of its own
+            // (~66, the dissenters who left) — so it said nothing about whether
+            // the parent had failed, and it failed on any legitimate collapse
+            // late in the window. Measured on the C4 branch in Unity: India
+            // split at month 232 after eighteen months of civil conflict, unity
+            // 12.3, stability 0, market index 8, treasury −5,475 — the end of
+            // exactly the story this test exists to require — and the assertion
+            // reported "a state fractured without ever having failed at
+            // anything" because its successor still read 63.3 eight months on.
+            // The parent's conflict flags are reset by the split itself, so the
+            // parent is snapshotted before each month is resolved.
+            const float HealthyUnity = 60f;   // the health line this test has always used
+
+            // 1. The rule itself. A state at peace cannot be split, and neither
+            //    can one in a long civil conflict that is still holding together.
+            var calm = state.FindCountry("NGA");
+            Assert.IsFalse(calm.government.inCivilConflict, "fixture: NGA should start at peace");
+            Assert.IsNull(SecessionSystem.Fracture(state, calm, new System.Random(7)),
+                "A state at peace was split — fragmentation has become a dice roll.");
+
+            calm.government.inCivilConflict = true;
+            calm.government.civilConflictMonthsElapsed = SecessionSystem.MinimumUnrecoverableMonths * 3;
+            calm.government.militaryLoyalty = SecessionSystem.FractureLoyalty - 10f;
+            calm.nationalUnity = HealthyUnity + 10f;
+            Assert.IsNull(SecessionSystem.Fracture(state, calm, new System.Random(7)),
+                "A state still holding together (unity above the health line) was split by a civil conflict it was surviving.");
+
+            // 2. The world. Every split that twenty years produces must come out
+            //    of a parent that had already failed when the month began.
+            var before = new Dictionary<string, (bool civil, int months, float unity, float loyalty, float stability)>();
+            var known = new HashSet<string>();
+            int splits = 0;
+
+            void JudgeNewSuccessors(GameState world)
+            {
+                foreach (var country in world.countries)
+                {
+                    if (!known.Add(country.id)) continue;
+                    if (!country.id.EndsWith("_S", StringComparison.Ordinal)) continue;
+
+                    string parentId = country.id.Substring(0, country.id.Length - 2);
+                    Assert.IsTrue(before.TryGetValue(parentId, out var parent),
+                        $"{country.id} appeared with no snapshot of its parent {parentId}");
+                    splits++;
+
+                    bool failing = parent.civil
+                                   && parent.months >= SecessionSystem.MinimumUnrecoverableMonths - 1
+                                   && parent.unity <= HealthyUnity;
+                    Assert.IsTrue(failing,
+                        $"{parentId} fractured into {country.id} without having failed at anything: when the month began it was "
+                        + $"in civil conflict {parent.civil} for {parent.months} months, unity {parent.unity:F1}, "
+                        + $"military loyalty {parent.loyalty:F1}, stability {parent.stability:F1}.");
+                }
+            }
+
+            var result = Run(1212, 240, (world, month) =>
+            {
+                JudgeNewSuccessors(world);
+                before.Clear();
+                foreach (var country in world.countries)
+                    before[country.id] = (country.government.inCivilConflict,
+                        country.government.civilConflictMonthsElapsed, country.nationalUnity,
+                        country.government.militaryLoyalty, country.stability);
+            });
+            JudgeNewSuccessors(result);
+
+            // Zero splits is a legitimate twenty years; part 1 keeps the test from
+            // being vacuous when the trajectory produces none.
+            TestContext.WriteLine($"splits judged in the twenty-year world: {splits}");
         }
 
         [Test]
