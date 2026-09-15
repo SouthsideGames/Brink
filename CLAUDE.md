@@ -2943,6 +2943,73 @@ for every figure in the table above.
       file already records once, in `SimulationPipeline`. **Unity remains the
       authority; the README already says so and now there is a measured reason.**
 
+- [ ] **C5B — strategic containment. Implemented and Mac-verified; Unity
+      certification outstanding.** Branch `chatgpt/c5b-strategic-containment`,
+      built on the C5 recovery head. **Not merged.**
+      C5 priced the post-war exit entirely in money, so a distressed government
+      returned the dearest thing it held and asked nothing about what returning
+      it would restore. Measured across eight seeds that produced a standing
+      cycle: a state attacks, its victim's guarantors enter defensively, the
+      guarantors take ground from it, the war ends, their books turn, C5 hands
+      the ground back, and the same state attacks the same victim again. Seed
+      1212 ran it four times in thirty years — 17 wars under C4, **44** under C5.
+      **The diagnostic's one load-bearing finding: the signal is provenance, not
+      hostility.** Of 113 C5 relinquishments, 31 were followed inside five years
+      by the owner attacking the holder or the ally the holder entered to defend
+      — and **30 of the 31 were the second kind**. The state giving the ground
+      back is the *guarantor*, not the victim. "Did they ever attack me" caught
+      **one case in thirty-one** (precision 0.00); defensive-entry provenance
+      caught 30 (precision 0.68, recall 0.97).
+      Generic hostility is not merely weaker but structurally unusable: the
+      **median relations at the moment of relinquishment is 1 of 100**, so a
+      threshold fires on nearly the whole population and reaches zero dangerous
+      releases only by permitting 17 of 113 — C4 wearing a gate.
+      `AllianceSystem.RecentlyAttacked` (the directional counterpart of the
+      direction-blind `RecentlyAtWar`) + `AISystem.ContainmentHolds`, called
+      inside `ConsiderRelinquishment`. Two files, +144 lines, insertions only.
+      **`ContainmentWindowMonths = 60`, chosen by measurement**, not because it
+      matches `RestructuringMemoryMonths`. The 36-month challenger differed by
+      exactly one line and was worse on containment *and* no better on
+      occupation:
+
+      | | C4 | C5 | C5B-36 | **C5B-60** |
+      |---|---|---|---|---|
+      | wars/world | 20.12 | 22.88 | 22.50 | **20.50** |
+      | confrontation-months | 566.0 | 617.1 | 580.6 | **557.0** |
+      | alliance fronts | 10.25 | 12.25 | 12.62 | **10.75** |
+      | exit-less holdings | 8.62 | 0.00 | 0.00 | **0.12** |
+      | occupied at end | 9.00 | 0.75 | 1.00 | **0.75** |
+      | repeat restructuring | 11.12 | 5.00 | 4.50 | **5.88** |
+      | dangerous releases/world | — | 3.88 | 1.38 | **0.75** |
+      | seed 1212 wars | 17 | 44 | 31 | **23** |
+
+      C5B-60 lands essentially at C4's strategic stability *and* essentially at
+      C5's fiscal outcome, which was the whole target. Seed 1212's Turkish
+      relinquishments fall 12 → 3, all three harmless, **zero recaptures**.
+      **Containment must expire and the measurement says so.** A *permanent*
+      version of the identical predicate was tested and **failed both halves** —
+      4.25 exit-less holdings a world *and* it did not break the cycle (22.25
+      wars vs C5's 22.88). The expiring window is doing the work, not the
+      containment idea. Never add a standing "former aggressor" flag.
+      Gate A (owner initiated the producing confrontation) was **rejected on
+      measurement**: in an obligation entry the *holder* opens its own front, so
+      the predicate selects precisely the non-obligation — harmless — cases. It
+      caught 0 of 12 Turkish releases in the seed it was proposed for. Gate C
+      (adding a strength condition) measured **bit-identical** to Gate B; the
+      condition fires on 111 of 113.
+      **AI judgement only.** `TerritorySystem.CanRelinquish` is untouched and the
+      operator may always hand ground back; a gate that bound the player would
+      make one government's assessment a law of territory. Specs 06 §6c, 04.
+      **Watch `plyrLost`**: 2.00 (C4) → 2.38 (C5) → **2.62** (C5B-60). Mildly
+      worse than both and not hidden.
+      **Outstanding before merge:** the authoritative Unity/Windows eight-seed
+      acceptance and full suite. Everything above is the dotnet harness, which
+      this file already records as unsound for exact-boundary arithmetic — in
+      particular the three C4 fiscal-gate tests (distressed research and
+      strategic-preparation starts) fail there for the float reason at *every*
+      commit including the clean baseline, so **the C4 guards are unverified on
+      this platform and must be checked in Unity.**
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

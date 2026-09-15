@@ -625,3 +625,23 @@ resists it by sanctioning it for other reasons.
 - Basing is granted automatically to the strongest eligible partner rather than
   negotiated. A host that would rather invite the *second* strongest — precisely
   because the strongest frightens it — has no way to say so.
+
+
+## Appendix — `AllianceSystem.RecentlyAttacked` (C5B)
+
+`RecentlyAtWar(state, countryId)` answers "has this state lately been *in* a
+war". It is involvement-scoped (`past.Involves(id)`) and therefore **blind to
+direction**: it cannot tell the attacker from the attacked.
+
+`RecentlyAttacked(state, aggressorId, victimId, windowMonths)` is its directional
+counterpart — a resolved confrontation with `initiatorId == aggressorId` and
+`defenderId == victimId` that ended inside the window, measured with the same
+`MonthsSince(startDate) - monthsActive` idiom.
+
+Who started it is the whole question for anything reasoning about aggression, and
+it was the one thing the existing helper could not answer. Reads nothing but
+retained confrontation history — no relationship, no rivalry, no threat, no
+stored state, **no save-schema change** — because `GameState.confrontations`
+keeps resolved wars for the life of the save.
+
+Read by [spec 06 §6c](06-AI.md).
