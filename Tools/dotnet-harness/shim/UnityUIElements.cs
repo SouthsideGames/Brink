@@ -373,6 +373,54 @@ namespace UnityEngine.UIElements
         public SliderDirection direction { get; set; }
     }
 
+    // Input fields used by StrategistView and OperationPlanningPanel. Absent
+    // until now, which is why the runtime assembly would not build outside
+    // Unity at all — the harness README's whole claim. Same shape as Toggle and
+    // Slider above: enough surface for the views to compile and be walked, no
+    // behaviour, because nothing in the suite drives them.
+    public class TextField : VisualElement
+    {
+        public string label { get; set; } = "";
+        public string value { get; set; } = "";
+        public bool isReadOnly { get; set; }
+        public bool multiline { get; set; }
+        public TextField() { }
+        public TextField(string label) { this.label = label; }
+        public void RegisterValueChangedCallback(EventCallback<ChangeEvent<string>> cb) { }
+        public void SetValueWithoutNotify(string v) { value = v; }
+    }
+
+    public class FloatField : VisualElement
+    {
+        public string label { get; set; } = "";
+        public float value { get; set; }
+        public bool isReadOnly { get; set; }
+        public FloatField() { }
+        public FloatField(string label) { this.label = label; }
+        public void RegisterValueChangedCallback(EventCallback<ChangeEvent<float>> cb) { }
+        public void SetValueWithoutNotify(float v) { value = v; }
+    }
+
+    public class DropdownField : VisualElement
+    {
+        public string label { get; set; } = "";
+        public List<string> choices { get; set; } = new List<string>();
+        public int index { get; set; }
+        public string value { get; set; } = "";
+        public DropdownField() { }
+        public DropdownField(string label) { this.label = label; }
+        public DropdownField(string label, List<string> choices, int defaultIndex)
+        {
+            this.label = label;
+            this.choices = choices ?? new List<string>();
+            index = defaultIndex;
+            if (this.choices.Count > 0 && defaultIndex >= 0 && defaultIndex < this.choices.Count)
+                value = this.choices[defaultIndex];
+        }
+        public void RegisterValueChangedCallback(EventCallback<ChangeEvent<string>> cb) { }
+        public void SetValueWithoutNotify(string v) { value = v; }
+    }
+
     public enum ScrollerVisibility { Auto, AlwaysVisible, Hidden }
 
     public enum SliderDirection { Horizontal, Vertical }
