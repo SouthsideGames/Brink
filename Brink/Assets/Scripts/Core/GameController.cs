@@ -1052,6 +1052,38 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Hand occupied ground back to the state it was taken from (GDD §16).
+        ///
+        /// The exit a post-war occupation never had. Note what is *not* here:
+        /// nothing calls this on the operator's behalf. A garrison the player
+        /// chose to leave in place stays there, however much it costs — the
+        /// government the AI runs makes this decision for itself, and the one
+        /// the operator runs does not.
+        /// </summary>
+        public bool RelinquishLocation(string locationId)
+        {
+            if (!MayCommand(Data.Pillar.Military)) return false;
+
+            if (!TerritorySystem.CanRelinquish(State, State.playerCountryId, locationId,
+                    out string reason))
+            {
+                GameLog.Warn("TERRITORY", reason);
+                return false;
+            }
+
+            if (!Turns.SpendCommandPoints(RelinquishCost, "Relinquish occupied ground"))
+                return false;
+
+            bool ok = TerritorySystem.RelinquishBy(State, State.playerCountryId, locationId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        /// <summary>Command points to give ground up. Ordering a withdrawal is cheap; deciding to is not.</summary>
+        public const int RelinquishCost = 1;
+
         public bool SetDoctrine(Data.MilitaryDoctrine doctrine)
         {
             if (!MayCommand(Data.Pillar.Military)) return false;
