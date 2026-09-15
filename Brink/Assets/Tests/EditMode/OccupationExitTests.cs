@@ -615,6 +615,269 @@ namespace Brink.Tests
                     "the player has an AIState, so the isolation rests on the guard alone");
         }
 
+        // ---------- C5B: strategic containment ----------
+
+        /// <summary>
+        /// A war the guarantor opened by honouring a guarantee: the owner
+        /// attacked `ally`, and `holder` entered on the ally's behalf. Returns
+        /// the holder's own front, which is the "producing confrontation".
+        /// </summary>
+        Confrontation DefensiveEntry(string holderId, string ownerId, string allyId,
+            int monthsAgo, int ranFor = 12)
+        {
+            var root = EndedWar(ownerId, allyId, monthsAgo, ranFor);
+            var front = EndedWar(holderId, ownerId, monthsAgo, ranFor);
+            front.obligationRootId = root.id;
+            front.obligationOnBehalfOfId = allyId;
+
+            Assert.IsTrue(front.IsObligationEntry, "the fixture did not build an obligation entry");
+            Assert.IsTrue(AllianceSystem.IsDefensiveEntry(state, front),
+                "the fixture's entry is not defensive, which is the thing under test");
+            return front;
+        }
+
+        /// <summary>The same shape, but the ally was the aggressor — an offensive entry.</summary>
+        Confrontation OffensiveEntry(string holderId, string ownerId, string allyId,
+            int monthsAgo, int ranFor = 12)
+        {
+            var root = EndedWar(allyId, ownerId, monthsAgo, ranFor);
+            var front = EndedWar(holderId, ownerId, monthsAgo, ranFor);
+            front.obligationRootId = root.id;
+            front.obligationOnBehalfOfId = allyId;
+
+            Assert.IsTrue(front.IsObligationEntry);
+            Assert.IsFalse(AllianceSystem.IsDefensiveEntry(state, front),
+                "the fixture built a defensive entry when it meant to build an offensive one");
+            return front;
+        }
+
+        /// <summary>Set a distressed AI holder up on ground it could otherwise release.</summary>
+        (CountryState holder, CountryState owner, StrategicLocation ground) Occupier(
+            string besides = null)
+        {
+            var holder = OtherCountry();
+            var owner = OtherCountry(besides: holder.id);
+            var ground = Occupy(GroundOf(owner.id), holder.id);
+            KeepThePeace(holder.id, owner.id);
+            Broke(holder);
+            return (holder, owner, ground);
+        }
+
+        [Test]
+        public void RecentDirectAggressionKeepsTheGround()
+        {
+            var (holder, owner, ground) = Occupier();
+            EndedWar(holder.id, owner.id, monthsAgo: 30);
+            // The owner attacked us, inside the window.
+            EndedWar(owner.id, holder.id, monthsAgo: 20);
+            Assert.IsTrue(AllianceSystem.RecentlyAttacked(
+                state, owner.id, holder.id, AISystem.ContainmentWindowMonths),
+                "the fixture failed to record a recent attack on the holder");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(holder.id, ground.ownerId,
+                "gave ground back to a state that attacked us twenty months ago");
+        }
+
+        [Test]
+        public void GroundTakenDefendingAnAllyIsKeptWhileThatAllyIsStillBeingAttacked()
+        {
+            var (holder, owner, ground) = Occupier();
+            var ally = OtherCountry(besides: holder.id);
+            if (ally.id == owner.id) ally = state.countries.Find(
+                c => !c.isPlayer && c.id != holder.id && c.id != owner.id);
+            Assert.NotNull(ally, "the fixture needs a third state");
+
+            DefensiveEntry(holder.id, owner.id, ally.id, monthsAgo: 30);
+            // ...and the owner went back at that same ally inside the window.
+            EndedWar(owner.id, ally.id, monthsAgo: 10);
+
+            Assert.IsFalse(AllianceSystem.RecentlyAttacked(
+                state, owner.id, holder.id, AISystem.ContainmentWindowMonths),
+                "the fixture also created a direct attack, so this proves nothing about the ally clause");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(holder.id, ground.ownerId,
+                "handed back the ground we took defending an ally the owner keeps attacking");
+        }
+
+        [Test]
+        public void GroundTakenJoiningAnAlliesOwnWarIsNotContained()
+        {
+            var (holder, owner, ground) = Occupier();
+            var ally = state.countries.Find(
+                c => !c.isPlayer && c.id != holder.id && c.id != owner.id);
+            Assert.NotNull(ally);
+
+            OffensiveEntry(holder.id, owner.id, ally.id, monthsAgo: 30);
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(owner.id, ground.ownerId,
+                "ground taken joining an ally's war of choice is ordinary conquest "
+                + "and must follow the ordinary rule");
+        }
+
+        [Test]
+        public void OurOwnWarStillFollowsTheOrdinaryRule()
+        {
+            var (holder, owner, ground) = Occupier();
+            EndedWar(holder.id, owner.id, monthsAgo: 30);
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(owner.id, ground.ownerId,
+                "a war we chose ourselves produced no containment claim, so C5 should apply");
+        }
+
+        [Test]
+        public void ContainmentExpires()
+        {
+            var (holder, owner, ground) = Occupier();
+            EndedWar(holder.id, owner.id, monthsAgo: 30);
+            // Older than the window: the record has aged out.
+            EndedWar(owner.id, holder.id,
+                monthsAgo: AISystem.ContainmentWindowMonths + 12);
+
+            Assert.IsFalse(AllianceSystem.RecentlyAttacked(
+                state, owner.id, holder.id, AISystem.ContainmentWindowMonths),
+                "the fixture's aggression is still inside the window");
+            Assert.IsTrue(AllianceSystem.RecentlyAttacked(
+                state, owner.id, holder.id, AISystem.ContainmentWindowMonths + 24),
+                "the fixture recorded no aggression at all, so ageing out proves nothing");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(owner.id, ground.ownerId,
+                "containment never expired — that is a permanent occupation, which C5B refuses");
+        }
+
+        [Test]
+        public void AQuietOriginalOwnerGetsItsGroundBack()
+        {
+            var (holder, owner, ground) = Occupier();
+            EndedWar(holder.id, owner.id, monthsAgo: 30);
+            foreach (var c in state.confrontations)
+                Assert.AreNotEqual(owner.id, c.initiatorId,
+                    "the fixture's owner started a war, so it is not quiet");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(owner.id, ground.ownerId,
+                "a state that has attacked nobody was still refused its territory");
+        }
+
+        [Test]
+        public void TheNeverFoughtPathIsUnchanged()
+        {
+            var (holder, owner, ground) = Occupier();
+            // No confrontation between them at all.
+            foreach (var c in state.confrontations)
+                Assert.IsFalse(c.Involves(holder.id) && c.Involves(owner.id),
+                    "the fixture has a war between the pair, which is not the never-fought path");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(owner.id, ground.ownerId,
+                "C5B changed the never-fought path, which is a separate recovery question");
+        }
+
+        [Test]
+        public void TheOperatorMayStillHandBackContainedGround()
+        {
+            var controller = GameController.Instance;
+            controller.NewGame(1212);
+            state = controller.State;
+            turns = controller.Turns;
+            state.authorizedPillarMask = ~0;
+            state.PlayerCountry.government.emergencyPowers = true;
+            state.commandPoints.current = 10;
+
+            var owner = OtherCountry();
+            var ground = Occupy(GroundOf(owner.id), state.playerCountryId);
+            EndedWar(state.playerCountryId, owner.id, monthsAgo: 30);
+            EndedWar(owner.id, state.playerCountryId, monthsAgo: 6);
+
+            Assert.IsTrue(AllianceSystem.RecentlyAttacked(
+                state, owner.id, state.playerCountryId, AISystem.ContainmentWindowMonths),
+                "the fixture is not contained, so this proves nothing");
+
+            Assert.IsTrue(controller.RelinquishLocation(ground.id),
+                "containment is an AI judgement and must never bind the operator");
+            Assert.AreEqual(owner.id, ground.ownerId);
+        }
+
+        [Test]
+        public void ContainmentDoesNotChangeWhatTheVerbPermits()
+        {
+            var (holder, owner, ground) = Occupier();
+            EndedWar(holder.id, owner.id, monthsAgo: 30);
+            EndedWar(owner.id, holder.id, monthsAgo: 6);
+
+            // The gate is judgement, not permission. `CanRelinquish` must be
+            // blind to it, or the player's screen would start refusing too.
+            Assert.IsTrue(TerritorySystem.CanRelinquish(
+                state, holder.id, ground.id, out string reason), reason);
+
+            AISystem.MonthlyThink(state);
+            Assert.AreEqual(holder.id, ground.ownerId, "the AI should still have kept it");
+        }
+
+        [Test]
+        public void ContainmentIsDeterministic()
+        {
+            string Play(int seed)
+            {
+                var s = WorldFactory.CreateDebugWorld(seed);
+                var t = new TurnManager(s);
+                SimulationPipeline.Wire(t, s);
+                for (int i = 0; i < 90; i++) { s.commandPoints.current = 6; t.EndMonth(); }
+                var sb = new System.Text.StringBuilder();
+                foreach (var l in s.locations) sb.Append(l.id).Append('=').Append(l.ownerId).Append(';');
+                sb.Append("wars=").Append(s.confrontations.Count);
+                return sb.ToString();
+            }
+
+            string a = Play(9090), b = Play(9090);
+            Assert.AreEqual(a, b, "containment introduced non-determinism");
+            // Non-vacuity: two runs that both did nothing are also equal.
+            StringAssert.DoesNotContain("wars=0", a, "the world was inert, so equality proves nothing");
+        }
+
+        [Test]
+        public void RecentAndAgedAggressionProduceDifferentDecisions()
+        {
+            // A/B on one fixture: the ONLY difference is how long ago the owner
+            // attacked. Measuring one arm alone cannot separate containment from
+            // any other reason the ground might not move.
+            bool Released(int aggressionMonthsAgo)
+            {
+                state = WorldFactory.CreateDebugWorld(seed: 1212);
+                state.commandPoints.current = 20;
+                turns = new TurnManager(state);
+
+                var holder = OtherCountry();
+                var owner = OtherCountry(besides: holder.id);
+                var ground = Occupy(GroundOf(owner.id), holder.id);
+                KeepThePeace(holder.id, owner.id);
+                Broke(holder);
+                EndedWar(holder.id, owner.id, monthsAgo: 30);
+                EndedWar(owner.id, holder.id, monthsAgo: aggressionMonthsAgo);
+
+                AISystem.MonthlyThink(state);
+                return ground.ownerId == owner.id;
+            }
+
+            bool recent = Released(12);
+            bool aged = Released(AISystem.ContainmentWindowMonths + 24);
+
+            Assert.IsFalse(recent, "recent aggression did not hold the ground");
+            Assert.IsTrue(aged, "aged-out aggression still held the ground — containment is permanent");
+            Assert.AreNotEqual(recent, aged);
+        }
+
         // ---------- reachability ----------
 
         [Test]
