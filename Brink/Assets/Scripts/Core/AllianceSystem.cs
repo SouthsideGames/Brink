@@ -522,6 +522,45 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// Whether <paramref name="aggressorId"/> opened a war on
+        /// <paramref name="victimId"/> that ended inside the last
+        /// <paramref name="windowMonths"/> months.
+        ///
+        /// **The directional counterpart of <see cref="RecentlyAtWar"/>**, which
+        /// asks only whether a state has lately been *in* a war and cannot tell
+        /// the attacker from the attacked. Who started it is the whole question
+        /// for anything reasoning about aggression, and it was the one thing the
+        /// existing helper could not answer.
+        ///
+        /// Reads nothing but retained confrontation history — no relationship, no
+        /// rivalry, no threat perception, no objectives, and **no stored state**.
+        /// `GameState.confrontations` keeps resolved wars for the life of the
+        /// save, so the whole record is already there; that is what lets this be
+        /// a judgement with no save-schema change behind it.
+        ///
+        /// Uses the established months-since-it-ended idiom, exactly as
+        /// <see cref="RecentlyAtWar"/> does.
+        /// </summary>
+        public static bool RecentlyAttacked(GameState state, string aggressorId,
+            string victimId, int windowMonths)
+        {
+            if (state == null) return false;
+            if (string.IsNullOrEmpty(aggressorId) || string.IsNullOrEmpty(victimId)) return false;
+
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var past = state.confrontations[i];
+                if (!past.resolved) continue;
+                if (past.initiatorId != aggressorId) continue;
+                if (past.defenderId != victimId) continue;
+
+                int since = state.date.MonthsSince(past.startDate) - past.monthsActive;
+                if (since >= 0 && since <= windowMonths) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// How willing a signatory is to actually fight. Warmth and shared threat
         /// argue for honoring; exhaustion, instability, dependence on the
         /// aggressor, distance and the wars already being fought argue for

@@ -1793,6 +1793,19 @@ namespace Brink.Core
         public const int PostWarRelinquishmentMonths = 24;
 
         /// <summary>
+        /// How far back a government looks for aggression before it hands ground
+        /// back to the state that ground belongs to.
+        ///
+        /// Measured, not chosen: across eight seeds of C5, 31 of 113 AI
+        /// relinquishments were followed inside five years by the original owner
+        /// attacking either the holder or the ally the holder had entered the war
+        /// to defend. **Thirty of those thirty-one were the second kind** — the
+        /// state giving the ground back was the guarantor, not the victim, so
+        /// "did they ever attack *me*" caught one case in thirty-one.
+        /// </summary>
+        public const int ContainmentWindowMonths = 60;
+
+        /// <summary>
         /// Whether a government still wants the ground it is sitting on after the
         /// war that took it (GDD §16, §19).
         ///
@@ -1846,6 +1859,9 @@ namespace Brink.Core
                 if (!InsurgencySystem.Denies(state, location)
                     && TerritorySystem.AnswersShortfall(state, country, location)) continue;
 
+                // Ground that is containing somebody stays held a while longer.
+                if (ContainmentHolds(state, country, location)) continue;
+
                 float here = TerritorySystem.HoldingBill(state, location);
                 if (here > worstBill) { worstBill = here; worst = location; }
             }
@@ -1854,6 +1870,95 @@ namespace Brink.Core
             // as a collapse rather than a decision, and staging it lets the next
             // month's books reflect what the last withdrawal saved.
             if (worst != null) TerritorySystem.RelinquishBy(state, country.id, worst.id);
+        }
+
+        /// <summary>
+        /// Whether this occupied ground is still doing strategic work, and so
+        /// should not yet be handed back however much the garrison costs.
+        ///
+        /// **This is an affordability decision meeting a security one.** C5 made
+        /// the post-war exit reachable and priced it entirely in money: a
+        /// distressed government returned the dearest thing it held, with no
+        /// question asked about what returning it would restore. Measured over
+        /// eight seeds that produced a standing cycle — a state attacks, its
+        /// victim's guarantors take ground from it defending the victim, the
+        /// guarantors' books turn and they give the ground back, and the same
+        /// state attacks the same victim again. Seed 1212 ran that four times in
+        /// thirty years and roughly doubled the world's wars.
+        ///
+        /// Two ways ground earns its keep, and the second is the one that
+        /// matters:
+        ///
+        /// 1. **Direct** — the state we would be returning it to recently
+        ///    attacked *us*.
+        /// 2. **On behalf of** — we took this ground while honouring a guarantee,
+        ///    and the state we would be returning it to recently attacked the
+        ///    ally we entered to defend. A guarantor is not usually the target;
+        ///    it is the shield. Asking only about ourselves misses almost the
+        ///    whole population — one case in thirty-one, measured.
+        ///
+        /// **It expires, and that is the design, not a concession.** The window
+        /// runs backward from today, so it ages out on its own as the record
+        /// recedes: no flag is set, nothing is stored, and a state that stops
+        /// attacking people gets its territory back. A permanent version of
+        /// exactly this predicate was measured and **failed both halves** — it
+        /// kept 4.25 exit-less holdings a world, most of the way back to the
+        /// fiscal trap C5 exists to fix, and it did not even break the war cycle.
+        /// Do not turn this into a standing "former aggressor" mark.
+        ///
+        /// Reads only retained confrontation history. No new state, no save
+        /// field, no RNG, and no bearing on
+        /// <see cref="TerritorySystem.CanRelinquish"/> — **the operator may
+        /// always hand ground back.** This is one government's judgement about
+        /// its own ground, not a rule about what may be done with territory.
+        /// </summary>
+        static bool ContainmentHolds(GameState state, CountryState holder,
+            StrategicLocation location)
+        {
+            string ownerId = location.originalOwnerId;
+
+            if (AllianceSystem.RecentlyAttacked(state, ownerId, holder.id,
+                    ContainmentWindowMonths))
+                return true;
+
+            var producing = ProducingConfrontation(state, holder.id, ownerId);
+            if (producing == null || !producing.IsObligationEntry) return false;
+
+            // Only a *defensive* entry earns this. Ground taken while joining an
+            // ally's war of choice is ordinary conquest and answers to the
+            // ordinary rule — `AllianceSystem` already draws that line for the
+            // call-in itself, and drawing it differently here would make the same
+            // war defensive in one system and offensive in another.
+            if (!AllianceSystem.IsDefensiveEntry(state, producing)) return false;
+
+            string defended = producing.obligationOnBehalfOfId;
+            if (string.IsNullOrEmpty(defended)) return false;
+
+            return AllianceSystem.RecentlyAttacked(state, ownerId, defended,
+                ContainmentWindowMonths);
+        }
+
+        /// <summary>
+        /// The war this occupation came out of: the most recently concluded
+        /// confrontation between these two. It is what says how the holder came
+        /// to be standing there — its own war, or somebody else's.
+        /// </summary>
+        static Confrontation ProducingConfrontation(GameState state, string holderId,
+            string ownerId)
+        {
+            Confrontation best = null;
+            int soonest = int.MaxValue;
+
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var past = state.confrontations[i];
+                if (!past.resolved) continue;
+                if (!past.Involves(holderId) || !past.Involves(ownerId)) continue;
+
+                int since = state.date.MonthsSince(past.startDate) - past.monthsActive;
+                if (since < soonest) { soonest = since; best = past; }
+            }
+            return best;
         }
 
         /// <summary>
