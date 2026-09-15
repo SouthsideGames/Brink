@@ -951,6 +951,38 @@ shell, never blocks and is always dismissable (GDD §5).
 
 ---
 
+## 11a. Giving ground back — the MILITARY occupied-site block (C5)
+
+The DEFENSIVE PROGRAMMES panel already selected any location we hold and let the
+operator fortify, pacify, escort and shield on it. What it could not do was let
+go: every verb on that screen was a way to *invest* in ground, and the only verb
+that released any was an operation needing a live confrontation. An occupied
+province could therefore be garrisoned, pacified and paid for from this panel
+forever, with no control anywhere that ended it.
+
+When the selected site `IsOccupied`, the block now carries:
+
+- a **`RELINQUISH [1 CP]`** command, gated by the same
+  `TerritorySystem.CanRelinquish` the order itself uses — one gate shared by what
+  is offered and what is accepted, on the `OperationCatalog.CanOrder` precedent,
+  so the screen and the verb cannot disagree about what is possible;
+- `TerminalView.Block(button, reason)` when it is refused, so the existing
+  `ExplainBlockedCommands` pass prints one wrapped `UNAVAILABLE:` line beneath the
+  row. A refusal the operator cannot see is indistinguishable from a broken
+  control — the lesson from the 2026-08 dead-buttons pass;
+- a dim line stating **what holding it costs a month** (`HoldingBill`), what
+  returning it costs in war support, and that the ground goes back to its
+  government rather than to nobody.
+
+The cost line matters more than it looks. Occupation upkeep and the insurgency
+bill are both monthly and invisible — they leave through the treasury with no
+screen attributing them to a place. Naming the figure on the panel where the
+decision is taken is what makes relinquishing a *decision* rather than a button.
+
+The COMMAND INDEX carries the verb under MILITARY with its own reason string, so
+an operator who cannot find it on the panel can still learn it exists and why it
+is out of reach.
+
 ## 12. Open questions / PLANNED
 
 Honest list. Several of these are things the GDD asks for that do not exist.

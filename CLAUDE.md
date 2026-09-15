@@ -2833,6 +2833,116 @@ for every figure in the table above.
       a breakaway inside 240 months; the successor case is the deterministic
       `ABreakawayIsBornWithAnEconomyItCanRecoverOn` fixture.
 
+- [ ] **C5 — the post-war occupation exit. RECONSTRUCTED, AND IT FAILS ITS OWN
+      ACCEPTANCE.** Not merged, not certified, and on
+      `chatgpt/c5-occupation-exit-recovery` rather than main. The original C5
+      commits (`665766f`, `9784697`, `7a2158a`) were made on another working copy
+      and **never pushed**; they exist nowhere reachable, so this is a
+      reconstruction from the C4 baseline plus the preserved design and
+      acceptance record, not a recovery of the lost objects. The SHAs necessarily
+      differ.
+      **What it fixes.** Ground taken in a war could not be put down once the war
+      ended: a settlement cedes only the *objective*, closing a confrontation
+      releases nothing else, `Withdraw` is an operation needing a **live**
+      confrontation, and no AI government had any verb for it at all. So
+      occupation upkeep and the insurgency bill ran forever against ground nobody
+      could give back. C4 repaired the fiscal *rules*; this was what was still
+      underneath them.
+      `TerritorySystem.CanRelinquish` / `RelinquishBy`, plus `HoldingBill`,
+      `AnswersShortfall` and `HoldingRunwayMonths = 36`;
+      `AISystem.ConsiderRelinquishment` (monthly, **outside the action budget**,
+      no RNG, no CP, difficulty-independent); `GameController.RelinquishLocation`
+      (1 CP, never automatic); a COMMAND INDEX entry and a RELINQUISH command on
+      MILITARY's occupied-site block. Specs 01 §3c, 06 §6b, 09 §11a, 16 §7a.
+      **Relinquishment is deliberately not a cession.** `Cede` rewrites
+      `originalOwnerId` — a recognised transfer of title. Here the title never
+      moved; we simply stop sitting on it. It also does not call `RecordSeizure`
+      (that prices *taking* ground), open a confrontation, create a truce, or
+      touch sanctions, basing or fiscal state. And it **does not delete the
+      insurgency**: `SupportTargetFor` reads occupation as a cause, so a movement
+      fades on its own once the ground stops being occupied. Deleting it here
+      would have made walking out a way to *erase* a rising rather than to stop
+      causing one.
+      **The known defect, which is the whole reason it is still open.** The rule
+      reasons about **cost** and never about **containment**. A burdensome
+      occupation that is also holding down a recent aggressor is released on
+      exactly the same terms as any other burden. Seed 1212: Turkey attacks the
+      US, US defensive allies take Turkish ground, the war ends, the distressed
+      allies eventually hand it back, Turkey recovers and attacks again. Under C4
+      permanent occupation suppressed that cycle **by accident**; C5 removed the
+      fiscal trap and the accidental containment with it. **Do not fix this
+      here** — it is C5B's subject, and a reconstruction that accidentally passed
+      the war/territorial guards would mean C5B behaviour had been introduced by
+      mistake.
+      **Verification.** All of it under `Tools/dotnet-harness`, not Unity — there
+      is no Unity on the machine this was written on, so **Unity must still be the
+      one to certify it**. 26 tests in `OccupationExitTests` (partition C) +
+      `ActionIndexTests` = 31/31. Full suite **1555 total / 27 failed** against the
+      C4 baseline's **1529 / 27**, run from a worktree at `0e2b3c0` on the same
+      machine: **the two failure sets are identical**, so C5 introduces nothing and
+      fixes nothing, and 1529 + 26 = 1555 accounts for every test.
+      **The eight-seed 360-month comparison reproduces the documented fingerprint**
+      on the axes a probe can reach without instrumenting the AI:
+
+      | metric (8 seeds, 360mo) | C4 measured | C5 measured | C5 documented |
+      |---|---|---|---|
+      | exit-less post-war holdings / world | **8.62** | **0.00** | 0–0.5 |
+      | occupied locations at end | 9.00 | 0.75 | — |
+      | unforced returns / world | 0.75 | 13.00 | — |
+      | wars / world | 20.12 | 22.88 | — |
+      | seed 1212 wars | 17 | **44** | 43–45 |
+
+      The C4 arm landing at 8.62 against a Unity-measured 8.75–9.25 is what makes
+      the C5 arm worth believing: **the platform is not distorting these
+      particular metrics**, so 0.00 against a documented 0–0.5 is a real match
+      rather than a coincidence of a different machine.
+      **Seed 1212 reproduces the containment failure in detail.** C4: 17 wars, one
+      repeated pair (DEU>RUS ×2). C5: 44 wars and `TUR>USA ×4`, with the entire US
+      defensive bloc — POL, BRA, MEX, AUS, IND, DEU, JPN, KOR, SAU — each fighting
+      Turkey three or four times, and 12 retakes of ground that had been handed
+      back. That is precisely the described cycle, and **it failing this way is the
+      evidence the reconstruction is faithful**: a version that passed the guards
+      would mean C5B behaviour had been introduced by mistake.
+      Still unmeasured, because the probe does not instrument them: AI action
+      volume, restructuring counts, post-war holding-cost share, objective
+      cessions and alliance fronts. Those need the Unity harness.
+- [x] **`Tools/dotnet-harness` could not build at all, and its float arithmetic
+      does not match Unity's.** Two separate findings, both pre-existing on
+      `0e2b3c0` and neither caused by C5.
+      1. **It did not compile.** `shim/UnityUIElements.cs` had no `TextField`,
+         `DropdownField` or `FloatField`, which `StrategistView` and
+         `OperationPlanningPanel` use — 7 × CS0246, so the runtime assembly could
+         not be built outside Unity and the harness's entire stated purpose was
+         unavailable. Added, same shape as the neighbouring `Toggle`/`Slider`
+         stubs. This is the only change outside the five expected C5 production
+         files and it is a test aid, not production.
+      2. **Three C4 tests fail there and pass in Unity.** `AiIsBlockedAtExactDebtCeiling`,
+         `FreshAiStrategicPreparationIsBlockedAtCeiling` and
+         `ActorGenericResearchRefusesFreshAiProgrammeAtCeiling` are *exact-boundary*
+         tests: `MakeSound(ai, 75f)` writes `sovereignDebt = gdp * 75f / 100f` and
+         the gate asks `DebtToGdp >= 75f`. Whether that round-trips to exactly 75
+         depends on something **the C# spec explicitly leaves to the
+         implementation** — whether intermediates are kept wider than `float`:
+
+         | evaluation of `gdp * 75f / 100f` | `DebtToGdp` | gate blocks? |
+         |---|---|---|
+         | double intermediates, single store (Mono/x64 — Unity) | **75.0** | yes — test passes |
+         | strict per-op float32 (.NET 9, arm64 — this harness) | **74.99999** | no — test fails |
+
+         Verified by reverting C5 entirely: the same three fail on the clean
+         baseline. `WorldFactory` uses no `UnityEngine` and seeded `System.Random`
+         is the legacy algorithm everywhere, so the *world* is identical on both —
+         only the arithmetic differs.
+      **The consequence is the point: the dotnet harness is not a measuring
+      instrument for this project.** It is fine for "does it compile" and "does
+      this logic branch", and it is **not** fine for balance figures, long-run
+      fingerprints or anything reading an equality or a threshold on a float.
+      Per-op rounding differences compound over 360 months, so an eight-seed run
+      taken there is not comparable to one taken in Unity — which is exactly the
+      "validation harness that does not run the thing it validates" failure this
+      file already records once, in `SimulationPipeline`. **Unity remains the
+      authority; the README already says so and now there is a measured reason.**
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

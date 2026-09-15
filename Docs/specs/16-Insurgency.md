@@ -167,6 +167,27 @@ already arms is its own asset and is known exactly. See spec 06 §7d.
 strength −9, **support +1.4**. A purely military answer holds the ground and does
 not end the problem.
 
+### 7a. The holder simply leaves (C5)
+
+An occupation rising has a third ending that is neither victory nor suppression:
+the holder puts the ground down. `TerritorySystem.RelinquishBy`
+([spec 01 §3c](01-Military.md)) sets `ownerId = originalOwnerId`, and **nothing in
+it touches `state.insurgencies`**.
+
+That is deliberate. `SupportTargetFor` reads occupation as a cause, so the moment
+the ground stops being occupied the movement's support target collapses and it
+fades through `FadeMonths` on the existing path. Deleting the rising in the
+relinquishment verb would have been a second, special-case ending that skipped
+the model — and would have made walking out a way to *erase* an insurgency rather
+than to stop causing one.
+
+The rising's bill is also what makes the ground likely to be the one released:
+`HoldingBill` counts `strength/100 × InsurgencyBillPerMonth` on top of upkeep, so
+a contested province is the most expensive thing a distressed government holds.
+And a rising is one of the two things that disqualifies ground from the
+"answers our shortfall, keep it" exemption — an oilfield that is burning is not
+supplying anybody.
+
 ## 8. Surfaces
 
 - **INTELLIGENCE — ARMED MOVEMENTS.** Every movement in the world. Existence is

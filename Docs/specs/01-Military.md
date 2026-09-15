@@ -433,6 +433,69 @@ consequence.** The after-action line (above) is the same information arriving to
 late to act on; the planning line is what makes reach a decision instead of a
 post-mortem.
 
+### 3c. The post-war exit (`CanRelinquish` / `RelinquishBy`) — C5
+
+> **Reconstructed C5. Original acceptance verdict: FAIL.** The mechanism below is
+> the one that was built and measured. It is known to lack strategic-containment
+> awareness — a burdensome occupation that is also *containing a recent aggressor*
+> is released on the same terms as any other. That defect is C5B's subject and is
+> deliberately still present here. Nothing in this section certifies the rule.
+
+Ground taken in a war could not be put down once the war ended:
+
+- a settlement cedes only the **objective**, not everything else captured;
+- closing a confrontation releases nothing at all;
+- `Withdraw` is an operation and needs a **live** confrontation to be ordered in;
+- no AI government had any verb for it.
+
+So `OccupationUpkeepPerValue` and the insurgency bill ran against that ground for
+the rest of the save with no reachable exit. C4 fixed the fiscal *rules* and this
+was what remained underneath them.
+
+**`CanRelinquish(state, actorId, locationId, out reason)`** succeeds only when the
+location exists, the actor holds it, it is occupied, the original owner still
+exists as a state, and **there is no unresolved confrontation between the holder
+and that owner**. The last clause is the load-bearing one: while the shooting is
+on, giving ground back is a battlefield decision and belongs to the operation
+verbs. This is for after.
+
+**`RelinquishBy(state, actorId, locationId)`** sets `ownerId = originalOwnerId`,
+floors the returned garrison at `ReturnedGarrisonFloor` (20), zeroes
+`pacification`, charges the holder `RelinquishWarSupportCost` (6) war support,
+adds a `+RelinquishMemoryWeight` (3) *"Returned occupied ground"* memory to the
+pair, and files a public chronicle entry.
+
+What it deliberately does **not** do, each for a reason:
+
+| Not done | Why |
+|---|---|
+| `Cede` | A cession rewrites `originalOwnerId` — a recognised transfer of title. The title never moved here. |
+| `RecordSeizure` | That prices *taking* ground. |
+| Open a confrontation | Handing ground back is not an act of war. |
+| Create a truce | Truces are settlement machinery; this is not a settlement. |
+| Touch sanctions, basing, fiscal or restructuring state | None of them are what occupation is. |
+| Delete the insurgency | A movement fades through `SupportTargetFor` once the ground stops being occupied — the existing mechanism, not a special case. |
+
+**`HoldingBill(state, location)`** reads what the treasury actually pays —
+`strategicValue × OccupationUpkeepPerValue` plus the standing insurgency bill if
+something is burning there. Read rather than re-derived: a second definition of
+what holding costs would drift from the one the money leaves by.
+
+**`AnswersShortfall(state, holder, location)`** uses the same
+`ShortfallThreshold` (40) on energy and strategic materials that
+`AISystem.ResourcePrize` reads when it decides a neighbour's ground is worth
+taking. A government using one number to seize and another to let go would be two
+governments.
+
+**`HoldingRunwayMonths` = 36** — months of holding bill a treasury must cover
+before the occupation counts as affordable. See [spec 06 §6b](06-AI.md) for the
+decision that reads it.
+
+The player's route is `GameController.RelinquishLocation`, 1 CP, gated on
+`MayCommand(Pillar.Military)` and the same `CanRelinquish`, recording initiative.
+**Never automatic** — a garrison the operator chose to leave in place stays there
+however much it costs.
+
 ## 4. Operations
 
 **Everything about an operation lives in one record.** `Core/OperationCatalog.cs`
