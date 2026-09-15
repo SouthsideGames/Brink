@@ -677,6 +677,17 @@ cheap and it eliminates a whole class of stale-state bugs.
 
 ---
 
+### MILITARY — RELINQUISH (occupied-site block, C5 2026-09)
+
+When the DEFENSIVE PROGRAMMES site selector is on occupied ground, the existing
+"THIS IS OCCUPIED GROUND" block carries one more command:
+`RELINQUISH THIS GROUND [1 CP]`, followed by a dim line stating what holding it
+costs a month. The button is gated by `TerritorySystem.CanRelinquish` — the same
+gate the order uses — and a refusal goes through `Block`, so while a war is still
+being fought with the original owner it reads `UNAVAILABLE: THE WAR FOR IT IS STILL
+BEING FOUGHT` rather than doing nothing. The COMMAND INDEX lists the verb under
+MILITARY (spec 01 §3c).
+
 ### MILITARY — THE WAR (belligerent roster)
 
 Once honouring a pact can open a front and that front can call in the aggressor's

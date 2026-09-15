@@ -2833,6 +2833,55 @@ for every figure in the table above.
       a breakaway inside 240 months; the successor case is the deterministic
       `ABreakawayIsBornWithAnEconomyItCanRecoverOn` fixture.
 
+- [ ] **C5 — the post-war exit from occupation** (branch
+      `chatgpt/c5-occupation-exit`, specs 01 §3c, 06 §6b, 09, 16 §7).
+      Captured ground had no way out once its war closed: `Settle` cedes only
+      the objective, `Finish` never touches ground, and `Withdraw` needs a live
+      confrontation — so 92% of occupation upkeep in an unattended world was paid
+      after the capturing war had ended, and it was the largest driver of repeat
+      debt restructuring (58–60% within 72 months).
+      - **A decision, not a release.** `TerritorySystem.CanRelinquish` /
+        `RelinquishBy` is one actor-generic gate (holds it, occupied, original
+        owner exists, no unresolved confrontation with that owner). Control
+        returns, garrison ≥20, pacification 0, holder war support −6, +3 pair
+        memory. No `Cede`, `RecordSeizure`, confrontation, truce, sanction,
+        escalation, threat or fiscal write; the occupation movement fades by its
+        own rules and its bill follows ownership.
+      - **AI rule** (`AISystem.ConsiderRelinquishment`, outside the budget, no
+        RNG): keep everything while `ConditionOf ≤ CashNegativeButCreditworthy`
+        and treasury ≥ bill × `HoldingRunwayMonths` (36); otherwise hand back one
+        location a month — the largest bill, authored-order tie-break — once its
+        war ended `SettlementTruceMonths` (24) ago, never uncontested ground that
+        answers the holder's own energy/materials shortfall.
+      - **Player**: `GameController.RelinquishLocation`, 1 CP, Military screen
+        occupied-site block, COMMAND INDEX entry. Never automatic.
+      **Acceptance (8 Challenging seeds × 360, baseline + 3 null perturbations of
+      the C5 tree) — primary criteria pass, guards do not.** Exit-less holdings at
+      horizon 8.75–9.25 → 0.00–0.50; post-war share of holding cost 92–94% →
+      51–53%; repeat restructuring within 72 months 58–60% → 30–37%;
+      restructurings/world 29–30 → 20.6–21.6; ruin and sanctions both lower; C4
+      distressed starts still 0. **Failed guards:** wars 22.0–22.9 and
+      confrontation-months 162.8–169.9 (C4 band top 21.0 / 159.8, +5% exceeded in
+      3 of 4 runs); ground taken from the player 2.38–3.50 (>2.5 in 2 of 4);
+      the same AI retaking player ground it had relinquished in every run
+      (0.12–0.50/world, all incidental captures in later wars, not claims);
+      cessions 2.12–2.38 (band 1.6–2.0).
+      **The heat is one seed and one cycle.** Seed 1212: Turkey attacks the USA
+      four times (once under C4), each war pulling in 7–8 US guarantors whose
+      fronts capture Turkish ground; the distressed allies hand it back after the
+      truce horizon; Turkey, restored, opens the next war. Without seed 1212 C5
+      runs cooler than C4 (19.6 fronts, 148 confrontation-months/world). Recovery
+      and re-conquest wars — a war *for* the returned ground — are zero in every
+      run. The rule has no security term: it prices burden against yield, never
+      whether handing ground back re-arms a state still at odds with the holder
+      or its protégé. Adding one naively would erase the gain — relations with
+      the original owner are a median 0 at eligibility. **Awaiting review; not
+      merged, no constant tuned.**
+      Suite via the repo's own `run-suite.sh` on a project copy (editor open):
+      **1552 tests, 1551 passed, 0 failed, 1 inconclusive** (the documented
+      `TheWorld_EverTurnsAStrategicInstrumentOnThePlayer`) — C4's 1529 plus the
+      23 `OccupationExitTests`. No save-schema change; no protected system touched.
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

@@ -163,6 +163,13 @@ already arms is its own asset and is known exactly. See spec 06 §7d.
 | Separatism | Unity −18, stability −12, conspiracy +10 — the conditions `SecessionSystem` reads |
 | Deprivation | Approval −12, stability −9, legislative support −8, grievance +6 |
 
+**Ground handed back is not a victory** (C5, spec 01 §3c). When a holder
+relinquishes occupied ground, an occupation movement on it is **not** removed: its
+support target falls to 0 the moment the ground stops being occupied, and it fades
+through the ordinary `FadeThreshold` / `FadeMonths` lifecycle, exactly as when
+ground is recovered by recapture or a wartime `Withdraw`. Its bill follows the
+ground's holder, so the former occupier stops paying immediately.
+
 `OnCounterInsurgency` (called from `MilitarySystem` when that verb resolves):
 strength −9, **support +1.4**. A purely military answer holds the ground and does
 not end the problem.

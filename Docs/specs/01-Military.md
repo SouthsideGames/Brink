@@ -196,7 +196,8 @@ costs the owner), `garrison`, `ownerId` and `originalOwnerId` (so occupation is
 visible via `IsOccupied`).
 
 Ownership changes through a successful `Assault`, a `Withdraw` from ground we
-hold, or a negotiated settlement.
+hold, a negotiated settlement, or relinquishing occupied ground once its war is
+over (§3c).
 
 ### 3a. What territory is worth (`TerritorySystem`)
 
@@ -432,6 +433,44 @@ the penalty. This is the principle established by the reporting work (spec 15):
 consequence.** The after-action line (above) is the same information arriving too
 late to act on; the planning line is what makes reach a decision instead of a
 post-mortem.
+
+### 3c. Leaving occupied ground after the war (`TerritorySystem`, C5 2026-09)
+
+Captured ground had no way out once its war closed. `Settle` cedes only the
+objective, `Finish` never touches ground (satellite fronts close with their root
+the same way), and `Withdraw` is `targeting = Either`, so `RequiresConfrontation`
+refuses it without a live war. Every other captured position stayed occupied and
+billed its holder for the rest of the save — measured on the certified C4 world,
+92% of occupation upkeep and 99% of occupied-ground insurgency bills were paid
+after the capturing war had ended, and it was the largest driver of repeat debt
+restructuring.
+
+`CanRelinquish(state, actor, location, out reason)` is the one gate (order, screen
+and AI): the actor holds the location, it is occupied, its original owner exists,
+and no unresolved confrontation stands between the actor and that owner — while
+one does, the ground belongs to that war and wartime `Withdraw` applies.
+
+`RelinquishBy` returns `ownerId` to `originalOwnerId`, raises the garrison to at
+least 20 (the `Withdraw` precedent), resets pacification, costs the holder
+`RelinquishWarSupportCost` = 6 war support (the capture's +6 given back) and writes
+`RelinquishMemoryWeight` = +3 "Returned occupied ground" to the pair (the
+`PeaceSystem` Withdrawal weight). It is **not** a cession, a seizure or an act of
+war: no `Cede`, no `RecordSeizure`, no confrontation, and no truce, sanction,
+escalation, threat or fiscal value is touched. Upkeep and any insurgency bill stop
+for the holder because both follow ownership; an armed movement on the ground is
+left to fade by its own rules (spec 16 §7).
+
+The operator relinquishes through `GameController.RelinquishLocation` for
+`RelinquishCost` = 1 CP (a Withdraw order's price), on the Military screen's
+occupied-site block. It is never done for them. Foreign governments decide through
+`AISystem.ConsiderRelinquishment` (spec 06 §6b).
+
+| Helper | Definition |
+|---|---|
+| `HoldingBillFor(location)` | `strategicValue × 0.55` + any movement's `strength/100 × 24` — exactly what is charged |
+| `HoldingBill(country)` | sum over its occupied locations |
+| `AnswersOwnShortfall(holder, location)` | energy region with energy < 40, or materials region with materials < 40 (`ShortfallLine`, the line `AISystem.ResourcePrize` reads) |
+| `HoldingRunwayMonths` | 36 — the treasury-runway horizon the operator's warning uses |
 
 ## 4. Operations
 
