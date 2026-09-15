@@ -102,6 +102,7 @@ namespace Brink.Core
                 TrackRivalries(ai);
                 Act(state, ai, country, rng);
                 ManageOngoingConfrontation(state, ai, country, rng);
+                ConsiderRelinquishment(state, country);
                 ConsiderStrategicInstruments(state, ai, country, rng);
                 ConsiderDetente(state, ai, country, rng);
                 ConsiderResearch(state, ai, country, rng);
@@ -1777,6 +1778,110 @@ namespace Brink.Core
             if (Math.Abs(wantedTax - fiscal.taxRate) > 0.5f
                 && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Tax rate"))
                 FiscalSystem.SetTaxRateBy(state, country.id, wantedTax);
+        }
+
+        // ---------- post-war occupation (C5) ----------
+
+        /// <summary>
+        /// Months that must have passed since the war ended before a government
+        /// will put down ground it took in it.
+        ///
+        /// The same scale the settlement truce runs on. Immediately after a war
+        /// a garrison is holding what the peace was argued over; a government
+        /// that walked out the following month would be settling twice.
+        /// </summary>
+        public const int PostWarRelinquishmentMonths = 24;
+
+        /// <summary>
+        /// Whether a government still wants the ground it is sitting on after the
+        /// war that took it (GDD §16, §19).
+        ///
+        /// **Outside the objective budget and deliberately so**, on the
+        /// `ConsiderDetente` precedent: deciding you can no longer afford a
+        /// garrison is not a strategy competing for this month's actions, it is
+        /// housekeeping a finance ministry does whether or not anything else is
+        /// happening. Routine restocking spent thirty measured years unreachable
+        /// because it sat behind a priority check, and this would go the same way.
+        ///
+        /// No RNG, no command points, and no difficulty term: a government that
+        /// cannot pay for an occupation cannot pay for it on Standard either.
+        /// </summary>
+        static void ConsiderRelinquishment(GameState state, CountryState country)
+        {
+            // The operator decides for their own country. There is no AIState for
+            // the player, so this is an assertion rather than a branch — but it
+            // is the assertion that keeps an occupation the player chose to hold
+            // from being handed back by a routine they never ran.
+            if (country == null || country.isPlayer) return;
+
+            float bill = TerritorySystem.HoldingBillFor(state, country.id);
+            if (bill <= 0f) return;
+
+            // A solvent government keeps what it took. The exit exists because
+            // occupation was *unpayable and inescapable*; a state that can plainly
+            // fund three years of garrison has no reason to reach for it.
+            if (FiscalSystem.ConditionOf(state, country) <= FiscalCondition.CashNegativeButCreditworthy
+                && country.resources.treasury >= bill * TerritorySystem.HoldingRunwayMonths)
+                return;
+
+            StrategicLocation worst = null;
+            float worstBill = -1f;
+
+            for (int i = 0; i < state.locations.Count; i++)
+            {
+                var location = state.locations[i];
+                if (location.ownerId != country.id) continue;
+                if (!location.IsOccupied) continue;
+
+                if (!TerritorySystem.CanRelinquish(state, country.id, location.id, out _)) continue;
+
+                if (MonthsSinceWarWith(state, country.id, location.originalOwnerId)
+                    < PostWarRelinquishmentMonths) continue;
+
+                // Ground that is quiet *and* answers a shortfall is the one kind
+                // worth the bill: it is paying us back in the commodity we are
+                // short of, and nobody is shooting at it. Either half failing —
+                // a rising on it, or no shortfall to answer — and it is just an
+                // expense.
+                if (!InsurgencySystem.Denies(state, location)
+                    && TerritorySystem.AnswersShortfall(state, country, location)) continue;
+
+                float here = TerritorySystem.HoldingBill(state, location);
+                if (here > worstBill) { worstBill = here; worst = location; }
+            }
+
+            // One a month. A government withdrawing from everything at once reads
+            // as a collapse rather than a decision, and staging it lets the next
+            // month's books reflect what the last withdrawal saved.
+            if (worst != null) TerritorySystem.RelinquishBy(state, country.id, worst.id);
+        }
+
+        /// <summary>
+        /// Months since the most recent war between these two ended, or
+        /// <see cref="int.MaxValue"/> when they have never fought.
+        ///
+        /// Uses the established idiom — months since it started, less the months
+        /// it ran — rather than a stored end date, exactly as
+        /// <see cref="AllianceSystem.RecentlyAtWar"/> does. Never having fought
+        /// reads as "long ago": there is no war to wait out.
+        /// </summary>
+        static int MonthsSinceWarWith(GameState state, string countryId, string otherId)
+        {
+            int soonest = int.MaxValue;
+
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var confrontation = state.confrontations[i];
+                if (!confrontation.resolved) continue;
+                if (!confrontation.Involves(countryId)) continue;
+                if (!confrontation.Involves(otherId)) continue;
+
+                int since = state.date.MonthsSince(confrontation.startDate)
+                            - confrontation.monthsActive;
+                if (since < soonest) soonest = since;
+            }
+
+            return soonest;
         }
 
         /// <summary>

@@ -522,6 +522,37 @@ namespace Brink.UI.Views
                     + "the defence, and every programme here is contested. COUNTER-INSURGENCY "
                     + "raises pacification; everything else gets easier as it rises.";
 
+            // **The way out.** Occupied ground could be fortified, pacified and
+            // garrisoned from this panel and never put down — the only verb that
+            // released it needed a live confrontation, so once the war ended the
+            // bill ran forever with no control anywhere that could stop it.
+            if (site.IsOccupied)
+            {
+                var exitRow = new VisualElement();
+                exitRow.AddToClassList("button-row");
+                Root.Add(exitRow);
+
+                bool canRelinquish = TerritorySystem.CanRelinquish(
+                    state, state.playerCountryId, site.id, out string relinquishBlock);
+
+                float monthlyBill = TerritorySystem.HoldingBill(state, site);
+
+                var relinquish = new Button(() =>
+                {
+                    GameController.Instance.RelinquishLocation(site.id);
+                    Refresh();
+                })
+                { text = $"RELINQUISH [{GameController.RelinquishCost} CP]" };
+                relinquish.AddToClassList("cmd-button");
+                if (!canRelinquish) Block(relinquish, relinquishBlock);
+                exitRow.Add(relinquish);
+
+                AddText("terminal-text-dim").text =
+                    $"   HOLDING THIS COSTS {monthlyBill:F0} A MONTH. Returning it ends that bill "
+                    + $"and costs {TerritorySystem.RelinquishWarSupportCost:F0} war support at home. "
+                    + "The ground goes back to its government, not to nobody.";
+            }
+
             BuildLastDefensiveProgramme(state);
         }
 

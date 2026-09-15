@@ -150,6 +150,29 @@ namespace Brink.Core
                 "Fortify ground we hold, pacify occupied territory, escort our shipping or " +
                 "build the shield. No confrontation required.",
                 verbs: new[] { nameof(GameController.LaunchDefensiveProgramme) });
+            // Ground taken in a war that has ended. The index states the reason
+            // it is out of reach rather than hiding the verb, because "we hold
+            // nothing that is not ours" and "the war is still on" are different
+            // facts about the world and the operator should be able to tell
+            // which one applies.
+            string relinquishBlock = "We are not occupying anyone's ground.";
+            bool canRelinquish = false;
+            foreach (var location in state.locations)
+            {
+                if (location.ownerId != state.playerCountryId) continue;
+                if (!location.IsOccupied) continue;
+                if (TerritorySystem.CanRelinquish(
+                        state, state.playerCountryId, location.id, out string why))
+                { canRelinquish = true; break; }
+                relinquishBlock = why;
+            }
+            Add(Pillar.Military, "MILITARY", "Relinquish occupied ground",
+                $"{GameController.RelinquishCost} CP",
+                "Hand ground back to the state it was taken from. Ends the upkeep and the "
+                + "insurgency bill with it; costs war support at home. Not available while "
+                + "the war with that state is still running.",
+                canRelinquish, relinquishBlock,
+                verbs: new[] { nameof(GameController.RelinquishLocation) });
             Add(Pillar.Military, "MILITARY", "Order equipment", "Treasury",
                 $"{AssetCatalog.All.Count} counted classes across air, sea and ground. "
                 + "Steel takes years, people take months; industry decides throughput.",

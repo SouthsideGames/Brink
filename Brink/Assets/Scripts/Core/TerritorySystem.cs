@@ -239,6 +239,198 @@ namespace Brink.Core
             }
         }
 
+
+        // ---------- the post-war exit (C5) ----------
+
+        /// <summary>
+        /// Months of holding bill a treasury must be able to cover before a
+        /// government treats its occupations as affordable.
+        ///
+        /// Three years: long enough that a state with real reserves is not
+        /// pushed off ground it can plainly pay for, short enough that a
+        /// treasury living hand to mouth stops pretending the garrison is free.
+        /// </summary>
+        public const int HoldingRunwayMonths = 36;
+
+        /// <summary>
+        /// Whether <paramref name="actorId"/> may hand this location back to the
+        /// state it was taken from, and why not when it may not.
+        ///
+        /// **This is the exit that did not exist.** A settlement cedes only the
+        /// objective, closing a confrontation releases nothing else that was
+        /// captured, and `Withdraw` is an operation that needs a live war to be
+        /// ordered in — so ground taken in a war that ended stayed occupied for
+        /// the rest of the save, paying upkeep and insurgency costs forever with
+        /// no reachable way to put it down.
+        ///
+        /// The last clause is the load-bearing one: while the shooting is still
+        /// on, giving ground back is a battlefield decision and belongs to the
+        /// operation verbs. This is for after.
+        /// </summary>
+        public static bool CanRelinquish(GameState state, string actorId, string locationId,
+            out string reason)
+        {
+            reason = "";
+
+            var location = state.FindLocation(locationId);
+            if (location == null) { reason = "NO SUCH LOCATION."; return false; }
+
+            if (location.ownerId != actorId) { reason = "WE DO NOT HOLD IT."; return false; }
+
+            // Our own ground is not ours to return to anybody.
+            if (!location.IsOccupied) { reason = "THIS IS OUR OWN GROUND."; return false; }
+
+            var owner = state.FindCountry(location.originalOwnerId);
+            if (owner == null)
+            {
+                reason = "THERE IS NO GOVERNMENT TO RETURN IT TO.";
+                return false;
+            }
+
+            for (int i = 0; i < state.confrontations.Count; i++)
+            {
+                var confrontation = state.confrontations[i];
+                if (confrontation.resolved) continue;
+                if (!confrontation.Involves(actorId)) continue;
+                if (!confrontation.Involves(location.originalOwnerId)) continue;
+                reason = "THE WAR WITH " + owner.displayName.ToUpperInvariant() + " IS NOT OVER.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Hand occupied ground back to the state it was taken from.
+        ///
+        /// Deliberately **not** <see cref="Cede"/>: a cession is a recognised
+        /// transfer of title and rewrites `originalOwnerId`. This is the opposite
+        /// act — the title never moved, and returning the ground simply stops us
+        /// sitting on it. Nor does it call <see cref="RecordSeizure"/>, which
+        /// prices taking ground rather than giving it up.
+        ///
+        /// What it costs is at home. A government that marches out of a place it
+        /// spent soldiers taking has to explain itself, so war support falls; the
+        /// state receiving its territory back remembers it, which is the only
+        /// thing here that points outward.
+        /// </summary>
+        public static bool RelinquishBy(GameState state, string actorId, string locationId)
+        {
+            if (!CanRelinquish(state, actorId, locationId, out _)) return false;
+
+            var location = state.FindLocation(locationId);
+            var holder = state.FindCountry(actorId);
+            var owner = state.FindCountry(location.originalOwnerId);
+
+            location.ownerId = location.originalOwnerId;
+
+            // A returning administration is not handed an empty province. The
+            // floor matters because the ground is immediately eligible to be
+            // fought over again, and a garrison of zero would make handing it
+            // back indistinguishable from opening it.
+            if (location.garrison < ReturnedGarrisonFloor)
+                location.garrison = ReturnedGarrisonFloor;
+
+            // Pacification measures how far an *occupier* has settled a hostile
+            // population. There is no occupier now, so the figure has no subject.
+            location.pacification = 0f;
+
+            if (holder != null)
+                holder.warSupport = Clamp(holder.warSupport - RelinquishWarSupportCost);
+
+            var relationship = state.FindRelationship(actorId, location.originalOwnerId);
+            if (relationship != null)
+                relationship.AddMemory(state.date, "Returned occupied ground",
+                    RelinquishMemoryWeight);
+
+            state.AddChronicle(ChronicleCategory.Military, actorId,
+                $"{(holder != null ? holder.displayName : actorId)} has returned "
+                + $"{location.displayName} to {(owner != null ? owner.displayName : "its government")}.",
+                Publicity.Public);
+
+            if (holder != null && holder.isPlayer)
+                state.AddNotification(NotificationClass.Priority, "GROUND RETURNED",
+                    $"{location.displayName} is no longer ours to hold. The garrison has come "
+                    + "home and the bill with it.", holder.id, desk: ReportingDesk.Military);
+
+            if (owner != null && owner.isPlayer)
+                state.AddNotification(NotificationClass.Priority, "TERRITORY RESTORED",
+                    $"{location.displayName} is ours again. "
+                    + $"{(holder != null ? holder.displayName : "The occupying force")} has withdrawn.",
+                    owner.id, desk: ReportingDesk.Military);
+
+            return true;
+        }
+
+        /// <summary>Garrison a returned province is left standing with.</summary>
+        public const float ReturnedGarrisonFloor = 20f;
+
+        /// <summary>War support the holder pays for giving ground up.</summary>
+        public const float RelinquishWarSupportCost = 6f;
+
+        /// <summary>Weight of the memory the receiving state keeps of the return.</summary>
+        public const float RelinquishMemoryWeight = 3f;
+
+        /// <summary>
+        /// What one occupied location costs its holder every month, through the
+        /// production rules that already bill it: occupation upkeep, plus the
+        /// standing insurgency bill if something is burning there.
+        ///
+        /// Read rather than re-derived — a second definition of what holding
+        /// costs would drift from the one the treasury actually pays.
+        /// </summary>
+        public static float HoldingBill(GameState state, StrategicLocation location)
+        {
+            if (location == null || !location.IsOccupied) return 0f;
+
+            float bill = location.strategicValue * OccupationUpkeepPerValue;
+
+            var rising = InsurgencySystem.At(state, location.id);
+            if (rising != null && rising.strength >= 1f)
+                bill += (rising.strength / 100f) * InsurgencySystem.InsurgencyBillPerMonth;
+
+            return bill;
+        }
+
+        /// <summary>Total monthly holding bill across everything this country occupies.</summary>
+        public static float HoldingBillFor(GameState state, string countryId)
+        {
+            float total = 0f;
+            for (int i = 0; i < state.locations.Count; i++)
+            {
+                var location = state.locations[i];
+                if (location.ownerId != countryId) continue;
+                total += HoldingBill(state, location);
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Whether this ground answers a shortfall the holder actually has.
+        ///
+        /// The same two thresholds `AISystem.ResourcePrize` reads when it decides
+        /// a neighbour's ground is worth taking — an energy-poor state values an
+        /// oilfield on the way out for the same reason it valued it on the way
+        /// in, and a government using one number to seize and another to let go
+        /// would be two governments.
+        /// </summary>
+        public static bool AnswersShortfall(GameState state, CountryState holder,
+            StrategicLocation location)
+        {
+            if (holder == null || location == null) return false;
+
+            if (holder.resources.energy < ShortfallThreshold
+                && location.type == LocationType.EnergyRegion) return true;
+
+            if (holder.resources.strategicMaterials < ShortfallThreshold
+                && location.type == LocationType.MaterialsRegion) return true;
+
+            return false;
+        }
+
+        /// <summary>The endowment level below which a state is short of something.</summary>
+        public const float ShortfallThreshold = 40f;
+
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);
     }
 }
