@@ -184,6 +184,28 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void SoundAiMayBeginFreshStrategicPreparation()
+        {
+            // The positive counterpart of FreshAiStrategicPreparationIsBlockedAtCeiling:
+            // identical requirements, 0.1 point of debt below the ceiling. Without it
+            // the blocked test would pass just as well if some other requirement were
+            // refusing the programme.
+            MakeSound(ai, AIFiscalDiscipline.NewProgrammeDebtCeiling - 0.1f);
+            MeetMobilizationRequirements(ai);
+
+            Assert.AreEqual(0f, ai.endgames.ProgressFor(EndgameType.TotalMobilization), 0.001f,
+                "fixture: the preparation must be fresh");
+            Assert.AreEqual(FiscalCondition.Sound, FiscalSystem.ConditionOf(state, ai),
+                "fixture: the AI must be fiscally sound");
+            Assert.IsTrue(AIFiscalDiscipline.CanStartNewDiscretionaryProgramme(state, ai));
+            Assert.IsTrue(EndgameSystem.CanPrepare(state, ai, EndgameType.TotalMobilization, out string reason), reason);
+
+            Assert.IsTrue(EndgameSystem.PrepareBy(state, ai.id, EndgameType.TotalMobilization));
+            Assert.Greater(ai.endgames.ProgressFor(EndgameType.TotalMobilization), 0f,
+                "a sound AI meeting every ordinary requirement could not begin a strategic programme");
+        }
+
+        [Test]
         public void FreshAiStrategicPreparationIsBlockedAtCeiling()
         {
             MakeSound(ai, AIFiscalDiscipline.NewProgrammeDebtCeiling);
