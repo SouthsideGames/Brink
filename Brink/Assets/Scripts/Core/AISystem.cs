@@ -102,6 +102,7 @@ namespace Brink.Core
                 TrackRivalries(ai);
                 Act(state, ai, country, rng);
                 ManageOngoingConfrontation(state, ai, country, rng);
+                ConsiderRelinquishment(state, ai, country);
                 ConsiderStrategicInstruments(state, ai, country, rng);
                 ConsiderDetente(state, ai, country, rng);
                 ConsiderResearch(state, ai, country, rng);
@@ -1777,6 +1778,79 @@ namespace Brink.Core
             if (Math.Abs(wantedTax - fiscal.taxRate) > 0.5f
                 && GovernmentSystem.SpendPoliticalCapitalBy(state, country.id, 1f, "Tax rate"))
                 FiscalSystem.SetTaxRateBy(state, country.id, wantedTax);
+        }
+
+        /// <summary>
+        /// Whether to keep carrying occupied ground whose war is over (C5, spec 06 §6b).
+        ///
+        /// Outside the objective budget on the `ConsiderDetente` precedent:
+        /// deciding what to do with ground a finished war left behind is war
+        /// management, not a strategy competing with this month's objectives —
+        /// and inside the budget it would lose the cut forever, which is how
+        /// routine restocking once went silent for thirty years. Deterministic and
+        /// draws no random numbers, so a world with nothing to decide is
+        /// unchanged. Never reached for the player's country: the operator always
+        /// decides this themselves.
+        ///
+        /// 1. A government that can carry the whole holding bill keeps everything:
+        ///    fiscally sound (or borrowing while creditworthy) with the bill covered
+        ///    for `TerritorySystem.HoldingRunwayMonths`.
+        /// 2. Otherwise a location is a candidate only if it can be relinquished,
+        ///    its war with the original owner ended at least
+        ///    `ConfrontationSystem.SettlementTruceMonths` ago (never fought counts
+        ///    as long ago), and it is not uncontested ground answering our own
+        ///    energy or materials shortfall — handing that back invites the war
+        ///    that took it.
+        /// 3. At most one location a month: the largest individual bill, first in
+        ///    authored order on a tie.
+        /// </summary>
+        public static void ConsiderRelinquishment(GameState state, AIState ai, CountryState country)
+        {
+            if (country == null || country.isPlayer || country.id == state.playerCountryId) return;
+
+            float bill = TerritorySystem.HoldingBill(state, country.id);
+            if (bill <= 0f) return;
+
+            bool sustainable = FiscalSystem.ConditionOf(state, country) <= FiscalCondition.CashNegativeButCreditworthy
+                               && country.resources.treasury >= bill * TerritorySystem.HoldingRunwayMonths;
+            if (sustainable) return;
+
+            StrategicLocation choice = null;
+            float choiceBill = 0f;
+            foreach (var location in state.locations)
+            {
+                if (location.ownerId != country.id || !location.IsOccupied) continue;
+                if (!TerritorySystem.CanRelinquish(state, country.id, location.id, out _)) continue;
+                if (MonthsSinceWarBetween(state, country.id, location.originalOwnerId)
+                    < ConfrontationSystem.SettlementTruceMonths) continue;
+                if (!InsurgencySystem.Denies(state, location)
+                    && TerritorySystem.AnswersOwnShortfall(country, location)) continue;
+
+                float locationBill = TerritorySystem.HoldingBillFor(state, location);
+                if (choice == null || locationBill > choiceBill)
+                {
+                    choice = location;
+                    choiceBill = locationBill;
+                }
+            }
+
+            if (choice != null) TerritorySystem.RelinquishBy(state, country.id, choice.id);
+        }
+
+        /// <summary>
+        /// Months since the most recent resolved confrontation between two states
+        /// ended — the same arithmetic `AllianceSystem.RecentlyAtWar` uses.
+        /// `int.MaxValue` when they have never fought.
+        /// </summary>
+        static int MonthsSinceWarBetween(GameState state, string a, string b)
+        {
+            int since = int.MaxValue;
+            foreach (var confrontation in state.confrontations)
+            {
+                if (!confrontation.resolved || !confrontation.Involves(a) || !confrontation.Involves(b)) continue;
+                since = Math.Min(since, state.date.MonthsSince(confrontation.startDate) - confrontation.monthsActive);
+            }
+            return since;
         }
 
         /// <summary>

@@ -517,10 +517,33 @@ namespace Brink.UI.Views
             // is the difference between a run of failures reading as the map and
             // reading as the dice.
             if (site.IsOccupied)
+            {
                 AddText("sig-rival").text =
                     "   THIS IS OCCUPIED GROUND. Until it is pacified the population is part of "
                     + "the defence, and every programme here is contested. COUNTER-INSURGENCY "
                     + "raises pacification; everything else gets easier as it rises.";
+
+                // The post-war exit (spec 01 §3c). The same gate the order uses,
+                // so a refused button says why rather than doing nothing.
+                string siteId = site.id;
+                bool canRelinquish = TerritorySystem.CanRelinquish(
+                    state, state.playerCountryId, siteId, out string relinquishBlocked);
+                var relinquishRow = new VisualElement();
+                relinquishRow.AddToClassList("button-row");
+                Root.Add(relinquishRow);
+                var relinquish = new Button(() =>
+                {
+                    GameController.Instance.RelinquishLocation(siteId);
+                    Refresh();
+                })
+                { text = $"RELINQUISH THIS GROUND [{TerritorySystem.RelinquishCost} CP]" };
+                relinquish.AddToClassList("cmd-button");
+                if (!canRelinquish) Block(relinquish, relinquishBlocked);
+                relinquishRow.Add(relinquish);
+                AddText("terminal-text-dim").text =
+                    $"   Holding it costs {TerritorySystem.HoldingBillFor(state, site):F0} a month. "
+                    + "Handing it back ends that bill and its yield, and costs war support.";
+            }
 
             BuildLastDefensiveProgramme(state);
         }

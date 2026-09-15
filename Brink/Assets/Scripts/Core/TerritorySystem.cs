@@ -239,6 +239,171 @@ namespace Brink.Core
             }
         }
 
+        // ---------- leaving: the post-war exit (C5, spec 01 §3c) ----------
+        //
+        // Captured ground used to have no way out once its war was over. A
+        // settlement cedes only the objective, `Finish` never touches ground, and
+        // `Withdraw` is an operation that needs a live confrontation — so every
+        // other position taken in a war stayed occupied, billing its holder
+        // upkeep and insurgency for as long as the save ran. Measured before this
+        // existed: 92% of all occupation upkeep in an unattended world was paid
+        // after the war that took the ground had ended, and it was the largest
+        // single reason restructured governments defaulted again.
+        //
+        // This is a **decision**, not a release: nothing here happens on a timer.
+        // The holder chooses to leave (the player through GameController, a
+        // foreign government through `AISystem.ConsiderRelinquishment`), and the
+        // same gate and the same consequences apply to both.
+
+        /// <summary>Command Points the operator spends to relinquish a position — the price of a Withdraw order.</summary>
+        public const int RelinquishCost = 1;
+
+        /// <summary>
+        /// Months of the whole holding bill a government wants in hand before it
+        /// is content to keep carrying occupied ground. The same three-year runway
+        /// the operator's treasury warning uses (`AttentionSystem`).
+        /// </summary>
+        public const int HoldingRunwayMonths = 36;
+
+        /// <summary>War support a voluntary withdrawal costs: the +6 a capture awarded (`MilitarySystem`), given back.</summary>
+        public const float RelinquishWarSupportCost = 6f;
+
+        /// <summary>Relationship memory written with the original owner — the weight `PeaceSystem`'s Withdrawal term records.</summary>
+        public const float RelinquishMemoryWeight = 3f;
+
+        /// <summary>
+        /// A resource below this is a shortfall. The line `AISystem.ResourcePrize`
+        /// and `AssertClaim` read when deciding whether a neighbour's ground is
+        /// worth a war; restated here rather than shared so those decision paths
+        /// are left exactly as they were.
+        /// </summary>
+        public const float ShortfallLine = 40f;
+
+        /// <summary>
+        /// What one occupied location costs its holder a month: upkeep on its
+        /// strategic value, plus the bill for any armed movement on it — exactly
+        /// what `MonthlyUpdate` and `InsurgencySystem`'s bill charge. Zero for
+        /// ground that is not occupied.
+        /// </summary>
+        public static float HoldingBillFor(GameState state, StrategicLocation location)
+        {
+            if (state == null || location == null || !location.IsOccupied) return 0f;
+
+            float bill = location.strategicValue * OccupationUpkeepPerValue;
+            var movement = InsurgencySystem.At(state, location.id);
+            if (movement != null && movement.strength >= 1f)
+                bill += movement.strength / 100f * InsurgencySystem.InsurgencyBillPerMonth;
+            return bill;
+        }
+
+        /// <summary>The whole monthly bill for every occupied location this country holds.</summary>
+        public static float HoldingBill(GameState state, string countryId)
+        {
+            float total = 0f;
+            if (state == null) return total;
+            foreach (var location in state.locations)
+                if (location.ownerId == countryId) total += HoldingBillFor(state, location);
+            return total;
+        }
+
+        /// <summary>
+        /// Whether this ground supplies what its holder is short of: an energy
+        /// region to a state below the energy line, a mining region to one below
+        /// the materials line. Says nothing about whether the ground is producing
+        /// — a contested location yields nothing to anyone (see `Swing`).
+        /// </summary>
+        public static bool AnswersOwnShortfall(CountryState holder, StrategicLocation location)
+        {
+            if (holder == null || location == null) return false;
+            return (holder.resources.energy < ShortfallLine && location.type == LocationType.EnergyRegion)
+                   || (holder.resources.strategicMaterials < ShortfallLine
+                       && location.type == LocationType.MaterialsRegion);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="actorId"/> may hand this location back now, and
+        /// why not. One gate, shared by the operator's order, the Military screen
+        /// and the AI, so what is offered and what is accepted cannot differ.
+        ///
+        /// While a confrontation between the holder and the original owner is
+        /// still open the ground is part of that war, and wartime `Withdraw` is
+        /// the verb for it.
+        /// </summary>
+        public static bool CanRelinquish(GameState state, string actorId, string locationId,
+            out string reason)
+        {
+            reason = "";
+            var location = state?.FindLocation(locationId);
+            if (location == null) { reason = "NO SUCH POSITION."; return false; }
+            if (string.IsNullOrEmpty(actorId) || location.ownerId != actorId)
+            {
+                reason = "WE DO NOT HOLD IT.";
+                return false;
+            }
+            if (!location.IsOccupied)
+            {
+                reason = "THIS IS OUR OWN GROUND. There is nobody to hand it back to.";
+                return false;
+            }
+            if (state.FindCountry(location.originalOwnerId) == null)
+            {
+                reason = "THERE IS NO GOVERNMENT LEFT TO HAND IT BACK TO.";
+                return false;
+            }
+            if (ConfrontationSystem.ExistingBetween(state, actorId, location.originalOwnerId) != null)
+            {
+                reason = "THE WAR FOR IT IS STILL BEING FOUGHT. Withdraw from the front instead.";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Hand occupied ground back to the state it was taken from.
+        ///
+        /// Control returns and the holder stops paying for it — its upkeep and any
+        /// armed movement's bill both follow ownership, so nothing here has to
+        /// cancel them. What it deliberately does **not** do: it is not a cession
+        /// (`Cede` recognises title to a new owner, this restores the old one),
+        /// not a seizure, and not an act of war — no confrontation, truce,
+        /// sanction, escalation or threat perception is touched. An armed
+        /// movement on the ground is left to fade by its own rules, as it does
+        /// when ground is recovered any other way.
+        /// </summary>
+        public static bool RelinquishBy(GameState state, string actorId, string locationId)
+        {
+            if (!CanRelinquish(state, actorId, locationId, out _)) return false;
+
+            var location = state.FindLocation(locationId);
+            var holder = state.FindCountry(actorId);
+            var owner = state.FindCountry(location.originalOwnerId);
+            if (holder == null) return false;
+
+            location.ownerId = location.originalOwnerId;
+            location.garrison = Math.Max(20f, location.garrison);
+            location.pacification = 0f;
+
+            holder.warSupport = Clamp(holder.warSupport - RelinquishWarSupportCost);
+            state.FindRelationship(actorId, owner.id)
+                ?.AddMemory(state.date, "Returned occupied ground", RelinquishMemoryWeight);
+
+            state.AddChronicle(ChronicleCategory.Military, actorId,
+                $"{location.displayName} relinquished to {owner.displayName}.", Publicity.Public);
+
+            if (actorId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "POSITION RELINQUISHED",
+                    $"Our forces have left {location.displayName}. It is {owner.displayName}'s again, "
+                    + "and so are its costs and whatever it produces.", owner.id,
+                    desk: ReportingDesk.Military);
+            else if (owner.id == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "GROUND RETURNED",
+                    $"{holder.displayName} has handed {location.displayName} back to us.",
+                    holder.id, desk: ReportingDesk.Military);
+
+            GameLog.Info("TERRITORY", $"{actorId} relinquished {location.id} to {owner.id}.");
+            return true;
+        }
+
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);
     }
 }

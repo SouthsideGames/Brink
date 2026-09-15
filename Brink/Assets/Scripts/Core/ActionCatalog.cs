@@ -150,6 +150,13 @@ namespace Brink.Core
                 "Fortify ground we hold, pacify occupied territory, escort our shipping or " +
                 "build the shield. No confrontation required.",
                 verbs: new[] { nameof(GameController.LaunchDefensiveProgramme) });
+            bool canRelinquish = state.locations.Exists(location =>
+                TerritorySystem.CanRelinquish(state, state.playerCountryId, location.id, out _));
+            Add(Pillar.Military, "MILITARY", "Relinquish occupied ground", $"{TerritorySystem.RelinquishCost} CP",
+                "Hand a position we hold by force back to its original owner once no war is being " +
+                "fought over it. Its upkeep and any rising there stop being ours; so does what it produces.",
+                canRelinquish, "We hold no occupied ground outside a live war.",
+                verbs: new[] { nameof(GameController.RelinquishLocation) });
             Add(Pillar.Military, "MILITARY", "Order equipment", "Treasury",
                 $"{AssetCatalog.All.Count} counted classes across air, sea and ground. "
                 + "Steel takes years, people take months; industry decides throughput.",

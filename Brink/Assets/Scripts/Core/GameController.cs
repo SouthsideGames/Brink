@@ -1134,6 +1134,24 @@ namespace Brink.Core
             return record;
         }
 
+        /// <summary>
+        /// Hand occupied ground back to its original owner once no war is being
+        /// fought over it (spec 01 §3c). Always the operator's own decision: the
+        /// AI's rule for this never reaches the player's country, however the
+        /// treasury looks.
+        /// </summary>
+        public bool RelinquishLocation(string locationId)
+        {
+            if (!MayCommand(Data.Pillar.Military)) return false;
+            if (!TerritorySystem.CanRelinquish(State, State.playerCountryId, locationId, out _)) return false;
+            if (!Turns.SpendCommandPoints(TerritorySystem.RelinquishCost, "Relinquish occupied ground")) return false;
+
+            bool ok = TerritorySystem.RelinquishBy(State, State.playerCountryId, locationId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public Data.OperationRecord LaunchOperation(string locationId, OperationType type, Data.OperationDirective directive)
         {
             if (!IsRunning || State.ActiveConfrontation == null) return null;
