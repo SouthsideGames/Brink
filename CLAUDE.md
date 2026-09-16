@@ -2836,11 +2836,14 @@ for every figure in the table above.
 - [ ] **C5 — the post-war occupation exit. RECONSTRUCTED, AND IT FAILS ITS OWN
       ACCEPTANCE.** Not merged, not certified, and on
       `chatgpt/c5-occupation-exit-recovery` rather than main. The original C5
-      commits (`665766f`, `9784697`, `7a2158a`) were made on another working copy
-      and **never pushed**; they exist nowhere reachable, so this is a
-      reconstruction from the C4 baseline plus the preserved design and
-      acceptance record, not a recovery of the lost objects. The SHAs necessarily
-      differ.
+      commits (`665766f`, `9784697`, `7a2158a`) were the first occupation-exit
+      implementation. They were **superseded** by the implementation that was
+      ultimately certified in Unity and merged into production, and they are
+      preserved under the annotated tag `archive/c5-original-occupation-exit`
+      — historical reference only; that tag is not certified production. This
+      entry describes a reconstruction built from the C4 baseline plus the
+      preserved design and acceptance record, so its SHAs necessarily differ
+      from those three.
       **What it fixes.** Ground taken in a war could not be put down once the war
       ended: a settlement cedes only the *objective*, closing a confrontation
       releases nothing else, `Withdraw` is an operation needing a **live**
