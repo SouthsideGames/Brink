@@ -1,7 +1,10 @@
 # 33 — Historical Identity, Precedent, Credibility, and Strategic Eras
 
 ## Status
-Phase G implementation specification — feature-complete pending certification.
+As-built and player-facing. Eras, reversal, precedent, credibility memory and
+the recovery file render in STRATEGIST's STRATEGIC RECORD section, and
+historical identity now renders there beside them. Covered by
+`CabinetConsultationTests`; not yet certified as production.
 
 ## Purpose
 A long-running Brink save should feel as though it is accumulating political-strategic history, not merely advancing a calendar. Phase G turns existing authoritative records into legible historical identity, precedent, named strategic eras, visible strategic reversals, diplomatic credibility memory, and recovery history.
@@ -12,6 +15,15 @@ A long-running Brink save should feel as though it is accumulating political-str
 - Existing structural characteristics can add secondary traditions such as ARMED TRADITION or INDUSTRIAL TRADITION.
 - Identity is descriptive. It grants no modifier, resource, probability adjustment, permission, or restriction.
 - Other countries' Chronicle records do not count toward the player's historical identity.
+- **Where the operator reads it.** STRATEGIST prints the identity immediately
+  after the era line, inside STRATEGIC RECORD: the era names the phase the
+  posting is in, the identity names what the record has made of it. The view is
+  a pass-through to `HistoricalIdentitySystem.Render` — the labels and their
+  evidence thresholds exist in exactly one place, and a test fails if a view
+  ever names one itself.
+  Reading it changes nothing: no save write, no counter, no clock. A test
+  plants two dozen foreign chronicle entries and asserts our identity is
+  unmoved, which guards the fog rule above as well as the record rule.
 
 ## Strategic eras
 - Once a standing doctrine has been chosen, the posting receives a human-readable era name.

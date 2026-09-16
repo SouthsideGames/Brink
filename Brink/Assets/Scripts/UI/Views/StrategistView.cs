@@ -33,10 +33,22 @@ namespace Brink.UI.Views
             BuildTree(state);
         }
 
+        /// <summary>
+        /// What STRATEGIST prints for the accumulated record. A pass-through to
+        /// the production reader on purpose: the classification lives in
+        /// `HistoricalIdentitySystem`, and a second copy in a view would be the
+        /// "two definitions of one thing" bug this project keeps re-learning.
+        /// </summary>
+        public static string HistoricalIdentityText(GameState state)
+            => HistoricalIdentitySystem.Render(state);
+
         void BuildHistoricalCourse(GameState state)
         {
             AddText("terminal-text-bright").text = AsciiChart.BoxHeader("STRATEGIC RECORD", W);
             AddText().text = StrategicEraSystem.Render(state);
+            // What the era is called, then what the record has made of us. Both
+            // are descriptive: neither grants power nor narrows a future choice.
+            AddText().text = HistoricalIdentityText(state);
             AddText("terminal-text-dim").text = StrategicReversalSystem.Render(state);
 
             var precedents = PrecedentSystem.Recent(state, TerminalMetrics.SizeClass == SizeClass.Compact ? 2 : 4);

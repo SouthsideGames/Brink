@@ -15,6 +15,15 @@ namespace Brink.UI.Views
         public override string ShortCode => "CAB";
         static int W => TerminalMetrics.Columns;
 
+        /// <summary>
+        /// Which direction the operator is currently asking about, or null for
+        /// none. View-local and deliberately transient — the same treatment
+        /// `WorldMapView` gives its selected country. A consultation is a
+        /// question the operator asked this session, not a fact about the world,
+        /// so it is not `GameState` and there is nothing to migrate.
+        /// </summary>
+        CabinetChoiceReadingSystem.ChoiceKind? consultChoice;
+
         protected override void Build()
         {
             var gc = GameController.Instance;
@@ -26,6 +35,7 @@ namespace Brink.UI.Views
                 $" INFLUENCE: {state.influence}/{GameState.InfluenceCap}   CP: {state.commandPoints.current}\n";
 
             BuildMeeting(state);
+            BuildConsultation(state);
 
             foreach (var vacancy in state.PlayerCountry.vacancies) BuildVacancyBlock(state, vacancy);
             foreach (var official in state.cabinet) BuildOfficialBlock(state, official);
@@ -65,6 +75,98 @@ namespace Brink.UI.Views
 
             AddText("terminal-text-dim").text =
                 " THIS IS ADVICE, NOT CONSENSUS. ALIGNMENT SHAPES REACTION; IT DOES NOT REMOVE YOUR AUTHORITY.";
+        }
+
+        // ---------- consultation ----------
+
+        /// <summary>
+        /// The directions the operator may consult the Cabinet about. This is
+        /// `CabinetChoiceReadingSystem`'s own taxonomy, enumerated rather than
+        /// restated: a second list would drift from the reader within a month,
+        /// which is the bug this project has shipped in six costumes.
+        /// </summary>
+        public static CabinetChoiceReadingSystem.ChoiceKind[] ConsultationChoices =>
+            (CabinetChoiceReadingSystem.ChoiceKind[])
+                Enum.GetValues(typeof(CabinetChoiceReadingSystem.ChoiceKind));
+
+        /// <summary>
+        /// What CABINET prints for a consulted direction. A pass-through to the
+        /// production reader on purpose — the view must not hold a second copy
+        /// of how an office feels about anything.
+        /// </summary>
+        public static string ConsultationText(GameState state,
+            CabinetChoiceReadingSystem.ChoiceKind choice)
+            => CabinetChoiceReadingSystem.Render(state, choice);
+
+        /// <summary>
+        /// Operator-initiated: the player comes to CABINET to ask "if I pursue
+        /// this, how will my government take it?" rather than being followed
+        /// around by a standing preview on every pillar desk. Informational by
+        /// construction — selecting a direction calls no `GameController` verb,
+        /// so it cannot spend CP or Influence, advance the month, draw RNG,
+        /// execute the direction or touch the save.
+        /// </summary>
+        void BuildConsultation(GameState state)
+        {
+            AddText("terminal-text-bright").text =
+                AsciiChart.BoxHeader("CABINET CONSULTATION — HOW WOULD THEY TAKE IT?", W);
+            AddText("terminal-text-dim").text =
+                " ASK THE GOVERNMENT ABOUT A DIRECTION YOU ARE WEIGHING. NOTHING IS ORDERED AND NOTHING IS SPENT.";
+
+            var row = MakeRow();
+            foreach (var choice in ConsultationChoices)
+            {
+                var captured = choice;
+                bool current = consultChoice.HasValue && consultChoice.Value == choice;
+                // Selecting the current direction puts the question down again,
+                // so the panel can be returned to one line on a phone.
+                var button = new Button(() =>
+                {
+                    consultChoice = current
+                        ? (CabinetChoiceReadingSystem.ChoiceKind?)null
+                        : captured;
+                    Refresh();
+                }) { text = (current ? "► " : "") + ConsultationLabel(choice) };
+                button.AddToClassList("cmd-button");
+                if (current) button.AddToClassList("primary");
+                row.Add(button);
+            }
+
+            if (!consultChoice.HasValue)
+            {
+                AddText("terminal-text-dim").text =
+                    "  NO DIRECTION SELECTED. CHOOSE ONE ABOVE TO READ THE ROOM.";
+                return;
+            }
+
+            AddText().text = ConsultationText(state, consultChoice.Value);
+        }
+
+        /// <summary>Terminal-voice button labels; the narrow forms are for a phone.</summary>
+        public static string ConsultationLabel(CabinetChoiceReadingSystem.ChoiceKind choice)
+        {
+            bool tight = TerminalMetrics.SizeClass == SizeClass.Compact;
+            switch (choice)
+            {
+                case CabinetChoiceReadingSystem.ChoiceKind.EscalateWar:
+                    return tight ? "ESCALATE" : "ESCALATE A WAR";
+                case CabinetChoiceReadingSystem.ChoiceKind.SeekPeace:
+                    return tight ? "PEACE" : "SEEK PEACE";
+                case CabinetChoiceReadingSystem.ChoiceKind.ExpandSpending:
+                    return tight ? "SPEND" : "EXPAND SPENDING";
+                case CabinetChoiceReadingSystem.ChoiceKind.FiscalRestraint:
+                    return tight ? "RESTRAIN" : "FISCAL RESTRAINT";
+                case CabinetChoiceReadingSystem.ChoiceKind.CovertRisk:
+                    return tight ? "COVERT" : "ACCEPT COVERT RISK";
+                case CabinetChoiceReadingSystem.ChoiceKind.DiplomaticCompromise:
+                    return tight ? "COMPROMISE" : "DIPLOMATIC COMPROMISE";
+                case CabinetChoiceReadingSystem.ChoiceKind.RestrictDomesticSpace:
+                    return tight ? "RESTRICT" : "RESTRICT AT HOME";
+                case CabinetChoiceReadingSystem.ChoiceKind.LiberalizeDomesticSpace:
+                    return tight ? "LIBERALIZE" : "LIBERALIZE AT HOME";
+                default:
+                    return choice.ToString().ToUpperInvariant();
+            }
         }
 
         void BuildVacancyBlock(GameState state, CabinetVacancy vacancy)
