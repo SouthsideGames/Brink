@@ -69,7 +69,7 @@ namespace Brink.Core
             var relationship = state.FindRelationship(sponsorId, targetId);
             if (relationship == null) { reason = "No relationship exists."; return false; }
 
-            if (relationship.relations < RequiredRelations)
+            if (DiplomacySystem.Permitted(state, relationship, relationship.relations) < RequiredRelations)
             {
                 reason = $"They are not close enough to us. Relations {relationship.relations:F0}, " +
                          $"need {RequiredRelations:F0}.";
@@ -195,7 +195,7 @@ namespace Brink.Core
                 // The whole thing rests on being their friend. Stop being one and
                 // the argument stops working — this is what makes it a *betrayal*
                 // rather than a slow-motion invasion.
-                if (relationship.relations < RequiredRelations - 15f
+                if (DiplomacySystem.Permitted(state, relationship, relationship.relations) < RequiredRelations - 15f
                     || relationship.trust < RequiredTrust - 15f)
                 {
                     Collapse(state, campaign, "lost the goodwill it depended on");

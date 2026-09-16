@@ -321,12 +321,13 @@ namespace Brink.Core
                 }
 
                 // Partnership with the friendly and the useful.
-                if (relationship.relations > 55f && state.FindTreaty(country.id, other.id) == null)
+                if (DiplomacySystem.Permitted(state, relationship, relationship.relations) > 55f
+                    && state.FindTreaty(country.id, other.id) == null)
                     candidates.Add(new AIObjective
                     {
                         type = AIObjectiveType.ExpandInfluence,
                         targetId = other.id,
-                        priority = relationship.relations * 0.5f * (0.6f + horizon * 0.6f)
+                        priority = DiplomacySystem.Permitted(state, relationship, relationship.relations) * 0.5f * (0.6f + horizon * 0.6f)
                     });
             }
 
@@ -1165,7 +1166,8 @@ namespace Brink.Core
             {
                 if (existing.broken || existing.Has(TreatyCommitment.MutualDefense)) return false;
                 var r = state.FindRelationship(country.id, targetId);
-                if (r == null || r.relations < 68f || r.trust < 55f) return false;
+                if (r == null || DiplomacySystem.Permitted(state, r, r.relations) < 68f
+                    || DiplomacySystem.Permitted(state, r, r.trust) < 55f) return false;
 
                 return DiplomacySystem.DeepenTreatyBy(state, country.id, targetId,
                     new List<TreatyCommitment> { TreatyCommitment.MutualDefense });

@@ -38,8 +38,6 @@ namespace Brink.Core
         /// <summary>How committed a shared bloc reads to rival gravity, 0..1.</summary>
         public const float BlocWarmth = 0.75f;
 
-        /// <summary>Monthly approach rate toward the gravity ceiling on relations.</summary>
-        public const float GravityCeilingRate = 0.35f;
 
         /// <summary>Where cold alignment thaws to between incidents: neutral, a little cool.</summary>
         public const float AlignmentBaseline = 40f;
@@ -48,10 +46,11 @@ namespace Brink.Core
         public const float AlignmentReversion = 0.004f;
 
         /// <summary>
-        /// How far rival gravity can cap a pair's alignment (100 − gravity × this).
-        /// The same weight as the relations ceiling: at the gravity a committed
-        /// bloc produces the cap has to cross the friendship line, or it
-        /// decorates the thing it exists to prevent.
+        /// How far rival gravity can cap the warmth a pair is *permitted* to
+        /// function at (100 − gravity × this). One weight for all three
+        /// dimensions: at the gravity a committed bloc produces the cap has to
+        /// cross the friendship line, or it decorates the thing it exists to
+        /// prevent. It no longer writes any stored value — see PermittedWarmth.
         /// </summary>
         public const float AlignmentGravityWeight = 85f;
 
@@ -79,15 +78,31 @@ namespace Brink.Core
             }
         }
 
-        /// <summary>
-        /// Emergent status (GDD §15.1). Combines temperature, trust, alignment,
-        /// threat and treaty commitments rather than reading one number.
-        /// </summary>
-        public static RelationshipStatus StatusOf(GameState state, string a, string b)
-        {
-            var relationship = state.FindRelationship(a, b);
-            if (relationship == null) return RelationshipStatus.Neutral;
+        /// <summary>The Hostile boundary of the StatusOf ladder, named so the
+        /// ladder and every other consumer cannot disagree about it.</summary>
+        public const float HostileBand = 20f;
 
+        /// <summary>The three relationship weights of <see cref="AffinityOf"/>, summed.
+        /// Written as the formula it comes from so it cannot drift from it.</summary>
+        public const float RelationalWeight = 0.40f + 0.25f + 0.25f;
+
+        /// <summary>
+        /// **Disposition.** The continuous affinity score behind
+        /// <see cref="StatusOf"/>: what these two actually think of one another,
+        /// from the full six-dimension state (GDD §15.1). Extracted so there is
+        /// exactly one hostility formula in the codebase — the discipline that
+        /// `MilitarySystem.ComputePowers` and `AcquisitionSystem.WorstShortfall`
+        /// already enforce. `forcedHostile` reports the live-war short circuit
+        /// the status ladder used to take by returning from inside the loop.
+        ///
+        /// Rival gravity never writes any of its inputs. That is the whole point
+        /// of the read-time architecture: geopolitics may forbid a partnership,
+        /// it may not make two countries dislike each other.
+        /// </summary>
+        public static float AffinityOf(GameState state, Relationship relationship, out bool forcedHostile)
+        {
+            forcedHostile = false;
+            string a = relationship.countryA, b = relationship.countryB;
             var treaty = state.FindTreaty(a, b);
             float score = relationship.relations * 0.4f
                           + relationship.trust * 0.25f
@@ -107,19 +122,101 @@ namespace Brink.Core
             {
                 if (confrontation.resolved) continue;
                 if (!confrontation.Involves(a) || !confrontation.Involves(b)) continue;
-                if (confrontation.escalation >= EscalationState.LimitedConflict) return RelationshipStatus.Hostile;
+                if (confrontation.escalation >= EscalationState.LimitedConflict) { forcedHostile = true; return score; }
                 if (confrontation.escalation >= EscalationState.Crisis) score -= 30f;
                 else score -= 15f;
             }
+            return score;
+        }
 
+        /// <summary>The status ladder, applied to an affinity score.</summary>
+        static RelationshipStatus BandOf(GameState state, Relationship relationship,
+            float score, bool forcedHostile)
+        {
+            if (forcedHostile) return RelationshipStatus.Hostile;
+            var treaty = state.FindTreaty(relationship.countryA, relationship.countryB);
             bool allied = treaty != null && treaty.Has(TreatyCommitment.MutualDefense);
             if (score >= 78f && allied) return RelationshipStatus.Ally;
             if (score >= 70f) return RelationshipStatus.StrategicPartner;
             if (score >= 60f) return RelationshipStatus.Friendly;
             if (score >= 50f) return RelationshipStatus.Cooperative;
             if (score >= 35f) return RelationshipStatus.Neutral;
-            if (score >= 20f) return RelationshipStatus.Rival;
+            if (score >= HostileBand) return RelationshipStatus.Rival;
             return RelationshipStatus.Hostile;
+        }
+
+        /// <summary>
+        /// Emergent status (GDD §15.1). Combines temperature, trust, alignment,
+        /// threat and treaty commitments rather than reading one number.
+        ///
+        /// **This is disposition, not permission.** It answers "what do these two
+        /// think of one another", and it is what the operator is shown. What the
+        /// world currently *permits* them to be is
+        /// <see cref="FunctionalCloseness"/>, and the two are deliberately
+        /// different readings of the same relationship.
+        /// </summary>
+        public static RelationshipStatus StatusOf(GameState state, string a, string b)
+        {
+            var relationship = state.FindRelationship(a, b);
+            if (relationship == null) return RelationshipStatus.Neutral;
+            float score = AffinityOf(state, relationship, out bool forcedHostile);
+            return BandOf(state, relationship, score, forcedHostile);
+        }
+
+        /// <summary>
+        /// **Permission.** The warmth this pair is currently permitted to function
+        /// at, given everybody else's alignments: `100 − gravity × AlignmentGravityWeight`.
+        /// Derived, never stored, so it costs no save state and no migration.
+        /// </summary>
+        public static float PermittedWarmth(GameState state, string a, string b)
+            => 100f - RivalGravity(state, a, b) * AlignmentGravityWeight;
+
+        /// <summary>A stored dimension, read as the warmth currently permitted:
+        /// the continuous form of the same constraint <see cref="FunctionalCloseness"/>
+        /// expresses as a band.</summary>
+        public static float Permitted(GameState state, Relationship r, float stored)
+        {
+            float cap = PermittedWarmth(state, r.countryA, r.countryB);
+            return stored < cap ? stored : cap;
+        }
+
+        /// <summary>
+        /// The warmest band a pair could reach if its disposition sat exactly at
+        /// the permitted ceiling and nothing else helped or hurt it — the status
+        /// ladder read against `RelationalWeight × permitted`.
+        ///
+        /// **The final branch returns Neutral, and that is load-bearing.** Rival
+        /// gravity may cap closeness; it may never assert enmity. Capping the
+        /// score's *inputs* instead would let the untouched threat, memory and
+        /// confrontation terms carry a warm pair below the Rival line, which is
+        /// the same defect the write-back had, relocated into classification.
+        /// </summary>
+        public static RelationshipStatus CeilingBand(float permitted)
+        {
+            float score = RelationalWeight * permitted;
+            if (score >= 78f) return RelationshipStatus.Ally;
+            if (score >= 70f) return RelationshipStatus.StrategicPartner;
+            if (score >= 60f) return RelationshipStatus.Friendly;
+            if (score >= 50f) return RelationshipStatus.Cooperative;
+            return RelationshipStatus.Neutral;
+        }
+
+        /// <summary>
+        /// **Canonical functional closeness.** The warmest band two countries are
+        /// presently permitted to occupy: never warmer than their disposition,
+        /// never colder than neutrality.
+        ///
+        /// Countries may genuinely like everyone. They may not functionally stand
+        /// beside everyone — which is what rival gravity is for, and the only
+        /// thing it is for. Read by the partnership gates and by nothing that
+        /// judges hostility.
+        /// </summary>
+        public static RelationshipStatus FunctionalCloseness(GameState state, string a, string b)
+        {
+            var underlying = StatusOf(state, a, b);
+            if (underlying <= RelationshipStatus.Neutral) return underlying;
+            var ceiling = CeilingBand(PermittedWarmth(state, a, b));
+            return underlying < ceiling ? underlying : ceiling;
         }
 
         // ---------- player commands ----------
@@ -192,7 +289,8 @@ namespace Brink.Core
                 relationship.AddMemory(state.date, "Rejected treaty proposal", -0.5f);
                 if (proposerId == state.playerCountryId)
                     state.AddNotification(NotificationClass.Advisory, "TREATY REJECTED",
-                        $"{target.displayName} declines the proposed commitments.", targetId,
+                        $"{target.displayName} declines the proposed commitments."
+                        + (BlockedByRival(state, proposerId, targetId) is string why ? " " + why : ""), targetId,
                         desk: ReportingDesk.Diplomacy);
                 GameLog.Info("DIPLO", $"{targetId} rejected a treaty proposal from {proposerId}.");
                 return false;
@@ -303,7 +401,9 @@ namespace Brink.Core
                 if (proposerId == state.playerCountryId)
                     state.AddNotification(NotificationClass.Advisory, "TREATY REJECTED",
                         $"{target.displayName} declines these terms. "
-                        + $"{(BalanceOf(clauses) > 2.5f ? "They can see what is being asked of them." : "The relationship is not there yet.")}",
+                        + (BlockedByRival(state, proposerId, targetId)
+                           ?? (BalanceOf(clauses) > 2.5f ? "They can see what is being asked of them."
+                                                         : "The relationship is not there yet.")),
                         targetId, desk: ReportingDesk.Diplomacy);
                 return false;
             }
@@ -622,9 +722,12 @@ namespace Brink.Core
             var target = state.FindCountry(targetId);
             if (player == null || target == null) return 0f;
 
-            float willingness = relationship.relations * 0.45f
-                                + relationship.trust * 0.3f
-                                + relationship.strategicAlignment * 0.25f
+            // Read as the warmth the world presently permits, not as raw feeling:
+            // signing is a partnership act, and the friend of my enemy cannot be
+            // my treaty partner however warmly we regard one another.
+            float willingness = Permitted(state, relationship, relationship.relations) * 0.45f
+                                + Permitted(state, relationship, relationship.trust) * 0.3f
+                                + Permitted(state, relationship, relationship.strategicAlignment) * 0.25f
                                 + relationship.DependenceOf(targetId) * 0.15f
                                 + player.pillars.diplomacy * 0.12f
                                 + relationship.memoryWeight * 1.5f;
@@ -667,25 +770,16 @@ namespace Brink.Core
                 willingness += TechnologySystem.Effectiveness(player, "CAP_VERIFICATION") * 26f;
             }
 
-            // **We will not pact with our enemy's ally.** The strongest case over
-            // every third state of the proposer being deeply aligned with a
-            // genuine rival of the target. Without this, an operator could sign
-            // both sides of every rivalry on earth — measured: fifteen of
-            // fifteen friendships in twenty years, unresisted.
-            float rivalTie = 0f;
-            foreach (var third in state.countries)
-            {
-                if (third.id == proposerId || third.id == targetId) continue;
-                var proposerThird = state.FindRelationship(proposerId, third.id);
-                var targetThird = state.FindRelationship(targetId, third.id);
-                if (proposerThird == null || targetThird == null) continue;
-
-                // Same thresholds as RivalGravity, so the door and the room agree.
-                float warmth = Math.Max(0f, proposerThird.strategicAlignment - 68f) / 32f;
-                float coldness = Math.Max(0f, 22f - targetThird.relations) / 22f;
-                rivalTie = Math.Max(rivalTie, warmth * coldness);
-            }
-            willingness -= rivalTie * 40f;
+            // **We will not pact with our enemy's ally** — and the three terms
+            // above now carry that, once. This used to be a second, separate
+            // `−40 × rivalTie` charge computed from the same inputs and the same
+            // thresholds as `RivalGravity`, introduced in the same commit with a
+            // comment asking that "the door and the room agree". It was pointwise
+            // dominated by gravity — the directional half of a symmetric max, on
+            // un-augmented terms — so with the willingness inputs read as
+            // permitted warmth it charged one fact twice. One definition of a
+            // rival tie, applied once per decision; the door and the room now read
+            // the same computation instead of keeping two copies in step by hand.
 
             // **Encirclement anxiety.** A proposer already pacted across the
             // world is offering membership in a hegemony, and every signature
@@ -921,9 +1015,12 @@ namespace Brink.Core
             var toTarget = state.FindRelationship(candidateId, targetId);
             if (toLeader == null || toTarget == null) return 0f;
 
-            float willingness = toLeader.relations * 0.35f
-                                + toLeader.trust * 0.25f
-                                + toLeader.strategicAlignment * 0.2f;
+            // Leader-side terms are permission: joining is standing beside them in
+            // somebody else's war. The target-side hostility term below stays
+            // underlying — gravity must not manufacture a reason to recruit.
+            float willingness = Permitted(state, toLeader, toLeader.relations) * 0.35f
+                                + Permitted(state, toLeader, toLeader.trust) * 0.25f
+                                + Permitted(state, toLeader, toLeader.strategicAlignment) * 0.2f;
 
             // Hostility toward the target is the strongest recruiting factor.
             willingness += (50f - toTarget.relations) * 0.5f;
@@ -1036,8 +1133,9 @@ namespace Brink.Core
             var relationship = state.FindRelationship(hostId, partnerId);
             if (relationship == null) return false;
 
-            // Nobody hosts a force they have come to fear.
-            return relationship.relations >= 35f
+            // Nobody hosts a force they have come to fear, and nobody hosts one
+            // their own bloc politics will not allow them to stand beside.
+            return Permitted(state, relationship, relationship.relations) >= 35f
                    && relationship.ThreatPerceivedBy(hostId) <= 70f;
         }
 
@@ -1064,7 +1162,14 @@ namespace Brink.Core
         /// </summary>
         public static float RivalGravity(GameState state, Relationship pair,
             Dictionary<string, Relationship> lookup)
+            => RivalGravity(state, pair, lookup, out _);
+
+        /// <summary>Gravity, plus the third state whose alignment produced the
+        /// binding maximum — so a refusal can say who it is about.</summary>
+        public static float RivalGravity(GameState state, Relationship pair,
+            Dictionary<string, Relationship> lookup, out string bindingThirdId)
         {
+            bindingThirdId = null;
             // Thresholds are deliberately severe, and severity is load-bearing:
             // at warmth-over-60 / coldness-under-30 the first calibration froze
             // the whole planet — gravity spread coldness, coldness fed more
@@ -1116,8 +1221,10 @@ namespace Brink.Core
                 if (!lookup.TryGetValue(PairKey(pair.countryA, third.id), out var ac)) continue;
                 if (!lookup.TryGetValue(PairKey(pair.countryB, third.id), out var bc)) continue;
 
-                worst = Math.Max(worst, Warmth(ac) * Coldness(bc));
-                worst = Math.Max(worst, Warmth(bc) * Coldness(ac));
+                float forward = Warmth(ac) * Coldness(bc);
+                if (forward > worst) { worst = forward; bindingThirdId = third.id; }
+                float reverse = Warmth(bc) * Coldness(ac);
+                if (reverse > worst) { worst = reverse; bindingThirdId = third.id; }
             }
             return worst;
         }
@@ -1127,14 +1234,43 @@ namespace Brink.Core
 
         /// <summary>Single-pair gravity, for action-time checks like Outreach.</summary>
         public static float RivalGravity(GameState state, string aId, string bId)
+            => RivalGravity(state, aId, bId, out _);
+
+        /// <summary>Single-pair gravity plus the binding third state.</summary>
+        public static float RivalGravity(GameState state, string aId, string bId,
+            out string bindingThirdId)
         {
+            bindingThirdId = null;
             var pair = state.FindRelationship(aId, bId);
             if (pair == null) return 0f;
 
             var lookup = new Dictionary<string, Relationship>(state.relationships.Count);
             foreach (var r in state.relationships)
                 lookup[PairKey(r.countryA, r.countryB)] = r;
-            return RivalGravity(state, pair, lookup);
+            return RivalGravity(state, pair, lookup, out bindingThirdId);
+        }
+
+        /// <summary>The state whose alignment is presently limiting how close this
+        /// pair may be, or null when nothing is. For refusal text only.</summary>
+        public static string BindingRivalOf(GameState state, string aId, string bId)
+        {
+            float gravity = RivalGravity(state, aId, bId, out string third);
+            return gravity > 0.01f ? third : null;
+        }
+
+        /// <summary>
+        /// A refusal the operator can act on. A gate that turns somebody down
+        /// because of a third state's alignment should say so — a refusal the
+        /// operator cannot see is indistinguishable from a broken control.
+        /// Returns null when bloc politics is not what is refusing.
+        /// </summary>
+        public static string BlockedByRival(GameState state, string aId, string bId)
+        {
+            string third = BindingRivalOf(state, aId, bId);
+            if (third == null) return null;
+            var blocker = state.FindCountry(third);
+            return "THEY WILL NOT STAND WITH US WHILE WE ARE ALIGNED WITH "
+                   + (blocker?.displayName ?? third).ToUpperInvariant() + ".";
         }
 
         /// <summary>
@@ -1318,7 +1454,7 @@ namespace Brink.Core
             var withB = state.FindRelationship(actorId, confrontation.defenderId);
             if (withA == null || withB == null) { reason = "NO STANDING WITH THEM."; return false; }
 
-            if (withA.relations < MediationFloor || withB.relations < MediationFloor)
+            if (Permitted(state, withA, withA.relations) < MediationFloor || Permitted(state, withB, withB.relations) < MediationFloor)
             {
                 reason = $"ONE SIDE WILL NOT HAVE US IN THE ROOM (needs {MediationFloor:F0} "
                          + "relations with both).";
@@ -1356,7 +1492,7 @@ namespace Brink.Core
             float exhaustion = ((initiator?.warExhaustion ?? 0f)
                                 + (defender?.warExhaustion ?? 0f)) * 0.5f;
 
-            float odds = (withA.relations + withB.relations) * 0.25f
+            float odds = (Permitted(state, withA, withA.relations) + Permitted(state, withB, withB.relations)) * 0.25f
                          + (mediator?.pillars.diplomacy ?? 0f) * 0.35f
                          + exhaustion * 0.45f
                          + TechnologySystem.Effectiveness(mediator, "CAP_VERIFICATION") * 18f
@@ -1550,9 +1686,10 @@ namespace Brink.Core
                 reason = "WE ARE IN A CONFRONTATION WITH THEM. Settle it or mediate it first.";
                 return false;
             }
-            if (relationship.relations < SummitFloor)
+            if (Permitted(state, relationship, relationship.relations) < SummitFloor)
             {
-                reason = $"THEY WILL NOT SIT DOWN WITH US (needs {SummitFloor:F0} relations).";
+                reason = BlockedByRival(state, relationship.countryA, relationship.countryB)
+                         ?? $"THEY WILL NOT SIT DOWN WITH US (needs {SummitFloor:F0} relations).";
                 return false;
             }
             return true;
@@ -1603,7 +1740,7 @@ namespace Brink.Core
                 relationship.summitMonthsRemaining--;
                 if (relationship.summitMonthsRemaining > 0) continue;
 
-                if (relationship.relations < SummitFloor)
+                if (Permitted(state, relationship, relationship.relations) < SummitFloor)
                 {
                     CollapseSummit(state, relationship, "the two sides had drifted too far apart");
                     continue;
@@ -1688,48 +1825,26 @@ namespace Brink.Core
                     relationship.trust = Clamp(relationship.trust + envoy * 0.5f);
                 }
 
-                // The friend of my enemy: deep alignment with a state's genuine
-                // rival caps how warm this relationship can be, and erodes what
-                // is above the cap. **A ceiling, not merely a drag** — the first
-                // version subtracted a fraction of a point per month, and the
-                // befriend-everyone bot simply out-spammed it with outreach
-                // (+3/month beats −0.9/month forever): fifteen of fifteen
-                // friendships survived the mechanic built to prevent them.
-                // Courtesy calls cannot outrun bloc politics.
-                float gravity = RivalGravity(state, relationship, lookup);
-                if (gravity > 0.01f)
-                {
-                    // 85, not 55: at the realistic gravity a committed bloc
-                    // produces (~0.45), a factor of 55 capped relations at 75 —
-                    // still comfortably a friendship, and the bot proved it by
-                    // befriending all fifteen anyway. The cap has to cross the
-                    // friendship line, or it decorates the thing it exists to
-                    // prevent.
-                    float ceiling = 100f - gravity * 85f;
-                    // Approached fast enough to outrun a monthly outreach call
-                    // (+3 × (1 − 0.8 gravity)): at 0.12 a pair sitting a dozen
-                    // points over the cap was pulled 1.5 a month and pushed
-                    // back 1.8, and the befriend-everyone bot held every
-                    // partner just over the friendship line. A ceiling that a
-                    // courtesy call can outrun is a drag with a comment.
-                    if (relationship.relations > ceiling)
-                        relationship.relations = Approach(relationship.relations, ceiling, GravityCeilingRate);
-                    if (relationship.trust > ceiling)
-                        relationship.trust = Approach(relationship.trust, ceiling, 0.08f);
-
-                    // Alignment is capped by gravity too, never drained by it.
-                    // The drain (−0.3 × gravity a month, no floor) was the
-                    // thirteenth value-versus-target instance: gravity attracts
-                    // where relations are cold, cold pairs are what sanctions
-                    // make, so every sanctioned pair's alignment ran to zero and
-                    // the chill target below it ran to zero with it — which is
-                    // the "relations 0 on every standing regime" the sanction
-                    // dump showed, and the mechanism that froze the planet in
-                    // the first calibration.
-                    float alignmentCeiling = 100f - gravity * AlignmentGravityWeight;
-                    if (relationship.strategicAlignment > alignmentCeiling)
-                        relationship.strategicAlignment = Approach(relationship.strategicAlignment, alignmentCeiling, 0.1f);
-                }
+                // **Rival gravity writes nothing here, by design.**
+                //
+                // It used to close `relations`, `trust` and `strategicAlignment`
+                // onto `100 − gravity × 85` every month, and the rate existed only
+                // to win a race against an outreach call. That made the same three
+                // scalars answer two different questions — what these two think of
+                // each other, and how close the rest of the world lets them be —
+                // and because 0.90 of the affinity score is those three scalars, a
+                // constraint fed itself: gravity wrote coldness, the coldness was
+                // read back as hostility evidence, and that produced more gravity
+                // somewhere else. Measured on eight Challenging worlds over 480
+                // months, the write-back moved the affinity score on 31,263
+                // pair-months, by up to 10.7 points.
+                //
+                // The constraint is now applied where it is *read*
+                // (`PermittedWarmth` / `FunctionalCloseness`), by the gates that
+                // grant partnership. A read-time cap cannot be out-spammed, because
+                // it is not in a race: it is a statement about the configuration as
+                // it stands, and it releases the moment the configuration does.
+                // Same measurement after: 0 of 464,816 pair-months moved.
 
                 // What you learned of a partner's doctrine goes stale.
                 //

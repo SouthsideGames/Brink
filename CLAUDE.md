@@ -2943,6 +2943,162 @@ for every figure in the table above.
       file already records once, in `SimulationPipeline`. **Unity remains the
       authority; the README already says so and now there is a measured reason.**
 
+
+- [x] **Disposition and permitted closeness are now two readings** (spec 04 §9c).
+      Rival gravity used to enforce the friend-of-my-enemy ceiling by *writing*
+      `relations`, `trust` and `strategicAlignment` down to `100 − gravity × 85`
+      every month. So the same three scalars answered two different questions —
+      what these two think of each other, and how close the rest of the world
+      lets them be — and because 0.90 of the affinity score is those three
+      scalars, **the constraint fed itself**: gravity wrote coldness, the
+      coldness was read back as hostility evidence, and that produced more
+      gravity elsewhere. Measured on eight Challenging worlds × 480 months, the
+      write-back moved the affinity score on **31,263 pair-months, by up to 10.7
+      points**, and it was the mechanism behind sanctions the review could never
+      lift (the AI imposes on `relations < 30`, and gravity was writing relations
+      under 30).
+      **The locked rule: countries may genuinely like everyone; they may not
+      functionally stand beside everyone.** Rival gravity represents geopolitical
+      incompatibility, so it limits how far a warm relationship can *progress* —
+      it may never decide how two states feel.
+      - `AffinityOf` is extracted from `StatusOf` and is the **one** hostility
+        formula (the `ComputePowers` / `WorstShortfall` discipline). Verified
+        bitwise-identical to the certified score on 461,248 pair-month
+        comparisons before anything else changed.
+      - `PermittedWarmth = 100 − gravity × AlignmentGravityWeight`, derived and
+        never stored — **no save field, no version bump, no migration.**
+        `Permitted(r, stored)` is its continuous form for the partnership gates.
+      - `FunctionalCloseness = min(StatusOf, CeilingBand(PermittedWarmth))`,
+        passed through unchanged at Neutral or colder. `CeilingBand` reads the
+        existing ladder against `RelationalWeight × permitted`, where
+        `RelationalWeight` is the sum of the score's own three weights
+        (0.40 + 0.25 + 0.25) — **no new constant anywhere in this work.** At
+        committed gravity 0.5 that lands on Cooperative, one band below the
+        friendship line, which is the arithmetic the friendship invariant always
+        asserted in its own comment.
+      - **`CeilingBand`'s final branch returns Neutral, and that is the whole
+        safety story.** `FunctionalCloseness` can never report Rival or Hostile
+        from a warm disposition, and `min` means it can never warm one either.
+        Capping the score's *inputs* was tried and rejected: the untouched
+        threat, memory and confrontation terms then carry a pair at
+        relations 90 / trust 80 / alignment 85 into **Rival** at ordinary threat
+        and **Hostile** at gravity 1.0 — the same defect relocated from stored
+        state into classification.
+      - **`rivalTie` is retired.** Treaty acceptance had a second `−40` charge
+        computed from the same inputs and thresholds as `RivalGravity`,
+        introduced in the same commit asking that "the door and the room agree".
+        It is the directional half of a symmetric maximum on un-augmented terms,
+        so `rivalTie ≤ RivalGravity` always: with the willingness inputs read as
+        permitted warmth it priced one fact twice. **One definition of a rival
+        tie, applied once per decision.** Measured: pacts 88 → 89, refusals
+        397 → 418 — the retirement and the routing cancel.
+      - `GravityCeilingRate` is **deleted**. Its own comment said it existed to
+        "outrun a monthly outreach call"; a read-time `min` is not in a race.
+      **Measured, control vs implementation, 8 Challenging seeds × 480 months:**
+      affinity deltas at the old write-back site **31,263 → 0 of 464,816**; zero
+      Rival/Hostile outputs from a warm disposition and zero warming over the
+      same population; the constraint binds on 3.5% of pair-months and removes
+      41 of 99 warm relationships from functional friendship at end of run.
+      Gravity itself is **preserved, not amplified** — bearing 45.5% → 47.2%,
+      committed 29.1% → 30.0%, mean at end 0.290 → 0.301. Standing sanctions
+      **fall 17.7%**. Disposition becomes truthful, so the world is warmer and
+      slightly more contentious: relations mean 33.0 → 42.4, alignment
+      44.2 → 53.5, wars 201 → 216.
+      **Two terms are deliberately left on disposition and say so at the call
+      site** — `BlocSystem.JoinWillingness`' and `AllianceSystem.HonorWillingness`'
+      trust. GDD §15.1 defines trust as the belief that commitments will be
+      honoured, which is a partner's reliability rather than how close bloc
+      politics lets us stand; `HonorWillingness` asks literally "will they come
+      when called", so capping it would let a third state's alignment make an ally
+      look unreliable. Bloc cohesion stays on disposition for the same reason and
+      a stronger one: `BlocSystem.Bind` writes cohesion into
+      `strategicAlignment`, so a gravity-derived cohesion would carry gravity
+      back into stored disposition. **Do not "fix" these for symmetry.**
+      **The friendship invariant is restated, not weakened.** Its own header
+      always described the rule as the ceiling crossing the friendship line; its
+      predicate read stored warmth only because gravity closed the stored value
+      onto the cap. `UniversalFriendshipIsStructurallyImpossible` now measures
+      `FunctionalCloseness >= Friendly` at the same thresholds, keeps both
+      non-vacuity checks, and **gains a fifth assertion**: at least one partner
+      must be warm by disposition while bloc politics holds it below functional
+      friendship. That pairing is impossible under the write-back, so it is the
+      assertion that fails if gravity ever starts manufacturing coldness again.
+      `DeepAlignmentWithARivalCapsTheRelationship` asserts the same `66` against
+      `PermittedWarmth` and adds that the courtship itself was not undone.
+      **The `0.706` gravity at which the old ceiling crossed `AlignmentBaseline`
+      is a diagnostic figure only.** Nothing reads it; do not turn it into a
+      threshold.
+      Presentation: `[STATUS]`, the relationship bars, the map glyphs and the
+      dossier all keep reading disposition (spec 15 — buried, never distorted).
+      The DIPLOMACY panel adds one line, only when the two readings differ,
+      naming the functional band and the binding third state, and gravity-gated
+      refusals say the same through the existing `Block` / `UNAVAILABLE` channel
+      (`DiplomacySystem.BlockedByRival`).
+      **CERTIFIED IN UNITY (2026-09-16), on branch and not merged.** Suite on a
+      project copy because the editor was open: partition A 465/465, B 194/193,
+      C 896/896 — **1555 tests, 1554 passed, 0 failed, 1 inconclusive by
+      design** (`TheWorld_EverTurnsAStrategicInstrumentOnThePlayer`). That is
+      **exact parity with the C5 baseline** at `a989b95`, and the total matching
+      1555 is itself the check that two tests were *restated* rather than added.
+      Note for the next reader: the "1555 / 27 known failures" figure is the
+      **dotnet-harness** number, and that harness is recorded above as unusable
+      quantitatively — Unity's own C5 line is 1554/0/1, which is the bar this was
+      held to.
+      **Balance, measured against `a989b95` as control** (`Report_MultiSeedBalance`,
+      5 seeds, same instrument both arms):
+
+      | Playstyle | control `a989b95` | read-time | Δ |
+      |---|---|---|---|
+      | PASSIVE (baseline) | 2.64 | **2.58** | −0.06 |
+      | DIPLOMACY | +0.50 | **+0.42** | −0.08 |
+      | MILITARY | +0.38 | **+0.36** | −0.02 |
+      | ECONOMY | +0.24 | **+0.28** | +0.04 |
+      | GOVERNMENT | +0.24 | **+0.24** | 0.00 |
+      | INTELLIGENCE | **0.00** | **+0.22** | **+0.22** |
+      | DRIFTER | +0.14 | **−0.02** | −0.16 |
+
+      **The control arm is where the surprise is: INTELLIGENCE does not beat
+      passive at all on certified production** (exactly 0.00), so this project's
+      standing "every playstyle beats passive" property was already broken at
+      `a989b95` and nobody knew, because balance has been recorded as unmeasured
+      since the stability repair. The read-time architecture restores it to
+      +0.22, and the components say why rather than leaving it to luck: that
+      playstyle's `POS` goes 29.9 → 37.1 and `ECON` 42.6 → 53.4. `position` is
+      *standing*, which is exactly what stops being written down by a third
+      state's alignment. Drifting also stops beating passive (+0.14 → −0.02) and
+      costs −0.44 against the diplomacy routine it actually runs (was −0.36), so
+      the crisis turn prices silence harder. The five real playstyles tighten
+      from a 0.50 band to **0.20**, all clearly above passive. DIPLOMACY's −0.08
+      is the largest adverse movement, it is still the leader, and it has a
+      mechanism — universal *functional* friendship is now genuinely prevented,
+      which is the whole point of the feature.
+      World health over 8 seeds × 360 months (`Tools/Stability.cs`): sanctions
+      17.9 → 13.1, ruined at end 1.13 → 0.88, mean index 109.8 → 117.0, living
+      standards 48.8 → 51.1, coups 8.9 → 7.75, insurgencies 6.0 → 4.9,
+      restructurings 9.9 → 7.9. Wars rise 10.25 → 12.00 per world, and **the
+      rise is defensive obligation entries (5.63 → 7.00), not root aggression
+      (4.63 → 5.00)** — alliances being honoured, which is what preserving
+      partnership means; root wars stay inside the repair's documented 2–7 band
+      and confrontation-months (109.3/decade) inside its 71–152. KAZ mandate run
+      is a reshuffle rather than a softening: RUS objective 6/8 → 7/8, CHN 7/8
+      unchanged, one seed moving the other way, and no mandate reaching FULFILLED
+      in either arm.
+      **A harness hazard worth knowing, because it nearly produced a false
+      verdict.** Running the balance probes *concurrently* with the batch suite
+      took the machine to 26.3 GB of a 28.0 GB commit limit with the editor open,
+      and the OS then killed the orchestrating wrapper **while its Unity child
+      survived and kept testing correctly**. This file already records "a killed
+      run leaves a complete-looking results file"; the mirror case is that a
+      killed *wrapper* can leave a **valid** run you are about to discard. Tell
+      them apart by process start time and whether the log's `[TEST]` lines are
+      still advancing. The one failure in the first pass was
+      `OverALongRunTheWorldNoLongerAccumulatesImmortalRivalryRegimes` hitting its
+      600 s timeout; re-run uncontended it **passes in 46 s**, and the same
+      360-month world timed in both arms outside Unity is 4625/4144 ms control
+      against 3928/4103 ms read-time — **no performance delta**, which is the
+      measurement that rules out the one plausible way a read-time architecture
+      could cause a timeout. **Run the probes after the suite, not beside it.**
+
 Recommended next:
 - **Run the suite — nothing at HEAD has been verified.** `bash Tools/run-suite.sh`
   with the editor closed. The last green run was **1258 tests at `f36809e`

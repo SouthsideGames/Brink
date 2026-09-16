@@ -80,10 +80,14 @@ namespace Brink.Core
                 return false;
             }
 
-            var status = DiplomacySystem.StatusOf(state, state.playerCountryId, partnerId);
+            // An exercise is a partnership act, so the gate reads how close the two
+            // are currently permitted to function rather than how warmly they regard
+            // one another. This is the one band-form consumer of the constraint.
+            var status = DiplomacySystem.FunctionalCloseness(state, state.playerCountryId, partnerId);
             if (status < RelationshipStatus.Cooperative)
             {
-                reason = $"Relationship is only {status}; they will not exercise with us.";
+                reason = DiplomacySystem.BlockedByRival(state, state.playerCountryId, partnerId)
+                         ?? $"Relationship is only {status}; they will not exercise with us.";
                 return false;
             }
 
