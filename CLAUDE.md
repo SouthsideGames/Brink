@@ -3034,7 +3034,12 @@ for every figure in the table above.
       naming the functional band and the binding third state, and gravity-gated
       refusals say the same through the existing `Block` / `UNAVAILABLE` channel
       (`DiplomacySystem.BlockedByRival`).
-      **CERTIFIED IN UNITY (2026-09-16), on branch and not merged.** Suite on a
+      **CERTIFIED IN UNITY (2026-09-16), AND MERGED TO PRODUCTION.** The
+      implementation commit is `9fdbf51`, merged to `main` at
+      `c86a8e8f353ee2dfff07f03fae882232cd1ee314`, tagged
+      `certified/read-time-rival-gravity` on that merge — the tag identifies the
+      exact certified production tree and does not move — and pushed, so
+      `origin/main` carries it. Suite on a
       project copy because the editor was open: partition A 465/465, B 194/193,
       C 896/896 — **1555 tests, 1554 passed, 0 failed, 1 inconclusive by
       design** (`TheWorld_EverTurnsAStrategicInstrumentOnThePlayer`). That is
