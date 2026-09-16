@@ -2833,17 +2833,21 @@ for every figure in the table above.
       a breakaway inside 240 months; the successor case is the deterministic
       `ABreakawayIsBornWithAnEconomyItCanRecoverOn` fixture.
 
-- [ ] **C5 — the post-war occupation exit. RECONSTRUCTED, AND IT FAILS ITS OWN
-      ACCEPTANCE.** Not merged, not certified, and on
-      `chatgpt/c5-occupation-exit-recovery` rather than main. The original C5
-      commits (`665766f`, `9784697`, `7a2158a`) were the first occupation-exit
-      implementation. They were **superseded** by the implementation that was
-      ultimately certified in Unity and merged into production, and they are
-      preserved under the annotated tag `archive/c5-original-occupation-exit`
-      — historical reference only; that tag is not certified production. This
-      entry describes a reconstruction built from the C4 baseline plus the
-      preserved design and acceptance record, so its SHAs necessarily differ
-      from those three.
+- [x] **C5 — the post-war occupation exit. CERTIFIED AND MERGED.** C5 was
+      ultimately implemented successfully: certified in Unity and merged into
+      production at `a989b9507ed4673947c64c30af7dc32cfc84f622`, tagged
+      `certified/c5-occupation-exit`. The recovery and working branches it was
+      developed on no longer exist — repository history is carried by tags now.
+      **Everything below this paragraph is the record of the earlier attempts**,
+      kept because the design reasoning and the measurements remain useful. Read
+      it as how C5 was arrived at, not as the final C5 outcome.
+      The original C5 commits (`665766f`, `9784697`, `7a2158a`) were the first
+      occupation-exit implementation. They were **superseded** by the certified
+      implementation and are preserved for historical reference only, under the
+      annotated tag `archive/c5-original-occupation-exit`, which is **not
+      certified production**. The reconstruction described below was built from
+      the C4 baseline plus the preserved design and acceptance record, so its
+      SHAs necessarily differ from those three.
       **What it fixes.** Ground taken in a war could not be put down once the war
       ended: a settlement cedes only the *objective*, closing a confrontation
       releases nothing else, `Withdraw` is an operation needing a **live**
@@ -2866,7 +2870,7 @@ for every figure in the table above.
       fades on its own once the ground stops being occupied. Deleting it here
       would have made walking out a way to *erase* a rising rather than to stop
       causing one.
-      **The known defect, which is the whole reason it is still open.** The rule
+      **The known defect of that earlier attempt, and why it was not shipped.** The rule
       reasons about **cost** and never about **containment**. A burdensome
       occupation that is also holding down a recent aggressor is released on
       exactly the same terms as any other burden. Seed 1212: Turkey attacks the
@@ -2877,9 +2881,11 @@ for every figure in the table above.
       here** — it is C5B's subject, and a reconstruction that accidentally passed
       the war/territorial guards would mean C5B behaviour had been introduced by
       mistake.
-      **Verification.** All of it under `Tools/dotnet-harness`, not Unity — there
-      is no Unity on the machine this was written on, so **Unity must still be the
-      one to certify it**. 26 tests in `OccupationExitTests` (partition C) +
+      **Verification of that earlier attempt.** All of it under
+      `Tools/dotnet-harness`, not Unity — there was no Unity on the machine it was
+      written on, so Unity had to be the one to certify C5, and later did: see the
+      certified merge named at the top of this entry. 26 tests in
+      `OccupationExitTests` (partition C) +
       `ActionIndexTests` = 31/31. Full suite **1555 total / 27 failed** against the
       C4 baseline's **1529 / 27**, run from a worktree at `0e2b3c0` on the same
       machine: **the two failure sets are identical**, so C5 introduces nothing and
