@@ -267,9 +267,17 @@ namespace Brink.Core
             if (target == null || leader == null) return 0f;
 
             float willingness = 20f
-                + (relationship.relations - 50f) * 0.55f
+                // Relations and alignment are read as the warmth the world permits:
+                // joining a bloc is taking a side. **Trust is deliberately left
+                // underlying** — GDD §15.1 defines it as the belief that commitments
+                // will be honoured, which is a fact about the leader's reliability
+                // rather than about how close bloc politics lets us stand. Capping it
+                // would have a third state's alignment make a partner look less
+                // trustworthy, which is disposition, not permission. Written down
+                // because two of three terms being capped is otherwise a drift trap.
+                + (DiplomacySystem.Permitted(state, relationship, relationship.relations) - 50f) * 0.55f
                 + (relationship.trust - 50f) * 0.45f
-                + (relationship.strategicAlignment - 50f) * 0.40f
+                + (DiplomacySystem.Permitted(state, relationship, relationship.strategicAlignment) - 50f) * 0.40f
                 + relationship.DependenceOf(targetId) * 0.20f
                 + bloc.cohesion * 0.12f;
 
@@ -283,7 +291,7 @@ namespace Brink.Core
             {
                 var withMember = state.FindRelationship(targetId, memberId);
                 if (withMember == null) continue;
-                if (withMember.relations < 25f) willingness -= 12f;
+                if (DiplomacySystem.Permitted(state, withMember, withMember.relations) < 25f) willingness -= 12f;
             }
 
             var treaty = state.FindTreaty(bloc.leaderId, targetId);

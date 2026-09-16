@@ -364,7 +364,7 @@ namespace Brink.Core
 
             var relationship = state.FindRelationship(parent.id, breakaway.id);
             if (relationship == null) return false;
-            if (relationship.relations < ReunificationRelations) return false;
+            if (DiplomacySystem.Permitted(state, relationship, relationship.relations) < ReunificationRelations) return false;
 
             return state.date.MonthsSince(breakaway.foundedDate) >= ReunificationSettlingMonths;
         }

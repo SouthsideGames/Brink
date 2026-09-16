@@ -163,19 +163,35 @@ namespace Brink.Tests
             // indirectly — and fragilely — observing.
             //
             // The structure is the friend-of-my-enemy ceiling
-            // (`DiplomacySystem.RivalGravity`, spec 04 §8a): committed alignment
-            // with a state's genuine enemy caps the relationship at
-            // 100 − gravity × 85 and closes on that cap every month. So:
+            // (`DiplomacySystem.RivalGravity`, spec 04 §9a): committed alignment
+            // with a state's genuine enemy caps how close the pair may
+            // *functionally* be at 100 − gravity × 85.
+            //
+            // **Restated for the disposition / permission split (2026-09).** Rival
+            // gravity used to enforce that cap by writing `relations`, `trust` and
+            // `strategicAlignment` downward, so stored warmth *was* permitted
+            // warmth and a stored-value predicate measured the rule exactly. It no
+            // longer writes them: the locked rule is that countries may genuinely
+            // like everyone but may not functionally stand beside everyone, so the
+            // question "is this a friend" is now `FunctionalCloseness`, and
+            // `relations > 65 && trust > 50` is a pre-split proxy for it. The
+            // thresholds below are unchanged; only what they are read against is.
+            // So:
             //   1. a friendship under committed rival gravity cannot persist —
-            //      at 0.5 the ceiling is 57.5, below the friendship line, and no
-            //      partner may stay a warm friend under it for half a year
-            //      (measured worst case: 3 consecutive months);
+            //      at 0.5 the permitted warmth is 57.5 and `CeilingBand` puts that
+            //      at Cooperative, below the friendship line, and no partner may
+            //      stay a *functional* friend under it for half a year;
             //   2. that gravity genuinely engages against this playthrough, or
             //      rule 1 is vacuous (measured: 76–173 months of 240);
-            //   3. universal friendship is not a held outcome — it does not
-            //      survive into the final two years (measured: last seen by
-            //      month 181);
-            //   4. the world refuses treaties by structure, not by pacing.
+            //   3. universal *functional* friendship is not a held outcome — it
+            //      does not survive into the final two years;
+            //   4. the world refuses treaties by structure, not by pacing;
+            //   5. **and the constraint does not damage the relationship.** At
+            //      least one partner must be warm by disposition while bloc
+            //      politics holds it below functional friendship. That pairing is
+            //      impossible under the old write-back — where stored and permitted
+            //      were one number — so this is the assertion that fails if gravity
+            //      ever starts manufacturing coldness again.
             const float CommittedRivalGravity = 0.5f;
             const int MonthsAFriendshipMaySurviveIt = 6;
             const int MonthsGravityMustEngage = 60;
@@ -190,6 +206,7 @@ namespace Brink.Tests
             int rejections = 0;
             var survivingUnderGravity = new Dictionary<string, int>();
             int longestSurvival = 0, monthsGravityEngaged = 0, lastUniversalMonth = 0;
+            int monthsWithAConstrainedFriendship = 0;
             string longestSurvivor = "none";
             for (int m = 0; m < 240; m++)
             {
@@ -218,20 +235,26 @@ namespace Brink.Tests
 
                 turns.EndMonth();
 
-                int partners = 0, friends = 0;
+                int partners = 0, functionalFriends = 0;
                 bool engaged = false;
                 foreach (var r in state.relationships)
                 {
                     if (!r.Involves(state.playerCountryId)) continue;
                     string other = r.PartnerOf(state.playerCountryId);
-                    bool friend = r.relations > 65f && r.trust > 50f;
+
+                    // Disposition: what they actually think of us.
+                    bool warmDisposition = r.relations > 65f && r.trust > 50f;
+                    // Permission: how close bloc politics presently lets us be.
+                    bool functionalFriend = DiplomacySystem.FunctionalCloseness(
+                        state, state.playerCountryId, other) >= RelationshipStatus.Friendly;
                     float gravity = DiplomacySystem.RivalGravity(state, state.playerCountryId, other);
                     partners++;
-                    if (friend) friends++;
+                    if (functionalFriend) functionalFriends++;
                     if (gravity >= CommittedRivalGravity) engaged = true;
+                    if (warmDisposition && !functionalFriend) monthsWithAConstrainedFriendship++;
 
                     survivingUnderGravity.TryGetValue(other, out int survived);
-                    survived = friend && gravity >= CommittedRivalGravity ? survived + 1 : 0;
+                    survived = functionalFriend && gravity >= CommittedRivalGravity ? survived + 1 : 0;
                     survivingUnderGravity[other] = survived;
                     if (survived > longestSurvival)
                     {
@@ -240,13 +263,13 @@ namespace Brink.Tests
                     }
                 }
                 if (engaged) monthsGravityEngaged++;
-                if (partners > 0 && friends == partners) lastUniversalMonth = m + 1;
+                if (partners > 0 && functionalFriends == partners) lastUniversalMonth = m + 1;
             }
 
             Assert.LessOrEqual(longestSurvival, MonthsAFriendshipMaySurviveIt,
-                $"A warm friendship survived {longestSurvival} consecutive months under committed rival " +
+                $"A functional friendship survived {longestSurvival} consecutive months under committed rival " +
                 $"gravity ≥ {CommittedRivalGravity} — {longestSurvivor}. The friend of my enemy cannot also be " +
-                "my friend: the ceiling is supposed to pull that relationship below the friendship line within " +
+                "my friend: permitted warmth is supposed to sit below the friendship line within " +
                 "months, or bloc politics decorates the thing it exists to prevent.");
             Assert.GreaterOrEqual(monthsGravityEngaged, MonthsGravityMustEngage,
                 $"Bloc gravity reached {CommittedRivalGravity} against this playthrough in only {monthsGravityEngaged} " +
@@ -254,20 +277,29 @@ namespace Brink.Tests
                 "bot is simply meeting a world with no committed sides.");
             Assert.LessOrEqual(lastUniversalMonth, 240 - FinalMonthsWithoutUniversalFriendship,
                 $"All {state.relationships.FindAll(r => r.Involves(state.playerCountryId)).Count} states were still " +
-                $"warm friends at month {lastUniversalMonth}. Universal friendship is supposed to be structurally " +
-                "impossible to hold — or a diplomatic playthrough solves itself and the game ends in boredom, " +
-                "as reported.");
+                $"functional friends at month {lastUniversalMonth}. Universal friendship is supposed to be " +
+                "structurally impossible to hold — or a diplomatic playthrough solves itself and the game ends " +
+                "in boredom, as reported.");
             Assert.Greater(rejections, 30,
                 "The world never refused anything — friendship is being resisted by " +
                 "accident of pacing rather than by structure.");
+            Assert.Greater(monthsWithAConstrainedFriendship, 0,
+                "Not once in 240 months was a partner warm by disposition while bloc politics held it below " +
+                "functional friendship. Either gravity never bit, or — the failure this guards — it bit by " +
+                "writing the relationship down instead of by limiting what can be built on it. Rival gravity " +
+                "may prevent warmth; it may not manufacture coldness.");
         }
 
         [Test]
         public void DeepAlignmentWithARivalCapsTheRelationship()
         {
             // The pure mechanism, isolated: hold deep alignment with a state's
-            // genuine enemy, and the relationship with that state cannot stay
-            // warm however hard it is courted.
+            // genuine enemy, and the relationship with that state cannot
+            // functionally stay warm however hard it is courted — while the
+            // courtship itself is not undone. Before the disposition / permission
+            // split this asserted `relations < 66` directly, because gravity closed
+            // the stored value onto the cap; it now asserts the same 66 against the
+            // permitted warmth, and adds the other half of the rule.
             // NARROW PIPELINE: DiplomacySystem.MonthlyUpdate alone — every other
             // system also writes relations, and this asserts one system's
             // arithmetic against preconditions it pins itself.
@@ -291,10 +323,19 @@ namespace Brink.Tests
                 DiplomacySystem.MonthlyUpdate(state);
             }
 
-            Assert.Less(withVictim.relations, 66f,
-                $"Four years of holding {withVictim.relations:F1} relations with a state " +
-                "while deeply aligned with its enemy — the ceiling never bit, and both " +
-                "sides of a rivalry can be held at once.");
+            Assert.Less(DiplomacySystem.PermittedWarmth(state, us, "POL"), 66f,
+                $"Four years of deep alignment with their enemy left them permitted " +
+                $"{DiplomacySystem.PermittedWarmth(state, us, "POL"):F1} warmth — the ceiling never bit, and " +
+                "both sides of a rivalry can be held at once.");
+            Assert.Less((int)DiplomacySystem.FunctionalCloseness(state, us, "POL"),
+                       (int)RelationshipStatus.Friendly,
+                $"They are still functionally " +
+                $"{DiplomacySystem.FunctionalCloseness(state, us, "POL")} while we are deeply aligned with " +
+                "their enemy. The cap has to cross the friendship line, or it decorates the thing it " +
+                "exists to prevent.");
+            Assert.GreaterOrEqual(withVictim.relations, 66f,
+                $"The courtship itself was undone: relations fell to {withVictim.relations:F1}. Rival gravity " +
+                "constrains what a relationship can be built into; it must not write the relationship down.");
 
             float gravity = DiplomacySystem.RivalGravity(state, us, "POL");
             Assert.Greater(gravity, 0.3f, "the configured rivalry produced almost no gravity");

@@ -661,11 +661,19 @@ namespace Brink.Core
             return held;
         }
 
+        /// <summary>
+        /// Standing the operator can actually exercise. `position` measures
+        /// strategic position — ground held, treaties in force, pacts, deterrent,
+        /// war verdicts — so the relationship term reads the warmth the world
+        /// permits rather than raw regard. Courting a state that bloc politics
+        /// will never let us stand beside has not advanced the country.
+        /// </summary>
         static float RelationsTotal(GameState state)
         {
             float total = 0f;
             foreach (var relationship in state.relationships)
-                if (relationship.Involves(state.playerCountryId)) total += relationship.relations;
+                if (relationship.Involves(state.playerCountryId))
+                    total += DiplomacySystem.Permitted(state, relationship, relationship.relations);
             return total;
         }
     }

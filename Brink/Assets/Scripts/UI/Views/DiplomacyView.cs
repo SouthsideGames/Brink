@@ -355,6 +355,22 @@ namespace Brink.UI.Views
                 sb.AppendLine("   " + AsciiChart.LabeledBar("THEIR DEPEND", relationship.DependenceOf(country.id), 100, 12, 16));
                 sb.AppendLine("   " + AsciiChart.LabeledBar("THEY FEAR US", relationship.ThreatPerceivedBy(country.id), 100, 12, 16));
 
+                // What the world presently permits, shown only when it differs from
+                // what they actually think of us. The bars and the [STATUS] label
+                // above stay truthful disposition; this line says what can be built
+                // on it, and names the alignment that is limiting it — a constraint
+                // the operator cannot see is indistinguishable from a broken control.
+                var functional = DiplomacySystem.FunctionalCloseness(state, state.playerCountryId, country.id);
+                if (functional < status)
+                {
+                    string blocker = DiplomacySystem.BindingRivalOf(state, state.playerCountryId, country.id);
+                    var blockerCountry = blocker == null ? null : state.FindCountry(blocker);
+                    sb.AppendLine($"   FUNCTIONALLY: {StatusText(functional)}"
+                        + (blockerCountry != null
+                            ? $" - LIMITED BY OUR ALIGNMENT WITH {blockerCountry.displayName.ToUpperInvariant()}"
+                            : ""));
+                }
+
                 if (treaty != null)
                 {
                     var commitments = new List<string>();

@@ -549,8 +549,14 @@ namespace Brink.Core
             var toAggressor = state.FindRelationship(allyId, confrontation.initiatorId);
             if (toDefender == null || toAggressor == null) return 0f;
 
+            // Relations read as the warmth the world permits — honouring is standing
+            // beside them. **Trust is deliberately left underlying**: this function
+            // asks whether the ally will come when called, and trust is precisely the
+            // belief that commitments will be honoured (GDD §15.1). Capping it would
+            // let a third state's alignment make an ally look unreliable, which is a
+            // disposition claim rival gravity is not allowed to make.
             float willingness = 18f
-                                + (toDefender.relations - 50f) * 0.55f
+                                + (DiplomacySystem.Permitted(state, toDefender, toDefender.relations) - 50f) * 0.55f
                                 + (toDefender.trust - 50f) * 0.45f
                                 + toDefender.interoperability * 0.15f
                                 + toAggressor.ThreatPerceivedBy(allyId) * 0.30f
@@ -892,8 +898,9 @@ namespace Brink.Core
             var pair = state.FindRelationship(observerId, defenderId);
             if (pair == null) return 0f;
 
-            float closeness = pair.relations * 0.5f + pair.trust * 0.3f
-                            + pair.strategicAlignment * 0.2f;
+            float closeness = DiplomacySystem.Permitted(state, pair, pair.relations) * 0.5f
+                            + DiplomacySystem.Permitted(state, pair, pair.trust) * 0.3f
+                            + DiplomacySystem.Permitted(state, pair, pair.strategicAlignment) * 0.2f;
             if (BlocSystem.SameBloc(state, observerId, defenderId)) closeness += 15f;
             return Clamp(closeness);
         }

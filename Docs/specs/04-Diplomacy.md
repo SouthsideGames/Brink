@@ -534,16 +534,17 @@ Three mechanisms fix it, all in `DiplomacySystem`:
 
 - **`RivalGravity(a,b)`** (0..1) — strongest case over any third state `c` of
   one side being *deeply aligned* with `c` (alignment > 68) while the other is
-  in *genuine enmity* with `c` (relations < 22). Applied monthly as a
-  **ceiling**: relations and trust approach `100 − gravity × 85`, alignment
-  erodes ×0.3. A ceiling, not a drag — a drag loses to outreach spam
-  (+3/month beats any fraction). `Outreach` itself is scaled by
-  `1 − gravity × 0.8`: envoys are received as warmly as bloc politics allows.
+  in *genuine enmity* with `c` (relations < 22). Read at the point of use, never
+  written: see §9c. `Outreach` is scaled by `1 − gravity × 0.8`, so envoys are
+  received as warmly as bloc politics allows.
   Thresholds are deliberately severe and load-bearing: a gentler calibration
   (60/30, drag-only) froze the entire planet — gravity spread coldness, which
   fed more gravity, until 93 of 120 pairs were hostile.
-- **Treaty acceptance** uses the same thresholds (−40 × rivalTie): *we will not
-  pact with our enemy's ally* — so the door and the room agree.
+- **Treaty acceptance** reads the same constraint, through the same computation
+  (§9c): *we will not pact with our enemy's ally* — so the door and the room
+  agree by construction rather than by two formulas kept in step. The separate
+  `−40 × rivalTie` charge is retired; it was the directional half of the same
+  symmetric maximum, on un-augmented terms, and therefore priced one fact twice.
 - **`PactAnxiety`** (0..1, defence pacts past the fourth /6) — an alliance web
   reads as encirclement to everyone outside it: +14 on their threat-perception
   target monthly, −25 × anxiety on the next treaty's acceptance. Hegemony is a
@@ -576,13 +577,14 @@ Three changes to the monthly bilateral tick, each a value-versus-target fix:
   `SanctionTrustFloor` (15), not to zero. Sized so a pair at the alignment
   baseline settles above `EconomySystem.SanctionHostilityLine` — a neutral
   pair is not a hostile one, and its measures lapse at review.
-- **Rival gravity caps alignment; it no longer drains it.** The old
+- **Rival gravity capped alignment rather than draining it** (superseded by
+  §9c, which stops it writing alignment at all). The old
   `alignment −= gravity × 0.3` had no floor; gravity attracts where relations
   are cold, cold pairs are what sanctions make, so every sanctioned pair's
   alignment ran to zero and the chill target ran to zero with it — the
   "relations 0 on every standing regime" the sanction dump showed, and the
-  feedback that froze the planet in the first calibration. Now
-  `alignment ≤ 100 − gravity × AlignmentGravityWeight (85)`, approached at 0.1.
+  feedback that froze the planet in the first calibration. The cap bounded that
+  loop; §9c removes it.
 - **Cold alignment thaws, upward only.** Below `AlignmentBaseline` (40), and
   absent a war between the pair, alignment approaches the baseline at
   `AlignmentReversion` 0.004 a month (~20 years). Warm alignment is earned by
@@ -594,11 +596,84 @@ the alignment reading, `PactWarmth` (0.6) for a signed mutual-defence treaty
 and `BlocWarmth` (0.75) for a shared bloc — a treaty partner's alignment sits in
 the low seventies, barely over the line, so gravity from a signed pact was a
 rounding error. `Coldness` is 1 for a pair at war and at least `SanctionEnmity`
-(0.5) for a pair under standing measures. The relations ceiling is approached at
-`GravityCeilingRate` 0.35, fast enough to outrun a monthly outreach call — at
-0.12 the befriend-everyone bot held every partner just over the friendship
-line. Measured: the bot tops out at ≤ 13 of 15 again, in a world that no longer
-resists it by sanctioning it for other reasons.
+(0.5) for a pair under standing measures. Measured: the bot tops out at ≤ 13 of
+15 again, in a world that no longer resists it by sanctioning it for other
+reasons.
+
+## 9c. Disposition versus permitted closeness
+
+**Countries may genuinely like everyone. They may not functionally stand beside
+everyone.** Rival gravity represents geopolitical incompatibility, so it limits
+how far a warm relationship can *progress* — it does not decide how two states
+feel. The two questions now have two readings of the same relationship:
+
+- **`AffinityOf` / `StatusOf` — disposition.** The six-dimension score and the
+  status ladder, unchanged and canonical. What the operator is shown. Every
+  hostility consumer reads this: `SanctionCauseStands`, the AI threat term,
+  `AssertClaim`, `MostHatedState`, `ColdestRivalOf`, sanctions relief,
+  diplomatic isolation, insurgency motive, `CouncilSystem.VoteScore`, mandates,
+  standing directives, history seeding, event eligibility, bloc cohesion, the
+  sanction chill target and the alignment thaw.
+- **`PermittedWarmth(a,b) = 100 − gravity × AlignmentGravityWeight`** — the
+  warmth the world presently permits. Derived, never stored: no save field, no
+  migration. `Permitted(r, stored)` is `min(stored, PermittedWarmth)`, the
+  continuous form read by the partnership gates.
+- **`FunctionalCloseness(a,b)`** — the categorical form. `min(StatusOf,
+  CeilingBand(PermittedWarmth))`, passed through unchanged at Neutral or colder.
+  `CeilingBand` reads the status ladder against `RelationalWeight × permitted`,
+  where `RelationalWeight` is the sum of the score's three relationship weights
+  (0.40 + 0.25 + 0.25). At committed gravity 0.5 that is 51.75 → Cooperative,
+  one band below the friendship line — the arithmetic the friendship invariant
+  always asserted.
+
+Two properties are load-bearing and are asserted, not assumed:
+
+1. **Gravity cannot manufacture hostility.** `CeilingBand`'s final branch
+   returns Neutral, so `FunctionalCloseness` can never report Rival or Hostile
+   from a warm disposition. Capping the score's *inputs* instead would let the
+   untouched threat, memory and confrontation terms carry a warm pair below the
+   Rival line — the same defect, relocated into classification.
+2. **Gravity cannot warm a relationship.** `min` against the disposition.
+
+Measured across eight Challenging seeds × 480 months, against certified
+production as control: the write-back moved the affinity score on **31,263**
+pair-months by up to **10.7** points; the read-time form moved it on **0 of
+464,816**. Zero Rival/Hostile outputs from a warm disposition and zero warming,
+over the same population. The constraint binds on 3.5% of pair-months and
+removes 41 of 99 warm relationships from functional friendship at end of run.
+Gravity itself is preserved, not amplified: pair-months bearing gravity
+45.5% → 47.2%, committed 29.1% → 30.0%, mean at end 0.290 → 0.301. Standing
+sanctions fall 17.7% because gravity can no longer push relations under the AI's
+hostility line. The `0.706` gravity at which the old ceiling crossed
+`AlignmentBaseline` remains a **diagnostic** figure only — it is not a threshold
+and nothing reads it.
+
+**Routed to permitted closeness** (partnership permission): treaty acceptance
+and deepening, `CoalitionWillingness`' leader-side terms, `BlocSystem`
+accession and member compatibility, `AccessionSystem`, `AllianceSystem`
+honour-willingness relations and observer closeness, summit and mediation
+gates, basing rights, the AI's partnership-seeking and deepen-to-pact gates,
+reunification, `ExerciseSystem` eligibility (the one band-form consumer), and
+the annual grade's relationship term — `position` measures standing the
+operator can exercise.
+
+**Two terms are deliberately left on disposition**, and say so at the call
+site: `BlocSystem.JoinWillingness`' and `AllianceSystem.HonorWillingness`'
+trust terms. GDD §15.1 defines trust as the belief that commitments will be
+honoured — a claim about a partner's reliability, not about how close bloc
+politics lets us stand. `HonorWillingness` asks exactly "will they come when
+called", so capping it would let a third state's alignment make an ally look
+unreliable, which is a disposition claim gravity may not make. Bloc cohesion
+stays on disposition for the same family of reason and one stronger one:
+`BlocSystem.Bind` writes cohesion into `strategicAlignment`, so a
+gravity-derived cohesion would carry gravity back into stored disposition.
+
+**Presentation.** The `[STATUS]` label, the relationship bars, the world-map
+glyphs and the dossier all keep reading disposition — a desk may bury a figure,
+never distort one (spec 15). The DIPLOMACY panel adds one line, shown only when
+the two readings differ, naming the functional band and the third state whose
+alignment is binding; gravity-gated refusals say the same thing through the
+existing `Block` / `UNAVAILABLE` channel (`DiplomacySystem.BlockedByRival`).
 
 ## 10. Extension points
 
