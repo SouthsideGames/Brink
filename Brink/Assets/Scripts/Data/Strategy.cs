@@ -23,6 +23,8 @@ namespace Brink.Data
 
     /// <summary>
     /// A goal written by the player rather than handed down by the game.
+    /// A null condition is freeform intent whose status is self-assessed;
+    /// otherwise the existing mandate evaluator supplies its current status.
     /// `achieved` means the condition is true now; `everAchieved` records whether
     /// the posting has ever reached it. This keeps objectives standing rather
     /// than turning them into one-shot quest checkboxes.
