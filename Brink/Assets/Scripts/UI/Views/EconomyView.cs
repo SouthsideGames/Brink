@@ -39,6 +39,7 @@ namespace Brink.UI.Views
 
             Root.Clear();
             AddAuthorityBadge(state, Pillar.Economy);
+            AddPillarArt(state, Pillar.Economy);
             AddCabinetAdvice(state, Pillar.Economy);
             BuildMacro(state, player);
             BuildFiscal(state, player);

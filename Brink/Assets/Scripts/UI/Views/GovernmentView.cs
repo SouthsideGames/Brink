@@ -31,6 +31,7 @@ namespace Brink.UI.Views
 
             Root.Clear();
             AddAuthorityBadge(state, Pillar.Government);
+            AddPillarArt(state, Pillar.Government);
             AddCabinetAdvice(state, Pillar.Government);
             BuildAdministration(state, player);
             BuildPoliticalCondition(state, player);

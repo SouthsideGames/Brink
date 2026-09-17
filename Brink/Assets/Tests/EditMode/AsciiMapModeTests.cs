@@ -27,6 +27,37 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void EveryPillarHasADistinctFixedHeightInstitutionalSignature()
+        {
+            var expectedHeadings = new[]
+            {
+                "FORCE STATUS", "NATIONAL MARKET", "SIGNAL PICTURE",
+                "DIPLOMATIC NETWORK", "STATE HOUSE"
+            };
+
+            int index = 0;
+            foreach (Pillar pillar in System.Enum.GetValues(typeof(Pillar)))
+            {
+                string art = AsciiPillarArt.Render(state, pillar, 64);
+                var rows = art.Split('\n');
+
+                Assert.AreEqual(5, rows.Length, pillar.ToString());
+                foreach (var row in rows) Assert.AreEqual(64, row.Length, pillar.ToString());
+                StringAssert.Contains(expectedHeadings[index++], art, pillar.ToString());
+            }
+        }
+
+        [Test]
+        public void PillarSignatureClampsToItsResponsiveWidthContract()
+        {
+            string narrow = AsciiPillarArt.Render(state, Pillar.Government, 12);
+            string wide = AsciiPillarArt.Render(state, Pillar.Government, 140);
+
+            foreach (var row in narrow.Split('\n')) Assert.AreEqual(32, row.Length);
+            foreach (var row in wide.Split('\n')) Assert.AreEqual(100, row.Length);
+        }
+
+        [Test]
         public void PoliticalModeIsTheExistingPublicMap()
         {
             string expected = AsciiWorldMap.Render(state, "CHN", 64, 16);

@@ -36,6 +36,7 @@ namespace Brink.UI.Views
 
             Root.Clear();
             AddAuthorityBadge(state, Pillar.Diplomacy);
+            AddPillarArt(state, Pillar.Diplomacy);
             AddCabinetAdvice(state, Pillar.Diplomacy);
             BuildRelationshipBoard(state);
             BuildTargetSelector(state);

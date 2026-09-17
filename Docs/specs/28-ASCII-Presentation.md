@@ -1,7 +1,7 @@
 # 28 — ASCII Presentation Engine and Strategic Map Modes
 
 ## Status
-Phase C development slice. Static implementation complete; comprehensive Unity integration verification is deferred to the C–G milestone gate.
+Phase C development slice. Static implementation complete; comprehensive Unity integration verification is deferred to the C–G milestone gate. The five pillar dashboards now surface their live institutional signatures directly beneath the authority badge.
 
 ## Principle
 ASCII is Brink's visual medium, not decoration around a text interface. Presentation code therefore gets reusable drawing primitives and live strategic layers rather than one-off strings embedded in views.
@@ -54,13 +54,14 @@ Focused tests cover:
 - foreign intelligence networks staying invisible;
 - live bloc/trade state changing the relevant overlay;
 - player-facing summary counts excluding unrelated foreign trade.
+- fixed five-row institutional signatures for all five pillars;
+- the 32–100 column responsive contract for pillar art.
 
 `AsciiMapModeTests` is registered in `Tools/run-suite.sh` so the suite coverage guard continues to protect the fixture.
 
 ## Next Phase C slices
-The same canvas should be reused for:
+The same canvas should continue to be reused for:
 
-- pillar-specific art language;
 - institutional scenes and Cabinet meeting layouts;
 - event/crisis scenes;
 - reusable icons and sprites;
