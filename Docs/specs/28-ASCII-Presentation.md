@@ -48,6 +48,25 @@ A presentation layer must never become a shortcut around `IntelligenceSystem`.
 ## Responsive contract
 Every mode renders into the exact grid requested by the terminal. The authored world remains 80×21 conceptually, while country coordinates and route geometry scale into the current device grid. Overlay lines do not overwrite country labels or the underlying landmass unless an explicit signal must win the cell.
 
+That rule was written before anything enforced it. Every overlay's *point*
+marker plotted straight onto `y - 1` (or `y + 1` for occupation) with
+`overwrite: true`, which is only reliably free at full scale: the map is
+squeezed from 21 rows into the terminal's 11, 17 or 23, and once rows collapse
+the cell above one country is the code row of another. Measured on the authored
+roster, 14 of 24 countries collide at 23 rows and 21 of 24 at 11. ACTIVITY only
+made it visible, because it can mark every state at once where trade and
+intelligence mark a handful.
+
+`AsciiMapModes.PlotSignal` is now the one placement rule for all four point
+markers — occupation, trade, intelligence access and activity. It keeps the
+preferred cell whenever that cell is free, then tries the opposite side and the
+four diagonals, and drops the marker only if a country's own label has boxed it
+in. The order is fixed, so the same world always draws the same map, and the
+protected set is exactly what the base map spends on identity: the two-letter
+code, the player's brackets and the selection arrows. Terrain uses no letters or
+digits, so scenery is never mistaken for a label. Confrontation lines and trade
+routes are untouched — they already layer with `overwrite: false`.
+
 ## Tests
 Focused tests cover:
 
@@ -61,6 +80,14 @@ Focused tests cover:
 - player-facing summary counts excluding unrelated foreign trade.
 - Activity mode excluding secret and older chronicle entries, and distinguishing
   one event from several without exposing their hidden causes;
+- Activity showing the previous December in January, ignoring the month still
+  being played, and giving global or unknown-country entries neither a marker
+  nor a place in the counts;
+- Activity holding the grid at the real map heights of 11, 17 and 23;
+- no overlay replacing a country code, player bracket or selection arrow, across
+  34/41/64/104 columns by 11/17/23 rows, with every state marked — paired with a
+  check that displaced markers are still drawn, because a placement rule that
+  silently skipped everything would satisfy the first check perfectly;
 - fixed five-row institutional signatures for all five pillars;
 - the 32–100 column responsive contract, for every pillar;
 - that all five pillar dashboards draw their signature through the shared

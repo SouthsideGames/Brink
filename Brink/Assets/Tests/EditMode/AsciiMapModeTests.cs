@@ -375,6 +375,182 @@ namespace Brink.Tests
                 AsciiMapModes.Summary(state, WorldMapMode.Activity));
         }
 
+        // ---------- overlay markers never eat the map's own labels ----------
+
+        static readonly int[] RealMapHeights = { 11, 17, 23 };
+        static readonly int[] PanelWidths = { 34, 41, 64, 104 };
+
+        static bool IsCountryLabel(char cell)
+            => char.IsLetterOrDigit(cell)
+               || cell == '[' || cell == ']' || cell == '<' || cell == '>';
+
+        /// <summary>
+        /// Give every state a public event so ACTIVITY marks the whole roster,
+        /// which is the density that exposed the collision.
+        /// </summary>
+        void MarkEveryState()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 2);
+            foreach (var country in state.countries)
+                state.chronicle.Add(new ChronicleEntry
+                {
+                    date = new GameDate(2000, 1), countryId = country.id,
+                    category = ChronicleCategory.Political, publicity = Publicity.Public,
+                    text = "e"
+                });
+        }
+
+        /// <summary>
+        /// The overlays draw beside the base map, never through it. Each mode
+        /// used to plot onto `y - 1` unconditionally, and once the map is
+        /// squeezed into 11, 17 or 23 rows that cell is another country's code
+        /// row for most of the roster — so a marker quietly ate a letter of
+        /// someone else's name.
+        /// </summary>
+        [Test]
+        public void OverlayMarkersNeverReplaceACountryLabel()
+        {
+            MarkEveryState();
+            string selected = null;
+            foreach (var country in state.countries)
+                if (country.id != state.playerCountryId) { selected = country.id; break; }
+            Assert.IsNotNull(selected, "the fixture has no foreign state to select");
+
+            foreach (int rows in RealMapHeights)
+            foreach (int columns in PanelWidths)
+            {
+                var baseline = AsciiMapModes.Render(state, selected, WorldMapMode.Political, columns, rows)
+                    .Split('\n');
+
+                foreach (WorldMapMode mode in System.Enum.GetValues(typeof(WorldMapMode)))
+                {
+                    if (mode == WorldMapMode.Political) continue;
+                    var overlay = AsciiMapModes.Render(state, selected, mode, columns, rows).Split('\n');
+
+                    for (int y = 0; y < rows; y++)
+                    for (int x = 0; x < columns; x++)
+                    {
+                        if (!IsCountryLabel(baseline[y][x])) continue;
+                        Assert.AreEqual(baseline[y][x], overlay[y][x],
+                            $"{mode} at {columns}x{rows} overwrote the label '{baseline[y][x]}' "
+                            + $"at ({x},{y}) with '{overlay[y][x]}'");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Displacing a marker must not silently discard it. With the whole
+        /// roster active, ACTIVITY still has to draw something at every size.
+        /// </summary>
+        [Test]
+        public void DisplacedActivityMarkersAreStillDrawn()
+        {
+            MarkEveryState();
+
+            foreach (int rows in RealMapHeights)
+            foreach (int columns in PanelWidths)
+            {
+                string map = AsciiMapModes.Render(state, null, WorldMapMode.Activity, columns, rows);
+                int markers = 0;
+                foreach (char cell in map) if (cell == '\u2022' || cell == '*') markers++;
+                Assert.Greater(markers, 0, $"ACTIVITY drew nothing at {columns}x{rows}");
+            }
+        }
+
+        [Test]
+        public void ActivityPreservesTheGridAtRealMapHeights()
+        {
+            MarkEveryState();
+            foreach (int rows in RealMapHeights)
+            foreach (int columns in PanelWidths)
+            {
+                var lines = AsciiMapModes.Render(state, null, WorldMapMode.Activity, columns, rows)
+                    .Split('\n');
+                Assert.AreEqual(rows, lines.Length, $"{columns}x{rows}");
+                foreach (var line in lines) Assert.AreEqual(columns, line.Length, $"{columns}x{rows}");
+            }
+        }
+
+        // ---------- the month window ----------
+
+        /// <summary>
+        /// January's previous month is the December before it. Verified in the
+        /// *including* direction: the existing test only proves a December entry
+        /// is rejected from February, which a broken year rollover also does.
+        /// </summary>
+        [Test]
+        public void JanuaryShowsThePreviousDecember()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 1);
+            string quiet = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(1999, 12), countryId = "CHN",
+                category = ChronicleCategory.Political, publicity = Publicity.Public, text = "e"
+            });
+
+            Assert.AreNotEqual(quiet, AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21),
+                "a December event is invisible in January — the year rollover is broken");
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 1   ACTIVE STATES 1",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(1999, 11), countryId = "RUS",
+                category = ChronicleCategory.Political, publicity = Publicity.Public, text = "e"
+            });
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 1   ACTIVE STATES 1",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+        }
+
+        [Test]
+        public void ActivityIgnoresTheMonthStillBeingPlayed()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 2);
+            string quiet = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 2), countryId = "CHN",
+                category = ChronicleCategory.Political, publicity = Publicity.Public, text = "e"
+            });
+
+            Assert.AreEqual(quiet, AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21),
+                "an event from the current month appeared on the map");
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 0   ACTIVE STATES 0",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+        }
+
+        /// <summary>
+        /// The wire carries global lines with no country, and a save may name a
+        /// state this roster does not have. Neither has a point on the map, and
+        /// neither may inflate the counts beside it.
+        /// </summary>
+        [Test]
+        public void GlobalAndUnknownEntriesReachNeitherTheMapNorTheCount()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 2);
+            string quiet = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            foreach (string id in new[] { "", null, "ZZZ", "XXX" })
+                state.chronicle.Add(new ChronicleEntry
+                {
+                    date = new GameDate(2000, 1), countryId = id,
+                    category = ChronicleCategory.Political, publicity = Publicity.Public, text = "e"
+                });
+
+            Assert.AreEqual(quiet, AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21),
+                "a global or unknown entry drew a marker");
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 0   ACTIVE STATES 0",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+        }
+
         [Test]
         public void ModeSummariesUseOnlyRelevantPlayerFacingCounts()
         {

@@ -137,7 +137,7 @@ namespace Brink.UI
             {
                 if (!location.IsOccupied) continue;
                 if (!Point(location.ownerId, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Min(canvas.Height - 1, y + 1), 'O', overwrite: true);
+                PlotSignal(canvas, x, y, +1, 'O');
             }
         }
 
@@ -156,7 +156,7 @@ namespace Brink.UI
                 if (sanction.senderId != state.playerCountryId && sanction.targetId != state.playerCountryId) continue;
                 string other = sanction.senderId == state.playerCountryId ? sanction.targetId : sanction.senderId;
                 if (!Point(other, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Max(0, y - 1), '$', overwrite: true);
+                PlotSignal(canvas, x, y, -1, '$');
             }
         }
 
@@ -170,7 +170,7 @@ namespace Brink.UI
                 canvas.Line(px, py, tx, ty, ':', overwrite: false);
                 char access = network.penetration >= 55f ? '@'
                     : network.penetration >= 20f ? '^' : '?';
-                canvas.Plot(tx, Math.Max(0, ty - 1), access, overwrite: true);
+                PlotSignal(canvas, tx, ty, -1, access);
             }
         }
 
@@ -194,7 +194,7 @@ namespace Brink.UI
             foreach (var pair in RecentActivity(state))
             {
                 if (!Point(pair.Key, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Max(0, y - 1), pair.Value > 1 ? '*' : '•', overwrite: true);
+                PlotSignal(canvas, x, y, -1, pair.Value > 1 ? '*' : '•');
             }
         }
 
@@ -210,6 +210,52 @@ namespace Brink.UI
             }
             return counts;
         }
+
+        /// <summary>
+        /// Place an overlay's point marker beside a country without erasing the
+        /// map's own labels.
+        ///
+        /// Every overlay used to plot straight onto `y - 1` (or `y + 1`) with
+        /// `overwrite: true`. That cell is only reliably free at full scale: the
+        /// map is squeezed from <see cref="AsciiWorldMap.Height"/> into 11, 17 or
+        /// 23 rows, and once rows collapse the cell above one country is the code
+        /// row of another. Measured on the authored roster, 14 of 24 countries
+        /// collide at 23 rows and 21 of 24 at 11 rows. ACTIVITY only made it
+        /// visible, because it can mark every state at once where trade and
+        /// intelligence mark a handful.
+        ///
+        /// So the preferred cell is tried first and kept whenever it is free,
+        /// then the cells immediately around it, and the marker is dropped only
+        /// if a country's own label has genuinely boxed it in. The order is
+        /// fixed, so the same world always draws the same map.
+        /// </summary>
+        static void PlotSignal(AsciiCanvas canvas, int x, int y, int preferred, char glyph)
+        {
+            int away = preferred >= 0 ? 1 : -1;
+            var candidates = new[]
+            {
+                (x, y + away), (x, y - away),
+                (x - 1, y + away), (x + 1, y + away),
+                (x - 1, y - away), (x + 1, y - away),
+            };
+
+            foreach (var (cx, cy) in candidates)
+            {
+                if (cx < 0 || cx >= canvas.Width || cy < 0 || cy >= canvas.Height) continue;
+                if (IsCountryLabel(canvas.At(cx, cy))) continue;
+                canvas.Plot(cx, cy, glyph, overwrite: true);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// A cell the base map has spent on a country's identity: the two-letter
+        /// code, the player's brackets, or the selection arrows. Terrain uses no
+        /// letters or digits, so this cannot mistake scenery for a label.
+        /// </summary>
+        static bool IsCountryLabel(char cell)
+            => char.IsLetterOrDigit(cell)
+               || cell == '[' || cell == ']' || cell == '<' || cell == '>';
 
         static bool Point(string countryId, AsciiCanvas canvas, out int x, out int y)
         {
