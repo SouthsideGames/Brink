@@ -105,21 +105,97 @@ namespace Brink.Tests
         }
 
         /// <summary>
-        /// Two failures flattened this skyline and only one was arithmetic. The
-        /// heights were invariant mod 3; fixing that but scaling against the
-        /// whole 0..100 range flattened it again, because a healthy economy
-        /// occupies a narrow high band (the seeded world opens at 72..93). So
-        /// this asserts the *seeded* world varies, not just a forced one.
+        /// Two separate faults flattened this skyline, and a test can easily
+        /// guard only the first. The heights were invariant mod 3; fixing that
+        /// but bucketing against the whole 0..100 range flattened it again,
+        /// because a healthy economy occupies a narrow high band.
+        ///
+        /// The band is the whole point, so these outputs are set explicitly
+        /// rather than taken from the fixture seed. An earlier version asserted
+        /// against the seeded world and silently stopped guarding the
+        /// calibration: on seed 6120 one sector sits at 59.7, which straddles
+        /// the old 68-point bucket edge and yields two heights even under the
+        /// broken mapping. Every value here is above that edge, so reverting to
+        /// absolute 0-33 / 34-67 / 68-100 thresholds puts all seven in one
+        /// bucket and fails this test.
         /// </summary>
         [Test]
-        public void TheMarketSkylineVariesAcrossTheSectorsBehindIt()
+        public void TheMarketSkylineVariesAcrossAHighBandOfSectorOutputs()
         {
-            Assert.Greater(state.PlayerCountry.economy.sectors.Count, 2,
-                "the fixture has too few sectors to vary");
+            var sectors = state.PlayerCountry.economy.sectors;
+            Assert.Greater(sectors.Count, 2, "the fixture has too few sectors to vary");
 
-            Assert.Greater(DistinctColumnHeights(state), 1,
-                "every column in the seeded world is the same height — the skyline "
-                + "cannot express the sector spread the country actually has");
+            // Ordinary healthy spread, all of it inside the old top bucket.
+            float[] band = { 72f, 93f, 78f, 88f, 76f, 74f, 75f };
+            for (int i = 0; i < sectors.Count; i++) sectors[i].output = band[i % band.Length];
+            foreach (var sector in sectors)
+                Assert.Greater(sector.output, 68f,
+                    "a value below the old top bucket would let absolute thresholds pass");
+
+            var heights = ColumnHeights(state);
+            Assert.Greater(new System.Collections.Generic.HashSet<int>(heights).Count, 1,
+                "every column is the same height — an ordinary high-band economy "
+                + "cannot be told apart from a level one");
+
+            // The tallest column is the strongest sector, not an arbitrary one.
+            int strongest = 0, weakest = 0;
+            for (int i = 0; i < sectors.Count; i++)
+            {
+                if (sectors[i].output > sectors[strongest].output) strongest = i;
+                if (sectors[i].output < sectors[weakest].output) weakest = i;
+            }
+            Assert.Greater(heights[strongest], heights[weakest],
+                "the tallest column does not belong to the strongest sector");
+
+            // Presentation only, so the same state must draw the same picture.
+            CollectionAssert.AreEqual(heights, ColumnHeights(state), "the skyline is not deterministic");
+
+            var rows = AsciiPillarArt.Render(state, Pillar.Economy, 64).Split('\n');
+            Assert.AreEqual(5, rows.Length);
+            foreach (var row in rows) Assert.AreEqual(64, row.Length);
+        }
+
+        /// <summary>
+        /// The state house used to stand on its own labels. At the 32-column
+        /// floor the facade is centred across x=7..20 while STAB held x=1..7 and
+        /// APP x=18..23, so row four read `STAB 64|_||_||_||APP 48`. Three-digit
+        /// figures are the tightest case the readout can reach, so they are what
+        /// this pins. Moving the labels back onto row four fails here twice
+        /// over: they vanish from the heading row and the foundation breaks.
+        /// </summary>
+        [Test]
+        public void TheStateHouseIsNeverOverwrittenByItsOwnReadout()
+        {
+            var player = state.PlayerCountry;
+            player.stability = 100f;
+            player.governmentApproval = 100f;
+
+            var rows = AsciiPillarArt.Render(state, Pillar.Government, 32).Split('\n');
+
+            Assert.AreEqual(5, rows.Length, "the signature is no longer five rows");
+            foreach (var row in rows) Assert.AreEqual(32, row.Length, "the signature left its 32 columns");
+
+            // The readout lives on the heading row, and only there.
+            StringAssert.Contains("STAB 100", rows[0]);
+            StringAssert.Contains("APP 100", rows[0]);
+            for (int y = 1; y < 5; y++)
+            {
+                StringAssert.DoesNotContain("STAB", rows[y], $"STAB was drawn onto row {y}");
+                StringAssert.DoesNotContain("APP", rows[y], $"APP was drawn onto row {y}");
+            }
+
+            // It does not run into the heading, and carries no part of the facade.
+            StringAssert.Contains("STATE HOUSE ", rows[0], "the readout abuts the heading");
+            foreach (char glyph in new[] { '/', '\\', '|' })
+                Assert.IsFalse(rows[0].Contains(glyph.ToString()),
+                    $"facade glyph '{glyph}' reached the readout row");
+
+            // The building is whole: roof, upper facade, colonnade, foundation.
+            StringAssert.Contains("/\\", rows[1], "the roof is broken");
+            StringAssert.Contains("___/  \\___", rows[2], "the upper facade is broken");
+            StringAssert.Contains("| || || || |", rows[3], "the colonnade is broken");
+            StringAssert.Contains("_|_||_||_||_|_", rows[4],
+                "the foundation is broken — a label was drawn across it");
         }
 
         [Test]
@@ -129,6 +205,21 @@ namespace Brink.Tests
 
             Assert.AreEqual(1, DistinctColumnHeights(state),
                 "a genuinely balanced economy must not be shown as uneven");
+        }
+
+        /// <summary>The height of each column the market skyline draws.</summary>
+        static int[] ColumnHeights(GameState state)
+        {
+            var rows = AsciiPillarArt.Render(state, Pillar.Economy, 64).Split('\n');
+            var heights = new System.Collections.Generic.List<int>();
+            for (int x = 1; x < 44; x += 3)
+            {
+                int h = 0;
+                for (int y = 4; y >= 0; y--) { if (rows[y][x] != '█') break; h++; }
+                heights.Add(h);
+            }
+            Assert.Greater(heights.Count, 0, "the skyline drew no columns at all");
+            return heights.ToArray();
         }
 
         /// <summary>How many different bar heights the market skyline draws.</summary>

@@ -59,8 +59,20 @@ Focused tests cover:
 - that all five pillar dashboards draw their signature through the shared
   `AddPillarArt` path, which is otherwise a line in a view no headless
   assertion reaches;
-- that the market skyline varies across the sector spread the seeded world
-  actually has, and still reads level for a genuinely balanced economy.
+- that the state house is never overwritten by its own readout, pinned at the
+  32-column floor with three-digit figures, which is the tightest case the
+  labels can reach;
+- that the market skyline varies across a high band of sector outputs, and
+  still reads level for a genuinely balanced economy.
+
+Both of those set their inputs explicitly rather than reading the fixture seed,
+and both are mutation-checked. The skyline test is the reason why: an earlier
+version asserted against the seeded world and silently stopped guarding the
+calibration, because seed 6120 puts one sector at 59.7 — below the old 68-point
+bucket edge — so two heights appeared even under the broken mapping. Every
+output it now sets sits above that edge, so reverting to absolute thresholds
+collapses them into one bucket and fails. **A regression test for a calibration
+has to choose values that straddle nothing.**
 
 Two calibration rules the pillar figures are held to. The Government readout
 sits on the heading row, not on the building's foundation row: at the 32-column
