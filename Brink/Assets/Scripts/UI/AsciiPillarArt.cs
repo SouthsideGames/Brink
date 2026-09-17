@@ -46,15 +46,53 @@ namespace Brink.UI
             c.Text(1, 0, "NATIONAL MARKET");
             int baseY = 4;
             int columns = Math.Max(8, c.Width - 20);
-            for (int x = 1; x < columns; x += 3)
+
+            // Each column is a sector, not noise. The previous height was
+            // `1 + |x * 17 + marketIndex| % 3` sampled at x = 1, 4, 7, ...;
+            // since every sampled x is congruent to 1 mod 3 and 17 * 3 is
+            // divisible by 3, `x * 17 % 3` was invariant, so every bar always
+            // shared one height and the skyline could never vary. Reading the
+            // sectors the country actually has makes an uneven economy look
+            // uneven, and is still derived only from our own state.
+            var sectors = country.economy.sectors;
+            float low = 0f, span = 0f;
+            if (sectors != null && sectors.Count > 0)
             {
-                int h = 1 + (Math.Abs((x * 17 + (int)country.economy.marketIndex)) % 3);
+                low = sectors[0].output; float high = low;
+                foreach (var sector in sectors)
+                {
+                    if (sector.output < low) low = sector.output;
+                    if (sector.output > high) high = sector.output;
+                }
+                span = high - low;
+            }
+
+            for (int x = 1, i = 0; x < columns; x += 3, i++)
+            {
+                int h = sectors == null || sectors.Count == 0
+                    ? 1
+                    : SectorHeight(sectors[i % sectors.Count].output, low, span);
                 for (int y = 0; y < h; y++) c.Plot(x, baseY - y, '█');
             }
             c.Text(Math.Max(1, c.Width - 18), 1, $"IDX {country.economy.marketIndex:F0}");
             c.Text(Math.Max(1, c.Width - 18), 2, $"GDP {country.economy.gdp:F0}");
             c.Text(Math.Max(1, c.Width - 18), 3,
                 country.economy.growthRate >= 0 ? "TREND  /" : "TREND  \\");
+        }
+
+        /// <summary>
+        /// A sector's capacity as a skyline height, scaled against the spread
+        /// this country actually has rather than the whole 0..100 range. A
+        /// healthy economy sits in a narrow high band — the seeded world opens
+        /// at 72..93 — so absolute thresholds put every sector in one bucket
+        /// and flattened the skyline just as thoroughly as the arithmetic bug
+        /// did. A genuinely level economy still reads level.
+        /// </summary>
+        static int SectorHeight(float output, float low, float span)
+        {
+            if (span < 4f) return 2;
+            int h = 1 + (int)Math.Round((output - low) / span * 3f);
+            return Math.Max(1, Math.Min(4, h));
         }
 
         static void Intelligence(AsciiCanvas c, CountryState country)
@@ -91,8 +129,15 @@ namespace Brink.UI
             c.Text(Math.Max(1, mid - 9), 2, "  ___/  \\___  ");
             c.Text(Math.Max(1, mid - 9), 3, " | || || || | ");
             c.Text(Math.Max(1, mid - 9), 4, "_|_||_||_||_|_");
-            c.Text(1, 4, $"STAB {country.stability:F0}");
-            c.Text(Math.Max(1, c.Width - 14), 4, $"APP {country.governmentApproval:F0}");
+
+            // The readout shares the title row rather than row 4. On a narrow
+            // panel the facade is centred and its foundation reaches within a
+            // few columns of both edges, so labels drawn onto row 4 overwrote
+            // it and fused into `STAB 64|_||_||_||APP 48`. Row 0 carries only
+            // the eleven-character heading, so there is room at every width the
+            // 32-column floor allows.
+            string readout = $"STAB {country.stability:F0}   APP {country.governmentApproval:F0}";
+            c.Text(Math.Max(13, c.Width - 1 - readout.Length), 0, readout);
         }
     }
 }

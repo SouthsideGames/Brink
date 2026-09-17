@@ -55,7 +55,21 @@ Focused tests cover:
 - live bloc/trade state changing the relevant overlay;
 - player-facing summary counts excluding unrelated foreign trade.
 - fixed five-row institutional signatures for all five pillars;
-- the 32–100 column responsive contract for pillar art.
+- the 32–100 column responsive contract, for every pillar;
+- that all five pillar dashboards draw their signature through the shared
+  `AddPillarArt` path, which is otherwise a line in a view no headless
+  assertion reaches;
+- that the market skyline varies across the sector spread the seeded world
+  actually has, and still reads level for a genuinely balanced economy.
+
+Two calibration rules the pillar figures are held to. The Government readout
+sits on the heading row, not on the building's foundation row: at the 32-column
+floor the centred facade reaches within a few columns of both edges, and labels
+drawn onto that row fused into it. The market skyline takes each column's height
+from a sector's capacity scaled against that country's own spread — a healthy
+economy occupies a narrow high band, so absolute 0..100 thresholds put every
+sector in one bucket and flatten the skyline as completely as an arithmetic bug
+would.
 
 `AsciiMapModeTests` is registered in `Tools/run-suite.sh` so the suite coverage guard continues to protect the fixture.
 
