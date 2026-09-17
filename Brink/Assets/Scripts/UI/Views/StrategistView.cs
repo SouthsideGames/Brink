@@ -103,7 +103,35 @@ namespace Brink.UI.Views
             var doctrineRow = new VisualElement(); doctrineRow.AddToClassList("button-row"); Root.Add(doctrineRow);
             foreach (StrategicDoctrine doctrine in System.Enum.GetValues(typeof(StrategicDoctrine))) { var captured = doctrine; bool active = plan != null && plan.doctrineChosen && plan.doctrine == doctrine; var button = new Button(() => { StrategySystem.SetDoctrine(state, captured); Refresh(); }) { text = (active ? "► " : "") + StrategySystem.DoctrineLabel(doctrine).ToUpperInvariant() }; button.AddToClassList("cmd-button"); if (active) button.AddToClassList("primary"); doctrineRow.Add(button); }
             var policies = StrategySystem.AvailablePolicies(state);
-            if (policies.Length > 0) { AddText("terminal-text-dim").text = " NATIONAL POLICY — country-shaped trade-off; replacement costs 1 Influence."; foreach (var policy in policies) { var captured = policy; AddText().text = $" {policy.label.ToUpperInvariant()} — {policy.description}"; var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row); var button = new Button(() => { StrategySystem.SetPolicy(state, captured.id); Refresh(); }) { text = "ADOPT" }; button.AddToClassList("cmd-button"); row.Add(button); } }
+            if (policies.Length > 0)
+            {
+                AddText("terminal-text-dim").text = $" NATIONAL POLICY — country-shaped trade-off; replacement costs {StrategySystem.PolicyRevisionInfluence} Influence.";
+                var policyFeedback = AddText("terminal-text-dim"); policyFeedback.text = " ";
+                foreach (var policy in policies)
+                {
+                    var captured = policy;
+                    var held = StrategySystem.PolicyInSlot(plan, policy.slotId);
+                    bool adopted = held != null && held.policyId == policy.id;
+                    bool replaces = held != null && !adopted;
+                    AddText().text = $" {policy.label.ToUpperInvariant()} — {policy.description}";
+                    // The cost tag is the shell-wide convention: GateOnAffordability
+                    // reads it back, refuses the button through Block, and
+                    // ExplainBlockedCommands prints the reason under the row — so an
+                    // unaffordable replacement is refused *before* it is pressed.
+                    AddButton(MakeRow(),
+                        (adopted ? "► " : "") + "ADOPT"
+                            + (replaces ? $" [{StrategySystem.PolicyRevisionInfluence} INF]" : ""),
+                        adopted ? "primary" : null,
+                        () =>
+                        {
+                            if (StrategySystem.SetPolicy(state, captured.id)) { Refresh(); return; }
+                            // Belt and braces for any refusal the gate cannot see
+                            // ahead of the press. Set the line and do not Refresh —
+                            // a rebuild would wipe it, as the objective form knows.
+                            policyFeedback.text = $" POLICY UNCHANGED — replacing a standing policy costs {StrategySystem.PolicyRevisionInfluence} Influence; we hold {state.influence}.";
+                        });
+                }
+            }
             AddText("terminal-text-dim").text = " WRITE AN OBJECTIVE — standing measurement only; no XP/grade bonus, maximum three.";
             var title = new TextField("OBJECTIVE") { value = "" }; title.AddToClassList("terminal-input"); Root.Add(title);
             var kinds = new List<string> { "Stability", "Approval", "Unity", "Energy", "Food", "Materials", "Industry", "Military", "Economy", "Intelligence", "Diplomacy", "Government", "Treaties", "Capabilities", "Relations ≥", "Relations ≤", "Solvent" };

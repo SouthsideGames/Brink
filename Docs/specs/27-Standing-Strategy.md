@@ -24,7 +24,9 @@ Strategy authoring itself is **not annual-evaluation initiative**. Adopting/revi
 Deterrence uses the existing autonomous `PREPARE FOR WAR` procurement path rather than the Directed-only readiness-target hook. It therefore has a real cost and a real force-structure consequence, and naturally stops ordering once establishment is filled.
 
 ## Country-specific national policy
-Each measured Standard-roster country has an authored national-policy option. A policy is available only to its country. It changes the default emphasis of both a favoured and a strained Autonomous desk through existing Cabinet directives; it does not create a parallel bonus/penalty system.
+Every authored country has two mutually exclusive national-policy alternatives, including countries available only in the Full roster. A policy is available only to its country. The first adoption is free; replacing it costs 1 Influence. Alternatives share the `NATIONAL` slot, so they replace rather than stack.
+
+Each policy changes the default emphasis of both a favoured and a strained Autonomous desk through existing Cabinet directives; it does not create a parallel bonus/penalty system. The alternatives deliberately reverse or redirect a country's emphasis so revision represents a real strategic choice rather than re-clicking a single adoption button.
 
 Policies are trade-offs in strategic posture, not claims about real countries. Their purpose is to make different national archetypes produce different unattended priorities.
 
@@ -53,13 +55,15 @@ No save-version bump is required for the additive fields.
 ## UI
 The OPERATOR panel shows the standing strategy between the mandate and optional desk directives. It provides doctrine controls, the player's country policy, and an objective authoring form.
 
+The adopted alternative is marked with the same `►` indicator and `primary` class the adopted doctrine carries directly above it; with two mutually exclusive alternatives, an unmarked pair is a guess rather than a choice. A button that would *replace* a standing policy carries the `[1 INF]` cost tag, so the shell-wide `GateOnAffordability` refuses it through `Block` and `ExplainBlockedCommands` prints the price under the row — the replacement is refused before it is pressed rather than silently doing nothing. Should a refusal reach the callback anyway, the panel writes a plain-language line instead of discarding `SetPolicy`'s answer. The COMMAND INDEX entry prices the same way, reading the occupied slot through `StrategySystem.PolicyInSlot` so what the index advertises, what the panel prints and what `SetPolicy` charges cannot disagree.
+
 ## Verification targets
 Unity verification must establish:
 1. old saves/null plans load into neutral strategy;
 2. first doctrine is free and revision costs Influence;
 3. strategy affects Autonomous Cabinet defaults but never overwrites Directed or Direct Control behavior;
 4. Deterrence produces a measurable force-structure trade-off instead of a Directed-only dead benefit;
-5. foreign-country policy cannot be adopted and every Standard policy expresses both sides of its trade-off;
+5. foreign-country policy cannot be adopted, every authored country has two alternatives, and every policy expresses both sides of its trade-off;
 6. authored goals are bounded to three, dynamic (MET can become unmet), and cannot generate XP/SP/initiative;
 7. strategy survives mandate reissue and save/load;
 8. Cabinet reporting distinguishes standing strategy from ministerial judgement;
