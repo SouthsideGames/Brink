@@ -19,13 +19,16 @@ ASCII is Brink's visual medium, not decoration around a text interface. Presenta
 It owns clipping and layering rules so maps, scenes and future pillar art do not each reimplement them.
 
 ## World map modes
-The MAP world layer now exposes five modes:
+The MAP world layer now exposes six modes:
 
 1. **Political** — the existing public standing map.
 2. **Military** — live confrontation routes, Total War emphasis and occupied-ground signals.
 3. **Trade** — the player's trade routes, embargoes and sanctions involving the player.
 4. **Intelligence** — only networks owned by the player's government, with access bands derived from penetration already known to that government.
 5. **Blocs** — standing bloc membership drawn from public alliance structure.
+6. **Activity** — countries with one or multiple public events on last month's
+   World Wire, so the map shows where the simulation just moved rather than only
+   standing structures.
 
 Modes are views over the authoritative save. They add no persistent state and do not alter simulation resolution.
 
@@ -37,6 +40,8 @@ Map modes follow the same information contract as the rest of Brink:
 - Trade mode shows the player's own commercial exposure rather than revealing every hidden economic dependency in the world.
 - Intelligence mode reads only `IntelNetwork` objects owned by the player and never plots a foreign service's network.
 - Bloc membership is treated as public diplomatic structure.
+- Activity delegates visibility to `WorldWire` and never reads secret or
+  Intelligence-category chronicle entries directly.
 
 A presentation layer must never become a shortcut around `IntelligenceSystem`.
 
@@ -54,6 +59,8 @@ Focused tests cover:
 - foreign intelligence networks staying invisible;
 - live bloc/trade state changing the relevant overlay;
 - player-facing summary counts excluding unrelated foreign trade.
+- Activity mode excluding secret and older chronicle entries, and distinguishing
+  one event from several without exposing their hidden causes;
 - fixed five-row institutional signatures for all five pillars;
 - the 32–100 column responsive contract, for every pillar;
 - that all five pillar dashboards draw their signature through the shared

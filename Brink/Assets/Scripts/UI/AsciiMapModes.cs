@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Brink.Core;
 using Brink.Data;
 
 namespace Brink.UI
@@ -9,7 +11,8 @@ namespace Brink.UI
         Military,
         Trade,
         Intelligence,
-        Blocs
+        Blocs,
+        Activity
     }
 
     /// <summary>
@@ -32,6 +35,7 @@ namespace Brink.UI
                 case WorldMapMode.Trade: DrawTrade(state, canvas); break;
                 case WorldMapMode.Intelligence: DrawIntelligence(state, canvas); break;
                 case WorldMapMode.Blocs: DrawBlocs(state, canvas); break;
+                case WorldMapMode.Activity: DrawActivity(state, canvas); break;
             }
             return canvas.ToString();
         }
@@ -62,6 +66,8 @@ namespace Brink.UI
                     return "  : collection route   ? thin access   ^ established access   @ deep access";
                 case WorldMapMode.Blocs:
                     return "  = standing bloc connection   uppercase code = state";
+                case WorldMapMode.Activity:
+                    return "  • one public event last month   * multiple public events";
                 default:
                     return AsciiWorldMap.Legend;
             }
@@ -103,6 +109,13 @@ namespace Brink.UI
                     foreach (var b in state.blocs)
                         if (!b.dissolved) { active++; if (b.Has(state.playerCountryId)) ours++; }
                     return $"ACTIVE BLOCS {active}   OUR MEMBERSHIPS {ours}";
+                }
+                case WorldMapMode.Activity:
+                {
+                    var activity = RecentActivity(state);
+                    int events = 0;
+                    foreach (int count in activity.Values) events += count;
+                    return $"PUBLIC EVENTS LAST MONTH {events}   ACTIVE STATES {activity.Count}";
                 }
                 default:
                     return "PUBLIC STANDING AND CURRENT TERRITORIAL CONTROL";
@@ -174,6 +187,28 @@ namespace Brink.UI
                     canvas.Line(lx, ly, mx, my, '=', overwrite: false);
                 }
             }
+        }
+
+        static void DrawActivity(GameState state, AsciiCanvas canvas)
+        {
+            foreach (var pair in RecentActivity(state))
+            {
+                if (!Point(pair.Key, canvas, out int x, out int y)) continue;
+                canvas.Plot(x, Math.Max(0, y - 1), pair.Value > 1 ? '*' : '•', overwrite: true);
+            }
+        }
+
+        static Dictionary<string, int> RecentActivity(GameState state)
+        {
+            var counts = new Dictionary<string, int>();
+            foreach (var item in WorldWire.LastMonth(state))
+            {
+                if (state.FindCountry(item.countryId) == null
+                    || WorldFactory.FindProfile(item.countryId) == null) continue;
+                counts[item.countryId] = counts.TryGetValue(item.countryId, out int count)
+                    ? count + 1 : 1;
+            }
+            return counts;
         }
 
         static bool Point(string countryId, AsciiCanvas canvas, out int x, out int y)

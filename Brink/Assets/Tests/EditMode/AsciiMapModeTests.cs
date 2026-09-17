@@ -307,6 +307,75 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ActivityModeShowsOnlyPublicEventsFromLastMonth()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 2);
+            string quiet = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 1), countryId = "CHN",
+                category = ChronicleCategory.Political, publicity = Publicity.Public,
+                text = "Public event"
+            });
+            string publicEvent = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+            Assert.AreNotEqual(quiet, publicEvent);
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 1   ACTIVE STATES 1",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 1), countryId = "RUS",
+                category = ChronicleCategory.Military, publicity = Publicity.Secret,
+                text = "Hidden event"
+            });
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 1), countryId = "RUS",
+                category = ChronicleCategory.Intelligence, publicity = Publicity.Public,
+                text = "Misclassified intelligence event"
+            });
+            Assert.AreEqual(publicEvent,
+                AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21),
+                "The activity map bypassed the world wire and exposed a secret event.");
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(1999, 12), countryId = "RUS",
+                category = ChronicleCategory.Military, publicity = Publicity.Public,
+                text = "Old event"
+            });
+            Assert.AreEqual(publicEvent,
+                AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21),
+                "The activity map retained events older than the last month.");
+        }
+
+        [Test]
+        public void ActivityModeDistinguishesOneEventFromSeveral()
+        {
+            state.chronicle.Clear();
+            state.date = new GameDate(2000, 2);
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 1), countryId = "CHN",
+                category = ChronicleCategory.Political, publicity = Publicity.Public
+            });
+            string one = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            state.chronicle.Add(new ChronicleEntry
+            {
+                date = new GameDate(2000, 1), countryId = "CHN",
+                category = ChronicleCategory.Economic, publicity = Publicity.Public
+            });
+            string several = AsciiMapModes.Render(state, null, WorldMapMode.Activity, 78, 21);
+
+            Assert.AreNotEqual(one, several);
+            StringAssert.Contains("PUBLIC EVENTS LAST MONTH 2   ACTIVE STATES 1",
+                AsciiMapModes.Summary(state, WorldMapMode.Activity));
+        }
+
+        [Test]
         public void ModeSummariesUseOnlyRelevantPlayerFacingCounts()
         {
             state.trade.Clear();
