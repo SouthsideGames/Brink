@@ -428,6 +428,17 @@ namespace Brink.UI.Views
         }
 
         /// <summary>
+        /// The live institutional signature shared by the five command pillars.
+        /// It is presentation only: the renderer reads the current save and
+        /// writes no state.
+        /// </summary>
+        protected void AddPillarArt(GameState state, Pillar pillar)
+        {
+            AddFigure("terminal-text-dim").text =
+                AsciiPillarArt.Render(state, pillar, TerminalMetrics.Columns);
+        }
+
+        /// <summary>
         /// Which metric's explanation is currently open, and whether its history
         /// is unrolled.
         ///

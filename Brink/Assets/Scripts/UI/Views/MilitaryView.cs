@@ -46,6 +46,7 @@ namespace Brink.UI.Views
 
             Root.Clear();
             AddAuthorityBadge(state, Pillar.Military);
+            AddPillarArt(state, Pillar.Military);
 
             BuildForceStructure(state, player);
             BuildStanding(state, player);

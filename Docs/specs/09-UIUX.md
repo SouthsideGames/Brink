@@ -1068,8 +1068,10 @@ closed.
   The blinking classification cursor is the only ambient motion. When added they
   must be optional, and must not interact badly with `theme-soft`, whose entire
   purpose is to reduce visual noise.
-- **No ASCII institutional art.** Ministries, headquarters, seals and situation
-  rooms are all prose; the two map renderers are the only pictures in the game.
+- **ASCII institutional art is deliberately compact.** Each pillar dashboard now
+  opens with its live five-row signature, rendered through `AsciiCanvas`; the MAP
+  modes reuse the same visual language. Larger ministry, headquarters, seal and
+  situation-room scenes remain future presentation work.
 - **`BlinkCursor` clobbers the assessment banner.** `UpdateStatusBar` sets
   `STRATEGIC APTITUDE ASSESSMENT // CLASSIFIED` while awaiting assessment, and
   the 530 ms blink schedule overwrites it with `UNKNOWN GAME // CLASSIFIED`

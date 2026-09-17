@@ -1,7 +1,7 @@
 # 28 — ASCII Presentation Engine and Strategic Map Modes
 
 ## Status
-Phase C development slice. Static implementation complete; comprehensive Unity integration verification is deferred to the C–G milestone gate.
+Phase C development slice. Static implementation complete; comprehensive Unity integration verification is deferred to the C–G milestone gate. The five pillar dashboards now surface their live institutional signatures directly beneath the authority badge.
 
 ## Principle
 ASCII is Brink's visual medium, not decoration around a text interface. Presentation code therefore gets reusable drawing primitives and live strategic layers rather than one-off strings embedded in views.
@@ -54,13 +54,40 @@ Focused tests cover:
 - foreign intelligence networks staying invisible;
 - live bloc/trade state changing the relevant overlay;
 - player-facing summary counts excluding unrelated foreign trade.
+- fixed five-row institutional signatures for all five pillars;
+- the 32–100 column responsive contract, for every pillar;
+- that all five pillar dashboards draw their signature through the shared
+  `AddPillarArt` path, which is otherwise a line in a view no headless
+  assertion reaches;
+- that the state house is never overwritten by its own readout, pinned at the
+  32-column floor with three-digit figures, which is the tightest case the
+  labels can reach;
+- that the market skyline varies across a high band of sector outputs, and
+  still reads level for a genuinely balanced economy.
+
+Both of those set their inputs explicitly rather than reading the fixture seed,
+and both are mutation-checked. The skyline test is the reason why: an earlier
+version asserted against the seeded world and silently stopped guarding the
+calibration, because seed 6120 puts one sector at 59.7 — below the old 68-point
+bucket edge — so two heights appeared even under the broken mapping. Every
+output it now sets sits above that edge, so reverting to absolute thresholds
+collapses them into one bucket and fails. **A regression test for a calibration
+has to choose values that straddle nothing.**
+
+Two calibration rules the pillar figures are held to. The Government readout
+sits on the heading row, not on the building's foundation row: at the 32-column
+floor the centred facade reaches within a few columns of both edges, and labels
+drawn onto that row fused into it. The market skyline takes each column's height
+from a sector's capacity scaled against that country's own spread — a healthy
+economy occupies a narrow high band, so absolute 0..100 thresholds put every
+sector in one bucket and flatten the skyline as completely as an arithmetic bug
+would.
 
 `AsciiMapModeTests` is registered in `Tools/run-suite.sh` so the suite coverage guard continues to protect the fixture.
 
 ## Next Phase C slices
-The same canvas should be reused for:
+The same canvas should continue to be reused for:
 
-- pillar-specific art language;
 - institutional scenes and Cabinet meeting layouts;
 - event/crisis scenes;
 - reusable icons and sprites;

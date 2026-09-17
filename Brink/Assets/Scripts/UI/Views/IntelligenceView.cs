@@ -40,6 +40,7 @@ namespace Brink.UI.Views
 
             Root.Clear();
             AddAuthorityBadge(state, Pillar.Intelligence);
+            AddPillarArt(state, Pillar.Intelligence);
             AddCabinetAdvice(state, Pillar.Intelligence);
             BuildEstimateBoard(state);
             BuildFinishedIntelligence(state);
