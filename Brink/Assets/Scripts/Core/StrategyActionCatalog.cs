@@ -72,7 +72,7 @@ namespace Brink.Core
                 viewId = "OPERATOR",
                 label = "Write a standing objective",
                 cost = "Free",
-                description = "Define what success means for this posting. Self-authored objectives are measurements only and never award XP or grade points.",
+                description = "Define measurable success or record self-assessed freeform intent. Neither awards XP or grade points.",
                 available = room,
                 blockedReason = room ? "" : $"Maximum {StrategySystem.MaxObjectives} standing objectives already on file."
             });

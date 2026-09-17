@@ -31,14 +31,16 @@ Each policy changes the default emphasis of both a favoured and a strained Auton
 Policies are trade-offs in strategic posture, not claims about real countries. Their purpose is to make different national archetypes produce different unattended priorities.
 
 ## Player-authored objectives
-The operator may maintain up to three self-authored objectives. The OPERATOR panel supplies a measure, target and optional country id for relationship goals. Supported conditions are current-state conditions that can be evaluated without borrowing the mandate's historical baseline.
+The operator may maintain up to three self-authored objectives. The OPERATOR panel supports both measurable conditions and freeform intent. Measurable objectives supply a measure, target and optional country id for relationship goals; supported conditions are current-state conditions that can be evaluated without borrowing the mandate's historical baseline.
+
+Freeform objectives are plain-language intent the simulation cannot honestly reduce to a numeric condition. They are self-assessed: the operator may mark one MET or reopen it, while the monthly evaluator leaves it alone. First attainment enters the Chronicle once, as it does for a measured objective; reopening and attaining it again creates no repeat traffic. Freeform and measured objectives share the same three-objective limit and persisted list.
 
 Self-authored objectives:
 - give no XP, Skill Points, or annual-evaluation initiative;
 - impose no penalty when removed or missed;
 - do not alter the ten-year mandate;
 - are **standing conditions**, not sticky quest completions;
-- show MET only while the condition is currently true;
+- show MET only while a measured condition is currently true or freeform intent is marked met;
 - remember first attainment for the historical record without continuing to report it as currently met;
 - create one notification/Chronicle line on first attainment only.
 
@@ -50,10 +52,10 @@ An Autonomous official carrying a doctrine/policy instruction must not report th
 ## Persistence
 `StrategicPlan` is stored on the posting's `Mandate`. Old saves may have a null plan; `StrategySystem.Ensure` creates the neutral default lazily. A mandate reissue mutates the existing Mandate and therefore does not erase the operator's strategy.
 
-No save-version bump is required for the additive fields.
+`PlayerObjective.freeform` is an explicit persisted discriminator because Unity's `JsonUtility` does not preserve a null nested serializable class. It defaults false in old saves, which is correct because objectives predating this feature are measured. No save-version bump is required for the additive field.
 
 ## UI
-The OPERATOR panel shows the standing strategy between the mandate and optional desk directives. It provides doctrine controls, the player's country policy, and an objective authoring form.
+The OPERATOR panel shows the standing strategy between the mandate and optional desk directives. It provides doctrine controls, the player's country policy, and an objective authoring form with measured and freeform modes. Freeform entries expose MARK MET / REOPEN beside the existing REMOVE action; measured entries remain read-only outcomes of the simulation.
 
 The adopted alternative is marked with the same `►` indicator and `primary` class the adopted doctrine carries directly above it; with two mutually exclusive alternatives, an unmarked pair is a guess rather than a choice. A button that would *replace* a standing policy carries the `[1 INF]` cost tag, so the shell-wide `GateOnAffordability` refuses it through `Block` and `ExplainBlockedCommands` prints the price under the row — the replacement is refused before it is pressed rather than silently doing nothing. Should a refusal reach the callback anyway, the panel writes a plain-language line instead of discarding `SetPolicy`'s answer. The COMMAND INDEX entry prices the same way, reading the occupied slot through `StrategySystem.PolicyInSlot` so what the index advertises, what the panel prints and what `SetPolicy` charges cannot disagree.
 
@@ -64,7 +66,7 @@ Unity verification must establish:
 3. strategy affects Autonomous Cabinet defaults but never overwrites Directed or Direct Control behavior;
 4. Deterrence produces a measurable force-structure trade-off instead of a Directed-only dead benefit;
 5. foreign-country policy cannot be adopted, every authored country has two alternatives, and every policy expresses both sides of its trade-off;
-6. authored goals are bounded to three, dynamic (MET can become unmet), and cannot generate XP/SP/initiative;
+6. measured and freeform goals share the three-objective limit, remain dynamic (MET can become unmet), persist, and cannot generate XP/SP/initiative;
 7. strategy survives mandate reissue and save/load;
 8. Cabinet reporting distinguishes standing strategy from ministerial judgement;
 9. deterministic runs remain deterministic;

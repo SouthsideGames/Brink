@@ -172,6 +172,36 @@ namespace Brink.Core
             return true;
         }
 
+        /// <summary>
+        /// Record intent the simulation cannot honestly reduce to a numeric
+        /// condition. Freeform objectives are self-assessed, unrewarded, and
+        /// share the same limit and history as measured objectives.
+        /// </summary>
+        public static bool AddFreeformObjective(GameState state, string title)
+        {
+            var plan = Ensure(state); if (plan == null || string.IsNullOrWhiteSpace(title)) return false;
+            if (plan.objectives.Count >= MaxObjectives) return false;
+            plan.objectives.Add(new PlayerObjective
+            {
+                id = "OBJ_" + state.NextActionSequence(), title = title.Trim(), freeform = true,
+                created = state.date
+            });
+            return true;
+        }
+
+        public static bool SetFreeformObjectiveMet(GameState state, string id, bool met)
+        {
+            var plan = Ensure(state); if (plan == null) return false;
+            foreach (var objective in plan.objectives)
+            {
+                if (objective.id != id || !objective.freeform) continue;
+                objective.achieved = met;
+                if (met) RecordFirstAttainment(state, objective);
+                return true;
+            }
+            return false;
+        }
+
         public static bool RemoveObjective(GameState state, string id)
         {
             var plan = Ensure(state); if (plan == null) return false;
@@ -200,21 +230,23 @@ namespace Brink.Core
             var plan = Ensure(state); if (plan == null) return;
             foreach (var o in plan.objectives)
             {
-                if (o.condition == null) continue;
+                if (o.freeform) continue;
                 bool met = MandateSystem.IsMet(state, o.condition);
                 bool wasMet = o.achieved;
                 o.achieved = met;
                 if (!met || wasMet) continue;
-
-                if (!o.everAchieved)
-                {
-                    o.everAchieved = true;
-                    o.achievedDate = state.date;
-                    state.AddNotification(NotificationClass.Advisory, "OBJECTIVE REACHED", o.title, state.playerCountryId);
-                    state.AddChronicle(ChronicleCategory.System, state.playerCountryId,
-                        $"Player-authored objective first reached: {o.title}.");
-                }
+                RecordFirstAttainment(state, o);
             }
+        }
+
+        static void RecordFirstAttainment(GameState state, PlayerObjective objective)
+        {
+            if (objective.everAchieved) return;
+            objective.everAchieved = true;
+            objective.achievedDate = state.date;
+            state.AddNotification(NotificationClass.Advisory, "OBJECTIVE REACHED", objective.title, state.playerCountryId);
+            state.AddChronicle(ChronicleCategory.System, state.playerCountryId,
+                $"Player-authored objective first reached: {objective.title}.");
         }
 
         public static void ClarifyCabinetReport(GameState state)
@@ -250,7 +282,7 @@ namespace Brink.Core
             sb.AppendLine("PLAYER OBJECTIVES:");
             if (plan.objectives.Count==0) sb.AppendLine("  NONE — define what success means for this posting.");
             foreach (var o in plan.objectives)
-                sb.AppendLine((o.achieved ? "  [MET] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
+                sb.AppendLine((o.achieved ? "  [MET] " : o.freeform ? "  [OPEN] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
             return sb.ToString().TrimEnd();
         }
 

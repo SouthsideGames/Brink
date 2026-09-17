@@ -183,6 +183,99 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void FreeformObjectiveIsSelfAssessedHistoricalAndUnrewarded()
+        {
+            int xp = state.strategistXP;
+            int initiative = state.initiativesThisYear;
+            int notifications = state.notifications.Count;
+            int chronicle = state.chronicle.Count;
+
+            Assert.IsTrue(StrategySystem.AddFreeformObjective(state,
+                "  Keep the republic out of a continental war  "));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+            Assert.IsTrue(objective.freeform);
+            Assert.AreEqual("Keep the republic out of a continental war", objective.title);
+            StringAssert.Contains("[OPEN]", StrategySystem.StatusText(state));
+
+            StrategySystem.MonthlyUpdate(state);
+            Assert.IsFalse(objective.achieved,
+                "the simulation must not pretend it can evaluate arbitrary intent.");
+
+            Assert.IsTrue(StrategySystem.SetFreeformObjectiveMet(state, objective.id, true));
+            Assert.IsTrue(objective.achieved);
+            Assert.IsTrue(objective.everAchieved);
+            Assert.AreEqual(notifications + 1, state.notifications.Count);
+            Assert.AreEqual(chronicle + 1, state.chronicle.Count);
+            Assert.AreEqual(xp, state.strategistXP);
+            Assert.AreEqual(initiative, state.initiativesThisYear);
+
+            Assert.IsTrue(StrategySystem.SetFreeformObjectiveMet(state, objective.id, false));
+            Assert.IsFalse(objective.achieved);
+            Assert.IsTrue(objective.everAchieved);
+            StringAssert.Contains("[PREVIOUSLY MET]", StrategySystem.StatusText(state));
+            Assert.IsTrue(StrategySystem.SetFreeformObjectiveMet(state, objective.id, true));
+            Assert.AreEqual(notifications + 1, state.notifications.Count,
+                "reaching self-assessed intent again must not manufacture repeat traffic.");
+            Assert.AreEqual(chronicle + 1, state.chronicle.Count);
+        }
+
+        [Test]
+        public void FreeformAndMeasuredObjectivesShareOneLimitAndOneSaveList()
+        {
+            Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Preserve strategic room"));
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Hold stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=999f, text="Stability at 999." }));
+            Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Avoid permanent dependence"));
+            Assert.IsFalse(StrategySystem.AddFreeformObjective(state, "A fourth objective"));
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(StrategySystem.MaxObjectives, loaded.mandate.strategy.objectives.Count);
+            Assert.IsTrue(loaded.mandate.strategy.objectives[0].freeform);
+            Assert.NotNull(loaded.mandate.strategy.objectives[1].condition);
+            Assert.IsFalse(loaded.mandate.strategy.objectives[1].freeform,
+                "measured and old-save objectives default to simulation evaluation.");
+            Assert.AreEqual("Avoid permanent dependence", loaded.mandate.strategy.objectives[2].title);
+
+            int notifications = loaded.notifications.Count;
+            int chronicle = loaded.chronicle.Count;
+            StrategySystem.MonthlyUpdate(loaded);
+            Assert.IsFalse(loaded.mandate.strategy.objectives[0].achieved,
+                "a reloaded freeform objective was evaluated as a default numeric condition.");
+            Assert.AreEqual(notifications, loaded.notifications.Count);
+            Assert.AreEqual(chronicle, loaded.chronicle.Count);
+            StringAssert.Contains("[OPEN]", StrategySystem.StatusText(loaded));
+        }
+
+        [Test]
+        public void MeasuredObjectiveCannotBeMarkedMetByHand()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Hold stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability at 99." }));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+
+            Assert.IsFalse(StrategySystem.SetFreeformObjectiveMet(state, objective.id, true));
+            Assert.IsFalse(objective.achieved);
+        }
+
+        [Test]
+        public void OperatorPanelOffersFreeformIntentAndManualStatus()
+        {
+            string source = ReadRuntimeSource(Path.Combine("UI", "Views", "StrategistView.cs"));
+            int start = source.IndexOf("WRITE AN OBJECTIVE", StringComparison.Ordinal);
+            int end = source.IndexOf("void BuildForecast", start, StringComparison.Ordinal);
+            Assert.Greater(start, 0);
+            Assert.Greater(end, start);
+            string block = source.Substring(start, end - start);
+
+            StringAssert.Contains("\"Freeform\"", block);
+            StringAssert.Contains("AddFreeformObjective(state, title.value)", block);
+            StringAssert.Contains("if (captured.freeform)", block);
+            StringAssert.Contains("SetFreeformObjectiveMet", block);
+            StringAssert.Contains("MARK MET", block);
+            StringAssert.Contains("REOPEN", block);
+        }
+
+        [Test]
         public void StandingStrategyReportingDoesNotPretendItWasMinisterialJudgement()
         {
             StrategySystem.SetDoctrine(state, StrategicDoctrine.Prosperity);
