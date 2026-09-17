@@ -183,7 +183,8 @@ namespace Brink.Core
             if (plan.objectives.Count >= MaxObjectives) return false;
             plan.objectives.Add(new PlayerObjective
             {
-                id = "OBJ_" + state.NextActionSequence(), title = title.Trim(), created = state.date
+                id = "OBJ_" + state.NextActionSequence(), title = title.Trim(), freeform = true,
+                created = state.date
             });
             return true;
         }
@@ -193,7 +194,7 @@ namespace Brink.Core
             var plan = Ensure(state); if (plan == null) return false;
             foreach (var objective in plan.objectives)
             {
-                if (objective.id != id || objective.condition != null) continue;
+                if (objective.id != id || !objective.freeform) continue;
                 objective.achieved = met;
                 if (met) RecordFirstAttainment(state, objective);
                 return true;
@@ -229,7 +230,7 @@ namespace Brink.Core
             var plan = Ensure(state); if (plan == null) return;
             foreach (var o in plan.objectives)
             {
-                if (o.condition == null) continue;
+                if (o.freeform) continue;
                 bool met = MandateSystem.IsMet(state, o.condition);
                 bool wasMet = o.achieved;
                 o.achieved = met;
@@ -281,7 +282,7 @@ namespace Brink.Core
             sb.AppendLine("PLAYER OBJECTIVES:");
             if (plan.objectives.Count==0) sb.AppendLine("  NONE — define what success means for this posting.");
             foreach (var o in plan.objectives)
-                sb.AppendLine((o.achieved ? "  [MET] " : o.condition == null ? "  [OPEN] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
+                sb.AppendLine((o.achieved ? "  [MET] " : o.freeform ? "  [OPEN] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
             return sb.ToString().TrimEnd();
         }
 

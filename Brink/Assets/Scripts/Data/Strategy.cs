@@ -23,8 +23,8 @@ namespace Brink.Data
 
     /// <summary>
     /// A goal written by the player rather than handed down by the game.
-    /// A null condition is freeform intent whose status is self-assessed;
-    /// otherwise the existing mandate evaluator supplies its current status.
+    /// Freeform intent is self-assessed; otherwise the existing mandate
+    /// evaluator supplies current status from <see cref="condition"/>.
     /// `achieved` means the condition is true now; `everAchieved` records whether
     /// the posting has ever reached it. This keeps objectives standing rather
     /// than turning them into one-shot quest checkboxes.
@@ -34,6 +34,11 @@ namespace Brink.Data
     {
         public string id;
         public string title;
+        /// <summary>
+        /// Explicit because Unity JsonUtility cannot preserve a null nested
+        /// serializable class. Absent in old saves correctly defaults false.
+        /// </summary>
+        public bool freeform;
         public MandateObjective condition;
         public GameDate created;
         public bool achieved;

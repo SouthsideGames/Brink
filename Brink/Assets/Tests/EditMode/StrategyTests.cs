@@ -193,7 +193,7 @@ namespace Brink.Tests
             Assert.IsTrue(StrategySystem.AddFreeformObjective(state,
                 "  Keep the republic out of a continental war  "));
             var objective = StrategySystem.Ensure(state).objectives[0];
-            Assert.IsNull(objective.condition);
+            Assert.IsTrue(objective.freeform);
             Assert.AreEqual("Keep the republic out of a continental war", objective.title);
             StringAssert.Contains("[OPEN]", StrategySystem.StatusText(state));
 
@@ -224,15 +224,26 @@ namespace Brink.Tests
         {
             Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Preserve strategic room"));
             Assert.IsTrue(StrategySystem.AddObjective(state, "Hold stability",
-                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=50f, text="Stability at 50." }));
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=999f, text="Stability at 999." }));
             Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Avoid permanent dependence"));
             Assert.IsFalse(StrategySystem.AddFreeformObjective(state, "A fourth objective"));
 
             var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
             Assert.AreEqual(StrategySystem.MaxObjectives, loaded.mandate.strategy.objectives.Count);
-            Assert.IsNull(loaded.mandate.strategy.objectives[0].condition);
+            Assert.IsTrue(loaded.mandate.strategy.objectives[0].freeform);
             Assert.NotNull(loaded.mandate.strategy.objectives[1].condition);
+            Assert.IsFalse(loaded.mandate.strategy.objectives[1].freeform,
+                "measured and old-save objectives default to simulation evaluation.");
             Assert.AreEqual("Avoid permanent dependence", loaded.mandate.strategy.objectives[2].title);
+
+            int notifications = loaded.notifications.Count;
+            int chronicle = loaded.chronicle.Count;
+            StrategySystem.MonthlyUpdate(loaded);
+            Assert.IsFalse(loaded.mandate.strategy.objectives[0].achieved,
+                "a reloaded freeform objective was evaluated as a default numeric condition.");
+            Assert.AreEqual(notifications, loaded.notifications.Count);
+            Assert.AreEqual(chronicle, loaded.chronicle.Count);
+            StringAssert.Contains("[OPEN]", StrategySystem.StatusText(loaded));
         }
 
         [Test]
@@ -258,6 +269,7 @@ namespace Brink.Tests
 
             StringAssert.Contains("\"Freeform\"", block);
             StringAssert.Contains("AddFreeformObjective(state, title.value)", block);
+            StringAssert.Contains("if (captured.freeform)", block);
             StringAssert.Contains("SetFreeformObjectiveMet", block);
             StringAssert.Contains("MARK MET", block);
             StringAssert.Contains("REOPEN", block);

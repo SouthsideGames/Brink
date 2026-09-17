@@ -52,7 +52,7 @@ An Autonomous official carrying a doctrine/policy instruction must not report th
 ## Persistence
 `StrategicPlan` is stored on the posting's `Mandate`. Old saves may have a null plan; `StrategySystem.Ensure` creates the neutral default lazily. A mandate reissue mutates the existing Mandate and therefore does not erase the operator's strategy.
 
-No save-version bump is required for the additive fields.
+`PlayerObjective.freeform` is an explicit persisted discriminator because Unity's `JsonUtility` does not preserve a null nested serializable class. It defaults false in old saves, which is correct because objectives predating this feature are measured. No save-version bump is required for the additive field.
 
 ## UI
 The OPERATOR panel shows the standing strategy between the mandate and optional desk directives. It provides doctrine controls, the player's country policy, and an objective authoring form with measured and freeform modes. Freeform entries expose MARK MET / REOPEN beside the existing REMOVE action; measured entries remain read-only outcomes of the simulation.
