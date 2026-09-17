@@ -24,7 +24,9 @@ Strategy authoring itself is **not annual-evaluation initiative**. Adopting/revi
 Deterrence uses the existing autonomous `PREPARE FOR WAR` procurement path rather than the Directed-only readiness-target hook. It therefore has a real cost and a real force-structure consequence, and naturally stops ordering once establishment is filled.
 
 ## Country-specific national policy
-Each measured Standard-roster country has an authored national-policy option. A policy is available only to its country. It changes the default emphasis of both a favoured and a strained Autonomous desk through existing Cabinet directives; it does not create a parallel bonus/penalty system.
+Every authored country has two mutually exclusive national-policy alternatives, including countries available only in the Full roster. A policy is available only to its country. The first adoption is free; replacing it costs 1 Influence. Alternatives share the `NATIONAL` slot, so they replace rather than stack.
+
+Each policy changes the default emphasis of both a favoured and a strained Autonomous desk through existing Cabinet directives; it does not create a parallel bonus/penalty system. The alternatives deliberately reverse or redirect a country's emphasis so revision represents a real strategic choice rather than re-clicking a single adoption button.
 
 Policies are trade-offs in strategic posture, not claims about real countries. Their purpose is to make different national archetypes produce different unattended priorities.
 
@@ -59,7 +61,7 @@ Unity verification must establish:
 2. first doctrine is free and revision costs Influence;
 3. strategy affects Autonomous Cabinet defaults but never overwrites Directed or Direct Control behavior;
 4. Deterrence produces a measurable force-structure trade-off instead of a Directed-only dead benefit;
-5. foreign-country policy cannot be adopted and every Standard policy expresses both sides of its trade-off;
+5. foreign-country policy cannot be adopted, every authored country has two alternatives, and every policy expresses both sides of its trade-off;
 6. authored goals are bounded to three, dynamic (MET can become unmet), and cannot generate XP/SP/initiative;
 7. strategy survives mandate reissue and save/load;
 8. Cabinet reporting distinguishes standing strategy from ministerial judgement;

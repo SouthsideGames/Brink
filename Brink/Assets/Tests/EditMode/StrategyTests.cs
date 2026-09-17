@@ -63,12 +63,58 @@ namespace Brink.Tests
         public void CountryPolicyIsActuallyCountrySpecificAndNotInitiative()
         {
             var policies = StrategySystem.AvailablePolicies(state);
-            Assert.AreEqual(1, policies.Length);
-            Assert.AreEqual("USA", policies[0].countryId);
+            Assert.AreEqual(2, policies.Length);
+            foreach (var policy in policies)
+            {
+                Assert.AreEqual("USA", policy.countryId);
+                Assert.AreNotEqual(policy.favours, policy.strains);
+            }
             Assert.IsFalse(StrategySystem.SetPolicy(state, "CHN_INDUSTRIAL_SECURITY"));
             int initiative = state.initiativesThisYear;
             Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
             Assert.AreEqual(initiative, state.initiativesThisYear);
+        }
+
+        [Test]
+        public void EveryAuthoredCountryHasARealPolicyChoice()
+        {
+            foreach (var profile in WorldFactory.Profiles)
+            {
+                var posting = WorldFactory.CreateWorld(712, profile.id, WorldSize.Full);
+                var policies = StrategySystem.AvailablePolicies(posting);
+
+                Assert.AreEqual(2, policies.Length, profile.id);
+                Assert.AreNotEqual(policies[0].id, policies[1].id, profile.id);
+                Assert.AreEqual(policies[0].slotId, policies[1].slotId, profile.id);
+                foreach (var policy in policies)
+                {
+                    Assert.AreEqual(profile.id, policy.countryId);
+                    Assert.AreNotEqual(policy.favours, policy.strains, policy.id);
+                }
+            }
+        }
+
+        [Test]
+        public void RevisingCountryPolicyCostsInfluenceAndChangesCabinetEmphasis()
+        {
+            var military = state.PlayerCountry.FindOfficial(Pillar.Military);
+            var economy = state.PlayerCountry.FindOfficial(Pillar.Economy);
+            var diplomacy = state.PlayerCountry.FindOfficial(Pillar.Diplomacy);
+            military.mode = economy.mode = diplomacy.mode = ControlMode.Autonomous;
+
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
+            int beforeRevision = state.influence;
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("DIP_OUTREACH", diplomacy.directiveId);
+            Assert.AreEqual("MIL_CONSERVE", military.directiveId);
+
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_INDUSTRIAL_RENEWAL"));
+            Assert.AreEqual(beforeRevision - StrategySystem.PolicyRevisionInfluence, state.influence);
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("ECO_GROWTH", economy.directiveId);
+            Assert.AreEqual("DIP_PRESSURE", diplomacy.directiveId);
+            Assert.AreEqual(1, StrategySystem.Ensure(state).policies.Count,
+                "Alternatives replace the national-policy slot instead of stacking.");
         }
 
         [Test]
