@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
@@ -219,6 +221,202 @@ namespace Brink.Tests
             Assert.AreEqual(StrategicDoctrine.Influence, state.mandate.strategy.doctrine);
             Assert.AreEqual("Influence Plan", state.mandate.strategy.planTitle);
             Assert.AreEqual(120, state.mandate.strategy.horizonMonths);
+        }
+
+        // ---------- national-policy presentation and refusal ----------
+        //
+        // Every country gained a second alternative, which made the *replacement*
+        // path reachable for the first time: with one policy per country,
+        // re-adopting the same id returns true before any cost is charged. These
+        // cover what that newly-live path has to say on screen.
+
+        /// <summary>
+        /// One definition of "which policy holds the slot". The panel prices the
+        /// button from this and <see cref="StrategySystem.SetPolicy"/> charges
+        /// from it, so the two cannot disagree about what a replacement is.
+        /// </summary>
+        [Test]
+        public void TheOccupiedSlotHasASingleSharedDefinition()
+        {
+            var plan = StrategySystem.Ensure(state);
+            Assert.IsNull(StrategySystem.PolicyInSlot(plan, "NATIONAL"),
+                "nothing is adopted yet, so the national slot must read as empty.");
+
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
+
+            var held = StrategySystem.PolicyInSlot(plan, "NATIONAL");
+            Assert.IsNotNull(held, "an adopted policy no longer occupies its slot.");
+            Assert.AreEqual("USA_ALLIANCE_FIRST", held.policyId);
+
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_INDUSTRIAL_RENEWAL"));
+            Assert.AreEqual("USA_INDUSTRIAL_RENEWAL",
+                StrategySystem.PolicyInSlot(plan, "NATIONAL").policyId,
+                "replacing left the old policy in the slot.");
+            Assert.AreEqual(1, plan.policies.Count,
+                "alternatives must replace in the NATIONAL slot, never stack.");
+        }
+
+        /// <summary>
+        /// The adopted alternative is marked the way the doctrine row directly
+        /// above it is marked. With one policy per country this was invisible;
+        /// with two mutually exclusive ones, an unmarked pair is a guess.
+        /// </summary>
+        [Test]
+        public void TheAdoptedPolicyIsMarkedLikeTheAdoptedDoctrine()
+        {
+            string block = PolicyBlockSource();
+
+            StringAssert.Contains("► ", block,
+                "the adopted policy is not marked with the same indicator the doctrine row uses.");
+            StringAssert.Contains("primary", block,
+                "the adopted policy does not carry the 'primary' class the adopted doctrine carries.");
+            StringAssert.Contains("adopted", block,
+                "nothing in the policy block distinguishes the standing policy from its alternative.");
+        }
+
+        /// <summary>
+        /// An unaffordable replacement is refused *before* it is pressed. The
+        /// button carries the cost tag, so the shell-wide gate reads it back,
+        /// blocks it with its price, and prints the reason under the row — the
+        /// convention that exists because a control which spends nothing and says
+        /// nothing reads as a broken control.
+        /// </summary>
+        [Test]
+        public void AnUnaffordableReplacementIsRefusedWithItsPriceOnScreen()
+        {
+            string block = PolicyBlockSource();
+            StringAssert.Contains("INF]", block,
+                "the replacement button carries no cost tag, so GateOnAffordability cannot refuse it.");
+            StringAssert.Contains("PolicyRevisionInfluence", block,
+                "the tag hardcodes a number instead of reading the cost the system actually charges.");
+
+            state.influence = 0;
+
+            var host = new UnityEngine.UIElements.VisualElement();
+            var row = new UnityEngine.UIElements.VisualElement();
+            row.AddToClassList("button-row");
+            host.Add(row);
+
+            var button = new UnityEngine.UIElements.Button
+            {
+                text = $"ADOPT [{StrategySystem.PolicyRevisionInfluence} INF]"
+            };
+            button.AddToClassList("cmd-button");
+            row.Add(button);
+
+            Brink.UI.Views.TerminalView.GateOnAffordability(row, state);
+            Brink.UI.Views.TerminalView.ExplainBlockedCommands(host);
+
+            Assert.IsFalse(button.enabledSelf,
+                "a replacement the operator cannot pay for is still pressable.");
+            StringAssert.Contains($"{StrategySystem.PolicyRevisionInfluence} INF",
+                Brink.UI.Views.TerminalView.BlockedReason(button));
+
+            string printed = "";
+            foreach (var child in host.Children())
+                if (child is UnityEngine.UIElements.Label label) printed += label.text;
+            printed = System.Text.RegularExpressions.Regex.Replace(printed, @"\s+", " ");
+
+            StringAssert.Contains("UNAVAILABLE", printed,
+                "the refusal is not readable on screen; a tooltip is dead weight on a phone.");
+        }
+
+        /// <summary>
+        /// And if a refusal ever reaches the callback anyway, the panel says so
+        /// rather than swallowing it — the objective form's pattern, one section
+        /// down in the same view.
+        /// </summary>
+        [Test]
+        public void ARefusedAdoptionExplainsItselfInsteadOfFailingSilently()
+        {
+            string block = PolicyBlockSource();
+
+            StringAssert.Contains("if (StrategySystem.SetPolicy(state, captured.id))", block,
+                "the ADOPT callback still discards SetPolicy's answer, so a refusal is silent.");
+            StringAssert.Contains("policyFeedback.text", block,
+                "a refused adoption writes no explanation anywhere the operator can read it.");
+        }
+
+        /// <summary>
+        /// A refusal must also be inert: nothing spent, nothing changed, the
+        /// standing policy left exactly where it was.
+        /// </summary>
+        [Test]
+        public void ARefusedReplacementChangesNothingAtAll()
+        {
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
+            var plan = StrategySystem.Ensure(state);
+            state.influence = 0;
+            int revisions = plan.revisionCount;
+
+            Assert.IsFalse(StrategySystem.SetPolicy(state, "USA_INDUSTRIAL_RENEWAL"),
+                "a replacement was accepted with no Influence to pay for it.");
+
+            Assert.AreEqual(0, state.influence, "a refused replacement still moved the account.");
+            Assert.AreEqual(revisions, plan.revisionCount, "a refused replacement counted as a revision.");
+            Assert.AreEqual("USA_ALLIANCE_FIRST",
+                StrategySystem.PolicyInSlot(plan, "NATIONAL").policyId,
+                "a refused replacement unseated the standing policy.");
+            Assert.AreEqual(1, plan.policies.Count);
+        }
+
+        /// <summary>
+        /// The COMMAND INDEX answers "what can I do and what does it cost". It
+        /// said "free" forever, while the second alternative costs Influence.
+        /// </summary>
+        [Test]
+        public void TheActionIndexPricesAPolicyReplacementOnceOneIsHeld()
+        {
+            var before = FindPolicyEntry();
+            StringAssert.Contains("Free first adoption", before.cost,
+                "the first adoption is free and the index should say so.");
+
+            Assert.IsTrue(StrategySystem.SetPolicy(state, "USA_ALLIANCE_FIRST"));
+
+            var after = FindPolicyEntry();
+            StringAssert.Contains($"{StrategySystem.PolicyRevisionInfluence} INF", after.cost,
+                "with a policy already in the NATIONAL slot the index still advertises a free adoption.");
+            StringAssert.Contains("revise", after.cost,
+                "the revision cost is not presented the way the doctrine entry presents its own.");
+        }
+
+        ActionEntry FindPolicyEntry()
+        {
+            foreach (var entry in StrategyActionCatalog.All(state))
+                if (entry.label == "Adopt national policy") return entry;
+            Assert.Fail("the COMMAND INDEX no longer carries a national-policy entry.");
+            return null;
+        }
+
+        /// <summary>
+        /// The policy block of the real view, isolated from the rest of the file.
+        /// The wiring is a line in a view that no headless assertion reaches, so
+        /// it is read from source — the same approach SettlementFogTests takes to
+        /// the oracle identifiers, and scoped to the block so a match elsewhere
+        /// in the file cannot satisfy it.
+        /// </summary>
+        static string PolicyBlockSource()
+        {
+            string source = ReadRuntimeSource(Path.Combine("UI", "Views", "StrategistView.cs"));
+            int start = source.IndexOf("AvailablePolicies(state)", StringComparison.Ordinal);
+            Assert.Greater(start, 0, "STRATEGIST no longer offers national policy at all.");
+            int end = source.IndexOf("WRITE AN OBJECTIVE", start, StringComparison.Ordinal);
+            Assert.Greater(end, start, "the policy block's end marker moved; rescope this reader.");
+            return source.Substring(start, end - start);
+        }
+
+        static string ReadRuntimeSource(string relative)
+        {
+            string root = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "Scripts");
+            for (var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+                 !Directory.Exists(root) && dir != null; dir = dir.Parent)
+            {
+                string candidate = Path.Combine(dir.FullName, "Brink", "Assets", "Scripts");
+                if (Directory.Exists(candidate)) root = candidate;
+            }
+            string path = Path.Combine(root, relative);
+            Assert.IsTrue(File.Exists(path), $"cannot find {relative} from {Directory.GetCurrentDirectory()}");
+            return File.ReadAllText(path);
         }
     }
 }

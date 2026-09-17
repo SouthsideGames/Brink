@@ -50,12 +50,16 @@ namespace Brink.Core
             });
 
             var policies = StrategySystem.AvailablePolicies(state);
+            bool policyHeld = policies.Length > 0
+                && StrategySystem.PolicyInSlot(plan, policies[0].slotId) != null;
             result.Add(new ActionEntry
             {
                 pillar = Pillar.Government,
                 viewId = "OPERATOR",
                 label = "Adopt national policy",
-                cost = "Free first adoption",
+                cost = policyHeld
+                    ? $"{StrategySystem.PolicyRevisionInfluence} INF to revise"
+                    : "Free first adoption",
                 description = "Choose the country-shaped strategic trade-off that steers favoured and strained autonomous desks.",
                 available = policies.Length > 0,
                 blockedReason = policies.Length > 0 ? "" : "No authored national policy is available for this posting."

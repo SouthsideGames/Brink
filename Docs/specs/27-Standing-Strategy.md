@@ -55,6 +55,8 @@ No save-version bump is required for the additive fields.
 ## UI
 The OPERATOR panel shows the standing strategy between the mandate and optional desk directives. It provides doctrine controls, the player's country policy, and an objective authoring form.
 
+The adopted alternative is marked with the same `►` indicator and `primary` class the adopted doctrine carries directly above it; with two mutually exclusive alternatives, an unmarked pair is a guess rather than a choice. A button that would *replace* a standing policy carries the `[1 INF]` cost tag, so the shell-wide `GateOnAffordability` refuses it through `Block` and `ExplainBlockedCommands` prints the price under the row — the replacement is refused before it is pressed rather than silently doing nothing. Should a refusal reach the callback anyway, the panel writes a plain-language line instead of discarding `SetPolicy`'s answer. The COMMAND INDEX entry prices the same way, reading the occupied slot through `StrategySystem.PolicyInSlot` so what the index advertises, what the panel prints and what `SetPolicy` charges cannot disagree.
+
 ## Verification targets
 Unity verification must establish:
 1. old saves/null plans load into neutral strategy;

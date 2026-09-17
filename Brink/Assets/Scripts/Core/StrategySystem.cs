@@ -93,6 +93,21 @@ namespace Brink.Core
             return list.ToArray();
         }
 
+        /// <summary>
+        /// The choice currently occupying a policy slot, or null.
+        ///
+        /// One definition, so what a panel prices and what <see cref="SetPolicy"/>
+        /// actually charges cannot disagree — the same discipline as the single
+        /// `OperationCatalog.CanOrder` gate shared by the order screen and the
+        /// launch path.
+        /// </summary>
+        public static StrategicPolicyChoice PolicyInSlot(StrategicPlan plan, string slotId)
+        {
+            StrategicPolicyChoice held = null;
+            if (plan != null) foreach (var p in plan.policies) if (p.slotId == slotId) held = p;
+            return held;
+        }
+
         public static bool SetDoctrine(GameState state, StrategicDoctrine doctrine)
         {
             var plan = Ensure(state); if (plan == null) return false;
@@ -117,8 +132,7 @@ namespace Brink.Core
             StrategicPolicyDef def = null;
             foreach (var p in AvailablePolicies(state)) if (p.id == policyId) def = p;
             if (def == null) return false;
-            StrategicPolicyChoice existing = null;
-            foreach (var p in plan.policies) if (p.slotId == def.slotId) existing = p;
+            var existing = PolicyInSlot(plan, def.slotId);
             if (existing != null && existing.policyId == policyId) return true;
             int cost = existing == null ? 0 : PolicyRevisionInfluence;
             if (state.influence < cost) return false;
