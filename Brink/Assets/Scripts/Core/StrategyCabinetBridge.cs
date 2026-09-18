@@ -32,6 +32,41 @@ namespace Brink.Core
                 if (strained != null && strained.mode == ControlMode.Autonomous)
                     strained.directiveId = StrainedDirective(def.strains);
             }
+
+            foreach (var objective in plan.objectives)
+            {
+                if (objective.id != plan.programmeObjectiveId || objective.achieved) continue;
+                if (!TryProgrammeInstruction(objective, out var pillar, out var directive)) break;
+                var official = country.FindOfficial(pillar);
+                if (official != null && official.mode == ControlMode.Autonomous) official.directiveId = directive;
+                break;
+            }
+        }
+
+        public static bool TryProgrammeInstruction(PlayerObjective objective, out Pillar pillar, out string directive)
+        {
+            pillar = Pillar.Government; directive = "";
+            if (objective == null || objective.freeform || objective.condition == null) return false;
+            switch (objective.condition.kind)
+            {
+                case MandateObjectiveKind.StabilityAtLeast: case MandateObjectiveKind.UnityAtLeast:
+                    directive = "GOV_STABILITY"; return true;
+                case MandateObjectiveKind.ApprovalAtLeast:
+                    directive = "GOV_APPROVAL"; return true;
+                case MandateObjectiveKind.EnergyAtLeast: case MandateObjectiveKind.FoodAtLeast:
+                case MandateObjectiveKind.MaterialsAtLeast: case MandateObjectiveKind.IndustryAtLeast:
+                    pillar = Pillar.Economy; directive = "ECO_GROWTH"; return true;
+                case MandateObjectiveKind.Solvent:
+                    pillar = Pillar.Economy; directive = "ECO_AUSTERITY"; return true;
+                case MandateObjectiveKind.TreatiesAtLeast: case MandateObjectiveKind.RelationsAtLeast:
+                    pillar = Pillar.Diplomacy; directive = "DIP_OUTREACH"; return true;
+                case MandateObjectiveKind.RelationsAtMost:
+                    pillar = Pillar.Diplomacy; directive = "DIP_PRESSURE"; return true;
+                case MandateObjectiveKind.PillarAtLeast:
+                    if (!System.Enum.TryParse(objective.condition.param, true, out pillar)) return false;
+                    directive = FavouredDirective(pillar); return true;
+                default: return false;
+            }
         }
 
         /// <summary>

@@ -258,6 +258,69 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void LongTermProgrammeSteersOnlyItsAutonomousDesk()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Steady the country",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability at 99." }));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+            var government = state.PlayerCountry.FindOfficial(Pillar.Government);
+            Assert.IsTrue(StrategySystem.SetProgramme(state, objective.id));
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("GOV_STABILITY", government.directiveId);
+            StringAssert.Contains("[PROGRAMME]", StrategySystem.StatusText(state));
+            CabinetSystem.MonthlyAct(state);
+            StrategySystem.ClarifyCabinetReport(state);
+            var report = state.cabinetReport.Find(r => r.pillar == Pillar.Government);
+            Assert.IsNotNull(report);
+            StringAssert.Contains("long-term programme", report.summary);
+
+            government.mode = ControlMode.Directed;
+            government.directiveId = "GOV_APPROVAL";
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("GOV_APPROVAL", government.directiveId,
+                "a strategic programme overrode an explicit Cabinet instruction");
+        }
+
+        [Test]
+        public void ProgrammeCompletesWithItsMeasuredObjective()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Reach present stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=1f, text="Stability at 1." }));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+            Assert.IsTrue(StrategySystem.SetProgramme(state, objective.id));
+            StrategySystem.MonthlyUpdate(state);
+            Assert.IsTrue(objective.achieved);
+            Assert.IsEmpty(StrategySystem.Ensure(state).programmeObjectiveId);
+        }
+
+        [Test]
+        public void ReplacingAProgrammeCostsInfluenceButCancellingDoesNotResetThePrice()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability." }));
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Solvency",
+                new MandateObjective { kind=MandateObjectiveKind.Solvent, text="Solvent." }));
+            var plan = StrategySystem.Ensure(state);
+            int before = state.influence;
+            Assert.IsTrue(StrategySystem.SetProgramme(state, plan.objectives[0].id));
+            Assert.AreEqual(before, state.influence);
+            Assert.IsTrue(StrategySystem.CancelProgramme(state));
+            Assert.IsTrue(StrategySystem.SetProgramme(state, plan.objectives[1].id));
+            Assert.AreEqual(before - StrategySystem.ProgrammeRevisionInfluence, state.influence);
+        }
+
+        [Test]
+        public void FreeformAndUnsupportedObjectivesCannotPretendToBeProgrammes()
+        {
+            Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Preserve room"));
+            var freeform = StrategySystem.Ensure(state).objectives[0];
+            Assert.IsFalse(StrategySystem.SetProgramme(state, freeform.id));
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Gain capabilities",
+                new MandateObjective { kind=MandateObjectiveKind.CapabilitiesAtLeast, threshold=4f, text="Capabilities." }));
+            Assert.IsFalse(StrategySystem.SetProgramme(state, StrategySystem.Ensure(state).objectives[1].id));
+        }
+
+        [Test]
         public void OperatorPanelOffersFreeformIntentAndManualStatus()
         {
             string source = ReadRuntimeSource(Path.Combine("UI", "Views", "StrategistView.cs"));

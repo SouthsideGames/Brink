@@ -66,6 +66,11 @@ namespace Brink.Data
         public int horizonMonths = 60;
         public GameDate horizonSet;
 
+        /// <summary>The one measured objective Cabinet is authorized to pursue autonomously.</summary>
+        public string programmeObjectiveId = "";
+        public bool programmeChosen;
+        public GameDate programmeAdopted;
+
         /// <summary>
         /// Staff campaign plans written during this posting. They are nested in
         /// the posting strategy deliberately: a plan is the operator's intent,

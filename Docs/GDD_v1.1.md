@@ -843,7 +843,7 @@ Skill Points develop the operator across the five pillars and hybrid disciplines
 
 Annual evaluation measures trajectory, economic performance, political stability, strategic position, crisis handling, initiative and efficiency, with adversity considered. Conquest can contribute to strategic position and grading, but the game does not require conquest and mandates do not ask for foreign land.
 
-A ten-year Mandate provides medium-term purpose; annual evaluations provide feedback; standing directives create shorter opportunities; the persistent world provides the long-term reason to continue.
+A ten-year Mandate provides medium-term purpose; annual evaluations provide feedback; standing directives create shorter opportunities; and one measured player objective may be authorized as a bounded autonomous Cabinet programme. The persistent world provides the long-term reason to continue.
 
 ---
 
