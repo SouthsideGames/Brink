@@ -299,7 +299,7 @@ by a test. `CrisisEffectTests.ACrisisSurvivesBeingSavedAndReloaded` covers it.
 | `READINESS` / `WAR_SUPPORT` | Our own force and public will |
 | `IMPOSE_SANCTION` / `SUFFER_SANCTION` | Real sanctions, severity from magnitude |
 | `TRADE_SHOCK` | Volume on links with the target, or all of ours if none named |
-| `MARKET_SHOCK` | Economic confidence and the market index |
+| `MARKET_SHOCK` | The named country's confidence and market index, or ours when no country is named |
 | `EXPOSE_NETWORK` | Burns one of our networks, **publicly** — which teaches the world we run them (spec 06 §7b) |
 | `FOREIGN_UNREST` | A foreign state's stability and conspiracy level |
 | `CONSPIRACY` | Plotting against our own government |

@@ -135,7 +135,8 @@ namespace Brink.Tests
                    $"{world.confrontations.Count}|{world.sanctions.Count}|{trade:F2}|" +
                    $"{us.economy.confidence:F2}|{us.economy.marketIndex:F2}|{us.warSupport:F2}|" +
                    $"{us.military.ground.readiness:F2}|{us.government.conspiracyLevel:F2}|" +
-                   $"{them?.stability:F2}|{compromised}";
+                   $"{them?.stability:F2}|{them?.economy.confidence:F2}|" +
+                   $"{them?.economy.marketIndex:F2}|{compromised}";
         }
 
         // ---------- a crisis can start a war ----------

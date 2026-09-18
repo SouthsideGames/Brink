@@ -223,13 +223,14 @@ namespace Brink.Core
 
                 case MarketShock:
                 {
-                    var economy = player.economy;
+                    var affected = target ?? player;
+                    var economy = affected.economy;
                     economy.confidence = Clamp(economy.confidence + magnitude);
                     // Named rather than left to the month's OTHER line: a crisis
                     // is the single most explainable thing that happens to a
                     // market, and an operator who just answered one should see
                     // it by name (spec 26 §3).
-                    Causal.Apply(state, player.id, CausalMetric.MarketIndex,
+                    Causal.Apply(state, affected.id, CausalMetric.MarketIndex,
                         CausalReason.MarketConditions, ref economy.marketIndex,
                         Math.Max(1f, economy.marketIndex * (1f + magnitude / 100f)),
                         string.IsNullOrEmpty(sourceActionId)
