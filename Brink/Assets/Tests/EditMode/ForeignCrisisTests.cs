@@ -178,6 +178,29 @@ namespace Brink.Tests
                 "The gap has to be wide enough to be worth reading an estimate for.");
         }
 
+        [Test]
+        public void AForeignMarketShockHitsTheCountryInCrisisNotThePlayer()
+        {
+            var foreign = state.FindCountry("CHN");
+            float playerIndex = state.PlayerCountry.economy.marketIndex;
+            float playerConfidence = state.PlayerCountry.economy.confidence;
+            float foreignIndex = foreign.economy.marketIndex;
+            float foreignConfidence = foreign.economy.confidence;
+
+            CrisisEffects.Apply(state, CrisisEffects.MarketShock, foreign.id, -9f);
+
+            Assert.AreEqual(playerIndex, state.PlayerCountry.economy.marketIndex, 0f,
+                "somebody else's crisis moved the player's market");
+            Assert.AreEqual(playerConfidence, state.PlayerCountry.economy.confidence, 0f,
+                "somebody else's crisis moved the player's confidence");
+            Assert.Less(foreign.economy.marketIndex, foreignIndex,
+                "the country in crisis kept its market index");
+            Assert.Less(foreign.economy.confidence, foreignConfidence,
+                "the country in crisis kept its confidence");
+            Assert.IsNull(state.causal.Latest(state.playerCountryId, CausalMetric.MarketIndex),
+                "a foreign shock leaked into the player-only causal ledger");
+        }
+
         // ---------- the settled boundary ----------
 
         [Test]
