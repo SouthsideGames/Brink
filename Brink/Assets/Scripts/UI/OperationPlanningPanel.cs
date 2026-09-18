@@ -40,9 +40,14 @@ namespace Brink.UI
             }
 
             Add(" " + OperationPlanningSystem.StatusText(state, confrontation.id), "terminal-text");
-            Add(plan.standingOrder
-                ? " STANDING ORDER IS ACTIVE. THE NEXT STEP WILL ATTEMPT ONCE AFTER MONTHLY CP REFRESH AND PAY ITS NORMAL COST."
-                : " PLAN IS INTENT UNTIL A STANDING ORDER IS ISSUED. MANUAL EXECUTION REMAINS AVAILABLE.", "terminal-text-dim");
+            string pending = plan.standingOrder
+                ? OperationPlanningSystem.StandingOrderPendingReason(state, confrontation.id)
+                : "";
+            Add(!plan.standingOrder
+                ? " PLAN IS INTENT UNTIL A STANDING ORDER IS ISSUED. MANUAL EXECUTION REMAINS AVAILABLE."
+                : string.IsNullOrEmpty(pending)
+                    ? " STANDING ORDER IS READY. THE NEXT STEP WILL ATTEMPT ONCE AFTER MONTHLY CP REFRESH AND PAY ITS NORMAL COST."
+                    : " STANDING ORDER REMAINS AUTHORIZED BUT WILL WAIT — " + pending.ToUpperInvariant(), "terminal-text-dim");
             var standingRow = Row();
             var standing = new Button(() =>
             {

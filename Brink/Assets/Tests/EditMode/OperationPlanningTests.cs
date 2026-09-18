@@ -1,6 +1,8 @@
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -291,6 +293,46 @@ namespace Brink.Tests
             StringAssert.Contains("Military authority", OperationPlanningSystem.StandingOrderPendingReason(state, confrontation.id));
             StringAssert.Contains("PENDING — MILITARY AUTHORITY", OperationPlanningSystem.StatusText(state, confrontation.id));
             Assert.IsTrue(plan.standingOrder, "a blocked order should remain cancellable rather than silently disappearing");
+        }
+
+        [Test]
+        public void TheIssueControlAndCommandIndexShowTheSameBlockedReason()
+        {
+            OperationPlanningSystem.Create(state, confrontation.id, "Hold");
+            var panel = new OperationPlanningPanel(null);
+            panel.Build(state, confrontation);
+
+            Button issue = null;
+            panel.Root.Query<Button>().ForEach(b => { if (b.text == "ISSUE STANDING ORDER") issue = b; });
+            Assert.NotNull(issue);
+            Assert.IsFalse(issue.enabledSelf);
+            Assert.AreEqual("Add an incomplete operation to the campaign plan.", issue.tooltip);
+            bool visible = false;
+            panel.Root.Query<Label>().ForEach(l => visible |= l.text.Contains("STANDING ORDER UNAVAILABLE — ADD AN INCOMPLETE OPERATION"));
+            Assert.IsTrue(visible, "the disabled control hid its reason in a hover-only tooltip");
+
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            state.PlayerCountry.government.type = GovernmentType.ParliamentaryRepublic;
+            state.authorizedPillarMask = 0;
+            var entry = ActionCatalog.All(state).Find(e => e.label == "Issue a standing order");
+
+            Assert.NotNull(entry);
+            Assert.IsFalse(entry.available);
+            Assert.AreEqual("Military authority is required.", entry.blockedReason);
+            panel.Build(state, confrontation);
+            issue = null;
+            panel.Root.Query<Button>().ForEach(b => { if (b.text == "ISSUE STANDING ORDER") issue = b; });
+            Assert.IsFalse(issue.enabledSelf);
+            Assert.AreEqual(entry.blockedReason, issue.tooltip);
+
+            OperationPlanningSystem.For(state, confrontation.id).standingOrder = true;
+            panel.Build(state, confrontation);
+            string panelText = "";
+            panel.Root.Query<Label>().ForEach(l => panelText += l.text + "\n");
+            StringAssert.Contains("STANDING ORDER REMAINS AUTHORIZED BUT WILL WAIT — MILITARY AUTHORITY IS REQUIRED.", panelText);
+            StringAssert.DoesNotContain("THE NEXT STEP WILL ATTEMPT", panelText);
         }
 
         [Test]
