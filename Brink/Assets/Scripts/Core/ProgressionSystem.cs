@@ -656,7 +656,7 @@ namespace Brink.Core
             {
                 if (treaty.broken || !treaty.Involves(state.playerCountryId)) continue;
                 held++;
-                if (treaty.Has(TreatyCommitment.MutualDefense)) defensePacts++;
+                if (treaty.HasActive(state, TreatyCommitment.MutualDefense)) defensePacts++;
             }
             return held;
         }

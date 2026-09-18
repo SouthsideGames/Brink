@@ -377,6 +377,41 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void DormantArmsControlDoesNotBindUntilItsNamedConflictBegins()
+        {
+            var pact = new Treaty
+            {
+                id = "TEST_CONDITIONAL_ARMS", countryA = state.playerCountryId,
+                countryB = "CHN", signedDate = state.date,
+                commitments = new System.Collections.Generic.List<TreatyCommitment>
+                    { TreatyCommitment.ArmsControl }
+            };
+            pact.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.ArmsControl,
+                side = ClauseSide.WeProvide,
+                trigger = TreatyClauseTrigger.ConflictWithCountry,
+                triggerCountryId = "RUS"
+            });
+            state.treaties.Add(pact);
+
+            var china = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(china);
+            ConfrontationSystem.SetEscalationBy(
+                state, china, EscalationState.LimitedConflict, state.playerCountryId);
+            Assert.IsFalse(pact.broken, "A dormant restraint bound us before its trigger.");
+
+            var russia = ConfrontationSystem.BeginBy(state, state.playerCountryId, "RUS",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(russia);
+            russia.escalation = EscalationState.LimitedConflict;
+            ConfrontationSystem.SetEscalationBy(
+                state, china, EscalationState.TotalWar, state.playerCountryId);
+            Assert.IsTrue(pact.broken, "The named conflict began but its restraint did not bind us.");
+        }
+
+        [Test]
         public void AnyGovernmentCanBeSeenToBreakItsWord()
         {
             // `BreakTreaty` was player-only, so no foreign government could ever

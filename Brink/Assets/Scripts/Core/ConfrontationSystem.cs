@@ -379,7 +379,7 @@ namespace Brink.Core
                         ? confrontation.defenderId : confrontation.initiatorId;
                     var pact = state.FindTreaty(player.id, other);
                     if (pact != null && !pact.broken
-                        && pact.Carries(player.id, TreatyCommitment.ArmsControl))
+                        && pact.Carries(state, player.id, TreatyCommitment.ArmsControl))
                     {
                         DiplomacySystem.BreakTreatyBy(state, player.id, other);
                         state.AddNotification(NotificationClass.Priority, "ARMS CONTROL BROKEN",

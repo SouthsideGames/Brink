@@ -77,7 +77,7 @@ namespace Brink.Core
                 if (!treaty.Involves(defenderId)) continue;
 
                 string ally = treaty.PartnerOf(defenderId);
-                if (!treaty.Carries(ally, TreatyCommitment.MutualDefense)) continue;
+                if (!treaty.Carries(state, ally, TreatyCommitment.MutualDefense)) continue;
                 if (ally == aggressorId || ally == defenderId) continue;
                 if (Contains(found, ally)) continue;
 
@@ -718,7 +718,7 @@ namespace Brink.Core
             }
 
             var treaty = state.FindTreaty(allyId, confrontation.defenderId);
-            if (treaty != null && treaty.Carries(allyId, TreatyCommitment.MutualDefense))
+            if (treaty != null && treaty.Carries(state, allyId, TreatyCommitment.MutualDefense))
             {
                 treaty.broken = true;
                 treaty.brokenBy = allyId;

@@ -3165,6 +3165,13 @@ does when it is appended to rather than edited.
       persisted flag is additive and defaults false, so an old save never invents
       permission. Spec 30.
 
+- [x] **Conditional Agreements** — constructed treaty clauses may be tied to a
+      live confrontation with a named third state, limited to a 1/3/5-year term,
+      or both. `Treaty.ClauseIsActive` is the single rule read by defense,
+      transit, intelligence sharing and arms control. Zero-valued fields keep
+      old saves permanent and unconditional; dormant/expired clauses remain in
+      the signed record rather than disappearing. Spec 04 §5.
+
 Process per GDD: Prompt → Implement → Test → Fix → Lock. Do not start a phase
 until the prior one passes its acceptance tests.
 

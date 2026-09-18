@@ -172,12 +172,38 @@ namespace Brink.Data
         WeProvide = 2
     }
 
+    /// <summary>
+    /// The circumstance under which a treaty clause applies. Append-only: the
+    /// zero value keeps every clause written before conditional agreements
+    /// permanent and unconditional.
+    /// </summary>
+    public enum TreatyClauseTrigger
+    {
+        Always = 0,
+        ConflictWithCountry = 1
+    }
+
     /// <summary>One commitment in a treaty, and which side actually bears it.</summary>
     [Serializable]
     public class TreatyClause
     {
         public TreatyCommitment commitment;
         public ClauseSide side = ClauseSide.Mutual;
+
+        /// <summary>Optional live condition; see <see cref="Treaty.ClauseIsActive"/>.</summary>
+        public TreatyClauseTrigger trigger = TreatyClauseTrigger.Always;
+
+        /// <summary>Named third state for <see cref="TreatyClauseTrigger.ConflictWithCountry"/>.</summary>
+        public string triggerCountryId = "";
+
+        /// <summary>Months from signature; zero means the clause does not expire.</summary>
+        public int durationMonths;
+
+        /// <summary>
+        /// When this clause last took effect. Zero-valued old saves fall back to
+        /// the treaty signature, preserving their original expiry.
+        /// </summary>
+        public GameDate effectiveDate;
     }
 
     [Serializable]
@@ -189,10 +215,9 @@ namespace Brink.Data
         public List<TreatyCommitment> commitments = new List<TreatyCommitment>();
 
         /// <summary>
-        /// The same commitments with their side recorded. Kept alongside the flat
-        /// list rather than replacing it: ~20 call sites ask `Has(commitment)` and
-        /// do not care who carries it, and rewriting them all to satisfy a data
-        /// model change would be a large diff for no behaviour.
+        /// The same commitments with their side and live scope recorded. Kept
+        /// alongside the flat list so `Has(commitment)` can continue to answer the
+        /// historical question while `HasActive` answers what is in force now.
         ///
         /// Sides are always written relative to <see cref="countryA"/>.
         /// </summary>
@@ -206,6 +231,24 @@ namespace Brink.Data
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
         public bool Has(TreatyCommitment commitment) => commitments.Contains(commitment);
 
+        /// <summary>Whether a signed commitment is currently in force.</summary>
+        public bool HasActive(GameState state, TreatyCommitment commitment)
+            => ClauseIsActive(state, commitment);
+
+        GameDate ClauseStart(TreatyClause clause)
+            => clause.effectiveDate.month >= 1 && clause.effectiveDate.month <= 12
+                ? clause.effectiveDate : signedDate;
+
+        public bool ClauseIsExpired(GameState state, TreatyCommitment commitment)
+        {
+            if (state == null || !Has(commitment)) return false;
+            foreach (var clause in clauses)
+                if (clause.commitment == commitment)
+                    return clause.durationMonths > 0
+                        && state.date.MonthsSince(ClauseStart(clause)) >= clause.durationMonths;
+            return false;
+        }
+
         /// <summary>
         /// Whether this country carries the commitment. Old treaties have no
         /// clause sides and therefore remain mutual through <see cref="SideFor"/>.
@@ -217,12 +260,65 @@ namespace Brink.Data
             return side == ClauseSide.Mutual || side == ClauseSide.WeProvide;
         }
 
+        /// <summary>Whether this country presently carries an active commitment.</summary>
+        public bool Carries(GameState state, string countryId, TreatyCommitment commitment)
+            => ClauseIsActive(state, commitment) && Carries(countryId, commitment);
+
         /// <summary>Whether this country receives the commitment's benefit.</summary>
         public bool Receives(string countryId, TreatyCommitment commitment)
         {
             if (!Involves(countryId) || !Has(commitment)) return false;
             ClauseSide side = SideFor(countryId, commitment);
             return side == ClauseSide.Mutual || side == ClauseSide.TheyProvide;
+        }
+
+        /// <summary>Whether this country presently receives an active commitment.</summary>
+        public bool Receives(GameState state, string countryId, TreatyCommitment commitment)
+            => ClauseIsActive(state, commitment) && Receives(countryId, commitment);
+
+        /// <summary>
+        /// One authoritative activation rule for every mechanical consumer.
+        /// Missing clause records are legacy mutual promises and remain active.
+        /// A conflict trigger means either signatory is presently fighting the
+        /// named third state; expiry is evaluated independently, so both compose.
+        /// </summary>
+        public bool ClauseIsActive(GameState state, TreatyCommitment commitment)
+        {
+            if (state == null || broken || !Has(commitment)) return false;
+
+            TreatyClause clause = null;
+            foreach (var candidate in clauses)
+                if (candidate.commitment == commitment) { clause = candidate; break; }
+            if (clause == null) return true;
+
+            if (clause.durationMonths > 0
+                && state.date.MonthsSince(ClauseStart(clause)) >= clause.durationMonths) return false;
+
+            if (clause.trigger == TreatyClauseTrigger.Always) return true;
+            if (string.IsNullOrEmpty(clause.triggerCountryId)
+                || clause.triggerCountryId == countryA || clause.triggerCountryId == countryB)
+                return false;
+
+            foreach (var confrontation in state.confrontations)
+            {
+                if (confrontation.resolved || confrontation.escalation < EscalationState.LimitedConflict)
+                    continue;
+                if (!confrontation.Involves(clause.triggerCountryId)) continue;
+                if (confrontation.Involves(countryA) || confrontation.Involves(countryB)) return true;
+            }
+            return false;
+        }
+
+        public GameDate ClauseExpiry(TreatyCommitment commitment)
+        {
+            foreach (var clause in clauses)
+            {
+                if (clause.commitment != commitment || clause.durationMonths <= 0) continue;
+                GameDate start = ClauseStart(clause);
+                int total = start.year * 12 + start.month - 1 + clause.durationMonths;
+                return new GameDate(total / 12, total % 12 + 1);
+            }
+            return default;
         }
 
         /// <summary>Which side carries a commitment, as seen by <paramref name="viewerId"/>.</summary>

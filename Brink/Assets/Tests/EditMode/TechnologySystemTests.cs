@@ -340,6 +340,53 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ConditionalIntelligenceSharingWaitsForItsNamedConflict()
+        {
+            var partner = state.FindCountry("IND");
+            GrantMature(partner, "CAP_CONVENING");
+            var relationship = state.FindRelationship(state.playerCountryId, "IND");
+            relationship.relations = 0f;
+            relationship.interoperability = 0f;
+
+            var treaty = new Treaty
+            {
+                id = "T_CONDITIONAL_INTEL", countryA = state.playerCountryId,
+                countryB = "IND", signedDate = state.date
+            };
+            treaty.commitments.Add(TreatyCommitment.IntelligenceSharing);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.IntelligenceSharing,
+                side = ClauseSide.TheyProvide,
+                trigger = TreatyClauseTrigger.ConflictWithCountry,
+                triggerCountryId = "CHN"
+            });
+            state.treaties.Add(treaty);
+
+            for (int i = 0; i < 120; i++)
+            {
+                TechnologySystem.MonthlyUpdate(state);
+                state.date = state.date.NextMonth();
+            }
+            Assert.IsFalse(TechnologySystem.Has(state.PlayerCountry, "CAP_CONVENING"),
+                "A dormant intelligence-sharing clause transferred knowledge.");
+
+            var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(war);
+            war.escalation = EscalationState.LimitedConflict;
+            for (int i = 0; i < 600 && !TechnologySystem.Has(state.PlayerCountry, "CAP_CONVENING"); i++)
+            {
+                TechnologySystem.MonthlyUpdate(state);
+                state.date = state.date.NextMonth();
+            }
+
+            var acquired = state.PlayerCountry.technology.Find("CAP_CONVENING");
+            Assert.IsNotNull(acquired, "The named conflict began but knowledge was never shared.");
+            Assert.AreEqual(CapabilitySource.Shared, acquired.source);
+        }
+
+        [Test]
         public void Knowledge_CanBeStolenThroughCollection()
         {
             var target = state.FindCountry("CHN");

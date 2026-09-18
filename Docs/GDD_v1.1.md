@@ -258,6 +258,7 @@ Past wars, betrayals, aid, treaties, exercises and other major events
 Relationship statuses such as Hostile, Rival, Neutral, Cooperative, Friendly, Strategic Partner and Ally emerge from the full relationship state rather than a single threshold.
 15.2 Treaties & Coalitions
 Alliances contain explicit commitments: defense, intelligence sharing, transit, joint planning, offensive support, guarantees, etc.
+Individual commitments may be permanent or time-limited, and may be conditioned on a live confrontation with a named third state. Conditions and expiry compose; a promise applies only while every term attached to it holds. Older and unconditional agreements remain permanent. Expired commitments remain in the historical treaty but stop granting current political or mechanical benefits; they can be renewed without extending unrelated clauses.
 Commitments may be broken, but trustworthiness and future diplomacy suffer.
 Countries join coalitions according to their own interests, rivalries, threat perceptions, governments and expected gains.
 The player can exploit an enemy's rocky relationships to recruit military, economic, intelligence or diplomatic support.
