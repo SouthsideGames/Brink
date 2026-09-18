@@ -511,6 +511,25 @@ namespace Brink.Core
 
             var judged = new List<TreatyCommitment>(added);
             judged.AddRange(renewed);
+            var judgedClauses = new List<TreatyClause>();
+            foreach (var commitment in added)
+                judgedClauses.Add(new TreatyClause { commitment = commitment });
+            foreach (var commitment in renewed)
+            {
+                foreach (var clause in treaty.clauses)
+                {
+                    if (clause.commitment != commitment) continue;
+                    judgedClauses.Add(new TreatyClause
+                    {
+                        commitment = commitment,
+                        side = treaty.countryA == proposerId ? clause.side : Flip(clause.side),
+                        trigger = clause.trigger,
+                        triggerCountryId = clause.triggerCountryId,
+                        durationMonths = clause.durationMonths
+                    });
+                    break;
+                }
+            }
 
             // Judged on the *added* burden by the same acceptance logic a new
             // treaty faces — the rival-tie and encirclement penalties included,
@@ -518,7 +537,7 @@ namespace Brink.Core
             // plus what a standing relationship is worth: a partner with history
             // signs what a stranger would not.
             float history = Math.Min(12f, state.date.MonthsSince(treaty.signedDate) * 0.1f) + 8f;
-            float willingness = TreatyWillingness(state, proposerId, targetId, judged) + history;
+            float willingness = TreatyWillingness(state, proposerId, targetId, judgedClauses) + history;
 
             if (willingness < 50f)
             {
@@ -540,17 +559,21 @@ namespace Brink.Core
             relationship.relations = Clamp(relationship.relations + 4f);
             relationship.trust = Clamp(relationship.trust + 4f);
             relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 8f);
-            relationship.AddMemory(state.date, "Deepened the treaty", 1.5f);
+            bool renewalOnly = added.Count == 0;
+            relationship.AddMemory(state.date,
+                renewalOnly ? "Renewed the treaty" : "Deepened the treaty", 1.5f);
 
             bool playerInvolved = proposerId == state.playerCountryId || targetId == state.playerCountryId;
             state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
-                "TREATY DEEPENED",
-                $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} extend their "
-                + $"agreement: {DescribeCommitments(judged)}.",
+                renewalOnly ? "TREATY RENEWED" : "TREATY DEEPENED",
+                $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} "
+                + $"{(renewalOnly ? "renew" : "extend")} their agreement: {DescribeCommitments(judged)}.",
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, proposerId,
-                $"Treaty with {target.displayName} deepened ({DescribeCommitments(judged)}).", Publicity.Public);
-            GameLog.Info("DIPLO", $"{proposerId} deepened treaty with {targetId}: {DescribeCommitments(judged)}.");
+                $"Treaty with {target.displayName} {(renewalOnly ? "renewed" : "deepened")} "
+                + $"({DescribeCommitments(judged)}).", Publicity.Public);
+            GameLog.Info("DIPLO", $"{proposerId} {(renewalOnly ? "renewed" : "deepened")} treaty "
+                + $"with {targetId}: {DescribeCommitments(judged)}.");
             return true;
         }
 
@@ -560,6 +583,9 @@ namespace Brink.Core
             foreach (var commitment in commitments) parts.Add(Phrase.Of(commitment).ToLowerInvariant());
             return string.Join(", ", parts);
         }
+
+        public static string ClauseTermText(Treaty treaty, TreatyCommitment commitment)
+            => $"EXPIRES BEFORE {treaty.ClauseExpiry(commitment).DisplayString.ToUpperInvariant()}";
 
         static ClauseSide Flip(ClauseSide side)
             => side == ClauseSide.TheyProvide ? ClauseSide.WeProvide

@@ -392,7 +392,7 @@ namespace Brink.UI.Views
                                 qualifier += $" IF CONFLICT WITH {trigger?.displayName.ToUpperInvariant() ?? clause.triggerCountryId}";
                             }
                             if (clause.durationMonths > 0)
-                                qualifier += $" EXPIRES BEFORE {treaty.ClauseExpiry(commitment).DisplayString.ToUpperInvariant()}";
+                                qualifier += $" {DiplomacySystem.ClauseTermText(treaty, commitment)}";
                             if (!treaty.ClauseIsActive(state, commitment)) qualifier += " [DORMANT]";
                             break;
                         }

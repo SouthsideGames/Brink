@@ -171,7 +171,9 @@ different conditions. Dormant and expired clauses stay in the signed record and
 are labelled `[DORMANT]`; they are not silently deleted or treated as broken.
 They stop shaping current political status and scoring. An expired bounded
 clause may be renewed through treaty deepening; renewal preserves its side and
-trigger and restarts only that clause's clock.
+trigger, is judged at that same negotiated scope, and restarts only that clause's
+clock. Notifications and the chronicle name renewals rather than presenting them
+as newly added promises.
 
 The negotiation panel applies the selected trigger and 1/3/5-year or permanent
 term to the drafted clauses. A narrower burden carried by the accepting state is
@@ -180,6 +182,8 @@ duration discounts multiply just as the constraints do, and even a five-year
 term remains distinguishable from a permanent promise. The fields
 remain per clause even though the first authoring surface applies one condition
 to the whole package, leaving amendment without a second agreement model.
+An untriggered conditional guarantee is historically signed but confers no live
+Ally status, access or bloc weight until its named condition is active.
 
 `ProposeTreatyBy(state, proposerId, targetId, commitments)` is the actor-generic
 form and skips the CP spend. `ProposeTreaty` spends CP and delegates to it; a
