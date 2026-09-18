@@ -247,6 +247,29 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void PeaceTermsRecordAppliedMovementAtTheApprovalFloor()
+        {
+            var war = ConfrontationSystem.BeginBy(state, "CHN", state.playerCountryId,
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(war);
+            state.PlayerCountry.governmentApproval = 3f;
+
+            Assert.IsTrue(PeaceSystem.AcceptOfferedTerms(state, war, "CHN",
+                PeaceProposal.Of(PeaceTerm.Reparations, PeaceTerm.PoliticalConcessions)));
+
+            var reparations = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.Reparations);
+            var concessions = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PoliticalConcessions);
+            Assert.IsNotNull(reparations);
+            Assert.AreEqual(-3f, reparations.value, 0.0005f,
+                "the ledger recorded the requested penalty rather than the clamped movement");
+            Assert.IsNull(concessions,
+                "a term that could not move approval manufactured a zero-delta cause");
+            Assert.AreEqual(0f, state.PlayerCountry.governmentApproval, 0.0005f);
+        }
+
+        [Test]
         public void ActorGenericPeaceDoesNotInventOperatorProvenance()
         {
             var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
