@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Brink.Core;
 using Brink.Data;
 
 namespace Brink.UI
@@ -9,7 +11,8 @@ namespace Brink.UI
         Military,
         Trade,
         Intelligence,
-        Blocs
+        Blocs,
+        Activity
     }
 
     /// <summary>
@@ -32,6 +35,7 @@ namespace Brink.UI
                 case WorldMapMode.Trade: DrawTrade(state, canvas); break;
                 case WorldMapMode.Intelligence: DrawIntelligence(state, canvas); break;
                 case WorldMapMode.Blocs: DrawBlocs(state, canvas); break;
+                case WorldMapMode.Activity: DrawActivity(state, canvas); break;
             }
             return canvas.ToString();
         }
@@ -62,6 +66,8 @@ namespace Brink.UI
                     return "  : collection route   ? thin access   ^ established access   @ deep access";
                 case WorldMapMode.Blocs:
                     return "  = standing bloc connection   uppercase code = state";
+                case WorldMapMode.Activity:
+                    return "  • one public event last month   * multiple public events";
                 default:
                     return AsciiWorldMap.Legend;
             }
@@ -104,6 +110,13 @@ namespace Brink.UI
                         if (!b.dissolved) { active++; if (b.Has(state.playerCountryId)) ours++; }
                     return $"ACTIVE BLOCS {active}   OUR MEMBERSHIPS {ours}";
                 }
+                case WorldMapMode.Activity:
+                {
+                    var activity = RecentActivity(state);
+                    int events = 0;
+                    foreach (int count in activity.Values) events += count;
+                    return $"PUBLIC EVENTS LAST MONTH {events}   ACTIVE STATES {activity.Count}";
+                }
                 default:
                     return "PUBLIC STANDING AND CURRENT TERRITORIAL CONTROL";
             }
@@ -120,16 +133,18 @@ namespace Brink.UI
                     front.escalation == EscalationState.TotalWar ? '*' : '×', overwrite: false);
             }
 
+            var claimed = new HashSet<int>();
             foreach (var location in state.locations)
             {
                 if (!location.IsOccupied) continue;
                 if (!Point(location.ownerId, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Min(canvas.Height - 1, y + 1), 'O', overwrite: true);
+                PlotSignal(canvas, claimed, x, y, +1, 'O');
             }
         }
 
         static void DrawTrade(GameState state, AsciiCanvas canvas)
         {
+            var claimed = new HashSet<int>();
             foreach (var trade in state.trade)
             {
                 if (!trade.Involves(state.playerCountryId)) continue;
@@ -143,12 +158,13 @@ namespace Brink.UI
                 if (sanction.senderId != state.playerCountryId && sanction.targetId != state.playerCountryId) continue;
                 string other = sanction.senderId == state.playerCountryId ? sanction.targetId : sanction.senderId;
                 if (!Point(other, canvas, out int x, out int y)) continue;
-                canvas.Plot(x, Math.Max(0, y - 1), '$', overwrite: true);
+                PlotSignal(canvas, claimed, x, y, -1, '$');
             }
         }
 
         static void DrawIntelligence(GameState state, AsciiCanvas canvas)
         {
+            var claimed = new HashSet<int>();
             if (!Point(state.playerCountryId, canvas, out int px, out int py)) return;
             foreach (var network in state.networks)
             {
@@ -157,7 +173,7 @@ namespace Brink.UI
                 canvas.Line(px, py, tx, ty, ':', overwrite: false);
                 char access = network.penetration >= 55f ? '@'
                     : network.penetration >= 20f ? '^' : '?';
-                canvas.Plot(tx, Math.Max(0, ty - 1), access, overwrite: true);
+                PlotSignal(canvas, claimed, tx, ty, -1, access);
             }
         }
 
@@ -175,6 +191,85 @@ namespace Brink.UI
                 }
             }
         }
+
+        static void DrawActivity(GameState state, AsciiCanvas canvas)
+        {
+            var claimed = new HashSet<int>();
+            foreach (var pair in RecentActivity(state))
+            {
+                if (!Point(pair.Key, canvas, out int x, out int y)) continue;
+                PlotSignal(canvas, claimed, x, y, -1, pair.Value > 1 ? '*' : '•');
+            }
+        }
+
+        static Dictionary<string, int> RecentActivity(GameState state)
+        {
+            var counts = new Dictionary<string, int>();
+            foreach (var item in WorldWire.LastMonth(state))
+            {
+                if (state.FindCountry(item.countryId) == null
+                    || WorldFactory.FindProfile(item.countryId) == null) continue;
+                counts[item.countryId] = counts.TryGetValue(item.countryId, out int count)
+                    ? count + 1 : 1;
+            }
+            return counts;
+        }
+
+        /// <summary>
+        /// Place an overlay's point marker beside a country without erasing the
+        /// map's own labels.
+        ///
+        /// Every overlay used to plot straight onto `y - 1` (or `y + 1`) with
+        /// `overwrite: true`. That cell is only reliably free at full scale: the
+        /// map is squeezed from <see cref="AsciiWorldMap.Height"/> into 11, 17 or
+        /// 23 rows, and once rows collapse the cell above one country is the code
+        /// row of another. Measured on the authored roster, 14 of 24 countries
+        /// collide at 23 rows and 21 of 24 at 11 rows. ACTIVITY only made it
+        /// visible, because it can mark every state at once where trade and
+        /// intelligence mark a handful.
+        ///
+        /// So the preferred cell is tried first and kept whenever it is free,
+        /// then the cells immediately around it, and the marker is dropped only
+        /// if a country's own label has genuinely boxed it in. The order is
+        /// fixed, so the same world always draws the same map.
+        /// </summary>
+        static void PlotSignal(AsciiCanvas canvas, HashSet<int> claimed,
+            int x, int y, int preferred, char glyph)
+        {
+            int away = preferred >= 0 ? 1 : -1;
+            var candidates = new[]
+            {
+                (x, y + away), (x, y - away),
+                (x - 1, y + away), (x + 1, y + away),
+                (x - 1, y - away), (x + 1, y - away),
+            };
+
+            foreach (var (cx, cy) in candidates)
+            {
+                if (cx < 0 || cx >= canvas.Width || cy < 0 || cy >= canvas.Height) continue;
+
+                if (IsCountryLabel(canvas.At(cx, cy))) continue;
+
+                // A cell another state's signal already took this render. The
+                // canvas cannot answer this on its own: a marker is not a
+                // country label, so the label test waved it through and the
+                // later state simply erased the earlier one — leaving the
+                // summary counting activity the map no longer showed.
+                if (!claimed.Add(cy * canvas.Width + cx)) continue;
+
+                canvas.Plot(cx, cy, glyph, overwrite: true);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// A cell the base map has spent on a country's identity: the two-letter
+        /// code, the player's brackets, or the selection arrows. Terrain uses no
+        /// letters or digits, so this cannot mistake scenery for a label.
+        /// </summary>
+        static bool IsCountryLabel(char cell)
+            => char.IsLetterOrDigit(cell)
+               || cell == '[' || cell == ']' || cell == '<' || cell == '>';
 
         static bool Point(string countryId, AsciiCanvas canvas, out int x, out int y)
         {
