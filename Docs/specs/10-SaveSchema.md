@@ -47,6 +47,11 @@ the foreign government put to the player. The additive list defaults empty on
 older saves; empty deliberately selects the legacy objective-only acceptance
 path, so no migration step or version bump is required.
 
+An `OperationPlan` carries the additive boolean `standingOrder`. Missing is
+`false`, deliberately: an old save may restore its staff plans, but this build
+must never invent permission to execute one. No migration or version bump is
+required.
+
 Per-country state (`CountryState`) nests `PillarScores`, `NationalResources`,
 `MilitaryState`, `EconomyState`, `CounterIntelState`, `GovernmentState`,
 `TechnologyState`, `EndgameState`, and `cabinet` — five `Official` records, one

@@ -3155,6 +3155,16 @@ Recommended next:
 list twice over after it was already done, which is what a recommended-next list
 does when it is appended to rather than edited.
 
+- [x] **Standing Orders** — campaign planning remains inert by default, but the
+      operator may explicitly preauthorize its next incomplete step. One step is
+      attempted after monthly CP refresh through the ordinary operation path, so
+      live availability, constitutional authority, the plan's risk envelope,
+      normal CP cost, deterministic resolution and the authoritative war diary
+      all remain binding. A blocked order waits without spending or cancelling;
+      reconciliation switches the authorization off after the final step. The
+      persisted flag is additive and defaults false, so an old save never invents
+      permission. Spec 30.
+
 Process per GDD: Prompt → Implement → Test → Fix → Lock. Do not start a phase
 until the prior one passes its acceptance tests.
 

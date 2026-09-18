@@ -1173,6 +1173,14 @@ namespace Brink.Core
             return record;
         }
 
+        public bool SetStandingOrder(string confrontationId, bool active)
+        {
+            if (!IsRunning || (active && !MayCommand(Data.Pillar.Military))) return false;
+            bool ok = OperationPlanningSystem.SetStandingOrder(State, confrontationId, active);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         /// <summary>Put a specific set of terms to the other side (GDD §26).</summary>
         public bool ProposeTerms(Data.PeaceProposal proposal)
         {

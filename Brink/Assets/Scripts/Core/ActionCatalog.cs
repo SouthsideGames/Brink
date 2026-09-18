@@ -146,6 +146,15 @@ namespace Brink.Core
                 "Selecting one is free; only EXECUTE spends capacity.",
                 atWar, "Requires Limited Conflict or higher.",
                 verbs: new[] { nameof(GameController.LaunchOperation) });
+            string standingBlock = confrontation == null
+                ? "Requires an active confrontation."
+                : OperationPlanningSystem.StandingOrderIssueBlockReason(state, confrontation.id);
+            bool canStand = string.IsNullOrEmpty(standingBlock);
+            Add(Pillar.Military, "COMMAND CENTER", "Issue a standing order", "normal operation CP",
+                "Preauthorize the next campaign-plan step after monthly command capacity refresh. " +
+                "At most one step executes; every live gate and the ordinary price still apply.",
+                canStand, standingBlock,
+                verbs: new[] { nameof(GameController.SetStandingOrder) });
             Add(Pillar.Military, "MILITARY", "Defensive programme", "1–3 CP",
                 "Fortify ground we hold, pacify occupied territory, escort our shipping or " +
                 "build the shield. No confrontation required.",

@@ -66,6 +66,7 @@ namespace Brink.Core
 
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
             turns.MonthResolved += Causal.CloseMonth;
+            turns.MonthStarted += _ => OperationPlanningSystem.ExecuteStandingOrder(state, turns);
         }
     }
 }

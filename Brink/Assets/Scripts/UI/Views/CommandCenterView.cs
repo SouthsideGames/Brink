@@ -107,7 +107,7 @@ namespace Brink.UI.Views
             guidance.text = AsciiChart.WrapBlock(compact
                 ? " COMMAND CENTER is attention-first on this display: what needs you, what changed, and campaign intent. Standing course and mandate detail remain in OPERATOR. END MONTH remains a valid choice."
                 : large
-                    ? " COMMAND CENTER uses the wider display for attention plus strategic context. It prioritizes and explains; it does not decide. Campaign planning records intent only; actual military operations execute from MILITARY and pay normal CP."
+                    ? " COMMAND CENTER uses the wider display for attention plus strategic context. It prioritizes and explains; it does not decide. Campaign plans remain intent unless you issue a standing order; every operation pays normal CP."
                     : " COMMAND CENTER shows attention plus the standing course on this display. Full mandate detail remains in OPERATOR. It prioritizes and explains; it does not decide. END MONTH remains available.", w);
         }
 

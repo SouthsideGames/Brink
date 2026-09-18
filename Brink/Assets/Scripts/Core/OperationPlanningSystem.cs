@@ -4,8 +4,8 @@ using Brink.Data;
 namespace Brink.Core
 {
     /// <summary>
-    /// Persistent staff planning for military campaigns. A plan is intent only:
-    /// it never spends CP, changes escalation, or launches an operation. Execution
+    /// Persistent staff planning for military campaigns. A plan is inert until
+    /// the operator separately authorizes a standing order. Authorized execution
     /// remains on the ordinary GameController/ConfrontationSystem command path.
     /// </summary>
     public static class OperationPlanningSystem
@@ -61,6 +61,42 @@ namespace Brink.Core
             plan.directive = CopyDirective(directive);
             plan.revised = state.date;
             return true;
+        }
+
+        public static bool SetStandingOrder(GameState state, string confrontationId, bool active)
+        {
+            var plan = For(state, confrontationId);
+            if (plan == null || plan.standingOrder == active) return false;
+            if (active && !string.IsNullOrEmpty(StandingOrderIssueBlockReason(state, confrontationId))) return false;
+            plan.standingOrder = active;
+            plan.revised = state.date;
+            return true;
+        }
+
+        public static string StandingOrderIssueBlockReason(GameState state, string confrontationId)
+        {
+            if (For(state, confrontationId) == null) return "Create a campaign plan first.";
+            if (Next(state, confrontationId) == null) return "Add an incomplete operation to the campaign plan.";
+            if (!AuthoritySystem.HoldsAuthority(state, Pillar.Military)) return "Military authority is required.";
+            return "";
+        }
+
+        public static string StandingOrderPendingReason(GameState state, string confrontationId)
+        {
+            string blocked = StandingOrderIssueBlockReason(state, confrontationId);
+            if (!string.IsNullOrEmpty(blocked)) return blocked;
+            var confrontation = state.FindConfrontation(confrontationId);
+            if (confrontation == null || confrontation.resolved) return "The confrontation has ended.";
+            var step = Next(state, confrontationId);
+            if (!Enum.TryParse(step.operationType, true, out OperationType type)) return "The next operation is no longer recognized.";
+            var location = state.FindLocation(step.locationId);
+            if (location == null) return "The next target no longer exists.";
+            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, out blocked)) return blocked;
+            if (!ConfrontationSystem.WithinEscalationLimit(confrontation, type, DirectiveFor(state, confrontationId)))
+                return "The next operation exceeds the plan's escalation ceiling.";
+            int cost = ConfrontationSystem.OperationCostFor(state, confrontation, type);
+            if (state.commandPoints.current < cost) return $"Needs {cost} Command Points; {state.commandPoints.current} available.";
+            return "";
         }
 
         public static bool AddStep(GameState state, string confrontationId, string locationId, OperationType type)
@@ -143,14 +179,53 @@ namespace Brink.Core
             {
                 if (plan == null || string.IsNullOrEmpty(plan.confrontationId)) continue;
                 var confrontation = state.FindConfrontation(plan.confrontationId);
-                if (confrontation == null || confrontation.operations == null) continue;
+                if (confrontation == null || confrontation.resolved)
+                {
+                    plan.standingOrder = false;
+                    continue;
+                }
+                if (confrontation.operations == null) continue;
 
                 int start = Math.Max(0, Math.Min(plan.reconciledOperationCount, confrontation.operations.Count));
                 for (int i = start; i < confrontation.operations.Count; i++)
                     RecordExecution(state, plan.confrontationId, confrontation.operations[i]);
 
                 plan.reconciledOperationCount = confrontation.operations.Count;
+                if (Next(state, plan.confrontationId) == null) plan.standingOrder = false;
             }
+        }
+
+        /// <summary>
+        /// Execute at most one explicitly pre-authorized step after the new
+        /// month's CP refresh. The ordinary launch path remains authoritative:
+        /// it spends normal CP, applies the saved risk envelope and files the
+        /// real operation record that reconciliation observes next month.
+        /// </summary>
+        public static OperationRecord ExecuteStandingOrder(GameState state, TurnManager turns)
+        {
+            if (state == null || turns == null) return null;
+            var strategy = Strategy(state);
+            if (strategy?.operationPlans == null) return null;
+
+            foreach (var plan in strategy.operationPlans)
+            {
+                if (plan == null || !plan.standingOrder) continue;
+                if (!string.IsNullOrEmpty(StandingOrderPendingReason(state, plan.confrontationId))) continue;
+                var confrontation = state.FindConfrontation(plan.confrontationId);
+                var step = Next(state, plan.confrontationId);
+                Enum.TryParse(step.operationType, true, out OperationType type);
+                var location = state.FindLocation(step.locationId);
+                var directive = DirectiveFor(state, plan.confrontationId);
+
+                var record = ConfrontationSystem.LaunchOperation(
+                    state, turns, confrontation, step.locationId, type, directive);
+                if (record == null) continue;
+                state.AddNotification(NotificationClass.Priority, "STANDING ORDER EXECUTED",
+                    $"{type.ToString().ToUpperInvariant()} — {location.displayName.ToUpperInvariant()}. "
+                    + "The pre-authorized campaign step used its normal command cost.", state.playerCountryId);
+                return record;
+            }
+            return null;
         }
 
         public static OperationDirective DirectiveFor(GameState state, string confrontationId)
@@ -174,7 +249,16 @@ namespace Brink.Core
                 nextText = $"{next.operationType.ToUpperInvariant()} — {(location?.displayName ?? next.locationId).ToUpperInvariant()}";
             }
             var directive = plan.directive ?? new OperationDirective();
+            string standing = "OFF";
+            if (plan.standingOrder)
+            {
+                string blocked = StandingOrderPendingReason(state, confrontationId);
+                standing = string.IsNullOrEmpty(blocked)
+                    ? "READY — NEXT STEP AFTER MONTHLY CP REFRESH"
+                    : "PENDING — " + blocked.ToUpperInvariant();
+            }
             return $"PLAN: {plan.title.ToUpperInvariant()}   STEPS {complete}/{(plan.steps == null ? 0 : plan.steps.Count)}\n"
+                 + $"STANDING ORDER: {standing}\n"
                  + $"NEXT: {nextText}\n"
                  + $"LIMITS: ESC {directive.escalationLimit.ToString().ToUpperInvariant()}  "
                  + $"CAS {directive.casualtyTolerance:F0}  CIV {directive.civilianRiskLimit:F0}  "
