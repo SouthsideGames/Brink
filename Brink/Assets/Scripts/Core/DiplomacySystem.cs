@@ -112,9 +112,9 @@ namespace Brink.Core
 
             if (treaty != null)
             {
-                if (treaty.Has(TreatyCommitment.MutualDefense)) score += 18f;
-                if (treaty.Has(TreatyCommitment.IntelligenceSharing)) score += 8f;
-                if (treaty.Has(TreatyCommitment.NonAggression)) score += 5f;
+                if (treaty.HasActive(state, TreatyCommitment.MutualDefense)) score += 18f;
+                if (treaty.HasActive(state, TreatyCommitment.IntelligenceSharing)) score += 8f;
+                if (treaty.HasActive(state, TreatyCommitment.NonAggression)) score += 5f;
             }
 
             // An active confrontation overrides warm paperwork.
@@ -135,7 +135,7 @@ namespace Brink.Core
         {
             if (forcedHostile) return RelationshipStatus.Hostile;
             var treaty = state.FindTreaty(relationship.countryA, relationship.countryB);
-            bool allied = treaty != null && treaty.Has(TreatyCommitment.MutualDefense);
+            bool allied = treaty != null && treaty.HasActive(state, TreatyCommitment.MutualDefense);
             if (score >= 78f && allied) return RelationshipStatus.Ally;
             if (score >= 70f) return RelationshipStatus.StrategicPartner;
             if (score >= 60f) return RelationshipStatus.Friendly;
@@ -443,7 +443,8 @@ namespace Brink.Core
                             : Flip(clause.side),
                         trigger = clause.trigger,
                         triggerCountryId = clause.triggerCountryId,
-                        durationMonths = clause.durationMonths
+                        durationMonths = clause.durationMonths,
+                        effectiveDate = state.date
                     });
             }
 
@@ -495,11 +496,21 @@ namespace Brink.Core
             if (treaty == null || treaty.broken || relationship == null || target == null) return false;
             if (addedCommitments == null) return false;
 
-            // Only what the treaty does not already carry.
+            // Add missing commitments and renew expired bounded ones. Renewal
+            // preserves the negotiated side and trigger, and restarts only that
+            // clause's clock rather than silently extending the whole treaty.
             var added = new List<TreatyCommitment>();
+            var renewed = new List<TreatyCommitment>();
             foreach (var commitment in addedCommitments)
+            {
                 if (!treaty.Has(commitment) && !added.Contains(commitment)) added.Add(commitment);
-            if (added.Count == 0) return false;
+                else if (treaty.ClauseIsExpired(state, commitment) && !renewed.Contains(commitment))
+                    renewed.Add(commitment);
+            }
+            if (added.Count == 0 && renewed.Count == 0) return false;
+
+            var judged = new List<TreatyCommitment>(added);
+            judged.AddRange(renewed);
 
             // Judged on the *added* burden by the same acceptance logic a new
             // treaty faces — the rival-tie and encirclement penalties included,
@@ -507,7 +518,7 @@ namespace Brink.Core
             // plus what a standing relationship is worth: a partner with history
             // signs what a stranger would not.
             float history = Math.Min(12f, state.date.MonthsSince(treaty.signedDate) * 0.1f) + 8f;
-            float willingness = TreatyWillingness(state, proposerId, targetId, added) + history;
+            float willingness = TreatyWillingness(state, proposerId, targetId, judged) + history;
 
             if (willingness < 50f)
             {
@@ -522,6 +533,9 @@ namespace Brink.Core
             }
 
             treaty.commitments.AddRange(added);
+            foreach (var commitment in renewed)
+                foreach (var clause in treaty.clauses)
+                    if (clause.commitment == commitment) { clause.effectiveDate = state.date; break; }
 
             relationship.relations = Clamp(relationship.relations + 4f);
             relationship.trust = Clamp(relationship.trust + 4f);
@@ -532,11 +546,11 @@ namespace Brink.Core
             state.AddNotification(playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
                 "TREATY DEEPENED",
                 $"{state.FindCountry(proposerId)?.displayName} and {target.displayName} extend their "
-                + $"agreement: {DescribeCommitments(added)}.",
+                + $"agreement: {DescribeCommitments(judged)}.",
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, proposerId,
-                $"Treaty with {target.displayName} deepened ({DescribeCommitments(added)}).", Publicity.Public);
-            GameLog.Info("DIPLO", $"{proposerId} deepened treaty with {targetId}: {DescribeCommitments(added)}.");
+                $"Treaty with {target.displayName} deepened ({DescribeCommitments(judged)}).", Publicity.Public);
+            GameLog.Info("DIPLO", $"{proposerId} deepened treaty with {targetId}: {DescribeCommitments(judged)}.");
             return true;
         }
 
@@ -731,7 +745,7 @@ namespace Brink.Core
                 // The discounts compose because the constraints compose.
                 float scope = clause.trigger == TreatyClauseTrigger.Always ? 1f : 0.70f;
                 if (clause.durationMonths > 0)
-                    scope *= Math.Min(1f, 0.35f + clause.durationMonths / 60f * 0.65f);
+                    scope *= Math.Min(0.92f, 0.35f + clause.durationMonths / 60f * 0.65f);
                 willingness += burden * (1f - scope);
 
                 if (clause.side == ClauseSide.TheyProvide)
@@ -1063,12 +1077,12 @@ namespace Brink.Core
             var treaty = state.FindTreaty(leaderId, candidateId);
             if (treaty != null)
             {
-                if (treaty.Has(TreatyCommitment.MutualDefense)) willingness += 25f;
-                if (treaty.Has(TreatyCommitment.JointPlanning)) willingness += 10f;
+                if (treaty.HasActive(state, TreatyCommitment.MutualDefense)) willingness += 25f;
+                if (treaty.HasActive(state, TreatyCommitment.JointPlanning)) willingness += 10f;
             }
 
             var targetTreaty = state.FindTreaty(candidateId, targetId);
-            if (targetTreaty != null && targetTreaty.Has(TreatyCommitment.MutualDefense))
+            if (targetTreaty != null && targetTreaty.HasActive(state, TreatyCommitment.MutualDefense))
                 willingness -= 70f; // they are committed to the other side
 
             // Operator training persuades on our behalf only. Applying it to every
@@ -1128,7 +1142,6 @@ namespace Brink.Core
                 foreach (var treaty in state.treaties)
                 {
                     if (treaty.broken || !treaty.Involves(host)) continue;
-                    if (!treaty.Carries(state, host, TreatyCommitment.Transit)) continue;
 
                     string partner = treaty.PartnerOf(host);
                     if (!StillWelcome(state, host, partner)) continue;
@@ -1219,7 +1232,7 @@ namespace Brink.Core
             {
                 float warm = Math.Max(0f, r.strategicAlignment - 68f) / 32f;
                 var treaty = state.FindTreaty(r.countryA, r.countryB);
-                if (treaty != null && treaty.Has(TreatyCommitment.MutualDefense))
+                if (treaty != null && treaty.HasActive(state, TreatyCommitment.MutualDefense))
                     warm = Math.Max(warm, PactWarmth);
                 if (BlocSystem.SameBloc(state, r.countryA, r.countryB))
                     warm = Math.Max(warm, BlocWarmth);

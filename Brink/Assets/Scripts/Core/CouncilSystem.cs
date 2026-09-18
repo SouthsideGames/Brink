@@ -284,7 +284,7 @@ namespace Brink.Core
             if (treaty != null)
             {
                 interest -= 18f;
-                if (treaty.Has(TreatyCommitment.MutualDefense)) interest -= 22f;
+                if (treaty.HasActive(state, TreatyCommitment.MutualDefense)) interest -= 22f;
             }
 
             // A mandate is a bigger ask than a form of words, and states that

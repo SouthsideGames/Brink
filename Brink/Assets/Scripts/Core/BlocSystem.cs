@@ -296,7 +296,7 @@ namespace Brink.Core
 
             var treaty = state.FindTreaty(bloc.leaderId, targetId);
             if (treaty != null) willingness += 10f;
-            if (treaty != null && treaty.Has(TreatyCommitment.MutualDefense)) willingness += 12f;
+            if (treaty != null && treaty.HasActive(state, TreatyCommitment.MutualDefense)) willingness += 12f;
 
             // What the bloc actually asks of them.
             //

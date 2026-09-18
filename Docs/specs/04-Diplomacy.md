@@ -156,7 +156,8 @@ Each `TreatyClause` may additionally carry one live trigger and a term:
 - `Always` (the zero/default value) or `ConflictWithCountry`, naming a third
   state. The latter applies while either treaty signatory is in an unresolved
   `LimitedConflict`-or-higher confrontation with that state.
-- `durationMonths`, measured from `Treaty.signedDate`; zero is permanent.
+- `durationMonths`, measured from the clause's `effectiveDate` (or
+  `Treaty.signedDate` for old saves); zero is permanent.
 
 The constraints compose. A five-year transit clause tied to conflict with a
 named state is usable only during that conflict and only before its five-year
@@ -168,10 +169,15 @@ basing, deliberate intelligence sharing and arms-control enforcement all use
 the state-aware `Carries` overload, so presentation and mechanics cannot invent
 different conditions. Dormant and expired clauses stay in the signed record and
 are labelled `[DORMANT]`; they are not silently deleted or treated as broken.
+They stop shaping current political status and scoring. An expired bounded
+clause may be renewed through treaty deepening; renewal preserves its side and
+trigger and restarts only that clause's clock.
 
 The negotiation panel applies the selected trigger and 1/3/5-year or permanent
-term to the drafted clauses. A narrower promise costs less acceptance burden;
-trigger and duration discounts multiply just as the constraints do. The fields
+term to the drafted clauses. A narrower burden carried by the accepting state is
+easier to accept; a narrower benefit offered to it is worth less. Trigger and
+duration discounts multiply just as the constraints do, and even a five-year
+term remains distinguishable from a permanent promise. The fields
 remain per clause even though the first authoring surface applies one condition
 to the whole package, leaving amendment without a second agreement model.
 

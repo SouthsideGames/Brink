@@ -62,7 +62,8 @@ namespace Brink.Core
             // a defence pact or an intelligence-sharing clause does.
             var treaty = state.FindTreaty(state.playerCountryId, countryId);
             if (treaty != null && !treaty.broken
-                && (treaty.Has(TreatyCommitment.MutualDefense) || treaty.Has(TreatyCommitment.IntelligenceSharing)))
+                && (treaty.HasActive(state, TreatyCommitment.MutualDefense)
+                    || treaty.HasActive(state, TreatyCommitment.IntelligenceSharing)))
                 return true;
             foreach (var confrontation in state.confrontations)
                 if (!confrontation.resolved && confrontation.Involves(state.playerCountryId) && confrontation.Involves(countryId))

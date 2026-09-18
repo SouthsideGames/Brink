@@ -198,6 +198,12 @@ namespace Brink.Data
 
         /// <summary>Months from signature; zero means the clause does not expire.</summary>
         public int durationMonths;
+
+        /// <summary>
+        /// When this clause last took effect. Zero-valued old saves fall back to
+        /// the treaty signature, preserving their original expiry.
+        /// </summary>
+        public GameDate effectiveDate;
     }
 
     [Serializable]
@@ -209,10 +215,9 @@ namespace Brink.Data
         public List<TreatyCommitment> commitments = new List<TreatyCommitment>();
 
         /// <summary>
-        /// The same commitments with their side recorded. Kept alongside the flat
-        /// list rather than replacing it: ~20 call sites ask `Has(commitment)` and
-        /// do not care who carries it, and rewriting them all to satisfy a data
-        /// model change would be a large diff for no behaviour.
+        /// The same commitments with their side and live scope recorded. Kept
+        /// alongside the flat list so `Has(commitment)` can continue to answer the
+        /// historical question while `HasActive` answers what is in force now.
         ///
         /// Sides are always written relative to <see cref="countryA"/>.
         /// </summary>
@@ -225,6 +230,24 @@ namespace Brink.Data
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
         public bool Has(TreatyCommitment commitment) => commitments.Contains(commitment);
+
+        /// <summary>Whether a signed commitment is currently in force.</summary>
+        public bool HasActive(GameState state, TreatyCommitment commitment)
+            => ClauseIsActive(state, commitment);
+
+        GameDate ClauseStart(TreatyClause clause)
+            => clause.effectiveDate.month >= 1 && clause.effectiveDate.month <= 12
+                ? clause.effectiveDate : signedDate;
+
+        public bool ClauseIsExpired(GameState state, TreatyCommitment commitment)
+        {
+            if (state == null || !Has(commitment)) return false;
+            foreach (var clause in clauses)
+                if (clause.commitment == commitment)
+                    return clause.durationMonths > 0
+                        && state.date.MonthsSince(ClauseStart(clause)) >= clause.durationMonths;
+            return false;
+        }
 
         /// <summary>
         /// Whether this country carries the commitment. Old treaties have no
@@ -269,7 +292,7 @@ namespace Brink.Data
             if (clause == null) return true;
 
             if (clause.durationMonths > 0
-                && state.date.MonthsSince(signedDate) >= clause.durationMonths) return false;
+                && state.date.MonthsSince(ClauseStart(clause)) >= clause.durationMonths) return false;
 
             if (clause.trigger == TreatyClauseTrigger.Always) return true;
             if (string.IsNullOrEmpty(clause.triggerCountryId)
@@ -291,7 +314,8 @@ namespace Brink.Data
             foreach (var clause in clauses)
             {
                 if (clause.commitment != commitment || clause.durationMonths <= 0) continue;
-                int total = signedDate.year * 12 + signedDate.month - 1 + clause.durationMonths;
+                GameDate start = ClauseStart(clause);
+                int total = start.year * 12 + start.month - 1 + clause.durationMonths;
                 return new GameDate(total / 12, total % 12 + 1);
             }
             return default;

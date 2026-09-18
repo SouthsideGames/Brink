@@ -392,7 +392,7 @@ namespace Brink.UI.Views
                                 qualifier += $" IF CONFLICT WITH {trigger?.displayName.ToUpperInvariant() ?? clause.triggerCountryId}";
                             }
                             if (clause.durationMonths > 0)
-                                qualifier += $" UNTIL {treaty.ClauseExpiry(commitment).DisplayString.ToUpperInvariant()}";
+                                qualifier += $" EXPIRES BEFORE {treaty.ClauseExpiry(commitment).DisplayString.ToUpperInvariant()}";
                             if (!treaty.ClauseIsActive(state, commitment)) qualifier += " [DORMANT]";
                             break;
                         }
@@ -429,7 +429,8 @@ namespace Brink.UI.Views
             bool anyMissing = false;
             foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
             {
-                if (standing.Has(commitment)) continue;
+                bool renewal = standing.ClauseIsExpired(state, commitment);
+                if (standing.Has(commitment) && !renewal) continue;
                 anyMissing = true;
                 var captured = commitment;
 
@@ -440,7 +441,7 @@ namespace Brink.UI.Views
                     GameController.Instance.DeepenTreaty(selectedTargetId, captured);
                     Refresh();
                 })
-                { text = $"ADD {Phrase.Caps(captured)} [{DiplomacySystem.TreatyProposalCost} CP]" };
+                { text = $"{(renewal ? "RENEW" : "ADD")} {Phrase.Caps(captured)} [{DiplomacySystem.TreatyProposalCost} CP]" };
                 button.AddToClassList("cmd-button");
                 if (reading < 40f)
                     Block(button, "THE RELATIONSHIP IS NOT THERE YET FOR THIS COMMITMENT.");
@@ -450,7 +451,7 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text = anyMissing
                 ? "  A partner with history signs what a stranger would not — and a pact "
                   + "added here answers to bloc politics like any pact."
-                : "  Every commitment is already in force. This is as deep as treaties go.";
+                : "  Every commitment is already signed and no bounded term has expired.";
         }
 
         void BuildTargetSelector(GameState state)

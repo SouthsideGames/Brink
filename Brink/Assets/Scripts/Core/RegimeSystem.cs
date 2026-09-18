@@ -301,7 +301,7 @@ namespace Brink.Core
             foreach (var treaty in state.treaties)
             {
                 if (treaty.broken || !treaty.Involves(country.id)) continue;
-                if (!treaty.Has(TreatyCommitment.MutualDefense)) continue;
+                if (!treaty.HasActive(state, TreatyCommitment.MutualDefense)) continue;
                 treaty.broken = true;
                 treaty.brokenBy = country.id;
             }

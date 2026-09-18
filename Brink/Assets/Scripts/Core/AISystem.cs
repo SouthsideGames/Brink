@@ -1165,7 +1165,8 @@ namespace Brink.Core
             var existing = state.FindTreaty(country.id, targetId);
             if (existing != null)
             {
-                if (existing.broken || existing.Has(TreatyCommitment.MutualDefense)) return false;
+                if (existing.broken || (existing.Has(TreatyCommitment.MutualDefense)
+                    && !existing.ClauseIsExpired(state, TreatyCommitment.MutualDefense))) return false;
                 var r = state.FindRelationship(country.id, targetId);
                 if (r == null || DiplomacySystem.Permitted(state, r, r.relations) < 68f
                     || DiplomacySystem.Permitted(state, r, r.trust) < 55f) return false;
