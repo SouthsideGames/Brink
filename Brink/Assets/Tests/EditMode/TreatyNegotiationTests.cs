@@ -256,6 +256,130 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ClauseDirectionControlsWhoCarriesAndReceives()
+        {
+            var treaty = new Treaty
+            {
+                id = "T_DIRECTION",
+                countryA = state.playerCountryId,
+                countryB = "DEU"
+            };
+            treaty.commitments.Add(TreatyCommitment.MutualDefense);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.MutualDefense,
+                side = ClauseSide.WeProvide
+            });
+
+            Assert.IsTrue(treaty.Carries(state.playerCountryId, TreatyCommitment.MutualDefense));
+            Assert.IsTrue(treaty.Receives("DEU", TreatyCommitment.MutualDefense));
+            Assert.IsFalse(treaty.Carries("DEU", TreatyCommitment.MutualDefense));
+            Assert.IsFalse(treaty.Receives(state.playerCountryId, TreatyCommitment.MutualDefense));
+        }
+
+        [Test]
+        public void AOneWayGuaranteeCallsOnlyThePromisingSide()
+        {
+            state.blocs.Clear();
+            var treaty = new Treaty
+            {
+                id = "T_GUARANTEE",
+                countryA = state.playerCountryId,
+                countryB = "DEU"
+            };
+            treaty.commitments.Add(TreatyCommitment.MutualDefense);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.MutualDefense,
+                side = ClauseSide.WeProvide
+            });
+            state.treaties.Add(treaty);
+
+            Assert.IsTrue(HasGuarantor(
+                AllianceSystem.GuarantorsOf(state, "DEU", "CHN"), state.playerCountryId),
+                "We promised to defend Germany, but its guarantor list omitted us.");
+            Assert.IsFalse(HasGuarantor(
+                AllianceSystem.GuarantorsOf(state, state.playerCountryId, "CHN"), "DEU"),
+                "Germany was called to defend us despite never making that promise.");
+        }
+
+        [Test]
+        public void TransitRunsOnlyFromTheCountryThatGrantedIt()
+        {
+            StrategicLocation host = null;
+            foreach (var location in state.locations)
+                if (location.ownerId == "IND" && location.SupportsBasing) { host = location; break; }
+            Assert.IsNotNull(host, "The authored world needs an Indian basing location.");
+            host.foreignOperatorId = "";
+
+            var relationship = state.FindRelationship(state.playerCountryId, "IND");
+            relationship.relations = 85f;
+            relationship.trust = 80f;
+            relationship.SetThreatPerceivedBy("IND", 0f);
+
+            var treaty = new Treaty
+            {
+                id = "T_TRANSIT",
+                countryA = state.playerCountryId,
+                countryB = "IND"
+            };
+            treaty.commitments.Add(TreatyCommitment.Transit);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.Transit,
+                side = ClauseSide.WeProvide
+            });
+            state.treaties.Add(treaty);
+
+            DiplomacySystem.MonthlyUpdate(state);
+            Assert.AreNotEqual(state.playerCountryId, host.foreignOperatorId,
+                "Our grant of transit was misread as India hosting us.");
+
+            treaty.clauses[0].side = ClauseSide.TheyProvide;
+            DiplomacySystem.MonthlyUpdate(state);
+            Assert.AreEqual(state.playerCountryId, host.foreignOperatorId,
+                "India granted transit, but its base remained unavailable to us.");
+        }
+
+        [Test]
+        public void NegotiatedTermsAreJudgedOnceOnTheirActualSides()
+        {
+            var relationship = state.FindRelationship(state.playerCountryId, "DEU");
+            relationship.SetThreatPerceivedBy("DEU", 0f);
+            relationship.SetDependenceOf("DEU", 0f);
+            var clauses = Clauses(
+                (TreatyCommitment.MutualDefense, ClauseSide.WeProvide),
+                (TreatyCommitment.Transit, ClauseSide.WeProvide));
+            var flat = new List<TreatyCommitment>
+            {
+                TreatyCommitment.MutualDefense,
+                TreatyCommitment.Transit
+            };
+
+            bool foundBoundary = false;
+            for (int warmth = 0; warmth <= 100; warmth++)
+            {
+                relationship.relations = warmth;
+                relationship.trust = warmth;
+                relationship.strategicAlignment = warmth;
+                if (DiplomacySystem.TreatyWillingness(
+                        state, state.playerCountryId, "DEU", clauses) >= 50f
+                    && DiplomacySystem.TreatyWillingness(
+                        state, state.playerCountryId, "DEU", flat) < 50f)
+                {
+                    foundBoundary = true;
+                    break;
+                }
+            }
+
+            Assert.IsTrue(foundBoundary,
+                "Fixture never reached the boundary between the directional and flat offers.");
+            Assert.IsTrue(DiplomacySystem.ProposeNegotiatedTreatyBy(
+                    state, state.playerCountryId, "DEU", clauses),
+                "A clause-aware offer passed, then a second direction-blind check rejected it.");
+        }
+
+        [Test]
         public void TheMinistryRecommendsAgainstOurWorstGap()
         {
             var player = state.PlayerCountry;
@@ -304,6 +428,17 @@ namespace Brink.Tests
             Assert.AreEqual(ClauseSide.Mutual,
                 treaty.SideFor(state.playerCountryId, TreatyCommitment.MutualDefense),
                 "A treaty signed before sides existed must read as an even one.");
+            Assert.IsTrue(treaty.Carries(state.playerCountryId, TreatyCommitment.MutualDefense));
+            Assert.IsTrue(treaty.Carries("DEU", TreatyCommitment.MutualDefense));
+            Assert.IsTrue(treaty.Receives(state.playerCountryId, TreatyCommitment.MutualDefense));
+            Assert.IsTrue(treaty.Receives("DEU", TreatyCommitment.MutualDefense));
+        }
+
+        static bool HasGuarantor(List<AllianceSystem.Guarantor> guarantors, string countryId)
+        {
+            foreach (var guarantor in guarantors)
+                if (guarantor.countryId == countryId) return true;
+            return false;
         }
     }
 }

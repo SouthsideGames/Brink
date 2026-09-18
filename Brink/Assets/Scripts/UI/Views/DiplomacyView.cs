@@ -376,7 +376,12 @@ namespace Brink.UI.Views
                 {
                     var commitments = new List<string>();
                     foreach (var commitment in treaty.commitments)
-                        commitments.Add(Phrase.Caps(commitment));
+                    {
+                        ClauseSide side = treaty.SideFor(state.playerCountryId, commitment);
+                        string who = side == ClauseSide.Mutual ? "BOTH"
+                            : side == ClauseSide.TheyProvide ? "THEY" : "WE";
+                        commitments.Add($"{Phrase.Caps(commitment)} [{who}]");
+                    }
                     sb.AppendLine($"   TREATY: {string.Join(", ", commitments)}");
                 }
 

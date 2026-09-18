@@ -97,8 +97,9 @@ every relationship, then `UpdateConfrontationEffects` and `UpdateCoalitions`.
 
 ## 5. Treaties
 
-Six commitments: `MutualDefense`, `IntelligenceSharing`, `Transit`,
-`JointPlanning`, `NonAggression`, `TradePreference`. Proposal costs 2 CP.
+Seven commitments: `MutualDefense`, `IntelligenceSharing`, `Transit`,
+`JointPlanning`, `NonAggression`, `TradePreference`, `ArmsControl`. Proposal
+costs 2 CP.
 
 ```
 willingness = relations × 0.45 + trust × 0.30 + alignment × 0.25
@@ -123,11 +124,37 @@ accepted if willingness ≥ 50
 On acceptance: relations +8, trust +5, alignment +10 and a +2 memory entry.
 Rejection writes a −0.5 memory entry.
 
+### Constructed terms and direction
+
+The negotiation screen authors a `TreatyClause` for every commitment. Its side
+is read from the proposer's perspective: `Mutual`, `TheyProvide`, or
+`WeProvide`. `Treaty.Carries(country, commitment)` answers who made the promise;
+`Treaty.Receives(country, commitment)` answers who benefits. Treaties loaded
+from older saves have no clause records and continue to read as mutual.
+
+Direction is authoritative at the mechanical point of use:
+
+- only a country carrying `MutualDefense` is called to fight;
+- only a host carrying `Transit` opens its locations to the partner;
+- only a capability-holder carrying `IntelligenceSharing` may transfer it;
+- only a country carrying `ArmsControl` can breach that restraint.
+
+Relationship status may still ask whether the treaty *contains* a commitment;
+that describes the agreement's political character rather than assigning an
+obligation. The standing-agreement display prints `[BOTH]`, `[THEY]`, or `[WE]`
+beside every term so the player sees the same direction the simulation obeys.
+
+Negotiated acceptance is calculated once from the actual sides. It must not
+pass the clause-aware willingness gate and then be run through the flat,
+implicitly mutual calculation a second time. Successful player proposals record
+one initiative in the shared conclusion path, not another in the controller.
+
 `ProposeTreatyBy(state, proposerId, targetId, commitments)` is the actor-generic
-form and skips the CP spend, the player-only skill term and the player XP award;
-`ProposeTreaty` spends CP and delegates to it. AI diplomacy uses the same
-willingness function, so a treaty the AI would sign is a treaty the player could
-have signed on the same terms.
+form and skips the CP spend. `ProposeTreaty` spends CP and delegates to it; a
+successful player proposal receives the player-only skill term and player
+progression award in the shared path. AI diplomacy uses the same willingness
+function, so a treaty the AI would sign is a treaty the player could have signed
+on the same terms.
 
 ### Breaking a treaty
 

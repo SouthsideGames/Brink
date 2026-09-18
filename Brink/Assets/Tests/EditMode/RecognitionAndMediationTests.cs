@@ -322,6 +322,11 @@ namespace Brink.Tests
                     { TreatyCommitment.ArmsControl },
                 signedDate = state.date
             };
+            pact.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.ArmsControl,
+                side = ClauseSide.WeProvide
+            });
             state.treaties.Add(pact);
 
             var confrontation = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
@@ -335,6 +340,40 @@ namespace Brink.Tests
                 "Opening hostilities against a state we had signed a limitation with left the "
                 + "agreement standing, so an arms-control treaty constrains nothing.");
             Assert.AreEqual(state.playerCountryId, pact.brokenBy);
+        }
+
+        [Test]
+        public void EscalationDoesNotBreakARestraintOnlyTheOtherSidePromised()
+        {
+            var relationship = state.FindRelationship(state.playerCountryId, "CHN");
+            relationship.relations = 70f;
+            relationship.trust = 70f;
+
+            var pact = new Treaty
+            {
+                id = "TEST_ONE_WAY_ARMS",
+                countryA = state.playerCountryId,
+                countryB = "CHN",
+                commitments = new System.Collections.Generic.List<TreatyCommitment>
+                    { TreatyCommitment.ArmsControl },
+                signedDate = state.date
+            };
+            pact.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.ArmsControl,
+                side = ClauseSide.TheyProvide
+            });
+            state.treaties.Add(pact);
+
+            var confrontation = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(confrontation);
+
+            ConfrontationSystem.SetEscalationBy(state, confrontation,
+                EscalationState.LimitedConflict, state.playerCountryId);
+
+            Assert.IsFalse(pact.broken,
+                "Our escalation broke an arms-control promise only China had made.");
         }
 
         [Test]
