@@ -1,8 +1,9 @@
 # 26 — Causal Explainability
 
-**Status: Phase A as-built, compiled and test-run (2026-09-11).** The framework
-and a representative vertical slice. Later phases extend the instrumentation;
-they should not need to change the record shape.
+**Status: Phase A as-built, plus the first episodic-attribution slice.** The
+framework and a representative vertical slice are live. Answered Crisis Turns
+now identify their approval and market consequences as the operator's decision;
+later phases extend the instrumentation without changing the record shape.
 [`GDD_v1.1.md`](../GDD_v1.1.md) §28.3 is the principle this implements.
 
 The rule, stated once: **when the simulation changes something important, it
@@ -296,6 +297,16 @@ of orphaning the provenance.
 Wired in Phase A: civic posture, public messaging, tax rate, budget posture,
 sovereign debt issuance.
 
+The first episodic extension wires answered Crisis Turns through the same
+provenance contract. Approval changes use `CrisisDecision`; market shocks keep
+their more informative `MarketConditions` reason. Both carry
+`nameof(GameController.ResolveCrisis)`, so the monthly debrief classifies the
+consequence under the operator's hand without storing crisis prose or inventing
+a parallel decision history. A zero-delta option records nothing, as with every
+other `Causal.Apply` site. A market crisis left unanswered keeps the existing
+`CrisisLapsed` provenance; actor-generic calls to `CrisisEffects.Apply` carry no
+operator provenance unless the caller supplies it.
+
 ## 8. What Phase A does not do
 
 Recorded honestly so the next reader does not assume more than is there.
@@ -309,10 +320,9 @@ Recorded honestly so the next reader does not assume more than is there.
   would produce exactly the misleading partial explanation this framework exists
   to prevent. `SovereignDebt` carries the fiscal representation instead, and is
   complete.
-- **Most episodic causes are not individually named.** A coup or a peace term
-  that moves approval shows up in that month's record as `Unattributed`, rendered
+- **Most episodic causes are not individually named.** An answered Crisis Turn's
+  approval and market effects are named, but a coup or a peace term that moves a
+  tracked value still shows up in that month's record as `Unattributed`, rendered
   as OTHER. The *figure* is still exact — `CloseMonth` guarantees the total — but
-  the *reason* is unnamed. A crisis market shock is named, because a crisis is the
-  most explainable thing that happens to a market and the operator has just
-  answered one; the rest are Phase B's to attribute.
+  the *reason* is unnamed. The rest are later slices to attribute.
 - **Foreign explanations are not stored**, only disclosed.

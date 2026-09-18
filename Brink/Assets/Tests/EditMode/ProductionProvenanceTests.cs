@@ -94,6 +94,93 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void LapsedMarketCrisisIsNotMisreportedAsAnAnsweredDecision()
+        {
+            state.activeCrises.Add(CrisisSystem.Create(state, "MARKET_PANIC"));
+
+            turns.EndMonth();
+
+            var contribution = ContributionOf(state, CausalMetric.MarketIndex,
+                CausalReason.MarketConditions);
+            Assert.IsNotNull(contribution, "the unanswered panic left no market cause");
+            Assert.AreEqual(CausalCategory.PlayerDecision, contribution.category);
+            Assert.AreEqual("CrisisLapsed", contribution.sourceActionId,
+                "silence was incorrectly reported as an answered Crisis Turn");
+        }
+
+        [Test]
+        public void AnsweredCrisisApprovalNamesTheDecisionAndReachesTheDebrief()
+        {
+            ActiveCrisis crisis = null;
+            int optionIndex = -1;
+            foreach (var definition in EventCatalog.Definitions)
+            {
+                var candidate = CrisisSystem.Create(state, definition.id);
+                for (int i = 0; i < candidate.options.Count; i++)
+                {
+                    if (Math.Abs(candidate.options[i].approvalDelta) < 2f) continue;
+                    crisis = candidate;
+                    optionIndex = i;
+                    break;
+                }
+                if (crisis != null) break;
+            }
+            Assert.IsNotNull(crisis, "no authored crisis option moves approval");
+
+            float before = state.PlayerCountry.governmentApproval;
+            state.activeCrises.Add(crisis);
+            CrisisSystem.Resolve(state, crisis, optionIndex);
+
+            var contribution = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.CrisisDecision);
+            Assert.IsNotNull(contribution, "the answered crisis was left under OTHER");
+            Assert.AreEqual(state.PlayerCountry.governmentApproval - before,
+                contribution.value, 0.0005f, "the named cause does not equal the applied movement");
+            Assert.AreEqual(CausalCategory.PlayerDecision, contribution.category);
+            Assert.AreEqual(nameof(GameController.ResolveCrisis), contribution.sourceActionId);
+
+            turns.EndMonth();
+            var consequence = MonthlyDebriefSystem.Build(state).consequences.Find(
+                c => c.metric == CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(consequence, "the answered crisis disappeared at rollover");
+            Assert.IsTrue(consequence.playerLinked,
+                "the operator's crisis response reads as world-driven");
+            Assert.AreEqual(nameof(GameController.ResolveCrisis), consequence.sourceActionId);
+        }
+
+        [Test]
+        public void AnsweredCrisisMarketShockKeepsItsCauseAndNamesTheDecision()
+        {
+            var crisis = new ActiveCrisis { defId = "PROVENANCE_TEST", title = "Market test" };
+            crisis.options.Add(new CrisisOption
+            {
+                label = "ACT",
+                resultText = "The decision is taken.",
+                effectId = CrisisEffects.MarketShock,
+                effectMagnitude = -12f
+            });
+            state.activeCrises.Add(crisis);
+
+            CrisisSystem.Resolve(state, crisis, 0);
+
+            var contribution = ContributionOf(state, CausalMetric.MarketIndex,
+                CausalReason.MarketConditions);
+            Assert.IsNotNull(contribution, "the market shock was not recorded");
+            Assert.Less(contribution.value, 0f, "the adverse shock did not lower the index");
+            Assert.AreEqual(CausalCategory.PlayerDecision, contribution.category,
+                "the operator's selected response reads as an autonomous market movement");
+            Assert.AreEqual(nameof(GameController.ResolveCrisis), contribution.sourceActionId);
+
+            turns.EndMonth();
+            var consequence = MonthlyDebriefSystem.Build(state).consequences.Find(
+                c => c.metric == CausalMetric.MarketIndex);
+            Assert.IsNotNull(consequence);
+            Assert.IsTrue(consequence.playerLinked,
+                "the debrief lost the operator's hand in the market consequence");
+            Assert.AreEqual(nameof(GameController.ResolveCrisis), consequence.sourceActionId);
+        }
+
+        [Test]
         public void PlayerDecisionWithoutActionIdDoesNotInventProvenance()
         {
             var player = state.PlayerCountry;

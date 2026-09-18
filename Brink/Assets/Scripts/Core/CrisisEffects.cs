@@ -82,7 +82,8 @@ namespace Brink.Core
         /// operator's report so a consequence beyond our borders is *visible*
         /// rather than something the player discovers three months later.
         /// </summary>
-        public static string Apply(GameState state, string effectId, string targetId, float magnitude)
+        public static string Apply(GameState state, string effectId, string targetId, float magnitude,
+                                   string sourceActionId = "")
         {
             if (string.IsNullOrEmpty(effectId)) return "";
 
@@ -231,7 +232,10 @@ namespace Brink.Core
                     Causal.Apply(state, player.id, CausalMetric.MarketIndex,
                         CausalReason.MarketConditions, ref economy.marketIndex,
                         Math.Max(1f, economy.marketIndex * (1f + magnitude / 100f)),
-                        CausalCategory.Economic, CausalKind.Direct);
+                        string.IsNullOrEmpty(sourceActionId)
+                            ? CausalCategory.Economic
+                            : CausalCategory.PlayerDecision,
+                        CausalKind.Direct, sourceActionId: sourceActionId);
                     return magnitude >= 0f
                         ? "Markets have taken the news well."
                         : "Markets have taken the news badly.";
