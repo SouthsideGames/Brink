@@ -133,16 +133,18 @@ namespace Brink.UI
                     front.escalation == EscalationState.TotalWar ? '*' : '×', overwrite: false);
             }
 
+            var claimed = new HashSet<int>();
             foreach (var location in state.locations)
             {
                 if (!location.IsOccupied) continue;
                 if (!Point(location.ownerId, canvas, out int x, out int y)) continue;
-                PlotSignal(canvas, x, y, +1, 'O');
+                PlotSignal(canvas, claimed, x, y, +1, 'O');
             }
         }
 
         static void DrawTrade(GameState state, AsciiCanvas canvas)
         {
+            var claimed = new HashSet<int>();
             foreach (var trade in state.trade)
             {
                 if (!trade.Involves(state.playerCountryId)) continue;
@@ -156,12 +158,13 @@ namespace Brink.UI
                 if (sanction.senderId != state.playerCountryId && sanction.targetId != state.playerCountryId) continue;
                 string other = sanction.senderId == state.playerCountryId ? sanction.targetId : sanction.senderId;
                 if (!Point(other, canvas, out int x, out int y)) continue;
-                PlotSignal(canvas, x, y, -1, '$');
+                PlotSignal(canvas, claimed, x, y, -1, '$');
             }
         }
 
         static void DrawIntelligence(GameState state, AsciiCanvas canvas)
         {
+            var claimed = new HashSet<int>();
             if (!Point(state.playerCountryId, canvas, out int px, out int py)) return;
             foreach (var network in state.networks)
             {
@@ -170,7 +173,7 @@ namespace Brink.UI
                 canvas.Line(px, py, tx, ty, ':', overwrite: false);
                 char access = network.penetration >= 55f ? '@'
                     : network.penetration >= 20f ? '^' : '?';
-                PlotSignal(canvas, tx, ty, -1, access);
+                PlotSignal(canvas, claimed, tx, ty, -1, access);
             }
         }
 
@@ -191,10 +194,11 @@ namespace Brink.UI
 
         static void DrawActivity(GameState state, AsciiCanvas canvas)
         {
+            var claimed = new HashSet<int>();
             foreach (var pair in RecentActivity(state))
             {
                 if (!Point(pair.Key, canvas, out int x, out int y)) continue;
-                PlotSignal(canvas, x, y, -1, pair.Value > 1 ? '*' : '•');
+                PlotSignal(canvas, claimed, x, y, -1, pair.Value > 1 ? '*' : '•');
             }
         }
 
@@ -229,7 +233,8 @@ namespace Brink.UI
         /// if a country's own label has genuinely boxed it in. The order is
         /// fixed, so the same world always draws the same map.
         /// </summary>
-        static void PlotSignal(AsciiCanvas canvas, int x, int y, int preferred, char glyph)
+        static void PlotSignal(AsciiCanvas canvas, HashSet<int> claimed,
+            int x, int y, int preferred, char glyph)
         {
             int away = preferred >= 0 ? 1 : -1;
             var candidates = new[]
@@ -242,7 +247,16 @@ namespace Brink.UI
             foreach (var (cx, cy) in candidates)
             {
                 if (cx < 0 || cx >= canvas.Width || cy < 0 || cy >= canvas.Height) continue;
+
                 if (IsCountryLabel(canvas.At(cx, cy))) continue;
+
+                // A cell another state's signal already took this render. The
+                // canvas cannot answer this on its own: a marker is not a
+                // country label, so the label test waved it through and the
+                // later state simply erased the earlier one — leaving the
+                // summary counting activity the map no longer showed.
+                if (!claimed.Add(cy * canvas.Width + cx)) continue;
+
                 canvas.Plot(cx, cy, glyph, overwrite: true);
                 return;
             }

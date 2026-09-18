@@ -378,7 +378,7 @@ namespace Brink.Tests
         // ---------- overlay markers never eat the map's own labels ----------
 
         static readonly int[] RealMapHeights = { 11, 17, 23 };
-        static readonly int[] PanelWidths = { 34, 41, 64, 104 };
+        static readonly int[] PanelWidths = { 34, 41, 49, 64, 104 };
 
         static bool IsCountryLabel(char cell)
             => char.IsLetterOrDigit(cell)
@@ -456,6 +456,56 @@ namespace Brink.Tests
                 int markers = 0;
                 foreach (char cell in map) if (cell == '\u2022' || cell == '*') markers++;
                 Assert.Greater(markers, 0, $"ACTIVITY drew nothing at {columns}x{rows}");
+            }
+        }
+
+        /// <summary>
+        /// Every state the summary counts is a state the map actually shows.
+        ///
+        /// Protecting country labels was not enough on its own. A marker is not
+        /// a label, so the label test waved through a cell another state's
+        /// marker already held, and `overwrite: true` did the rest: a later
+        /// state silently erased an earlier one while the summary went on
+        /// counting activity that was no longer drawn.
+        ///
+        /// **This has to be a FULL-roster world.** The fixture's Standard
+        /// sixteen states never crowd each other — measured across five seeds
+        /// and eighteen grids, every one places cleanly with or without the
+        /// claim set, so a Standard-world version of this test passes just as
+        /// happily with the guard removed. At twenty-four states the map loses
+        /// exactly one marker at 34x11 and 49x11, on every seed tried. A
+        /// regression test for a crowding bug has to be run in a crowd.
+        /// </summary>
+        [Test]
+        public void EveryActiveStateTheSummaryCountsIsDrawnOnTheMap()
+        {
+            var crowded = WorldFactory.CreateWorld(6120, "USA", WorldSize.Full);
+            crowded.chronicle.Clear();
+            crowded.date = new GameDate(2000, 2);
+            foreach (var country in crowded.countries)
+                crowded.chronicle.Add(new ChronicleEntry
+                {
+                    date = new GameDate(2000, 1), countryId = country.id,
+                    category = ChronicleCategory.Political, publicity = Publicity.Public,
+                    text = "e"
+                });
+
+            var summary = AsciiMapModes.Summary(crowded, WorldMapMode.Activity);
+            int active = int.Parse(summary.Substring(summary.IndexOf("ACTIVE STATES", StringComparison.Ordinal)
+                + "ACTIVE STATES".Length).Trim());
+            Assert.Greater(active, 16,
+                "this needs the full roster; the standard sixteen never crowd each other");
+
+            foreach (int rows in RealMapHeights)
+            foreach (int columns in PanelWidths)
+            {
+                string map = AsciiMapModes.Render(crowded, null, WorldMapMode.Activity, columns, rows);
+                int drawn = 0;
+                foreach (char cell in map) if (cell == '\u2022' || cell == '*') drawn++;
+
+                Assert.AreEqual(active, drawn,
+                    $"at {columns}x{rows} the summary counts {active} active states but the map "
+                    + $"draws {drawn} markers — one state's signal overwrote another's");
             }
         }
 

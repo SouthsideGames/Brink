@@ -67,6 +67,22 @@ code, the player's brackets and the selection arrows. Terrain uses no letters or
 digits, so scenery is never mistaken for a label. Confrontation lines and trade
 routes are untouched — they already layer with `overwrite: false`.
 
+It also refuses a cell another signal took during the same render. Labels alone
+were not enough: a marker is not a label, so the label test waved through a cell
+an earlier state already held and `overwrite: true` erased it, leaving the
+summary counting activity the map no longer showed. **The crowding is only
+reachable on the full roster** — measured across five seeds and eighteen grids,
+the Standard sixteen states always place cleanly with or without the claim set,
+while twenty-four lose exactly one marker at 34x11 and 49x11. A regression test
+for this has to be run in a crowd, or it passes just as happily with the guard
+removed.
+
+The claim set is per overlay, not per render: modes never draw together, so a
+set built at the top of each `Draw*` is both correct and smaller than threading
+one through four signatures. The ACTIVITY summary is deliberately left counting
+real activity rather than drawn markers — tying it to what fitted would make the
+same world report different numbers at different widths.
+
 ## Tests
 Focused tests cover:
 
@@ -85,9 +101,11 @@ Focused tests cover:
   nor a place in the counts;
 - Activity holding the grid at the real map heights of 11, 17 and 23;
 - no overlay replacing a country code, player bracket or selection arrow, across
-  34/41/64/104 columns by 11/17/23 rows, with every state marked — paired with a
-  check that displaced markers are still drawn, because a placement rule that
+  34/41/49/64/104 columns by 11/17/23 rows, with every state marked — paired with
+  a check that displaced markers are still drawn, because a placement rule that
   silently skipped everything would satisfy the first check perfectly;
+- every state the ACTIVITY summary counts being drawn on the map, in a full
+  roster world, which is the only density where signals contend for a cell;
 - fixed five-row institutional signatures for all five pillars;
 - the 32–100 column responsive contract, for every pillar;
 - that all five pillar dashboards draw their signature through the shared
