@@ -700,7 +700,7 @@ namespace Brink.Core
             // Give ground one demand at a time, most expensive first.
             for (int attempt = 0; attempt < 8; attempt++)
             {
-                if (proposal.terms.Count > 0
+                if (HasDemand(proposal)
                     && WouldAccept(state, confrontation, proposerId, proposal)) return proposal;
 
                 PeaceTerm? worst = null;
@@ -715,10 +715,17 @@ namespace Brink.Core
                 proposal.terms.Remove(worst.Value);
             }
 
-            return proposal.terms.Count > 0
+            return HasDemand(proposal)
                    && WouldAccept(state, confrontation, proposerId, proposal)
                 ? proposal
                 : null;
+        }
+
+        static bool HasDemand(PeaceProposal proposal)
+        {
+            foreach (var term in proposal.terms)
+                if (IsDemand(term)) return true;
+            return false;
         }
 
         /// <summary>

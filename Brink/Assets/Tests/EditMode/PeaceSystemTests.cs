@@ -270,6 +270,23 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ForeignGovernmentsDoNotSignAConcessionsOnlyPackage()
+        {
+            confrontation.objectiveLocationId = "CHN_CAP";
+            confrontation.defenderWarExhaustion = 100f;
+            confrontation.momentum = 100f;
+            state.FindCountry("CHN").warSupport = 0f;
+            state.FindCountry("CHN").pillars.government = 0f;
+
+            var proposal = PeaceSystem.BestAcceptableProposal(
+                state, confrontation, state.playerCountryId);
+
+            Assert.IsNull(proposal,
+                "The substantive demand was impossible, but a prisoner exchange alone was "
+                + "laundered into a settlement on our terms.");
+        }
+
+        [Test]
         public void AForeignConstructedOfferReachesThePlayerIntact()
         {
             var foreignWar = ConfrontationSystem.BeginBy(state, "RUS", state.playerCountryId,
