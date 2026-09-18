@@ -456,6 +456,11 @@ namespace Brink.Core
 
             var target = state.FindLocation(targetLocationId);
             if (target == null) return null;
+            if (!WithinEscalationLimit(confrontation, operationType, directive))
+            {
+                GameLog.Warn("CONFRONT", "The order's escalation limit forbids the conflict this would open.");
+                return null;
+            }
 
             int cost = OperationCostFor(state, confrontation, operationType);
             if (!turns.SpendCommandPoints(cost, $"{operationType} at {target.displayName}"))
@@ -526,13 +531,7 @@ namespace Brink.Core
             if (escalatory && confrontation != null
                 && confrontation.escalation < EscalationState.LimitedConflict)
             {
-                if (directive.escalationLimit < EscalationState.LimitedConflict)
-                {
-                    if (attackerId == state.playerCountryId)
-                        GameLog.Warn("CONFRONT",
-                            "The order's escalation limit forbids the conflict this would open.");
-                    return null;
-                }
+                if (!WithinEscalationLimit(confrontation, operationType, directive)) return null;
                 SetEscalationBy(state, confrontation, EscalationState.LimitedConflict, attackerId);
             }
 
@@ -608,6 +607,16 @@ namespace Brink.Core
                         desk: ReportingDesk.Military);
             }
             return record;
+        }
+
+        public static bool WithinEscalationLimit(Confrontation confrontation,
+            OperationType operationType, OperationDirective directive)
+        {
+            bool escalatory = OperationCatalog.For(operationType)?.targeting != OperationTargeting.OwnGround
+                              && operationType != OperationType.Withdraw;
+            if (!escalatory || confrontation == null
+                || confrontation.escalation >= EscalationState.LimitedConflict) return true;
+            return directive != null && directive.escalationLimit >= EscalationState.LimitedConflict;
         }
 
         /// <summary>The outcome, followed by why it went that way (GDD §28.1).</summary>

@@ -134,5 +134,151 @@ namespace Brink.Tests
             Assert.AreEqual(TerritorialIntent.Degrade, plan.directive.territorialIntent);
             Assert.AreEqual(EscalationState.LimitedConflict, plan.directive.escalationLimit);
         }
+
+        [Test]
+        public void StandingOrderExecutesOnlyTheNextStepThroughTheRealCommandPath()
+        {
+            var turns = new TurnManager(state);
+            SimulationPipeline.Wire(turns, state);
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Advance");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+            int cost = ConfrontationSystem.OperationCostFor(state, confrontation, OperationType.Raid);
+
+            state.commandPoints.current = 0;
+            Assert.IsTrue(turns.EndMonth());
+
+            Assert.AreEqual(1, confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).Count,
+                "a standing order must attempt at most one player step per month");
+            Assert.AreEqual(state.commandPoints.baselinePerMonth - cost, state.commandPoints.current,
+                "the operation bypassed the normal Command Point price after refresh");
+            Assert.IsFalse(plan.steps[0].completed,
+                "execution should still be reconciled from the authoritative diary, not marked optimistically");
+
+            Assert.IsTrue(turns.EndMonth());
+            Assert.IsTrue(plan.steps[0].completed);
+            Assert.AreEqual(2, confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).Count);
+
+            Assert.IsTrue(turns.EndMonth());
+            Assert.IsTrue(plan.steps[1].completed);
+            Assert.IsFalse(plan.standingOrder, "a completed plan kept an empty authorization active");
+            Assert.AreEqual(2, confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).Count);
+        }
+
+        [Test]
+        public void APlanWithoutAStandingOrderNeverExecutesItself()
+        {
+            var turns = new TurnManager(state);
+            SimulationPipeline.Wire(turns, state);
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Intent only");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Assault, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Assault));
+
+            turns.EndMonth();
+
+            Assert.IsFalse(plan.standingOrder);
+            Assert.AreEqual(0, confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).Count);
+        }
+
+        [Test]
+        public void BlockedStandingOrderWaitsWithoutSpendingCommandPoints()
+        {
+            var turns = new TurnManager(state);
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Hold");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Assault, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Assault));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+            state.commandPoints.current = 0;
+
+            var record = OperationPlanningSystem.ExecuteStandingOrder(state, turns);
+
+            Assert.IsNull(record);
+            Assert.AreEqual(0, state.commandPoints.current);
+            Assert.AreEqual(0, confrontation.operations.Count);
+            Assert.IsFalse(plan.steps[0].completed);
+            Assert.IsTrue(plan.standingOrder, "a temporary refusal should not silently cancel the authorization");
+        }
+
+        [Test]
+        public void StandingOrderRespectsItsEscalationCeilingBeforeSpending()
+        {
+            var turns = new TurnManager(state);
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Do not widen",
+                new OperationDirective { escalationLimit = EscalationState.Crisis });
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Assault, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Assault));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+            confrontation.escalation = EscalationState.Crisis;
+            state.commandPoints.current = 10;
+
+            Assert.IsNull(OperationPlanningSystem.ExecuteStandingOrder(state, turns));
+            Assert.AreEqual(10, state.commandPoints.current);
+            Assert.AreEqual(EscalationState.Crisis, confrontation.escalation);
+            Assert.AreEqual(0, confrontation.operations.Count);
+            Assert.IsTrue(plan.standingOrder);
+        }
+
+        [Test]
+        public void ManualOrderAlsoChecksItsEscalationCeilingBeforeSpending()
+        {
+            var turns = new TurnManager(state);
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Assault, out _));
+            Assert.NotNull(target);
+            confrontation.escalation = EscalationState.Crisis;
+            state.commandPoints.current = 10;
+
+            var record = ConfrontationSystem.LaunchOperation(state, turns, confrontation,
+                target.id, OperationType.Assault,
+                new OperationDirective { escalationLimit = EscalationState.Crisis });
+
+            Assert.IsNull(record);
+            Assert.AreEqual(10, state.commandPoints.current,
+                "the ordinary command path charged an operation it then refused");
+            Assert.AreEqual(EscalationState.Crisis, confrontation.escalation);
+            Assert.AreEqual(0, confrontation.operations.Count);
+        }
+
+        [Test]
+        public void StandingOrderPersistsAndOldPlansRemainManual()
+        {
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Advance");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(OperationPlanningSystem.For(loaded, confrontation.id).standingOrder);
+
+            OperationPlanningSystem.For(loaded, confrontation.id).standingOrder = false;
+            Assert.IsFalse(OperationPlanningSystem.For(loaded, confrontation.id).standingOrder);
+        }
+
+        [Test]
+        public void StandingOrderCannotBypassConstitutionalAuthority()
+        {
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Advance");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.NotNull(target);
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            state.PlayerCountry.government.type = GovernmentType.ParliamentaryRepublic;
+            state.authorizedPillarMask = 0;
+
+            Assert.IsFalse(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+            Assert.IsFalse(plan.standingOrder);
+        }
     }
 }

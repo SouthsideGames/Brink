@@ -562,6 +562,12 @@ is priced rather than refused. **Defensive verbs on our own ground are exempt
 from both**: fortifying a position we hold cannot be the thing that starts the
 shooting.
 
+`WithinEscalationLimit` is checked before the player wrapper spends CP and again
+inside actor-generic resolution. This shared preflight matters for standing
+orders: an authorization whose saved ceiling forbids opening Limited Conflict
+waits without paying for an operation the resolver will refuse. Manual and
+standing execution use the same rule.
+
 ### 4-0. Availability — `OperationCatalog.CanOrder`
 
 One gate, shared by the order screen and `LaunchOperationBy`, so what the

@@ -40,7 +40,18 @@ namespace Brink.UI
             }
 
             Add(" " + OperationPlanningSystem.StatusText(state, confrontation.id), "terminal-text");
-            Add(" PLAN IS INTENT. EXECUTION STILL HAPPENS THROUGH THE ORDINARY MILITARY ORDER AND PAYS ITS NORMAL COST.", "terminal-text-dim");
+            Add(plan.standingOrder
+                ? " STANDING ORDER IS ACTIVE. THE NEXT STEP WILL ATTEMPT ONCE AFTER MONTHLY CP REFRESH AND PAY ITS NORMAL COST."
+                : " PLAN IS INTENT UNTIL A STANDING ORDER IS ISSUED. MANUAL EXECUTION REMAINS AVAILABLE.", "terminal-text-dim");
+            var standingRow = Row();
+            var standing = new Button(() =>
+            {
+                GameController.Instance.SetStandingOrder(confrontation.id, !plan.standingOrder);
+                refresh?.Invoke();
+            }) { text = plan.standingOrder ? "CANCEL STANDING ORDER" : "ISSUE STANDING ORDER" };
+            standing.AddToClassList("cmd-button");
+            if (plan.standingOrder) standing.AddToClassList("primary");
+            standingRow.Add(standing);
 
             if (plan.steps != null && plan.steps.Count > 0)
             {

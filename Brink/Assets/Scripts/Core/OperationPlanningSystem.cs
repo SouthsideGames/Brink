@@ -63,6 +63,16 @@ namespace Brink.Core
             return true;
         }
 
+        public static bool SetStandingOrder(GameState state, string confrontationId, bool active)
+        {
+            var plan = For(state, confrontationId);
+            if (plan == null || plan.standingOrder == active || (active && Next(state, confrontationId) == null)) return false;
+            if (active && !AuthoritySystem.HoldsAuthority(state, Pillar.Military)) return false;
+            plan.standingOrder = active;
+            plan.revised = state.date;
+            return true;
+        }
+
         public static bool AddStep(GameState state, string confrontationId, string locationId, OperationType type)
         {
             var plan = For(state, confrontationId);
@@ -150,7 +160,44 @@ namespace Brink.Core
                     RecordExecution(state, plan.confrontationId, confrontation.operations[i]);
 
                 plan.reconciledOperationCount = confrontation.operations.Count;
+                if (Next(state, plan.confrontationId) == null) plan.standingOrder = false;
             }
+        }
+
+        /// <summary>
+        /// Execute at most one explicitly pre-authorized step after the new
+        /// month's CP refresh. The ordinary launch path remains authoritative:
+        /// it spends normal CP, applies the saved risk envelope and files the
+        /// real operation record that reconciliation observes next month.
+        /// </summary>
+        public static OperationRecord ExecuteStandingOrder(GameState state, TurnManager turns)
+        {
+            if (state == null || turns == null || !AuthoritySystem.HoldsAuthority(state, Pillar.Military)) return null;
+            var strategy = Strategy(state);
+            if (strategy?.operationPlans == null) return null;
+
+            foreach (var plan in strategy.operationPlans)
+            {
+                if (plan == null || !plan.standingOrder) continue;
+                var confrontation = state.FindConfrontation(plan.confrontationId);
+                var step = Next(state, plan.confrontationId);
+                if (confrontation == null || confrontation.resolved || step == null) continue;
+                if (!Enum.TryParse(step.operationType, true, out OperationType type)) continue;
+                var location = state.FindLocation(step.locationId);
+                if (location == null || !OperationCatalog.CanOrder(state, state.playerCountryId, location, type, out _)) continue;
+                var directive = DirectiveFor(state, plan.confrontationId);
+                if (!ConfrontationSystem.WithinEscalationLimit(confrontation, type, directive)) continue;
+                if (state.commandPoints.current < ConfrontationSystem.OperationCostFor(state, confrontation, type)) continue;
+
+                var record = ConfrontationSystem.LaunchOperation(
+                    state, turns, confrontation, step.locationId, type, directive);
+                if (record == null) continue;
+                state.AddNotification(NotificationClass.Priority, "STANDING ORDER EXECUTED",
+                    $"{type.ToString().ToUpperInvariant()} — {location.displayName.ToUpperInvariant()}. "
+                    + "The pre-authorized campaign step used its normal command cost.", state.playerCountryId);
+                return record;
+            }
+            return null;
         }
 
         public static OperationDirective DirectiveFor(GameState state, string confrontationId)
@@ -175,6 +222,7 @@ namespace Brink.Core
             }
             var directive = plan.directive ?? new OperationDirective();
             return $"PLAN: {plan.title.ToUpperInvariant()}   STEPS {complete}/{(plan.steps == null ? 0 : plan.steps.Count)}\n"
+                 + $"STANDING ORDER: {(plan.standingOrder ? "ACTIVE — NEXT STEP AFTER MONTHLY CP REFRESH" : "OFF")}\n"
                  + $"NEXT: {nextText}\n"
                  + $"LIMITS: ESC {directive.escalationLimit.ToString().ToUpperInvariant()}  "
                  + $"CAS {directive.casualtyTolerance:F0}  CIV {directive.civilianRiskLimit:F0}  "

@@ -29,6 +29,13 @@ namespace Brink.Data
         public GameDate created;
         public GameDate revised;
 
+        /// <summary>
+        /// The operator has pre-authorized the next incomplete step to execute
+        /// after monthly Command Points refresh. Additive: old saves remain
+        /// manual, which is the only safe default for an absent authorization.
+        /// </summary>
+        public bool standingOrder;
+
         // Number of real confrontation operation records already examined by the
         // planner. Additive save field: old saves default to zero and reconcile
         // safely on the next resolved month. This prevents one real operation
