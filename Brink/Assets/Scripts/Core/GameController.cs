@@ -1185,7 +1185,9 @@ namespace Brink.Core
         public bool ProposeTerms(Data.PeaceProposal proposal)
         {
             if (!IsRunning || State.ActiveConfrontation == null) return false;
-            bool ok = PeaceSystem.ProposeTerms(State, State.ActiveConfrontation, State.playerCountryId, proposal);
+            bool ok = PeaceSystem.ProposeTerms(State, State.ActiveConfrontation,
+                State.playerCountryId, proposal, CausalCategory.PlayerDecision,
+                nameof(ProposeTerms));
             SaveSystem.Save(State, AutosaveSlot); // the attempt itself is worth recording
             if (ok) ProgressionSystem.RecordInitiative(State);
             return ok;

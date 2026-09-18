@@ -1166,6 +1166,11 @@ test that confirms a six-demand proposal is refused by an opponent who would hav
 signed a two-term one.
 
 Signed settlements are archived in `GameState.settlements` with their terms.
+Their approval effects are recorded at the write site for causal explanation:
+reparations, political concessions, prisoner exchange and the settlement
+dividend remain distinct. An operator proposal carries `ProposeTerms`; accepting
+an incoming package carries `ResolveCrisis`; actor-generic settlement calls do
+not invent operator authorship.
 
 **Foreign governments construct settlements too.** `AISystem` routes both its
 ordinary war-weariness decision and its strategic-programme pre-emption through
