@@ -304,6 +304,109 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ConditionalGuaranteeWakesOnlyDuringTheNamedConflict()
+        {
+            state.blocs.Clear();
+            var treaty = new Treaty
+            {
+                id = "T_CONDITIONAL_GUARANTEE", countryA = state.playerCountryId,
+                countryB = "DEU", signedDate = state.date
+            };
+            treaty.commitments.Add(TreatyCommitment.MutualDefense);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.MutualDefense,
+                side = ClauseSide.WeProvide,
+                trigger = TreatyClauseTrigger.ConflictWithCountry,
+                triggerCountryId = "CHN"
+            });
+            state.treaties.Add(treaty);
+
+            Assert.IsFalse(HasGuarantor(
+                AllianceSystem.GuarantorsOf(state, "DEU", "CHN"), state.playerCountryId),
+                "A dormant conditional guarantee was called as if it were permanent.");
+
+            var war = ConfrontationSystem.BeginBy(state, "DEU", "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(war);
+            war.escalation = EscalationState.LimitedConflict;
+
+            Assert.IsTrue(HasGuarantor(
+                AllianceSystem.GuarantorsOf(state, "DEU", "CHN"), state.playerCountryId),
+                "The named conflict began but the conditional guarantee stayed dormant.");
+        }
+
+        [Test]
+        public void TriggerAndTermComposeAndLegacyClausesStayPermanent()
+        {
+            var treaty = new Treaty
+            {
+                id = "T_COMPOSED", countryA = state.playerCountryId,
+                countryB = "DEU", signedDate = state.date
+            };
+            treaty.commitments.Add(TreatyCommitment.Transit);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.Transit,
+                trigger = TreatyClauseTrigger.ConflictWithCountry,
+                triggerCountryId = "CHN",
+                durationMonths = 1
+            });
+            state.treaties.Add(treaty);
+
+            var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(war);
+            war.escalation = EscalationState.LimitedConflict;
+            Assert.IsTrue(treaty.ClauseIsActive(state, TreatyCommitment.Transit),
+                "Both live conditions held but the clause was dormant.");
+
+            state.date = state.date.NextMonth();
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit),
+                "The trigger kept an expired clause alive.");
+
+            var old = new Treaty
+            {
+                id = "T_LEGACY", countryA = state.playerCountryId,
+                countryB = "IND", signedDate = state.date
+            };
+            old.commitments.Add(TreatyCommitment.Transit);
+            Assert.IsTrue(old.ClauseIsActive(state, TreatyCommitment.Transit),
+                "A clause-less treaty from an old save stopped being permanent.");
+        }
+
+        [Test]
+        public void NarrowerPromisesAreEasierToAccept()
+        {
+            var permanent = Clauses((TreatyCommitment.MutualDefense, ClauseSide.TheyProvide));
+            var bounded = Clauses((TreatyCommitment.MutualDefense, ClauseSide.TheyProvide));
+            bounded[0].trigger = TreatyClauseTrigger.ConflictWithCountry;
+            bounded[0].triggerCountryId = "CHN";
+            bounded[0].durationMonths = 12;
+
+            Assert.Greater(
+                DiplomacySystem.TreatyWillingness(state, state.playerCountryId, "DEU", bounded),
+                DiplomacySystem.TreatyWillingness(state, state.playerCountryId, "DEU", permanent),
+                "A one-year promise for one named conflict cost exactly as much as a permanent guarantee.");
+        }
+
+        [Test]
+        public void AConditionMustNameARealThirdState()
+        {
+            var clause = Clauses((TreatyCommitment.Transit, ClauseSide.Mutual));
+            clause[0].trigger = TreatyClauseTrigger.ConflictWithCountry;
+            clause[0].triggerCountryId = "DEU";
+            Assert.IsFalse(DiplomacySystem.ProposeNegotiatedTreatyBy(
+                    state, state.playerCountryId, "DEU", clause),
+                "A treaty used its own signatory as the external trigger.");
+
+            clause[0].triggerCountryId = "NOT_A_COUNTRY";
+            Assert.IsFalse(DiplomacySystem.ProposeNegotiatedTreatyBy(
+                    state, state.playerCountryId, "DEU", clause),
+                "A treaty was conditioned on a state that does not exist.");
+        }
+
+        [Test]
         public void TransitRunsOnlyFromTheCountryThatGrantedIt()
         {
             StrategicLocation host = null;
@@ -339,6 +442,48 @@ namespace Brink.Tests
             DiplomacySystem.MonthlyUpdate(state);
             Assert.AreEqual(state.playerCountryId, host.foreignOperatorId,
                 "India granted transit, but its base remained unavailable to us.");
+        }
+
+        [Test]
+        public void ConditionalTransitDoesNotOpenABaseUntilItsConflictBegins()
+        {
+            StrategicLocation host = null;
+            foreach (var location in state.locations)
+                if (location.ownerId == "IND" && location.SupportsBasing) { host = location; break; }
+            Assert.IsNotNull(host);
+            host.foreignOperatorId = "";
+
+            var relationship = state.FindRelationship(state.playerCountryId, "IND");
+            relationship.relations = 85f;
+            relationship.SetThreatPerceivedBy("IND", 0f);
+
+            var treaty = new Treaty
+            {
+                id = "T_CONDITIONAL_TRANSIT", countryA = state.playerCountryId,
+                countryB = "IND", signedDate = state.date
+            };
+            treaty.commitments.Add(TreatyCommitment.Transit);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.Transit,
+                side = ClauseSide.TheyProvide,
+                trigger = TreatyClauseTrigger.ConflictWithCountry,
+                triggerCountryId = "CHN"
+            });
+            state.treaties.Add(treaty);
+
+            host.foreignOperatorId = state.playerCountryId;
+            DiplomacySystem.MonthlyUpdate(state);
+            Assert.AreNotEqual(state.playerCountryId, host.foreignOperatorId,
+                "Dormant conditional transit opened a foreign base.");
+
+            var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(war);
+            war.escalation = EscalationState.LimitedConflict;
+            DiplomacySystem.MonthlyUpdate(state);
+            Assert.AreEqual(state.playerCountryId, host.foreignOperatorId,
+                "The named conflict began but its transit promise stayed dormant.");
         }
 
         [Test]
@@ -400,8 +545,12 @@ namespace Brink.Tests
         public void ClausesSurviveASaveRoundTrip()
         {
             Warm("DEU");
-            DiplomacySystem.ProposeNegotiatedTreatyBy(state, state.playerCountryId, "DEU",
-                Clauses((TreatyCommitment.Transit, ClauseSide.TheyProvide)));
+            var clauses = Clauses((TreatyCommitment.Transit, ClauseSide.TheyProvide));
+            clauses[0].trigger = TreatyClauseTrigger.ConflictWithCountry;
+            clauses[0].triggerCountryId = "CHN";
+            clauses[0].durationMonths = 36;
+            DiplomacySystem.ProposeNegotiatedTreatyBy(
+                state, state.playerCountryId, "DEU", clauses);
 
             var restored = SaveSystem.FromJson(SaveSystem.ToJson(state));
             var treaty = restored.FindTreaty(restored.playerCountryId, "DEU");
@@ -409,6 +558,9 @@ namespace Brink.Tests
             Assert.IsNotNull(treaty);
             Assert.AreEqual(ClauseSide.TheyProvide,
                 treaty.SideFor(restored.playerCountryId, TreatyCommitment.Transit));
+            Assert.AreEqual(TreatyClauseTrigger.ConflictWithCountry, treaty.clauses[0].trigger);
+            Assert.AreEqual("CHN", treaty.clauses[0].triggerCountryId);
+            Assert.AreEqual(36, treaty.clauses[0].durationMonths);
             Assert.AreEqual(state.PlayerCountry.reciprocity, restored.PlayerCountry.reciprocity, 0.01f);
         }
 

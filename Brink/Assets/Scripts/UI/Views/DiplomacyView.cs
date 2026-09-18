@@ -26,6 +26,8 @@ namespace Brink.UI.Views
 
         /// <summary>The treaty being negotiated: what each side would carry.</summary>
         readonly List<TreatyClause> draftClauses = new List<TreatyClause>();
+        string draftTriggerCountryId = "";
+        int draftDurationMonths;
 
         protected override void Build()
         {
@@ -380,7 +382,21 @@ namespace Brink.UI.Views
                         ClauseSide side = treaty.SideFor(state.playerCountryId, commitment);
                         string who = side == ClauseSide.Mutual ? "BOTH"
                             : side == ClauseSide.TheyProvide ? "THEY" : "WE";
-                        commitments.Add($"{Phrase.Caps(commitment)} [{who}]");
+                        string qualifier = "";
+                        foreach (var clause in treaty.clauses)
+                        {
+                            if (clause.commitment != commitment) continue;
+                            if (clause.trigger == TreatyClauseTrigger.ConflictWithCountry)
+                            {
+                                var trigger = state.FindCountry(clause.triggerCountryId);
+                                qualifier += $" IF CONFLICT WITH {trigger?.displayName.ToUpperInvariant() ?? clause.triggerCountryId}";
+                            }
+                            if (clause.durationMonths > 0)
+                                qualifier += $" UNTIL {treaty.ClauseExpiry(commitment).DisplayString.ToUpperInvariant()}";
+                            if (!treaty.ClauseIsActive(state, commitment)) qualifier += " [DORMANT]";
+                            break;
+                        }
+                        commitments.Add($"{Phrase.Caps(commitment)} [{who}]{qualifier}");
                     }
                     sb.AppendLine($"   TREATY: {string.Join(", ", commitments)}");
                 }
@@ -453,7 +469,16 @@ namespace Brink.UI.Views
                 if (country.isPlayer) continue;
                 var captured = country;
                 bool current = selectedTargetId == country.id;
-                var button = new Button(() => { selectedTargetId = captured.id; Refresh(); })
+                var button = new Button(() =>
+                {
+                    selectedTargetId = captured.id;
+                    if (draftTriggerCountryId == selectedTargetId)
+                    {
+                        draftTriggerCountryId = "";
+                        ApplyDraftConditions();
+                    }
+                    Refresh();
+                })
                 { text = (current ? "► " : "") + country.displayName.ToUpperInvariant() };
                 button.AddToClassList("cmd-button");
                 if (current) button.AddToClassList("primary");
@@ -544,6 +569,25 @@ namespace Brink.UI.Views
                 row.Add(button);
             }
 
+            if (draftClauses.Count > 0)
+            {
+                var conditionRow = new VisualElement();
+                conditionRow.AddToClassList("button-row");
+                Root.Add(conditionRow);
+
+                var triggerCountry = state.FindCountry(draftTriggerCountryId);
+                AddButton(conditionRow,
+                    string.IsNullOrEmpty(draftTriggerCountryId)
+                        ? "TRIGGER: ALWAYS"
+                        : $"TRIGGER: CONFLICT WITH {triggerCountry?.displayName.ToUpperInvariant() ?? draftTriggerCountryId}",
+                    null, () => { CycleTrigger(state); Refresh(); });
+
+                AddButton(conditionRow,
+                    draftDurationMonths <= 0 ? "TERM: PERMANENT"
+                        : $"TERM: {draftDurationMonths / 12} YEAR(S)",
+                    null, () => { CycleDuration(); Refresh(); });
+            }
+
             var proposeRow = new VisualElement();
             proposeRow.AddToClassList("button-row");
             Root.Add(proposeRow);
@@ -605,7 +649,15 @@ namespace Brink.UI.Views
             var existing = FindClause(commitment);
             if (existing == null)
             {
-                draftClauses.Add(new TreatyClause { commitment = commitment, side = ClauseSide.Mutual });
+                draftClauses.Add(new TreatyClause
+                {
+                    commitment = commitment,
+                    side = ClauseSide.Mutual,
+                    trigger = string.IsNullOrEmpty(draftTriggerCountryId)
+                        ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry,
+                    triggerCountryId = draftTriggerCountryId,
+                    durationMonths = draftDurationMonths
+                });
                 return;
             }
 
@@ -614,6 +666,39 @@ namespace Brink.UI.Views
                 case ClauseSide.Mutual: existing.side = ClauseSide.TheyProvide; break;
                 case ClauseSide.TheyProvide: existing.side = ClauseSide.WeProvide; break;
                 default: draftClauses.Remove(existing); break;
+            }
+        }
+
+        /// <summary>Cycle through an unconditional agreement and each valid third-state trigger.</summary>
+        void CycleTrigger(GameState state)
+        {
+            var candidates = new List<string>();
+            foreach (var country in state.countries)
+                if (country.id != state.playerCountryId && country.id != selectedTargetId)
+                    candidates.Add(country.id);
+
+            int current = candidates.IndexOf(draftTriggerCountryId);
+            int next = string.IsNullOrEmpty(draftTriggerCountryId) ? 0 : current + 1;
+            draftTriggerCountryId = next >= 0 && next < candidates.Count ? candidates[next] : "";
+            ApplyDraftConditions();
+        }
+
+        void CycleDuration()
+        {
+            draftDurationMonths = draftDurationMonths == 0 ? 12
+                : draftDurationMonths == 12 ? 36
+                : draftDurationMonths == 36 ? 60 : 0;
+            ApplyDraftConditions();
+        }
+
+        void ApplyDraftConditions()
+        {
+            foreach (var clause in draftClauses)
+            {
+                clause.trigger = string.IsNullOrEmpty(draftTriggerCountryId)
+                    ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry;
+                clause.triggerCountryId = draftTriggerCountryId;
+                clause.durationMonths = draftDurationMonths;
             }
         }
 

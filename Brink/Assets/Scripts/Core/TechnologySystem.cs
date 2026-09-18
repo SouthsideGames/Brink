@@ -249,7 +249,7 @@ namespace Brink.Core
                     // Treaty partners share deliberately.
                     var treaty = state.FindTreaty(country.id, other.id);
                     if (treaty != null
-                        && treaty.Carries(other.id, TreatyCommitment.IntelligenceSharing))
+                        && treaty.Carries(state, other.id, TreatyCommitment.IntelligenceSharing))
                     {
                         float chance = 0.018f;
                         if (chance > best) { best = chance; route = CapabilitySource.Shared; }

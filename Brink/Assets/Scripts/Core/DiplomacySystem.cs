@@ -395,6 +395,15 @@ namespace Brink.Core
             string targetId, List<TreatyClause> clauses)
         {
             if (clauses == null || clauses.Count == 0) return false;
+            foreach (var clause in clauses)
+            {
+                if (clause == null || clause.durationMonths < 0) return false;
+                if (clause.trigger == TreatyClauseTrigger.Always) continue;
+                if (clause.trigger != TreatyClauseTrigger.ConflictWithCountry
+                    || string.IsNullOrEmpty(clause.triggerCountryId)
+                    || clause.triggerCountryId == proposerId || clause.triggerCountryId == targetId
+                    || state.FindCountry(clause.triggerCountryId) == null) return false;
+            }
 
             var commitments = new List<TreatyCommitment>();
             foreach (var clause in clauses) commitments.Add(clause.commitment);
@@ -431,7 +440,10 @@ namespace Brink.Core
                         commitment = clause.commitment,
                         side = treaty.countryA == proposerId
                             ? clause.side
-                            : Flip(clause.side)
+                            : Flip(clause.side),
+                        trigger = clause.trigger,
+                        triggerCountryId = clause.triggerCountryId,
+                        durationMonths = clause.durationMonths
                     });
             }
 
@@ -714,10 +726,18 @@ namespace Brink.Core
             {
                 float burden = BurdenOf(clause.commitment);
 
+                // A promise that applies only during one named conflict, or for
+                // a bounded term, costs less than the same permanent promise.
+                // The discounts compose because the constraints compose.
+                float scope = clause.trigger == TreatyClauseTrigger.Always ? 1f : 0.70f;
+                if (clause.durationMonths > 0)
+                    scope *= Math.Min(1f, 0.35f + clause.durationMonths / 60f * 0.65f);
+                willingness += burden * (1f - scope);
+
                 if (clause.side == ClauseSide.TheyProvide)
-                    willingness -= burden * 0.6f * (1f - leverage * 0.6f);
+                    willingness -= burden * scope * 0.6f * (1f - leverage * 0.6f);
                 else if (clause.side == ClauseSide.WeProvide)
-                    willingness += burden * 1.4f;
+                    willingness += burden * scope * 1.4f;
             }
 
             return willingness;
@@ -1108,7 +1128,7 @@ namespace Brink.Core
                 foreach (var treaty in state.treaties)
                 {
                     if (treaty.broken || !treaty.Involves(host)) continue;
-                    if (!treaty.Carries(host, TreatyCommitment.Transit)) continue;
+                    if (!treaty.Carries(state, host, TreatyCommitment.Transit)) continue;
 
                     string partner = treaty.PartnerOf(host);
                     if (!StillWelcome(state, host, partner)) continue;
@@ -1140,7 +1160,7 @@ namespace Brink.Core
 
             var treaty = state.FindTreaty(hostId, partnerId);
             if (treaty == null || treaty.broken
-                || !treaty.Carries(hostId, TreatyCommitment.Transit)) return false;
+                || !treaty.Carries(state, hostId, TreatyCommitment.Transit)) return false;
 
             var relationship = state.FindRelationship(hostId, partnerId);
             if (relationship == null) return false;

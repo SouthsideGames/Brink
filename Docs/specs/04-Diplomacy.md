@@ -149,6 +149,32 @@ pass the clause-aware willingness gate and then be run through the flat,
 implicitly mutual calculation a second time. Successful player proposals record
 one initiative in the shared conclusion path, not another in the controller.
 
+### Conditional and time-limited clauses
+
+Each `TreatyClause` may additionally carry one live trigger and a term:
+
+- `Always` (the zero/default value) or `ConflictWithCountry`, naming a third
+  state. The latter applies while either treaty signatory is in an unresolved
+  `LimitedConflict`-or-higher confrontation with that state.
+- `durationMonths`, measured from `Treaty.signedDate`; zero is permanent.
+
+The constraints compose. A five-year transit clause tied to conflict with a
+named state is usable only during that conflict and only before its five-year
+term ends. Missing clause records, zero-valued fields and old saves remain
+unconditional and permanent.
+
+`Treaty.ClauseIsActive` is the single activation rule. Defense call-ins, foreign
+basing, deliberate intelligence sharing and arms-control enforcement all use
+the state-aware `Carries` overload, so presentation and mechanics cannot invent
+different conditions. Dormant and expired clauses stay in the signed record and
+are labelled `[DORMANT]`; they are not silently deleted or treated as broken.
+
+The negotiation panel applies the selected trigger and 1/3/5-year or permanent
+term to the drafted clauses. A narrower promise costs less acceptance burden;
+trigger and duration discounts multiply just as the constraints do. The fields
+remain per clause even though the first authoring surface applies one condition
+to the whole package, leaving amendment without a second agreement model.
+
 `ProposeTreatyBy(state, proposerId, targetId, commitments)` is the actor-generic
 form and skips the CP spend. `ProposeTreaty` spends CP and delegates to it; a
 successful player proposal receives the player-only skill term and player

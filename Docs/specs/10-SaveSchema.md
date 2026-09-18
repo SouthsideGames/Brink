@@ -52,6 +52,11 @@ An `OperationPlan` carries the additive boolean `standingOrder`. Missing is
 must never invent permission to execute one. No migration or version bump is
 required.
 
+`TreatyClause.trigger`, `triggerCountryId` and `durationMonths` are additive.
+Their zero/empty defaults mean unconditional and permanent, exactly matching
+every treaty written before conditional agreements. No migration or save-version
+bump is required; a round trip preserves non-default conditions and terms.
+
 Per-country state (`CountryState`) nests `PillarScores`, `NationalResources`,
 `MilitaryState`, `EconomyState`, `CounterIntelState`, `GovernmentState`,
 `TechnologyState`, `EndgameState`, and `cabinet` — five `Official` records, one
