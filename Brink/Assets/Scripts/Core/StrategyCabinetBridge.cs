@@ -57,7 +57,7 @@ namespace Brink.Core
                     pillar = Pillar.Economy; directive = "ECO_AUSTERITY"; return true;
                 case MandateObjectiveKind.PillarAtLeast:
                     if (!System.Enum.TryParse(objective.condition.param, true, out pillar)) return false;
-                    if (pillar == Pillar.Government) return false;
+                    if (pillar == Pillar.Government || pillar == Pillar.Military) return false;
                     directive = FavouredDirective(pillar); return true;
                 default: return false;
             }

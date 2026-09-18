@@ -29,9 +29,11 @@ Cancellation is free and does not reset that revision price. When the existing
 mandate evaluator says the objective is met, the authorization clears and the
 operator is notified. Freeform intent and objectives without an honest Cabinet
 mapping cannot be authorized. The current honest mappings are stability,
-approval, solvency, and Military/Economy/Intelligence/Diplomacy pillar targets.
+approval, solvency, and Economy/Intelligence/Diplomacy pillar targets.
 Resource, relationship, treaty, unity, capability and Government-pillar targets
 remain descriptive until a Cabinet directive actually moves their stated metric.
+Military-pillar intent is also descriptive: PREPARE FOR WAR builds equipment
+strength, not the aggregate Military pillar used by that objective.
 
 Programme authorization is not a doctrine/policy reversal and therefore does
 not increment the strategic-reversal counter. First completion uses the existing

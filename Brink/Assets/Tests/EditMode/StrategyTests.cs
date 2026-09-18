@@ -332,6 +332,8 @@ namespace Brink.Tests
                     new PlayerObjective { condition = new MandateObjective { kind=kind, param="CHN" } }, out _, out _), kind.ToString());
             Assert.IsFalse(StrategyCabinetBridge.TryProgrammeInstruction(
                 new PlayerObjective { condition = new MandateObjective { kind=MandateObjectiveKind.PillarAtLeast, param="Government" } }, out _, out _));
+            Assert.IsFalse(StrategyCabinetBridge.TryProgrammeInstruction(
+                new PlayerObjective { condition = new MandateObjective { kind=MandateObjectiveKind.PillarAtLeast, param="Military" } }, out _, out _));
         }
 
         [Test]
