@@ -193,6 +193,30 @@ namespace Brink.Core
             }
         }
 
+        /// <summary>A term in an incoming offer, phrased from the recipient's side.</summary>
+        public static string DescribeReceived(PeaceTerm term)
+        {
+            switch (term)
+            {
+                case PeaceTerm.TerritorialCession: return "WE CEDE THE OBJECTIVE";
+                case PeaceTerm.Reparations: return "WE PAY REPARATIONS";
+                case PeaceTerm.Demilitarization: return "WE DEMILITARIZE";
+                case PeaceTerm.ResourceAccess: return "WE GRANT RESOURCE ACCESS";
+                case PeaceTerm.Recognition: return "WE RECOGNIZE THEIR POSITION";
+                case PeaceTerm.TreatyRevision: return "WE REVISE OUR TREATIES";
+                case PeaceTerm.PoliticalConcessions: return "WE CHANGE COURSE";
+                case PeaceTerm.SanctionsLifted: return "WE LIFT SANCTIONS";
+                case PeaceTerm.Withdrawal: return "THEY WITHDRAW";
+                case PeaceTerm.SanctionsRelief: return "THEY LIFT SANCTIONS";
+                case PeaceTerm.PrisonerExchange: return "PRISONER EXCHANGE";
+                case PeaceTerm.SecurityGuarantee: return "THEY GUARANTEE US";
+                default:
+                    GameLog.Error("PEACE",
+                        $"{term} has no incoming-offer label. Add it to PeaceSystem.DescribeReceived.");
+                    return Phrase.Caps(term);
+            }
+        }
+
         /// <summary>
         /// Why a term would achieve nothing if signed, or null if it is live.
         ///
@@ -442,6 +466,41 @@ namespace Brink.Core
             return true;
         }
 
+        /// <summary>
+        /// Let a foreign government use the same constructed settlement grammar
+        /// as the player. AI opponents get the best package they will actually
+        /// accept; the player receives the opening package as a Crisis decision.
+        /// </summary>
+        public static bool ProposeConstructedSettlementBy(GameState state,
+            Confrontation confrontation, string proposerId)
+        {
+            if (confrontation == null || confrontation.resolved) return false;
+            var opponent = state.FindCountry(confrontation.OpponentOf(proposerId));
+            if (opponent == null) return false;
+
+            var proposal = opponent.isPlayer
+                ? SuggestProposal(state, confrontation, proposerId)
+                : BestAcceptableProposal(state, confrontation, proposerId);
+            if (proposal == null || proposal.terms.Count == 0) return false;
+
+            return opponent.isPlayer
+                ? ConfrontationSystem.OfferConstructedTermsToPlayer(
+                    state, confrontation, proposerId, proposal)
+                : ProposeTerms(state, confrontation, proposerId, proposal);
+        }
+
+        /// <summary>Apply a package the player explicitly accepted.</summary>
+        public static bool AcceptOfferedTerms(GameState state, Confrontation confrontation,
+            string proposerId, PeaceProposal proposal)
+        {
+            if (confrontation == null || confrontation.resolved
+                || proposal == null || proposal.terms.Count == 0) return false;
+            var opponent = state.FindCountry(confrontation.OpponentOf(proposerId));
+            if (opponent == null) return false;
+            ApplyTerms(state, confrontation, proposerId, opponent, proposal);
+            return true;
+        }
+
         static void ApplyTerms(GameState state, Confrontation confrontation,
             string proposerId, CountryState opponent, PeaceProposal proposal)
         {
@@ -641,7 +700,7 @@ namespace Brink.Core
             // Give ground one demand at a time, most expensive first.
             for (int attempt = 0; attempt < 8; attempt++)
             {
-                if (proposal.terms.Count > 0
+                if (HasDemand(proposal)
                     && WouldAccept(state, confrontation, proposerId, proposal)) return proposal;
 
                 PeaceTerm? worst = null;
@@ -656,10 +715,17 @@ namespace Brink.Core
                 proposal.terms.Remove(worst.Value);
             }
 
-            return proposal.terms.Count > 0
+            return HasDemand(proposal)
                    && WouldAccept(state, confrontation, proposerId, proposal)
                 ? proposal
                 : null;
+        }
+
+        static bool HasDemand(PeaceProposal proposal)
+        {
+            foreach (var term in proposal.terms)
+                if (IsDemand(term)) return true;
+            return false;
         }
 
         /// <summary>
@@ -671,7 +737,8 @@ namespace Brink.Core
         {
             var proposal = new PeaceProposal();
 
-            if (!string.IsNullOrEmpty(confrontation.objectiveLocationId))
+            if (proposerId == confrontation.initiatorId
+                && !string.IsNullOrEmpty(confrontation.objectiveLocationId))
                 proposal.terms.Add(PeaceTerm.TerritorialCession);
             else
                 proposal.terms.Add(PeaceTerm.Recognition);

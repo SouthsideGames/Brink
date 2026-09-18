@@ -280,5 +280,28 @@ namespace Brink.Tests
                 "A government that can see a rival approaching an existential instrument " +
                 "must have a distinct objective about it, not merely a higher threat number.");
         }
+
+        [Test]
+        public void ProgrammePreemptionPutsConstructedTermsToThePlayer()
+        {
+            var confrontation = ConfrontationSystem.BeginBy(state, Rival.id,
+                state.playerCountryId, ConfrontationObjective.Deterrence, null,
+                PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(confrontation);
+
+            var method = typeof(AISystem).GetMethod("PreemptProgramme",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method, "The pre-emption action was renamed without updating its guard.");
+
+            bool acted = (bool)method.Invoke(null,
+                new object[] { state, RivalAI, Rival, state.playerCountryId, new System.Random(1) });
+
+            Assert.IsTrue(acted);
+            Assert.IsTrue(state.HasOpenCrisis);
+            var offer = state.activeCrises[state.activeCrises.Count - 1];
+            Assert.AreEqual(ConfrontationSystem.TermsOfferedCrisisId, offer.defId);
+            Assert.IsNotEmpty(offer.offeredPeaceTerms,
+                "Programme pre-emption fell back to the legacy objective-only offer.");
+        }
     }
 }

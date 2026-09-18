@@ -109,6 +109,12 @@ namespace Brink.Data
         public string contextId = "";
 
         /// <summary>
+        /// Exact settlement package attached to a foreign offer. Empty keeps
+        /// crises from older saves on the legacy objective-only settlement path.
+        /// </summary>
+        public List<PeaceTerm> offeredPeaceTerms = new List<PeaceTerm>();
+
+        /// <summary>
         /// What happens in the world if nobody decides (GDD §23).
         ///
         /// Drifting used to cost only standing, which made ignoring a crisis a
