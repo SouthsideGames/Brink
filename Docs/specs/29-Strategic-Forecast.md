@@ -1,7 +1,7 @@
 # 29 — Long-Term Plan Frame and Strategic Forecast
 
 ## Status
-Phase D development slice. Static implementation complete; comprehensive Unity verification is deferred to the C–G milestone gate.
+As built: long-term plan frame, bounded autonomous programme, and strategic forecast.
 
 ## Purpose
 Brink already lets the operator adopt a standing doctrine and write their own objectives. This slice turns those pieces into an explicit long-term plan and gives the operator a way to ask **what if we ran the government this way for a while?** without secretly simulating a parallel future.
@@ -16,6 +16,29 @@ Brink already lets the operator adopt a standing doctrine and write their own ob
 A horizon is organizational context, not a deadline. Reaching it gives no reward or penalty, changes no mandate verdict, and awards no initiative/XP.
 
 `StrategySystem.SetPlanFrame` changes only those planning fields.
+
+## Autonomous programme
+
+One unfinished measured player objective may be authorized as the plan's active
+programme. It does not create a second executor: `StrategyCabinetBridge` maps
+the objective onto an existing Cabinet directive and only steers that desk while
+its official remains Autonomous. Directed and Direct Control orders still win.
+
+The first programme is free; replacing or reauthorizing one costs 1 Influence.
+Cancellation is free and does not reset that revision price. When the existing
+mandate evaluator says the objective is met, the authorization clears and the
+operator is notified. Freeform intent and objectives without an honest Cabinet
+mapping cannot be authorized. The current honest mappings are stability,
+approval, solvency, and Economy/Intelligence/Diplomacy pillar targets.
+Resource, relationship, treaty, unity, capability and Government-pillar targets
+remain descriptive until a Cabinet directive actually moves their stated metric.
+Military-pillar intent is also descriptive: PREPARE FOR WAR builds equipment
+strength, not the aggregate Military pillar used by that objective.
+
+Programme authorization is not a doctrine/policy reversal and therefore does
+not increment the strategic-reversal counter. First completion uses the existing
+`OBJECTIVE REACHED` notice; a previously reached objective completed again uses
+one `PROGRAMME COMPLETE` notice, never both.
 
 ## Forecast / what-if
 `StrategicForecastSystem` is read-only. It:

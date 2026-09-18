@@ -258,6 +258,102 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void LongTermProgrammeSteersOnlyItsAutonomousDesk()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Steady the country",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability at 99." }));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+            var government = state.PlayerCountry.FindOfficial(Pillar.Government);
+            Assert.IsTrue(StrategySystem.SetProgramme(state, objective.id));
+            Assert.AreEqual(objective.id, StrategySystem.Ensure(state).programmeObjectiveId);
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("GOV_STABILITY", government.directiveId);
+            StringAssert.Contains("[PROGRAMME]", StrategySystem.StatusText(state));
+            CabinetSystem.MonthlyAct(state);
+            StrategySystem.ClarifyCabinetReport(state);
+            var report = state.cabinetReport.Find(r => r.pillar == Pillar.Government);
+            Assert.IsNotNull(report);
+            StringAssert.Contains("long-term programme", report.summary);
+
+            government.mode = ControlMode.Directed;
+            government.directiveId = "GOV_APPROVAL";
+            StrategyCabinetBridge.Prepare(state);
+            Assert.AreEqual("GOV_APPROVAL", government.directiveId,
+                "a strategic programme overrode an explicit Cabinet instruction");
+        }
+
+        [Test]
+        public void ProgrammeCompletesWithItsMeasuredObjective()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Reach present stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=1f, text="Stability at 1." }));
+            var objective = StrategySystem.Ensure(state).objectives[0];
+            Assert.IsTrue(StrategySystem.SetProgramme(state, objective.id));
+            StrategySystem.MonthlyUpdate(state);
+            Assert.IsTrue(objective.achieved);
+            Assert.IsEmpty(StrategySystem.Ensure(state).programmeObjectiveId);
+            Assert.AreEqual(1, state.notifications.FindAll(n => n.title == "OBJECTIVE REACHED" || n.title == "PROGRAMME COMPLETE").Count,
+                "one completed objective produced duplicate completion traffic");
+        }
+
+        [Test]
+        public void ReplacingAProgrammeCostsInfluenceButCancellingDoesNotResetThePrice()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability." }));
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Solvency",
+                new MandateObjective { kind=MandateObjectiveKind.Solvent, text="Solvent." }));
+            var plan = StrategySystem.Ensure(state);
+            int before = state.influence;
+            Assert.IsTrue(StrategySystem.SetProgramme(state, plan.objectives[0].id));
+            Assert.AreEqual(before, state.influence);
+            Assert.IsTrue(StrategySystem.CancelProgramme(state));
+            Assert.IsTrue(StrategySystem.SetProgramme(state, plan.objectives[1].id));
+            Assert.AreEqual(before - StrategySystem.ProgrammeRevisionInfluence, state.influence);
+            Assert.AreEqual(plan.objectives[1].id, plan.programmeObjectiveId,
+                "replacement retained the previous programme");
+        }
+
+        [Test]
+        public void FreeformAndUnsupportedObjectivesCannotPretendToBeProgrammes()
+        {
+            Assert.IsTrue(StrategySystem.AddFreeformObjective(state, "Preserve room"));
+            var freeform = StrategySystem.Ensure(state).objectives[0];
+            Assert.IsFalse(StrategySystem.SetProgramme(state, freeform.id));
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Gain capabilities",
+                new MandateObjective { kind=MandateObjectiveKind.CapabilitiesAtLeast, threshold=4f, text="Capabilities." }));
+            Assert.IsFalse(StrategySystem.SetProgramme(state, StrategySystem.Ensure(state).objectives[1].id));
+
+            foreach (var kind in new[] { MandateObjectiveKind.UnityAtLeast, MandateObjectiveKind.EnergyAtLeast,
+                MandateObjectiveKind.FoodAtLeast, MandateObjectiveKind.MaterialsAtLeast,
+                MandateObjectiveKind.IndustryAtLeast, MandateObjectiveKind.TreatiesAtLeast,
+                MandateObjectiveKind.RelationsAtLeast, MandateObjectiveKind.RelationsAtMost })
+                Assert.IsFalse(StrategyCabinetBridge.TryProgrammeInstruction(
+                    new PlayerObjective { condition = new MandateObjective { kind=kind, param="CHN" } }, out _, out _), kind.ToString());
+            Assert.IsFalse(StrategyCabinetBridge.TryProgrammeInstruction(
+                new PlayerObjective { condition = new MandateObjective { kind=MandateObjectiveKind.PillarAtLeast, param="Government" } }, out _, out _));
+            Assert.IsFalse(StrategyCabinetBridge.TryProgrammeInstruction(
+                new PlayerObjective { condition = new MandateObjective { kind=MandateObjectiveKind.PillarAtLeast, param="Military" } }, out _, out _));
+        }
+
+        [Test]
+        public void ProgrammeAuthorizationIsAdministrativeAndRemovalClearsIt()
+        {
+            Assert.IsTrue(StrategySystem.AddObjective(state, "Stability",
+                new MandateObjective { kind=MandateObjectiveKind.StabilityAtLeast, threshold=99f, text="Stability." }));
+            var plan = StrategySystem.Ensure(state);
+            var objective = plan.objectives[0];
+            string countryBefore = UnityEngine.JsonUtility.ToJson(state.PlayerCountry);
+            int revisions = plan.revisionCount;
+            Assert.IsTrue(StrategySystem.SetProgramme(state, objective.id));
+            Assert.AreEqual(countryBefore, UnityEngine.JsonUtility.ToJson(state.PlayerCountry));
+            Assert.AreEqual(revisions, plan.revisionCount,
+                "authorizing delegated work was misfiled as a strategic reversal");
+            Assert.IsTrue(StrategySystem.RemoveObjective(state, objective.id));
+            Assert.IsEmpty(plan.programmeObjectiveId);
+        }
+
+        [Test]
         public void OperatorPanelOffersFreeformIntentAndManualStatus()
         {
             string source = ReadRuntimeSource(Path.Combine("UI", "Views", "StrategistView.cs"));

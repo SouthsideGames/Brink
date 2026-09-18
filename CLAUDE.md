@@ -3165,6 +3165,15 @@ Recommended next:
 list twice over after it was already done, which is what a recommended-next list
 does when it is appended to rather than edited.
 
+- [x] **Long-term strategic programmes (2026-09-18)** — one measured player
+      objective can now authorize an existing autonomous Cabinet desk to pursue
+      its matching existing directive. There is no second executor or resource
+      model; explicit Cabinet control wins, unsupported/freeform objectives stay
+      descriptive, revision costs 1 Influence, and reaching the real objective
+      clears the programme with one notice. Only directives proven to move their
+      stated objective are offered; PREPARE FOR WAR is not offered for a Military
+      pillar target because it builds equipment rather than that metric. Spec 29.
+
 - [x] **Standing Orders** — campaign planning remains inert by default, but the
       operator may explicitly preauthorize its next incomplete step. One step is
       attempted after monthly CP refresh through the ordinary operation path, so

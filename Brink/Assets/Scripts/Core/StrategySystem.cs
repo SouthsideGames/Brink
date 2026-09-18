@@ -21,6 +21,7 @@ namespace Brink.Core
         public const int MaxObjectives = 3;
         public const int DoctrineRevisionInfluence = 2;
         public const int PolicyRevisionInfluence = 1;
+        public const int ProgrammeRevisionInfluence = 1;
 
         static readonly StrategicPolicyDef[] Policies =
         {
@@ -206,8 +207,34 @@ namespace Brink.Core
         {
             var plan = Ensure(state); if (plan == null) return false;
             for (int i=0;i<plan.objectives.Count;i++)
-                if (plan.objectives[i].id==id) { plan.objectives.RemoveAt(i); return true; }
+                if (plan.objectives[i].id==id) { if (plan.programmeObjectiveId == id) plan.programmeObjectiveId = ""; plan.objectives.RemoveAt(i); return true; }
             return false;
+        }
+
+        public static bool SetProgramme(GameState state, string objectiveId)
+        {
+            var plan = Ensure(state); if (plan == null) return false;
+            PlayerObjective objective = null;
+            foreach (var candidate in plan.objectives) if (candidate.id == objectiveId) objective = candidate;
+            if (objective == null || objective.freeform || objective.achieved
+                || !StrategyCabinetBridge.TryProgrammeInstruction(objective, out _, out _)) return false;
+            if (plan.programmeObjectiveId == objectiveId) return true;
+            int cost = plan.programmeChosen ? ProgrammeRevisionInfluence : 0;
+            if (state.influence < cost) return false;
+            state.influence -= cost;
+            plan.programmeObjectiveId = objectiveId;
+            plan.programmeChosen = true;
+            plan.programmeAdopted = state.date;
+            state.AddNotification(NotificationClass.Priority, "STRATEGIC PROGRAMME",
+                $"Cabinet authorized to pursue: {objective.title}.", state.playerCountryId);
+            return true;
+        }
+
+        public static bool CancelProgramme(GameState state)
+        {
+            var plan = Ensure(state); if (plan == null || string.IsNullOrEmpty(plan.programmeObjectiveId)) return false;
+            plan.programmeObjectiveId = "";
+            return true;
         }
 
         static bool AllowedPlayerObjective(MandateObjectiveKind kind)
@@ -234,6 +261,15 @@ namespace Brink.Core
                 bool met = MandateSystem.IsMet(state, o.condition);
                 bool wasMet = o.achieved;
                 o.achieved = met;
+                if (met && plan.programmeObjectiveId == o.id)
+                {
+                    plan.programmeObjectiveId = "";
+                    // First attainment already files OBJECTIVE REACHED. A repeat
+                    // attainment needs the programme notice because first-attainment
+                    // history correctly stays one-shot.
+                    if (o.everAchieved)
+                        state.AddNotification(NotificationClass.Advisory, "PROGRAMME COMPLETE", o.title, state.playerCountryId);
+                }
                 if (!met || wasMet) continue;
                 RecordFirstAttainment(state, o);
             }
@@ -261,7 +297,12 @@ namespace Brink.Core
                 var def = CabinetSystem.FindDirective(official.office, official.directiveId);
                 string label = def?.label ?? official.directiveId;
                 line.ownJudgement = false;
-                line.summary = $"worked under standing strategy ({label.ToLowerInvariant()}) — " + QualityTail(line.summary);
+                string authority = "standing strategy";
+                foreach (var objective in plan.objectives)
+                    if (objective.id == plan.programmeObjectiveId
+                        && StrategyCabinetBridge.TryProgrammeInstruction(objective, out var pillar, out _)
+                        && pillar == line.pillar) authority = "long-term programme";
+                line.summary = $"worked under {authority} ({label.ToLowerInvariant()}) — " + QualityTail(line.summary);
             }
         }
 
@@ -282,7 +323,7 @@ namespace Brink.Core
             sb.AppendLine("PLAYER OBJECTIVES:");
             if (plan.objectives.Count==0) sb.AppendLine("  NONE — define what success means for this posting.");
             foreach (var o in plan.objectives)
-                sb.AppendLine((o.achieved ? "  [MET] " : o.freeform ? "  [OPEN] " : "  [   ] ") + o.title + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
+                sb.AppendLine((o.achieved ? "  [MET] " : o.freeform ? "  [OPEN] " : "  [   ] ") + o.title + (plan.programmeObjectiveId == o.id ? "  [PROGRAMME]" : "") + (o.everAchieved && !o.achieved ? "  [PREVIOUSLY MET]" : ""));
             return sb.ToString().TrimEnd();
         }
 
