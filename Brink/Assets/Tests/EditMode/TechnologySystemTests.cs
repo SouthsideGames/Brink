@@ -312,6 +312,34 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void KnowledgeIsSharedOnlyByTheCountryThatPromisedIt()
+        {
+            var partner = state.FindCountry("IND");
+            GrantMature(partner, "CAP_CONVENING");
+
+            var treaty = new Treaty
+            {
+                id = "T_DIRECTIONAL_INTEL",
+                countryA = state.playerCountryId,
+                countryB = "IND"
+            };
+            treaty.commitments.Add(TreatyCommitment.IntelligenceSharing);
+            treaty.clauses.Add(new TreatyClause
+            {
+                commitment = TreatyCommitment.IntelligenceSharing,
+                side = ClauseSide.WeProvide
+            });
+            state.treaties.Add(treaty);
+
+            for (int i = 0; i < 600 && !TechnologySystem.Has(state.PlayerCountry, "CAP_CONVENING"); i++)
+                turns.EndMonth();
+
+            var acquired = state.PlayerCountry.technology.Find("CAP_CONVENING");
+            Assert.IsTrue(acquired == null || acquired.source != CapabilitySource.Shared,
+                "India transferred knowledge despite never promising to share it.");
+        }
+
+        [Test]
         public void Knowledge_CanBeStolenThroughCollection()
         {
             var target = state.FindCountry("CHN");

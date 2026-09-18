@@ -285,7 +285,6 @@ namespace Brink.Core
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
             if (!Turns.SpendCommandPoints(DiplomacySystem.TreatyProposalCost, "Treaty proposal")) return false;
             bool ok = DiplomacySystem.ProposeNegotiatedTreatyBy(State, State.playerCountryId, targetId, clauses);
-            if (ok) ProgressionSystem.RecordInitiative(State);
             SaveSystem.Save(State, AutosaveSlot);
             return ok;
         }

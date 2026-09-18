@@ -296,6 +296,16 @@ namespace Brink.Core
                 return false;
             }
 
+            return ConcludeTreaty(state, proposerId, targetId, commitments);
+        }
+
+        static bool ConcludeTreaty(GameState state, string proposerId, string targetId,
+            List<TreatyCommitment> commitments)
+        {
+            var relationship = state.FindRelationship(proposerId, targetId);
+            var target = state.FindCountry(targetId);
+            if (relationship == null || target == null) return false;
+
             var treaty = new Treaty
             {
                 id = $"TRTY_{state.date.SortKey}_{state.treaties.Count}",
@@ -408,7 +418,8 @@ namespace Brink.Core
                 return false;
             }
 
-            if (!ProposeTreatyBy(state, proposerId, targetId, commitments)) return false;
+            if (state.FindTreaty(proposerId, targetId) != null) return false;
+            if (!ConcludeTreaty(state, proposerId, targetId, commitments)) return false;
 
             // Record who carries what, relative to countryA.
             var treaty = state.FindTreaty(proposerId, targetId);
@@ -1097,7 +1108,7 @@ namespace Brink.Core
                 foreach (var treaty in state.treaties)
                 {
                     if (treaty.broken || !treaty.Involves(host)) continue;
-                    if (!treaty.Has(TreatyCommitment.Transit)) continue;
+                    if (!treaty.Carries(host, TreatyCommitment.Transit)) continue;
 
                     string partner = treaty.PartnerOf(host);
                     if (!StillWelcome(state, host, partner)) continue;
@@ -1128,7 +1139,8 @@ namespace Brink.Core
             if (string.IsNullOrEmpty(partnerId) || partnerId == hostId) return false;
 
             var treaty = state.FindTreaty(hostId, partnerId);
-            if (treaty == null || treaty.broken || !treaty.Has(TreatyCommitment.Transit)) return false;
+            if (treaty == null || treaty.broken
+                || !treaty.Carries(hostId, TreatyCommitment.Transit)) return false;
 
             var relationship = state.FindRelationship(hostId, partnerId);
             if (relationship == null) return false;

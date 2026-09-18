@@ -206,6 +206,25 @@ namespace Brink.Data
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
         public bool Has(TreatyCommitment commitment) => commitments.Contains(commitment);
 
+        /// <summary>
+        /// Whether this country carries the commitment. Old treaties have no
+        /// clause sides and therefore remain mutual through <see cref="SideFor"/>.
+        /// </summary>
+        public bool Carries(string countryId, TreatyCommitment commitment)
+        {
+            if (!Involves(countryId) || !Has(commitment)) return false;
+            ClauseSide side = SideFor(countryId, commitment);
+            return side == ClauseSide.Mutual || side == ClauseSide.WeProvide;
+        }
+
+        /// <summary>Whether this country receives the commitment's benefit.</summary>
+        public bool Receives(string countryId, TreatyCommitment commitment)
+        {
+            if (!Involves(countryId) || !Has(commitment)) return false;
+            ClauseSide side = SideFor(countryId, commitment);
+            return side == ClauseSide.Mutual || side == ClauseSide.TheyProvide;
+        }
+
         /// <summary>Which side carries a commitment, as seen by <paramref name="viewerId"/>.</summary>
         public ClauseSide SideFor(string viewerId, TreatyCommitment commitment)
         {
