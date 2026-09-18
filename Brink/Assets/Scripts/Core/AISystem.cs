@@ -732,7 +732,8 @@ namespace Brink.Core
                                && confrontation.Involves(targetId);
 
             // 1. Stop being their target.
-            if (againstThem && ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
+            if (againstThem && PeaceSystem.ProposeConstructedSettlementBy(
+                    state, confrontation, country.id))
             {
                 // Suing for terms is public; *why* is not. The original text
                 // named the foreign programme that prompted it, which is exactly
@@ -1304,7 +1305,7 @@ namespace Brink.Core
 
             if (!wantsOut || confrontation.monthsActive < 2) return false;
 
-            if (ConfrontationSystem.ProposeSettlementBy(state, confrontation, country.id))
+            if (PeaceSystem.ProposeConstructedSettlementBy(state, confrontation, country.id))
                 return true;
 
             // Terms refused; a tired or cautious state may simply concede.

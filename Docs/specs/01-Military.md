@@ -1161,6 +1161,20 @@ signed a two-term one.
 
 Signed settlements are archived in `GameState.settlements` with their terms.
 
+**Foreign governments construct settlements too.** `AISystem` routes both its
+ordinary war-weariness decision and its strategic-programme pre-emption through
+`PeaceSystem.ProposeConstructedSettlementBy`. Against another AI it chooses the
+best package the recipient will accept and signs through the same term applier
+as the player. Against the player it puts its opening package into a
+`TERMS_OFFERED` Crisis Turn; the exact list is shown, saved, and applied only if
+the operator accepts. Refusal changes nothing and starts the ordinary six-month
+offer cooldown. The legacy objective-only path remains for concessions and old
+offer crises loaded without a package.
+
+A defender's suggested package asks for `Recognition` of the status quo rather
+than `TerritorialCession`: the objective belongs to the initiator, and asking to
+have ground already held by the defender ceded back to it would be an inert term.
+
 ## 5b. Entering somebody else's war (GDD §15.2, user decision 2026-08-27)
 
 `ConfrontationSystem.BeginObligationBy(state, allyId, aggressorId, onBehalfOfId)`

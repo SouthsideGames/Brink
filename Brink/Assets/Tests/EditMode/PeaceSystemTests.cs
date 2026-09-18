@@ -237,6 +237,84 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ADefenderDoesNotDemandTheObjectiveItAlreadyOwns()
+        {
+            var proposal = PeaceSystem.SuggestProposal(state, confrontation, "CHN");
+
+            Assert.IsFalse(proposal.Has(PeaceTerm.TerritorialCession),
+                "The defender offered to have its own ground ceded back to itself.");
+            Assert.IsTrue(proposal.Has(PeaceTerm.Recognition),
+                "A defender's opening package should ask the claimant to recognize the status quo.");
+        }
+
+        [Test]
+        public void ForeignGovernmentsSettleOnConstructedTermsToo()
+        {
+            var foreignWar = ConfrontationSystem.BeginBy(state, "RUS", "IND",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(foreignWar);
+            foreignWar.defenderWarExhaustion = 100f;
+            foreignWar.momentum = 100f;
+            state.FindCountry("IND").warSupport = 0f;
+            state.FindCountry("IND").pillars.government = 0f;
+
+            Assert.IsTrue(PeaceSystem.ProposeConstructedSettlementBy(state, foreignWar, "RUS"));
+            Assert.IsTrue(foreignWar.resolved);
+
+            var record = state.settlements[state.settlements.Count - 1];
+            Assert.AreEqual("RUS", record.proposerId);
+            CollectionAssert.Contains(record.terms, PeaceTerm.Recognition);
+            CollectionAssert.Contains(record.terms, PeaceTerm.PrisonerExchange);
+            Assert.Greater(record.terms.Count, 1,
+                "The AI still closed its war through a single objective-only settlement.");
+        }
+
+        [Test]
+        public void AForeignConstructedOfferReachesThePlayerIntact()
+        {
+            var foreignWar = ConfrontationSystem.BeginBy(state, "RUS", state.playerCountryId,
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(foreignWar);
+
+            Assert.IsTrue(PeaceSystem.ProposeConstructedSettlementBy(state, foreignWar, "RUS"));
+            Assert.IsFalse(foreignWar.resolved, "A foreign offer decided for the player.");
+
+            var offer = state.activeCrises[state.activeCrises.Count - 1];
+            CollectionAssert.AreEqual(
+                new[] { PeaceTerm.Recognition, PeaceTerm.PrisonerExchange },
+                offer.offeredPeaceTerms);
+            StringAssert.Contains("WE RECOGNIZE THEIR POSITION", offer.body);
+            StringAssert.Contains("PRISONER EXCHANGE", offer.body);
+
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            var loadedOffer = loaded.activeCrises[loaded.activeCrises.Count - 1];
+            CollectionAssert.AreEqual(offer.offeredPeaceTerms, loadedOffer.offeredPeaceTerms,
+                "Saving with terms on the table erased or changed the package.");
+
+            CrisisSystem.Resolve(state, offer, 0);
+            Assert.IsTrue(foreignWar.resolved);
+            var record = state.settlements[state.settlements.Count - 1];
+            CollectionAssert.AreEqual(offer.offeredPeaceTerms, record.terms,
+                "The signed settlement differs from the offer the player accepted.");
+        }
+
+        [Test]
+        public void RefusingAConstructedOfferAppliesNothing()
+        {
+            var foreignWar = ConfrontationSystem.BeginBy(state, "RUS", state.playerCountryId,
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsTrue(PeaceSystem.ProposeConstructedSettlementBy(state, foreignWar, "RUS"));
+            var offer = state.activeCrises[state.activeCrises.Count - 1];
+
+            CrisisSystem.Resolve(state, offer, 1);
+
+            Assert.IsFalse(foreignWar.resolved);
+            Assert.AreEqual(0, state.settlements.Count);
+            Assert.AreEqual(ConfrontationSystem.OfferCooldownMonths,
+                foreignWar.monthsUntilNextOffer);
+        }
+
+        [Test]
         public void Settlements_SurviveSaveRoundTrip()
         {
             ExhaustTheOpponent();
@@ -316,6 +394,24 @@ namespace Brink.Tests
             foreach (var entry in GameLog.Entries)
                 Assert.AreNotEqual(LogLevel.Error, entry.level,
                     $"A peace term fell through PeaceSystem.Describe: {entry.message}");
+        }
+
+        [Test]
+        public void EveryIncomingPeaceTermHasItsOwnLabel()
+        {
+            GameLog.Clear();
+            var seen = new System.Collections.Generic.HashSet<string>();
+
+            foreach (PeaceTerm term in System.Enum.GetValues(typeof(PeaceTerm)))
+            {
+                string label = PeaceSystem.DescribeReceived(term);
+                Assert.IsFalse(string.IsNullOrWhiteSpace(label));
+                Assert.IsTrue(seen.Add(label), $"Incoming term label is duplicated: {label}");
+            }
+
+            foreach (var entry in GameLog.Entries)
+                Assert.AreNotEqual(LogLevel.Error, entry.level,
+                    $"A peace term fell through PeaceSystem.DescribeReceived: {entry.message}");
         }
 
         /// <summary>

@@ -993,7 +993,10 @@ namespace Brink.Core
             // A foreign government's terms reach the operator as a decision,
             // never as a fait accompli.
             if (opponent.isPlayer && proposerId != state.playerCountryId)
-                return OfferTermsToPlayer(state, confrontation, proposerId);
+            {
+                OfferTermsToPlayer(state, confrontation, proposerId, null);
+                return false;
+            }
 
             if (!WouldAcceptTermsFrom(state, confrontation, proposerId))
             {
@@ -1105,10 +1108,15 @@ namespace Brink.Core
         /// accompli. `ProposeSettlementBy` used to close the player's war on the
         /// player's behalf whenever their *computed* willingness cleared the bar
         /// — a peace imposed without a decision, which the design forbids for a
-        /// war (§18.1) and should forbid for its ending too. Always returns
-        /// false: the confrontation is still open until the operator answers.
+        /// war (§18.1) and should forbid for its ending too.
         /// </summary>
-        static bool OfferTermsToPlayer(GameState state, Confrontation confrontation, string proposerId)
+        /// <summary>Raise a player decision containing the exact package offered.</summary>
+        public static bool OfferConstructedTermsToPlayer(GameState state,
+            Confrontation confrontation, string proposerId, PeaceProposal proposal)
+            => OfferTermsToPlayer(state, confrontation, proposerId, proposal);
+
+        static bool OfferTermsToPlayer(GameState state, Confrontation confrontation,
+            string proposerId, PeaceProposal proposal)
         {
             if (confrontation.monthsUntilNextOffer > 0) return false;
             foreach (var open in state.activeCrises)
@@ -1117,30 +1125,43 @@ namespace Brink.Core
             var proposer = state.FindCountry(proposerId);
             bool proposerIsClaimant = proposerId == confrontation.initiatorId;
             string objective = ObjectiveText(state, confrontation);
+            bool constructed = proposal != null && proposal.terms.Count > 0;
+            bool demandsConcession = proposerIsClaimant;
+            if (constructed)
+                foreach (var term in proposal.terms)
+                    if (PeaceSystem.IsDemand(term)) { demandsConcession = true; break; }
+            string package = constructed
+                ? string.Join(", ", proposal.terms.ConvertAll(PeaceSystem.DescribeReceived))
+                : "";
 
             var crisis = new ActiveCrisis
             {
                 defId = TermsOfferedCrisisId,
                 subjectCountryId = proposerId,
+                contextId = confrontation.id,
                 title = "TERMS OFFERED",
-                body = proposerIsClaimant
-                    ? $"{proposer?.displayName} offers to end the confrontation if we concede its objective: {objective}."
-                    : $"{proposer?.displayName} offers to end the confrontation on the status quo. We would withdraw our claim: {objective}.",
+                body = constructed
+                    ? $"{proposer?.displayName} offers a settlement: {package}."
+                    : proposerIsClaimant
+                        ? $"{proposer?.displayName} offers to end the confrontation if we concede its objective: {objective}."
+                        : $"{proposer?.displayName} offers to end the confrontation on the status quo. We would withdraw our claim: {objective}.",
                 startDate = state.date,
                 options = new List<CrisisOption>
                 {
                     new CrisisOption
                     {
                         label = "ACCEPT THE TERMS",
-                        description = proposerIsClaimant
-                            ? "The war ends and they get what they demanded. Giving way costs standing."
-                            : "The war ends and nothing changes hands.",
+                        description = constructed
+                            ? "The war ends and the listed terms are applied exactly."
+                            : proposerIsClaimant
+                                ? "The war ends and they get what they demanded. Giving way costs standing."
+                                : "The war ends and nothing changes hands.",
                         resultText = $"Terms accepted. The confrontation with {proposer?.displayName} is over.",
                         // Yielding to a demand is a concession and priced like
                         // one (see the concede path); accepting a status-quo
                         // offer is not.
-                        approvalDelta = proposerIsClaimant ? -6f : 0f,
-                        stabilityDelta = proposerIsClaimant ? -2f : 0f
+                        approvalDelta = demandsConcession ? -6f : 0f,
+                        stabilityDelta = demandsConcession ? -2f : 0f
                     },
                     new CrisisOption
                     {
@@ -1150,6 +1171,7 @@ namespace Brink.Core
                     }
                 }
             };
+            if (constructed) crisis.offeredPeaceTerms.AddRange(proposal.terms);
 
             state.activeCrises.Add(crisis);
             state.crisesFacedThisYear++;
@@ -1157,14 +1179,16 @@ namespace Brink.Core
             state.AddNotification(NotificationClass.Flash, crisis.title,
                 "Immediate decision required. End Month is suspended.", proposerId);
             GameLog.Info("CONFRONT", $"{proposerId} offers the player terms.");
-            return false;
+            return true;
         }
 
         /// <summary>Apply the player's answer to an offer. Called by <see cref="CrisisSystem"/>.</summary>
         public static void ApplyOfferDecision(GameState state, ActiveCrisis crisis, bool accepted)
         {
             string proposerId = crisis.subjectCountryId;
-            var confrontation = ExistingBetween(state, state.playerCountryId, proposerId);
+            var confrontation = !string.IsNullOrEmpty(crisis.contextId)
+                ? state.FindConfrontation(crisis.contextId)
+                : ExistingBetween(state, state.playerCountryId, proposerId);
             if (confrontation == null) return;
 
             if (!accepted)
@@ -1173,7 +1197,13 @@ namespace Brink.Core
                 GameLog.Info("CONFRONT", "Player refused offered terms.");
                 return;
             }
-            Settle(state, confrontation, proposerId);
+            if (crisis.offeredPeaceTerms != null && crisis.offeredPeaceTerms.Count > 0)
+            {
+                var proposal = new PeaceProposal();
+                proposal.terms.AddRange(crisis.offeredPeaceTerms);
+                PeaceSystem.AcceptOfferedTerms(state, confrontation, proposerId, proposal);
+            }
+            else Settle(state, confrontation, proposerId);
         }
 
         /// <summary>
