@@ -31,7 +31,7 @@ namespace Brink.UI
             var plan = OperationPlanningSystem.For(state, confrontation.id);
             if (plan == null)
             {
-                Add(" STAFF PLANNING IS FREE. A PLAN DOES NOT LAUNCH OPERATIONS, CHANGE ESCALATION, OR SPEND CP.", "terminal-text-dim");
+                Add(" STAFF PLANNING IS FREE. A PLAN ALONE DOES NOT LAUNCH OPERATIONS, CHANGE ESCALATION, OR SPEND CP.", "terminal-text-dim");
                 var title = new TextField("PLAN NAME") { value = "Campaign plan" }; title.AddToClassList("terminal-input"); root.Add(title);
                 var row = Row();
                 Button create = new Button(() => { OperationPlanningSystem.Create(state, confrontation.id, title.value); refresh?.Invoke(); }) { text = "CREATE CAMPAIGN PLAN" };
@@ -51,6 +51,16 @@ namespace Brink.UI
             }) { text = plan.standingOrder ? "CANCEL STANDING ORDER" : "ISSUE STANDING ORDER" };
             standing.AddToClassList("cmd-button");
             if (plan.standingOrder) standing.AddToClassList("primary");
+            if (!plan.standingOrder)
+            {
+                string blocked = OperationPlanningSystem.StandingOrderIssueBlockReason(state, confrontation.id);
+                if (!string.IsNullOrEmpty(blocked))
+                {
+                    standing.SetEnabled(false);
+                    standing.tooltip = blocked;
+                    Add(" STANDING ORDER UNAVAILABLE — " + blocked.ToUpperInvariant(), "terminal-text-dim");
+                }
+            }
             standingRow.Add(standing);
 
             if (plan.steps != null && plan.steps.Count > 0)

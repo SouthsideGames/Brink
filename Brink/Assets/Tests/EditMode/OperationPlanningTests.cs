@@ -145,7 +145,7 @@ namespace Brink.Tests
                 && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
             Assert.NotNull(target);
             Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
-            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.SuppressDefenses));
             Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
             int cost = ConfrontationSystem.OperationCostFor(state, confrontation, OperationType.Raid);
 
@@ -167,6 +167,8 @@ namespace Brink.Tests
             Assert.IsTrue(plan.steps[1].completed);
             Assert.IsFalse(plan.standingOrder, "a completed plan kept an empty authorization active");
             Assert.AreEqual(2, confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).Count);
+            CollectionAssert.AreEqual(new[] { "RAID", "SUPPRESSDEFENSES" },
+                confrontation.operations.FindAll(o => o.attackerId == state.playerCountryId).ConvertAll(o => o.operationType));
         }
 
         [Test]
@@ -262,8 +264,48 @@ namespace Brink.Tests
             var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
             Assert.IsTrue(OperationPlanningSystem.For(loaded, confrontation.id).standingOrder);
 
-            OperationPlanningSystem.For(loaded, confrontation.id).standingOrder = false;
-            Assert.IsFalse(OperationPlanningSystem.For(loaded, confrontation.id).standingOrder);
+            string legacyJson = SaveSystem.ToJson(state);
+            const string field = "\"standingOrder\": true,";
+            StringAssert.Contains(field, legacyJson);
+            legacyJson = legacyJson.Replace(field, "");
+            var legacy = SaveSystem.FromJson(legacyJson);
+            Assert.IsFalse(OperationPlanningSystem.For(legacy, confrontation.id).standingOrder,
+                "a save from before standing orders did not retain the default-manual behaviour");
+            Assert.AreEqual(1, OperationPlanningSystem.For(legacy, confrontation.id).steps.Count);
+        }
+
+        [Test]
+        public void ABlockedStandingOrderExplainsWhyItIsWaiting()
+        {
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Hold");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.NotNull(target);
+
+            StringAssert.Contains("Add an incomplete operation", OperationPlanningSystem.StandingOrderIssueBlockReason(state, confrontation.id));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+            state.PlayerCountry.government.type = GovernmentType.ParliamentaryRepublic;
+            state.authorizedPillarMask = 0;
+
+            StringAssert.Contains("Military authority", OperationPlanningSystem.StandingOrderPendingReason(state, confrontation.id));
+            StringAssert.Contains("PENDING — MILITARY AUTHORITY", OperationPlanningSystem.StatusText(state, confrontation.id));
+            Assert.IsTrue(plan.standingOrder, "a blocked order should remain cancellable rather than silently disappearing");
+        }
+
+        [Test]
+        public void AResolvedConfrontationClearsItsObsoleteStandingOrder()
+        {
+            var plan = OperationPlanningSystem.Create(state, confrontation.id, "Advance");
+            var target = state.locations.Find(l => l.ownerId == confrontation.defenderId
+                && OperationCatalog.CanOrder(state, state.playerCountryId, l, OperationType.Raid, out _));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, confrontation.id, target.id, OperationType.Raid));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, confrontation.id, true));
+
+            confrontation.resolved = true;
+            OperationPlanningSystem.MonthlyReconcile(state);
+
+            Assert.IsFalse(plan.standingOrder);
         }
 
         [Test]

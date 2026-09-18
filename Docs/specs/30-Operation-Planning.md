@@ -40,6 +40,10 @@ Actual execution remains on the existing confrontation command path. `OperationP
 
 After the next month's Command Points refresh, `ExecuteStandingOrder` attempts at most one preauthorized step across all plans. It contains no second resolver: it parses the stored verb, checks the live target and `OperationCatalog.CanOrder`, checks the ordinary CP price, then calls `ConfrontationSystem.LaunchOperation` with the plan's saved risk envelope. Therefore the order spends normal CP, uses ordinary deterministic resolution and consequences, respects current authority and live availability, and waits when temporarily blocked instead of spending or cancelling itself. The resulting normal `OperationRecord` is completed by the existing reconciliation pass.
 
+Plans are considered in creation order; the first executable standing order wins the month's single execution slot. A blocked earlier plan does not prevent a later executable plan from running. The panel reports the current reason when an authorization is waiting, and an ended confrontation clears its obsolete authorization.
+
+Because execution uses the ordinary command path, it also awards the ordinary XP and initiative credit. Those rewards belong to the operator's earlier act of preauthorization; standing orders do not create a cheaper or anonymous execution path.
+
 Planning remains inert. The separate standing-order toggle is the act that delegates execution; turning it off returns the plan to staff intent without deleting a step.
 
 ## Validation contract
