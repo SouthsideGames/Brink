@@ -49,21 +49,15 @@ namespace Brink.Core
             if (objective == null || objective.freeform || objective.condition == null) return false;
             switch (objective.condition.kind)
             {
-                case MandateObjectiveKind.StabilityAtLeast: case MandateObjectiveKind.UnityAtLeast:
+                case MandateObjectiveKind.StabilityAtLeast:
                     directive = "GOV_STABILITY"; return true;
                 case MandateObjectiveKind.ApprovalAtLeast:
                     directive = "GOV_APPROVAL"; return true;
-                case MandateObjectiveKind.EnergyAtLeast: case MandateObjectiveKind.FoodAtLeast:
-                case MandateObjectiveKind.MaterialsAtLeast: case MandateObjectiveKind.IndustryAtLeast:
-                    pillar = Pillar.Economy; directive = "ECO_GROWTH"; return true;
                 case MandateObjectiveKind.Solvent:
                     pillar = Pillar.Economy; directive = "ECO_AUSTERITY"; return true;
-                case MandateObjectiveKind.TreatiesAtLeast: case MandateObjectiveKind.RelationsAtLeast:
-                    pillar = Pillar.Diplomacy; directive = "DIP_OUTREACH"; return true;
-                case MandateObjectiveKind.RelationsAtMost:
-                    pillar = Pillar.Diplomacy; directive = "DIP_PRESSURE"; return true;
                 case MandateObjectiveKind.PillarAtLeast:
                     if (!System.Enum.TryParse(objective.condition.param, true, out pillar)) return false;
+                    if (pillar == Pillar.Government) return false;
                     directive = FavouredDirective(pillar); return true;
                 default: return false;
             }

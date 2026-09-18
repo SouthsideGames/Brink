@@ -225,7 +225,6 @@ namespace Brink.Core
             plan.programmeObjectiveId = objectiveId;
             plan.programmeChosen = true;
             plan.programmeAdopted = state.date;
-            plan.revisionCount++;
             state.AddNotification(NotificationClass.Priority, "STRATEGIC PROGRAMME",
                 $"Cabinet authorized to pursue: {objective.title}.", state.playerCountryId);
             return true;
@@ -265,7 +264,11 @@ namespace Brink.Core
                 if (met && plan.programmeObjectiveId == o.id)
                 {
                     plan.programmeObjectiveId = "";
-                    state.AddNotification(NotificationClass.Advisory, "PROGRAMME COMPLETE", o.title, state.playerCountryId);
+                    // First attainment already files OBJECTIVE REACHED. A repeat
+                    // attainment needs the programme notice because first-attainment
+                    // history correctly stays one-shot.
+                    if (o.everAchieved)
+                        state.AddNotification(NotificationClass.Advisory, "PROGRAMME COMPLETE", o.title, state.playerCountryId);
                 }
                 if (!met || wasMet) continue;
                 RecordFirstAttainment(state, o);

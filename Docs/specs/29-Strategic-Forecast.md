@@ -28,7 +28,15 @@ The first programme is free; replacing or reauthorizing one costs 1 Influence.
 Cancellation is free and does not reset that revision price. When the existing
 mandate evaluator says the objective is met, the authorization clears and the
 operator is notified. Freeform intent and objectives without an honest Cabinet
-mapping cannot be authorized.
+mapping cannot be authorized. The current honest mappings are stability,
+approval, solvency, and Military/Economy/Intelligence/Diplomacy pillar targets.
+Resource, relationship, treaty, unity, capability and Government-pillar targets
+remain descriptive until a Cabinet directive actually moves their stated metric.
+
+Programme authorization is not a doctrine/policy reversal and therefore does
+not increment the strategic-reversal counter. First completion uses the existing
+`OBJECTIVE REACHED` notice; a previously reached objective completed again uses
+one `PROGRAMME COMPLETE` notice, never both.
 
 ## Forecast / what-if
 `StrategicForecastSystem` is read-only. It:

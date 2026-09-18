@@ -3170,7 +3170,8 @@ does when it is appended to rather than edited.
       its matching existing directive. There is no second executor or resource
       model; explicit Cabinet control wins, unsupported/freeform objectives stay
       descriptive, revision costs 1 Influence, and reaching the real objective
-      clears the programme. Spec 29.
+      clears the programme with one notice. Only directives proven to move their
+      stated objective are offered. Spec 29.
 
 - [x] **Standing Orders** — campaign planning remains inert by default, but the
       operator may explicitly preauthorize its next incomplete step. One step is
