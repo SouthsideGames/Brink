@@ -106,6 +106,9 @@ namespace Brink.Data
 
         /// <summary>Sovereign debt written down by decision (spec 02 §9).</summary>
         DebtRestructured,
+
+        /// <summary>An answered Crisis Turn changed a tracked domestic outcome.</summary>
+        CrisisDecision,
     }
 
     /// <summary>
@@ -177,6 +180,7 @@ namespace Brink.Data
 
                 case CausalReason.CrisisLapsed: return "CRISIS LEFT UNANSWERED";
                 case CausalReason.DebtRestructured: return "DEBT RESTRUCTURED";
+                case CausalReason.CrisisDecision: return "CRISIS DECISION";
 
                 default: return "UNSPECIFIED";
             }

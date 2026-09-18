@@ -140,7 +140,8 @@ namespace Brink.Core
                 // else, which made ignoring a crisis the cheapest way to avoid
                 // its consequences — precisely backwards.
                 string worldEffect = CrisisEffects.Apply(
-                    state, crisis.lapseEffectId, crisis.lapseTargetId, crisis.lapseMagnitude);
+                    state, crisis.lapseEffectId, crisis.lapseTargetId, crisis.lapseMagnitude,
+                    "CrisisLapsed");
 
                 state.activeCrises.RemoveAt(i);
                 RecordOutcome(state, crisis.defId, lapsed: true);
@@ -190,7 +191,11 @@ namespace Brink.Core
 
                 player.resources.treasury += Soften(option.treasuryDelta);
                 player.stability = Clamp(player.stability + Soften(option.stabilityDelta));
-                player.governmentApproval = Clamp(player.governmentApproval + Soften(option.approvalDelta));
+                Causal.Apply(state, player.id, CausalMetric.GovernmentApproval,
+                    CausalReason.CrisisDecision, ref player.governmentApproval,
+                    Clamp(player.governmentApproval + Soften(option.approvalDelta)),
+                    CausalCategory.PlayerDecision,
+                    sourceActionId: nameof(GameController.ResolveCrisis));
                 player.nationalUnity = Clamp(player.nationalUnity + Soften(option.unityDelta));
             }
 
@@ -203,7 +208,8 @@ namespace Brink.Core
             // planning cushions what a shock costs us at home; it does not make
             // another government think better of us or call off a war.
             string worldEffect = CrisisEffects.Apply(
-                state, option.effectId, option.effectTargetId, option.effectMagnitude);
+                state, option.effectId, option.effectTargetId, option.effectMagnitude,
+                nameof(GameController.ResolveCrisis));
 
             state.activeCrises.Remove(crisis);
             RecordOutcome(state, crisis.defId, lapsed: false);
