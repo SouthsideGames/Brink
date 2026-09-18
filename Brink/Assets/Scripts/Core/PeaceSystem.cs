@@ -440,7 +440,9 @@ namespace Brink.Core
         /// costs nothing but time — and time is the thing wars consume.
         /// </summary>
         public static bool ProposeTerms(GameState state, Confrontation confrontation,
-            string proposerId, PeaceProposal proposal)
+            string proposerId, PeaceProposal proposal,
+            CausalCategory category = CausalCategory.Diplomatic,
+            string sourceActionId = null)
         {
             if (confrontation == null || confrontation.resolved) return false;
             if (proposal == null || proposal.terms.Count == 0) return false;
@@ -462,7 +464,7 @@ namespace Brink.Core
                 return false;
             }
 
-            ApplyTerms(state, confrontation, proposerId, opponent, proposal);
+            ApplyTerms(state, confrontation, proposerId, opponent, proposal, category, sourceActionId);
             return true;
         }
 
@@ -491,18 +493,21 @@ namespace Brink.Core
 
         /// <summary>Apply a package the player explicitly accepted.</summary>
         public static bool AcceptOfferedTerms(GameState state, Confrontation confrontation,
-            string proposerId, PeaceProposal proposal)
+            string proposerId, PeaceProposal proposal,
+            CausalCategory category = CausalCategory.Diplomatic,
+            string sourceActionId = null)
         {
             if (confrontation == null || confrontation.resolved
                 || proposal == null || proposal.terms.Count == 0) return false;
             var opponent = state.FindCountry(confrontation.OpponentOf(proposerId));
             if (opponent == null) return false;
-            ApplyTerms(state, confrontation, proposerId, opponent, proposal);
+            ApplyTerms(state, confrontation, proposerId, opponent, proposal, category, sourceActionId);
             return true;
         }
 
         static void ApplyTerms(GameState state, Confrontation confrontation,
-            string proposerId, CountryState opponent, PeaceProposal proposal)
+            string proposerId, CountryState opponent, PeaceProposal proposal,
+            CausalCategory category, string sourceActionId)
         {
             var proposer = state.FindCountry(proposerId);
             var relationship = state.FindRelationship(proposerId, opponent.id);
@@ -529,7 +534,10 @@ namespace Brink.Core
                         float amount = Math.Min(opponent.resources.treasury * 0.25f, 400f);
                         opponent.resources.treasury -= amount;
                         proposer.resources.treasury += amount;
-                        opponent.governmentApproval = Clamp(opponent.governmentApproval - 5f);
+                        Causal.Apply(state, opponent.id, CausalMetric.GovernmentApproval,
+                            CausalReason.Reparations, ref opponent.governmentApproval,
+                            Clamp(opponent.governmentApproval - 5f), category,
+                            sourceActionId: sourceActionId);
                         summary.Add("reparations paid");
                         break;
                     }
@@ -559,7 +567,10 @@ namespace Brink.Core
                         // it at home, and the change outlives the war: their
                         // strategic alignment moves toward ours because the
                         // people who argued for confronting us have just lost.
-                        opponent.governmentApproval = Clamp(opponent.governmentApproval - 12f);
+                        Causal.Apply(state, opponent.id, CausalMetric.GovernmentApproval,
+                            CausalReason.PoliticalConcessions, ref opponent.governmentApproval,
+                            Clamp(opponent.governmentApproval - 12f), category,
+                            sourceActionId: sourceActionId);
                         opponent.government.eliteCohesion = Clamp(opponent.government.eliteCohesion - 8f);
                         if (opponent.government.IsElective)
                             opponent.government.legislativeSupport =
@@ -621,8 +632,14 @@ namespace Brink.Core
                     case PeaceTerm.PrisonerExchange:
                         proposer.resources.manpower += 40f;
                         opponent.resources.manpower += 40f;
-                        proposer.governmentApproval = Clamp(proposer.governmentApproval + 3f);
-                        opponent.governmentApproval = Clamp(opponent.governmentApproval + 3f);
+                        Causal.Apply(state, proposer.id, CausalMetric.GovernmentApproval,
+                            CausalReason.PrisonerExchange, ref proposer.governmentApproval,
+                            Clamp(proposer.governmentApproval + 3f), category,
+                            sourceActionId: sourceActionId);
+                        Causal.Apply(state, opponent.id, CausalMetric.GovernmentApproval,
+                            CausalReason.PrisonerExchange, ref opponent.governmentApproval,
+                            Clamp(opponent.governmentApproval + 3f), category,
+                            sourceActionId: sourceActionId);
                         summary.Add("prisoners exchanged");
                         break;
 
@@ -660,7 +677,10 @@ namespace Brink.Core
                 relationship.relations = Clamp(relationship.relations + 6f);
             }
 
-            proposer.governmentApproval = Clamp(proposer.governmentApproval + 6f);
+            Causal.Apply(state, proposer.id, CausalMetric.GovernmentApproval,
+                CausalReason.PeaceSettlement, ref proposer.governmentApproval,
+                Clamp(proposer.governmentApproval + 6f), category,
+                sourceActionId: sourceActionId);
             if (proposerId == state.playerCountryId)
                 ProgressionSystem.AwardXP(state, 80, "Settlement concluded on our terms");
 

@@ -2704,6 +2704,16 @@ for every figure in the table above.
       test script gets to take. Same sources, same editor binary; only the
       Library was regenerated.
 
+- [x] **Causal peace attribution (2026-09-18).** The next episodic slice uses
+      the existing causal ledger rather than adding another explanation model.
+      `PeaceSystem` records the exact applied approval movements for reparations,
+      political concessions, prisoner exchanges and the settlement dividend.
+      Operator proposals carry `nameof(GameController.ProposeTerms)`; accepted
+      foreign terms carry `nameof(GameController.ResolveCrisis)`; actor-generic
+      calls remain Diplomatic with no invented operator provenance. Arithmetic,
+      clamping, settlement acceptance and world behavior are unchanged. Spec 26
+      §7 and spec 01 §5 document the boundary.
+
 - [x] **Core stability repair (2026-09-12)** — the audit's verdict was that the
       systems connect exactly as designed and the connected loop has no damping:
       cascade heat feeds sanctions feeds ruin feeds coups feeds heat, and every

@@ -1210,7 +1210,8 @@ namespace Brink.Core
             {
                 var proposal = new PeaceProposal();
                 proposal.terms.AddRange(crisis.offeredPeaceTerms);
-                PeaceSystem.AcceptOfferedTerms(state, confrontation, proposerId, proposal);
+                PeaceSystem.AcceptOfferedTerms(state, confrontation, proposerId, proposal,
+                    CausalCategory.PlayerDecision, nameof(GameController.ResolveCrisis));
             }
             else Settle(state, confrontation, proposerId);
         }

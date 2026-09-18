@@ -181,6 +181,92 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void OperatorPeaceTermsNameEachApprovalEffect()
+        {
+            var controller = Operator();
+            var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(war);
+            state.FindCountry("CHN").warSupport = 5f;
+            state.FindCountry("CHN").pillars.government = 10f;
+            war.defenderWarExhaustion = 85f;
+            war.momentum = 55f;
+
+            Assert.IsTrue(controller.ProposeTerms(PeaceProposal.Of(PeaceTerm.PrisonerExchange)),
+                "the other side refused a concession-only settlement, so this test proves nothing");
+
+            var exchange = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PrisonerExchange);
+            var settlement = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PeaceSettlement);
+            Assert.IsNotNull(exchange, "the prisoner exchange remained under OTHER");
+            Assert.IsNotNull(settlement, "the settlement dividend remained under OTHER");
+            Assert.AreEqual(3f, exchange.value, 0.0005f);
+            Assert.AreEqual(6f, settlement.value, 0.0005f);
+            Assert.AreEqual(CausalCategory.PlayerDecision, exchange.category);
+            Assert.AreEqual(nameof(GameController.ProposeTerms), exchange.sourceActionId);
+            Assert.AreEqual(nameof(GameController.ProposeTerms), settlement.sourceActionId);
+
+            turns.EndMonth();
+            var consequence = MonthlyDebriefSystem.Build(state).consequences.Find(
+                c => c.metric == CausalMetric.GovernmentApproval);
+            Assert.IsNotNull(consequence, "the settlement disappeared at rollover");
+            Assert.IsTrue(consequence.playerLinked);
+            Assert.AreEqual(nameof(GameController.ProposeTerms), consequence.sourceActionId);
+        }
+
+        [Test]
+        public void AcceptedForeignTermsNameTheirDomesticCosts()
+        {
+            var controller = Operator();
+            var war = ConfrontationSystem.BeginBy(state, "CHN", state.playerCountryId,
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            Assert.IsNotNull(war);
+            var offer = PeaceProposal.Of(PeaceTerm.Reparations,
+                PeaceTerm.PoliticalConcessions, PeaceTerm.PrisonerExchange);
+            Assert.IsTrue(ConfrontationSystem.OfferConstructedTermsToPlayer(
+                state, war, "CHN", offer));
+
+            var crisis = state.activeCrises[state.activeCrises.Count - 1];
+            controller.ResolveCrisis(crisis, 0);
+
+            var reparations = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.Reparations);
+            var concessions = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PoliticalConcessions);
+            var exchange = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PrisonerExchange);
+            Assert.AreEqual(-5f, reparations.value, 0.0005f);
+            Assert.AreEqual(-12f, concessions.value, 0.0005f);
+            Assert.AreEqual(3f, exchange.value, 0.0005f);
+            foreach (var contribution in new[] { reparations, concessions, exchange })
+            {
+                Assert.AreEqual(CausalCategory.PlayerDecision, contribution.category);
+                Assert.AreEqual(nameof(GameController.ResolveCrisis), contribution.sourceActionId);
+            }
+        }
+
+        [Test]
+        public void ActorGenericPeaceDoesNotInventOperatorProvenance()
+        {
+            var war = ConfrontationSystem.BeginBy(state, state.playerCountryId, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Diplomatic);
+            state.FindCountry("CHN").warSupport = 5f;
+            state.FindCountry("CHN").pillars.government = 10f;
+            war.defenderWarExhaustion = 85f;
+            war.momentum = 55f;
+            Assert.IsTrue(PeaceSystem.ProposeTerms(state, war, state.playerCountryId,
+                PeaceProposal.Of(PeaceTerm.PrisonerExchange)));
+
+            var exchange = ContributionOf(state, CausalMetric.GovernmentApproval,
+                CausalReason.PrisonerExchange);
+            Assert.IsNotNull(exchange);
+            Assert.AreEqual(CausalCategory.Diplomatic, exchange.category);
+            Assert.IsEmpty(exchange.sourceActionId,
+                "the player country acting autonomously was misreported as an operator decision");
+        }
+
+        [Test]
         public void PlayerDecisionWithoutActionIdDoesNotInventProvenance()
         {
             var player = state.PlayerCountry;

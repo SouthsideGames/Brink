@@ -1,9 +1,10 @@
 # 26 — Causal Explainability
 
-**Status: Phase A as-built, plus the first episodic-attribution slice.** The
-framework and a representative vertical slice are live. Answered Crisis Turns
-now identify their approval and market consequences as the operator's decision;
-later phases extend the instrumentation without changing the record shape.
+**Status: Phase A as-built, plus two episodic-attribution slices.** The framework
+and representative vertical slices are live. Answered Crisis Turns and signed
+peace terms now identify their approval consequences and the operator decision
+behind them; later phases extend the instrumentation without changing the record
+shape.
 [`GDD_v1.1.md`](../GDD_v1.1.md) §28.3 is the principle this implements.
 
 The rule, stated once: **when the simulation changes something important, it
@@ -307,6 +308,14 @@ other `Causal.Apply` site. A market crisis left unanswered keeps the existing
 `CrisisLapsed` provenance; actor-generic calls to `CrisisEffects.Apply` carry no
 operator provenance unless the caller supplies it.
 
+The second episodic extension wires constructed peace settlements. Reparations,
+political concessions, prisoner exchanges and the settlement dividend retain
+their distinct causes. Terms proposed through `GameController.ProposeTerms`
+carry that verb; foreign terms accepted through a Crisis Turn carry
+`GameController.ResolveCrisis`. Actor-generic `PeaceSystem` calls remain
+Diplomatic and carry no operator provenance, even when the acting country is the
+player's country. The arithmetic and clamping expressions are unchanged.
+
 ## 8. What Phase A does not do
 
 Recorded honestly so the next reader does not assume more than is there.
@@ -320,9 +329,10 @@ Recorded honestly so the next reader does not assume more than is there.
   would produce exactly the misleading partial explanation this framework exists
   to prevent. `SovereignDebt` carries the fiscal representation instead, and is
   complete.
-- **Most episodic causes are not individually named.** An answered Crisis Turn's
-  approval and market effects are named, but a coup or a peace term that moves a
-  tracked value still shows up in that month's record as `Unattributed`, rendered
-  as OTHER. The *figure* is still exact — `CloseMonth` guarantees the total — but
-  the *reason* is unnamed. The rest are later slices to attribute.
+- **Most episodic causes are not individually named.** Answered Crisis Turns and
+  approval effects applied by constructed peace terms are named, but a coup or
+  other one-off write to a tracked value still shows up in that month's record
+  as `Unattributed`, rendered as OTHER. The *figure* is still exact —
+  `CloseMonth` guarantees the total — but the *reason* is unnamed. The rest are
+  later slices to attribute.
 - **Foreign explanations are not stored**, only disclosed.

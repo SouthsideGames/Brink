@@ -109,6 +109,12 @@ namespace Brink.Data
 
         /// <summary>An answered Crisis Turn changed a tracked domestic outcome.</summary>
         CrisisDecision,
+
+        // ---- appended 2026-09 (episodic settlement attribution). ----
+        Reparations,
+        PoliticalConcessions,
+        PrisonerExchange,
+        PeaceSettlement,
     }
 
     /// <summary>
@@ -181,6 +187,10 @@ namespace Brink.Data
                 case CausalReason.CrisisLapsed: return "CRISIS LEFT UNANSWERED";
                 case CausalReason.DebtRestructured: return "DEBT RESTRUCTURED";
                 case CausalReason.CrisisDecision: return "CRISIS DECISION";
+                case CausalReason.Reparations: return "REPARATIONS";
+                case CausalReason.PoliticalConcessions: return "POLITICAL CONCESSIONS";
+                case CausalReason.PrisonerExchange: return "PRISONER EXCHANGE";
+                case CausalReason.PeaceSettlement: return "PEACE SETTLEMENT";
 
                 default: return "UNSPECIFIED";
             }
