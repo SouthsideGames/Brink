@@ -72,8 +72,7 @@ namespace Brink.UI
             header.text =
                 AsciiChart.BoxHeader("STRATEGIC APTITUDE ASSESSMENT", TerminalMetrics.Columns) + "\n" +
                 $" SCENARIO {index + 1} OF {AssessmentCatalog.Questions.Count}\n" +
-                $" {AsciiChart.Bar(index, AssessmentCatalog.Questions.Count,
-                    System.Math.Max(1, System.Math.Min(40, TerminalMetrics.Columns - 2)))}\n";
+                $" {AsciiChart.Bar(index, AssessmentCatalog.Questions.Count, System.Math.Max(1, System.Math.Min(40, TerminalMetrics.Columns - 2)))}\n";
 
             var situation = AddLabel();
             situation.style.whiteSpace = WhiteSpace.Normal;

@@ -204,12 +204,45 @@ namespace Brink.Tests
             assessment.RefreshLayout();
 
             string allText = "";
+            Label questionHeader = null;
             assessment.Root.Query<Label>().ForEach(label => allText += label.text + "\n");
+            assessment.Root.Query<Label>().ForEach(label =>
+            {
+                if (questionHeader == null && label.ClassListContains("terminal-text-bright"))
+                    questionHeader = label;
+            });
             StringAssert.Contains("SCENARIO 3 OF", allText,
                 "A geometry-only refresh restarted the assessment.");
             foreach (var line in allText.Replace("\r", "").Split('\n'))
                 Assert.LessOrEqual(line.Length, TerminalMetrics.Columns,
                     $"Assessment text still exceeds the folded grid: {line}");
+
+            Assert.IsNotNull(questionHeader);
+            var questionLines = questionHeader.text.Replace("\r", "").Split('\n');
+            Assert.AreEqual(TerminalMetrics.Columns, questionLines[0].Length,
+                "The question header was wrapped after being built to a stale fixed width.");
+            Assert.AreEqual(System.Math.Min(40, TerminalMetrics.Columns - 2),
+                questionLines[2].Trim().Length,
+                "The progress bar no longer derives from the live assessment grid.");
+
+            var answers = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < AssessmentCatalog.Questions.Count; i++) answers.Add(0);
+            var pending = typeof(AssessmentScreen).GetField("pendingResult",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(pending);
+            pending.SetValue(assessment, AssessmentSystem.Evaluate(answers, 7));
+            assessment.RefreshLayout();
+
+            Label completeHeader = null;
+            assessment.Root.Query<Label>().ForEach(label =>
+            {
+                if (completeHeader == null && label.ClassListContains("terminal-text-bright"))
+                    completeHeader = label;
+            });
+            Assert.IsNotNull(completeHeader);
+            Assert.AreEqual(TerminalMetrics.Columns,
+                completeHeader.text.Replace("\r", "").Split('\n')[0].Length,
+                "The completed-assessment header was wrapped from a stale fixed width.");
         }
 
         [Test]
@@ -229,6 +262,8 @@ namespace Brink.Tests
                 "Settings keeps the height it had when it opened and can push CLOSE below the fold.");
             StringAssert.Contains("!gc.AwaitingAssessment && gc.State.HasOpenCrisis", source,
                 "Crisis chrome from the discarded world can remain visible over first launch.");
+            StringAssert.Contains("bool active = !gc.AwaitingAssessment && crises != null", source,
+                "The crisis overlay can reopen over the first-launch assessment.");
         }
 
         [TearDown]
