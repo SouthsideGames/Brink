@@ -296,21 +296,39 @@ namespace Brink.Core
         /// interesting part.
         /// </summary>
         public static float Supply(GameState state, string countryId, TradeFocus focus)
+            => SupplyIfLifted(state, countryId, focus, null, null);
+
+        /// <summary>
+        /// `Supply` as it would read if `liftSenderId`'s regime on
+        /// `liftTargetId` were lifted the way `LiftSanctions` lifts it: that one
+        /// record gone and the pair's link no longer embargoed. Every other
+        /// closure — a regime the other way, a third state's regime, another
+        /// embargo, focus, tariff, stock — is read exactly as it stands, by the
+        /// one loop above. Read-only: nothing on the state moves, so an offer
+        /// can be priced without a preview editing and restoring the live
+        /// world. With no pair named this *is* `Supply`; only the sanctions
+        /// exchange (`DiplomaticLeverage.SupplyReliefGain`) names one.
+        /// </summary>
+        public static float SupplyIfLifted(GameState state, string countryId, TradeFocus focus,
+            string liftSenderId, string liftTargetId)
         {
             if (focus == TradeFocus.General) return 0f;
+            bool lifting = liftSenderId != null && liftTargetId != null;
 
             float supplied = 0f;
             foreach (var link in state.trade)
             {
-                if (!link.Involves(countryId) || link.embargoed) continue;
+                if (!link.Involves(countryId)) continue;
+                bool liftedLink = lifting && link.Involves(liftSenderId) && link.Involves(liftTargetId);
+                if (link.embargoed && !liftedLink) continue;
                 if (link.focus != focus) continue;
 
                 var partner = state.FindCountry(link.PartnerOf(countryId));
                 if (partner == null) continue;
 
                 // A sanctions regime either way closes the tap.
-                if (state.FindSanction(partner.id, countryId) != null) continue;
-                if (state.FindSanction(countryId, partner.id) != null) continue;
+                if (Stands(state, partner.id, countryId, liftSenderId, liftTargetId)) continue;
+                if (Stands(state, countryId, partner.id, liftSenderId, liftTargetId)) continue;
 
                 float theirs;
                 switch (focus)
@@ -326,6 +344,11 @@ namespace Brink.Core
 
             return supplied;
         }
+
+        /// <summary>A regime from sender to target stands — unless it is the one being lifted.</summary>
+        static bool Stands(GameState state, string senderId, string targetId, string liftSenderId, string liftTargetId)
+            => state.FindSanction(senderId, targetId) != null
+               && !(senderId == liftSenderId && targetId == liftTargetId);
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);
     }

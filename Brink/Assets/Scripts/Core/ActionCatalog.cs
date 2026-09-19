@@ -335,6 +335,15 @@ namespace Brink.Core
                 DiplomaticLeverage.Surpluses(state.PlayerCountry).Count > 0,
                 "We hold no energy, materials or food surplus to offer anyone.",
                 verbs: new[] { nameof(GameController.OfferSupplyForCommitment) });
+            bool anyOwnSanction = false;
+            foreach (var sanction in state.sanctions) if (sanction.senderId == state.playerCountryId) { anyOwnSanction = true; break; }
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Lift our sanctions for a commitment", "2 CP",
+                "Lift the measures we imposed on a government in exchange for one commitment it "
+                + "carries for us. The existing 24-month détente then bars new measures from either "
+                + "side; a war voids it, and their commitment is a treaty term that outlives it.",
+                anyOwnSanction,
+                "We have no sanctions of our own in force against anyone.",
+                verbs: new[] { nameof(GameController.OfferSanctionsReliefForCommitment) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Seek sanctions relief", "2 CP",
                 "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
                 + "blowback and warmth persuade; the threat they still see does not.",

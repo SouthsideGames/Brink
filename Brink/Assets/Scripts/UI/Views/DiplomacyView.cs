@@ -47,6 +47,7 @@ namespace Brink.UI.Views
             BuildTargetSelector(state);
             BuildTreatyControls(state);
             BuildLeverageControls(state);
+            BuildSanctionsExchangeControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
             BuildBlocControls(state);
@@ -729,6 +730,70 @@ namespace Brink.UI.Views
                 + " What the link delivers follows the trade rules and our own stocks; we can change or withdraw it "
                 + "later through TRADE at the usual cost, and doing so does not cancel their commitment."
                 + " Declined, nothing changes but the memory of the ask. The same supply cannot buy a second commitment.";
+        }
+
+        /// <summary>
+        /// Slice 2 (spec 04 §5i): lift OUR measures on them for a commitment they
+        /// carry. Ours only — a regime they run against us belongs to SEEK
+        /// SANCTIONS RELIEF, and a third state's regime is not ours to trade.
+        /// </summary>
+        void BuildSanctionsExchangeControls(GameState state)
+        {
+            var target = state.FindCountry(selectedTargetId);
+            if (target == null) return;
+
+            AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("LIFT OUR SANCTIONS FOR A COMMITMENT", W);
+
+            var ours = state.FindSanction(state.playerCountryId, target.id);
+            if (ours == null)
+            {
+                AddText("terminal-text-dim").text = state.FindSanction(target.id, state.playerCountryId) != null
+                    ? "  Their measures on us are theirs to lift — use SEEK SANCTIONS RELIEF above. We run no measures against them, so there is nothing of ours to trade."
+                    : "  We have no measures in force against them — nothing to lift.";
+                return;
+            }
+
+            AddText().text =
+                $"  OUR {Phrase.Caps(ours.severity)} MEASURES AGAINST {target.displayName.ToUpperInvariant()}, IN FORCE {ours.monthsActive} MONTH(S)"
+                + (CouncilSystem.SanctionsMandated(state, target.id) ? " — UNDER A CHAMBER MANDATE" : "")
+                + (state.FindRelationship(state.playerCountryId, target.id)?.sanctionsTruceMonths > 0
+                    ? $" — A DÉTENTE ALREADY HOLDS ({state.FindRelationship(state.playerCountryId, target.id).sanctionsTruceMonths} MO)" : "");
+
+            var standing = state.FindTreaty(state.playerCountryId, target.id);
+            var row = MakeRow();
+            bool anyAsk = false;
+            foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+            {
+                var captured = commitment;
+                bool can = DiplomaticLeverage.CanOfferRelief(state, state.playerCountryId, target.id, captured, out string blocked);
+                var button = AddButton(row, $"LIFT FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
+                {
+                    GameController.Instance.OfferSanctionsReliefForCommitment(selectedTargetId, captured);
+                    Refresh();
+                });
+                if (!can) Block(button, blocked);
+                else anyAsk = true;
+            }
+            ExplainBlockedCommands(Root);
+
+            if (anyAsk)
+            {
+                var outlook = new StringBuilder();
+                foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+                {
+                    var o = DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target.id, commitment);
+                    if (o == TradeOutlook.NoTerms) continue;
+                    outlook.Append(outlook.Length == 0 ? "  OUTLOOK: " : ", ").Append(Phrase.Caps(commitment)).Append(' ').Append(o.ToString().ToUpperInvariant());
+                }
+                AddText("terminal-text-dim").text = outlook.ToString();
+            }
+            AddText("terminal-text-dim").text =
+                "  Accepted, both halves apply at once: our measures end (any embargo on our trade link with them lifts), "
+                + $"and a clause they carry{(standing != null ? " is added to the standing treaty." : " is signed in a new treaty.")}"
+                + $" A détente then holds for at least {EconomySystem.DetenteTruceMonths} months — neither side may impose new measures on the other "
+                + "while it runs; a war between us voids it. After it lapses we may sanction them again at the ordinary cost, "
+                + "and their commitment stands regardless. Declined, our measures and every clause stay exactly as they are. "
+                + "Their worth to them is what the measures cost them today: heavier and fresher measures buy more; ones they have adapted to buy less.";
         }
 
         /// <summary>The clause for a commitment in the current draft, or null.</summary>

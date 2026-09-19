@@ -1646,6 +1646,32 @@ three had passed for a long time:
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
 
+- [x] **Specific diplomatic leverage, slice 2 — lift our sanctions for a
+      commitment** (roadmap #21, spec 04 §5i). Ours on them only; a regime they
+      run against us stays with SEEK SANCTIONS RELIEF. The concession is the
+      existing regime, removed as LIFT SANCTIONS removes it, priced by the
+      exact pressure `SanctionPressureOn` charges them today (severity weight,
+      halved once adapted) plus **the supply that actually resumes**:
+      `TradeSystem.SupplyIfLifted` reads `Supply` with our one regime lifted
+      and nothing else moved (read-only; with no pair named it *is* `Supply`),
+      and `SupplyReliefGain` prices the difference, headroom-capped. The first
+      cut keyed this on the link's `embargoed` flag and priced a link their
+      own regime still closed at +18.9 for a delivery of 0, and a sub-Severe
+      regime closing an open link at 0 for a delivery of 18.9 — priced and
+      delivered are now equal by construction and a test proves phantom
+      supply cannot buy a commitment. The commitment is written through the
+      §5h treaty paths. Durability is the **existing** 24-month détente
+      (`max(existing, 24)` — a longer truce is kept) — `ImposeSanctionsBy`
+      refuses either side while it runs, a war voids it, nothing stronger was
+      invented — and the panel says so, including that their commitment is a
+      treaty term that outlives it. One initiative, 42/32 XP as §5h (the lift
+      verb's own 10 is not added). `SanctionsExchangeTests` (PART_A).
+      **Follow-up, not done:** the cleared `embargoed` flag has readers that
+      never consult sanctions (`TradeHealth`, `ImportDisplacement`, the
+      dependence target, the map glyph, an event gate, the AI's hostility
+      count), so a link their remaining regime still closes reads as open to
+      them — inherited from ordinary LIFT SANCTIONS; spec 04 §5i names it.
+
 - [x] **Specific diplomatic leverage, first slice** (roadmap #21, spec 04 §5h).
       "Something this government needs from us, for a specific commitment."
       An **ordinary** resource supply link (a `TradeRelation` on a commodity we
