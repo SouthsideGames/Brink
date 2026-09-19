@@ -19,6 +19,7 @@ namespace Brink.Core
             public string temperament;
             public string relationship;
             public string instinct;
+            public string continuity;
             public int resistance;
         }
 
@@ -42,8 +43,23 @@ namespace Brink.Core
                 temperament = Temperament(official),
                 relationship = Relationship(official),
                 instinct = Instinct(state, official),
+                continuity = ContinuityFor(official),
                 resistance = Resistance(official)
             };
+        }
+
+        /// <summary>
+        /// How deeply the current officeholder's habits have become the
+        /// institution's habits. Derived from the tenure already in the save:
+        /// no second meter, migration or hidden bonus.
+        /// </summary>
+        public static string ContinuityFor(Official official)
+        {
+            int months = Math.Max(0, official?.monthsInOffice ?? 0);
+            if (months < 12) return "newly appointed — the office is still forming around them";
+            if (months < 48) return "settled in office — routines are taking hold";
+            if (months < 96) return "established command — the institution knows their methods";
+            return "entrenched command — the office carries their imprint";
         }
 
         public static List<Friction> Frictions(GameState state)
@@ -116,6 +132,7 @@ namespace Brink.Core
             if (o.loyalty < 45f) score++;
             if (o.competence > 75f && o.trust < 45f) score++;
             if (o.mode == ControlMode.DirectControl) score++;
+            if (o.monthsInOffice >= 96 && o.trust < 50f) score++;
             return Math.Min(4, score);
         }
 

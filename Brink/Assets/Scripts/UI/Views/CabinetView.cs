@@ -55,6 +55,7 @@ namespace Brink.UI.Views
                 AddText(item.pressure >= 3 ? "sig-hostile" : "terminal-text").text =
                     $" {marker} {item.title.ToUpperInvariant()} — {item.officialName.ToUpperInvariant()}\n" +
                     $"    {item.identity.ToUpperInvariant()} | {item.relationship}\n" +
+                    $"    CONTINUITY: {item.continuity}\n" +
                     $"    {item.position}\n" +
                     $"    CONCERN: {item.concern}" +
                     (item.resistance >= 2 ? "\n    FRICTION: This office is protective of its own judgement." : "");
@@ -194,7 +195,7 @@ namespace Brink.UI.Views
         void BuildOfficialBlock(GameState state, Official official)
         {
             var profile = InstitutionalPersonalitySystem.ProfileFor(state, official);
-            string identity = profile == null ? "" : $"\n  IDENTITY: {profile.identity.ToUpperInvariant()}\n  INSTINCT: {profile.instinct}\n  RELATIONSHIP: {profile.relationship}";
+            string identity = ProfileText(profile);
             AddText().text = AsciiChart.Divider(W) + "\n" +
                 $" {official.displayName}   [{official.office.ToString().ToUpperInvariant()}]   AGE {official.age:F0}   IN OFFICE: {official.monthsInOffice} MO\n" +
                 $"  {official.title}\n" +
@@ -240,6 +241,13 @@ namespace Brink.UI.Views
                 AddText("terminal-text-dim").text = "  " + action.description + " Bypassing the official erodes trust.";
             }
         }
+
+        public static string ProfileText(InstitutionalPersonalitySystem.Profile profile)
+            => profile == null ? "" :
+                $"\n  IDENTITY: {profile.identity.ToUpperInvariant()}" +
+                $"\n  CONTINUITY: {profile.continuity}" +
+                $"\n  INSTINCT: {profile.instinct}" +
+                $"\n  RELATIONSHIP: {profile.relationship}";
 
         void AddModeButton(VisualElement row, Official official, ControlMode mode, string label)
         {

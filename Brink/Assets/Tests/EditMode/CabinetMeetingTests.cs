@@ -1,5 +1,6 @@
 using Brink.Core;
 using Brink.Data;
+using Brink.UI.Views;
 using NUnit.Framework;
 
 namespace Brink.Tests
@@ -67,7 +68,72 @@ namespace Brink.Tests
             Assert.AreEqual(first.identity, second.identity);
             Assert.AreEqual(first.temperament, second.temperament);
             Assert.AreEqual(first.relationship, second.relationship);
+            Assert.AreEqual(first.continuity, second.continuity);
             Assert.AreEqual(first.resistance, second.resistance);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void InstitutionalContinuityChangesAtLegibleTenureBoundaries()
+        {
+            var official = new Official();
+
+            official.monthsInOffice = 0;
+            StringAssert.Contains("newly appointed", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 11;
+            StringAssert.Contains("newly appointed", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 12;
+            StringAssert.Contains("settled in office", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 47;
+            StringAssert.Contains("settled in office", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 48;
+            StringAssert.Contains("established command", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 95;
+            StringAssert.Contains("established command", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 96;
+            StringAssert.Contains("entrenched command", InstitutionalPersonalitySystem.ContinuityFor(official));
+        }
+
+        [Test]
+        public void LongTenureHardensOnlyAnAlreadyStrainedOffice()
+        {
+            var state = WorldFactory.CreateDebugWorld(837);
+            var official = state.PlayerCountry.FindOfficial(Pillar.Economy);
+            official.competence = 60f;
+            official.loyalty = 60f;
+            official.mode = ControlMode.Autonomous;
+            official.trust = 45f;
+            official.monthsInOffice = 95;
+            int before = InstitutionalPersonalitySystem.ProfileFor(state, official).resistance;
+
+            official.monthsInOffice = 96;
+            int entrenched = InstitutionalPersonalitySystem.ProfileFor(state, official).resistance;
+            Assert.AreEqual(before + 1, entrenched,
+                "A long-serving strained office has no more institutional ground than a new one.");
+
+            official.trust = 70f;
+            Assert.AreEqual(0,
+                InstitutionalPersonalitySystem.ProfileFor(state, official).resistance,
+                "Tenure alone became hostility; continuity should deepen an existing dispute, not invent one.");
+        }
+
+        [Test]
+        public void CabinetMeetingMakesContinuityVisibleWithoutMutatingTheSave()
+        {
+            var state = WorldFactory.CreateDebugWorld(838);
+            var official = state.PlayerCountry.FindOfficial(Pillar.Government);
+            official.monthsInOffice = 120;
+            string before = SaveSystem.ToJson(state);
+
+            var positions = CabinetMeetingSystem.Build(state);
+            var government = positions.Find(p => p.pillar == Pillar.Government);
+            string rendered = CabinetMeetingSystem.Render(state);
+
+            StringAssert.Contains("entrenched command", government.continuity);
+            StringAssert.Contains("CONTINUITY:", rendered);
+            StringAssert.Contains("entrenched command", rendered);
+            StringAssert.Contains("CONTINUITY:", CabinetView.ProfileText(
+                InstitutionalPersonalitySystem.ProfileFor(state, official)));
             Assert.AreEqual(before, SaveSystem.ToJson(state));
         }
 

@@ -933,10 +933,13 @@ specified in the GDD and absent from the code:
   reporting and nothing else; there is no threshold at which an official refuses
   an order, briefs against the operator, or joins `RegimeSystem`'s conspiracy —
   even though military loyalty and conspiracy are already simulated next door.
-- **Nothing about an official evolves.** No experience, no traits, no
-  relationships with each other, no reputation. Competence is fixed from the roll
-  that created them until the day they are replaced, so a long-serving minister
-  is never better at the job than on their first month.
+- **Competence and reputation still do not evolve.** Officials now age, retire,
+  die, arrive through candidate shortlists, and acquire visible institutional
+  continuity as their existing `monthsInOffice` crosses the thresholds in spec
+  32. An entrenched but strained office is harder to bypass in the advisory
+  reading; tenure alone grants no hostility or execution bonus. Competence is
+  still fixed from appointment until replacement, and officials have no earned
+  traits or persistent relationships with one another.
 - **`loyalty` and `riskTolerance` are read only by `CabinetSystem`.** Two of the
   four personality axes affect nothing outside this file.
 - **Only one directive reaches its pillar's actual subsystem.** `MIL_READINESS`
