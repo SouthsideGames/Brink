@@ -29,6 +29,9 @@ namespace Brink.UI.Views
         string draftTriggerCountryId = "";
         int draftDurationMonths;
 
+        /// <summary>The commodity currently offered as the concession (spec 04 §5h).</summary>
+        TradeFocus leverageFocus = TradeFocus.General;
+
         protected override void Build()
         {
             var gc = GameController.Instance;
@@ -43,6 +46,7 @@ namespace Brink.UI.Views
             BuildRelationshipBoard(state);
             BuildTargetSelector(state);
             BuildTreatyControls(state);
+            BuildLeverageControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
             BuildBlocControls(state);
@@ -629,6 +633,102 @@ namespace Brink.UI.Views
                 $"  OUR NAME AS A PARTNER: {player.reciprocity:F0}. A state that needs us will "
                 + "sign terms a self-sufficient one would refuse — and everyone else will price "
                 + "that in the next time we ask them for something.";
+        }
+
+        /// <summary>
+        /// Specific leverage (spec 04 §5h): something this government needs from
+        /// us, offered for one commitment it carries. The screen reads only our
+        /// own stocks and the authored (public) endowments — never the other
+        /// side's live figure — and grades the outlook by our collection on them,
+        /// the same way a trade proposal is assessed.
+        /// </summary>
+        void BuildLeverageControls(GameState state)
+        {
+            var player = state.PlayerCountry;
+            var target = state.FindCountry(selectedTargetId);
+            if (target == null) return;
+
+            AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("LEVERAGE — WHAT THEY NEED FROM US", W);
+
+            var surpluses = DiplomaticLeverage.Surpluses(player);
+            if (surpluses.Count == 0)
+            {
+                AddText("terminal-text-dim").text =
+                    $"  We hold no energy, materials or food above {DiplomaticLeverage.SurplusFloor:F0} — "
+                    + "nothing to offer anyone. A surplus is what makes an offer.";
+                return;
+            }
+            if (leverageFocus == TradeFocus.General || !surpluses.Contains(leverageFocus))
+                leverageFocus = surpluses[0];
+
+            // The concession: which surplus we put on the table.
+            var focusRow = MakeRow();
+            foreach (var focus in surpluses)
+            {
+                var captured = focus;
+                var button = AddButton(focusRow,
+                    $"{(captured == leverageFocus ? "► " : "")}OFFER {Phrase.Caps(captured)} SUPPLY",
+                    captured == leverageFocus ? "primary" : null,
+                    () => { leverageFocus = captured; Refresh(); });
+            }
+
+            // What we know about their need, from public facts only.
+            float? authored = DiplomaticLeverage.AuthoredEndowment(target.id, leverageFocus);
+            string need = authored == null
+                ? "NO AUTHORED ENDOWMENT ON RECORD FOR THIS STATE."
+                : authored < 45f ? $"THEIR {Phrase.Caps(leverageFocus)} ENDOWMENT IS THIN — SUPPLY IS WORTH SOMETHING TO THEM."
+                : authored < DiplomaticLeverage.SurplusFloor ? $"THEIR {Phrase.Caps(leverageFocus)} ENDOWMENT IS MODEST."
+                : $"THEY ARE WELL ENDOWED IN {Phrase.Caps(leverageFocus)} — DO NOT EXPECT IT TO BUY MUCH.";
+            var link = state.FindTrade(state.playerCountryId, target.id);
+            AddText("terminal-text-dim").text = "  " + need
+                + (link != null && link.focus == leverageFocus
+                    ? $"\n  THEY ALREADY DRAW {Phrase.Caps(link.focus)} FROM US AT VOLUME {link.volume:F0}, TARIFF {link.tariff:F0}."
+                    : link != null && link.focus == TradeFocus.General
+                        ? $"\n  OUR GENERAL TRADE LINK (VOLUME {link.volume:F0}, TARIFF {link.tariff:F0}) WOULD BECOME THE {Phrase.Caps(leverageFocus)} LINK, KEEPING THE BETTER TERMS."
+                        : "");
+
+            // The commitment: what we ask them to carry in return.
+            var standing = state.FindTreaty(state.playerCountryId, target.id);
+            var askRow = MakeRow();
+            bool anyAsk = false;
+            foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+            {
+                var captured = commitment;
+                bool canOffer = DiplomaticLeverage.CanOffer(state, state.playerCountryId, target.id,
+                    leverageFocus, captured, out string blocked);
+                var button = AddButton(askRow,
+                    $"FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
+                    {
+                        GameController.Instance.OfferSupplyForCommitment(selectedTargetId, leverageFocus, captured);
+                        Refresh();
+                    });
+                if (!canOffer) Block(button, blocked);
+                else anyAsk = true;
+            }
+            ExplainBlockedCommands(Root);
+
+            if (anyAsk)
+            {
+                // One outlook for the package, graded by what our collection
+                // on them supports — never the true reception.
+                var outlookText = new StringBuilder();
+                foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+                {
+                    var outlook = DiplomaticLeverage.Assess(state, state.playerCountryId, target.id, leverageFocus, commitment);
+                    if (outlook == TradeOutlook.NoTerms) continue;
+                    outlookText.Append(outlookText.Length == 0 ? "  OUTLOOK: " : ", ")
+                        .Append(Phrase.Caps(commitment)).Append(' ').Append(outlook.ToString().ToUpperInvariant());
+                }
+                AddText("terminal-text-dim").text = outlookText.ToString();
+            }
+            AddText("terminal-text-dim").text =
+                $"  Accepted, both halves apply at once: an ordinary {Phrase.Of(leverageFocus).ToLowerInvariant()} trade link at "
+                + $"volume {DiplomaticLeverage.OfferVolume:F0} and tariff {DiplomaticLeverage.OfferTariff:F0} (or our existing "
+                + "terms where better) that makes them dependent on us, and a clause they carry"
+                + (standing != null ? " added to the standing treaty." : " in a new treaty.")
+                + " What the link delivers follows the trade rules and our own stocks; we can change or withdraw it "
+                + "later through TRADE at the usual cost, and doing so does not cancel their commitment."
+                + " Declined, nothing changes but the memory of the ask. The same supply cannot buy a second commitment.";
         }
 
         /// <summary>The clause for a commitment in the current draft, or null.</summary>

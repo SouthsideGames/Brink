@@ -987,6 +987,48 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Offer supply they need for one commitment they carry (spec 04 §5h).
+        /// Invalid offers spend nothing; a declined one is a spent attempt,
+        /// exactly like a treaty proposal.
+        ///
+        /// **Reward ownership.** One accepted offer is one Diplomacy decision and
+        /// records exactly one initiative (spec 07). The helpers own the treaty
+        /// act's award: `ConcludeTreaty` records the initiative and 30 XP for a
+        /// player proposer when a treaty is created, so on that path this wrapper
+        /// adds only the exchange's 12 XP; `RecordDeepening` awards nothing (the
+        /// ordinary `DeepenTreaty` wrapper owns its 20 XP and initiative), so on
+        /// that path this wrapper records the initiative and pays the deepening's
+        /// 20 XP plus the exchange's 12. Totals: 42 XP when a treaty is created,
+        /// 32 XP when one is extended, one initiative either way.
+        /// </summary>
+        public bool OfferSupplyForCommitment(string targetId, Data.TradeFocus focus, Data.TreatyCommitment commitment)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomaticLeverage.CanOffer(State, State.playerCountryId, targetId, focus, commitment,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomaticLeverage.OfferCost, "Supply-for-commitment offer"))
+                return false;
+
+            bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
+            bool ok = DiplomaticLeverage.OfferBy(State, State.playerCountryId, targetId, focus, commitment);
+            if (ok)
+            {
+                if (extending)
+                {
+                    ProgressionSystem.RecordInitiative(State);
+                    ProgressionSystem.AwardXP(State, 20, "Treaty deepened");
+                }
+                ProgressionSystem.AwardXP(State, 12, "Leverage exchange concluded");
+            }
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
         public bool BreakTreaty(string partnerId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;

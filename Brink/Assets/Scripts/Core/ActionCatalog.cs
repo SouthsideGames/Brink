@@ -327,6 +327,14 @@ namespace Brink.Core
                 "Add commitments to a standing agreement. A partner with history signs "
                 + "what a stranger would not.",
                 verbs: new[] { nameof(GameController.DeepenTreaty) });
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Offer supply for a commitment", "2 CP",
+                "Open an ordinary supply link on a commodity they are short of — energy, materials "
+                + "or food we hold in surplus — in exchange for one commitment they carry for us. "
+                + "What the link delivers follows the trade rules and our own stocks; it can be "
+                + "changed or withdrawn later through TRADE, and their commitment stands regardless.",
+                DiplomaticLeverage.Surpluses(state.PlayerCountry).Count > 0,
+                "We hold no energy, materials or food surplus to offer anyone.",
+                verbs: new[] { nameof(GameController.OfferSupplyForCommitment) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Seek sanctions relief", "2 CP",
                 "Ask a sender to lift its measures and hold a détente. Fatigue, their own "
                 + "blowback and warmth persuade; the threat they still see does not.",
