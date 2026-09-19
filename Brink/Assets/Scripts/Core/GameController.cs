@@ -1066,6 +1066,39 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Recognise a breakaway in exchange for one commitment it carries
+        /// (spec 04 §5j). Recognition lands through `RecogniseBy` with every
+        /// consequence RECOGNISE A STATE has; that verb's own 14 XP and
+        /// initiative are not added here — one decision is paid once.
+        /// </summary>
+        public bool OfferRecognitionForCommitment(string targetId, Data.TreatyCommitment commitment)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomaticLeverage.CanOfferRecognition(State, State.playerCountryId, targetId, commitment,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomaticLeverage.OfferCost, "Recognition-for-commitment offer"))
+                return false;
+
+            bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
+            bool ok = DiplomaticLeverage.OfferRecognitionBy(State, State.playerCountryId, targetId, commitment);
+            if (ok)
+            {
+                if (extending)
+                {
+                    ProgressionSystem.RecordInitiative(State);
+                    ProgressionSystem.AwardXP(State, 20, "Treaty deepened");
+                }
+                ProgressionSystem.AwardXP(State, 12, "Leverage exchange concluded");
+            }
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
         public bool BreakTreaty(string partnerId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;

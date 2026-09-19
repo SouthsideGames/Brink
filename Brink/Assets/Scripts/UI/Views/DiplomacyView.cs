@@ -48,6 +48,7 @@ namespace Brink.UI.Views
             BuildTreatyControls(state);
             BuildLeverageControls(state);
             BuildSanctionsExchangeControls(state);
+            BuildRecognitionExchangeControls(state);
             BuildAccessionControls(state);
             BuildCoalitionControls(state);
             BuildBlocControls(state);
@@ -794,6 +795,73 @@ namespace Brink.UI.Views
                 + "while it runs; a war between us voids it. After it lapses we may sanction them again at the ordinary cost, "
                 + "and their commitment stands regardless. Declined, our measures and every clause stay exactly as they are. "
                 + "Their worth to them is what the measures cost them today: heavier and fresher measures buy more; ones they have adapted to buy less.";
+        }
+
+        /// <summary>
+        /// Recognition for a commitment (spec 04 §5j). Reads only public facts:
+        /// who they broke away from, how many states have recognised them (each
+        /// recognition is a public act), and our own position.
+        /// </summary>
+        void BuildRecognitionExchangeControls(GameState state)
+        {
+            var target = state.FindCountry(selectedTargetId);
+            if (target == null) return;
+
+            AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("RECOGNITION FOR A COMMITMENT", W);
+
+            if (!DiplomacySystem.IsSuccessor(state, target))
+            {
+                AddText("terminal-text-dim").text = $"  {target.displayName} has always been there — there is nothing to recognise. Recognition is for a state that has just declared itself.";
+                return;
+            }
+            var ours = state.FindRelationship(state.playerCountryId, target.id);
+            if (ours != null && ours.recognised)
+            {
+                AddText("terminal-text-dim").text = $"  We already recognise {target.displayName}. Recognition, once given, is not ours to sell again.";
+                return;
+            }
+
+            var parent = state.FindCountry(DiplomacySystem.ParentOf(state, target));
+            int recognisers = DiplomacySystem.RecognitionCount(state, target.id);
+            AddText().text =
+                $"  RECOGNISING {target.displayName.ToUpperInvariant()}"
+                + (parent != null ? $" — BROKE AWAY FROM {parent.displayName.ToUpperInvariant()}" : "")
+                + $" — RECOGNISED BY {recognisers} OF {state.countries.Count - 1} STATES";
+
+            var standing = state.FindTreaty(state.playerCountryId, target.id);
+            var row = MakeRow();
+            bool anyAsk = false;
+            foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+            {
+                var captured = commitment;
+                bool can = DiplomaticLeverage.CanOfferRecognition(state, state.playerCountryId, target.id, captured, out string blocked);
+                var button = AddButton(row, $"RECOGNISE FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
+                {
+                    GameController.Instance.OfferRecognitionForCommitment(selectedTargetId, captured);
+                    Refresh();
+                });
+                if (!can) Block(button, blocked);
+                else anyAsk = true;
+            }
+            ExplainBlockedCommands(Root);
+
+            if (anyAsk)
+            {
+                var outlook = new StringBuilder();
+                foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+                {
+                    var o = DiplomaticLeverage.AssessRecognitionOffer(state, state.playerCountryId, target.id, commitment);
+                    if (o == TradeOutlook.NoTerms) continue;
+                    outlook.Append(outlook.Length == 0 ? "  OUTLOOK: " : ", ").Append(Phrase.Caps(commitment)).Append(' ').Append(o.ToString().ToUpperInvariant());
+                }
+                AddText("terminal-text-dim").text = outlook.ToString();
+            }
+            AddText("terminal-text-dim").text =
+                "  Accepted, both halves apply at once: we recognise them — exactly as RECOGNISE A STATE does, "
+                + $"warming them and cooling {(parent != null ? parent.displayName : "the state they left")}, who takes it as a hostile act — "
+                + $"and a clause they carry{(standing != null ? " is added to the standing treaty." : " is signed in a new treaty.")}"
+                + " Recognition, once given, is not withdrawn by any rule; their commitment is a treaty term and stands until the treaty is broken at the treaty-break price. "
+                + "Declined, nothing applies. Recognition is worth to them what it always is: a warmer relationship with us, and one more state that admits they exist.";
         }
 
         /// <summary>The clause for a commitment in the current draft, or null.</summary>

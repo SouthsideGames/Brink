@@ -793,6 +793,89 @@ separate piece of work on embargo handling.
 
 **Not in this slice.** Partial lifting or severity reduction; lifting for a
 conditional or bounded clause; recognition or tariff bargaining; an AI caller.
+## 5j. Specific leverage — recognise a state for a commitment (roadmap #21, slice 3)
+
+`DiplomaticLeverage.CanOfferRecognition / OfferRecognitionBy`;
+`GameController.OfferRecognitionForCommitment(targetId, commitment)`; the
+RECOGNITION FOR A COMMITMENT panel on DIPLOMACY; `RecognitionExchangeTests`.
+
+*"We will recognise your state if you agree to this commitment."* **Only a
+breakaway, and only recognition we have not yet given.** Eligibility is
+exactly `DiplomacySystem.CanRecognise` — a `SecessionSystem` successor
+(`IsSuccessor`: founded after the world was), not ourselves, not one we already
+recognise — followed by the treaty gates the other exchanges apply (a broken
+standing treaty, a commitment they already carry, arms control without a
+verification regime). Recognition is granted in exactly one place in the game
+(`RecogniseBy`) and is never withdrawn by any rule, so it cannot be sold twice,
+before or after a save.
+
+**The concession is our actual recognition, through the existing path.**
+Accepted, `RecogniseBy` runs unchanged: the flag, the grateful new state
+(relations +16, trust +12, alignment +10, a memory), the parent's reaction
+(relations −14, trust −10, a memory), the public chronicle line. The commitment
+is then written through `ConcludeNegotiatedTreaty` / `RecordDeepening` exactly
+as in §5h, so direction, conditions and reciprocity behave identically.
+Declined: a memory and an explanation only. Invalid or unaffordable: nothing.
+
+**Pricing, from what recognition is already worth.** Treaty acceptance reads
+the *proposer's* legitimacy (`TreatyWillingness` charges a breakaway proposer
+`(1 − Legitimacy) × 45`), so when we propose to a breakaway that term is zero
+and our recognition reaches their judgement only through the warmth it writes.
+The exchange therefore reads the ask **as they would read it once recognised**
+— the same `TreatyWillingness`, on a detached `Relationship.AsIf()` copy
+carrying exactly the warmth `ApplyRecognitionWarmth` writes (one definition,
+shared with `RecogniseBy`), with rival gravity read through a
+`RelationshipLookup` in which a detached copy of our relationship with their
+**parent** carries exactly the cost `ApplyRecognitionParentCost` charges (the
+other definition `RecogniseBy` shares). The parent is a third state gravity
+reads: a breakaway committed to its parent (alignment past 68, a defence pact,
+a shared bloc) pulls against us once recognition drops our relations with the
+parent under 22, and a preview that warmed the pair without cooling the parent
+read gravity from a world that would not exist after acceptance — measured up
+to 37 points high, enough to flip acceptance (at parent relations 10 and
+alignment 90 the uncorrected read was 70.0 against an actual 43.5). Both
+consequences, nothing live touched — plus the one share of the world's acceptance our
+recognition adds (`LegitimacyGain`, the `Legitimacy` arithmetic read forward
+one recognition), at `LegitimacyWillingnessWeight` (45), the weight the treaty
+test itself puts on legitimacy:
+
+```
+once     = TreatyWillingness([TheyProvide commitment]) read on AsIf(relationship) with recognition's warmth applied
+share    = Legitimacy(after one more recognition) − Legitimacy(now)       — 1/(N−1) until the world is unanimous
+willingness = once + share × 45
+value    = (once − plain) + share × 45                                    — what our recognition is worth to them
+accepted if willingness ≥ 50
+```
+
+Measured on the fixture world (17 states; relations, trust and alignment
+equal): the warmth alone lifts a Transit ask by 14.65 points and the share
+adds 2.81 (17.46 in all), so recognition carries an ask a relationship at the
+same warmth would refuse — at warmth 35 the bare ask reads 32.7 and the
+recognition-backed one 50.2. Accepted at that warmth, the pair moved
+relations 35 → 59 (16 from recognition, 8 from signing), the parent 34 → 20. Nothing is granted before acceptance — the preview copy is never
+stored — and nothing is priced twice: the warmth is inside `once`, the share is
+the one term `TreatyWillingness` cannot see for a target. Reciprocity is
+charged on `ValueOf(commitment) − value / 6` (six willingness points per
+treaty-value unit, the sanctions exchange's ratio).
+
+**Durability.** Recognition is permanent: no verb, tick or event clears
+`Relationship.recognised`. Their commitment is a treaty term and stands until
+the treaty is broken at the treaty-break price. The exchange promises nothing
+beyond those two facts and the panel says so.
+
+**Rewards.** 2 CP (`OfferCost`). One Diplomacy initiative; XP is the treaty
+act's own award plus 12 for the exchange (42 created / 32 extended) under the
+repetition rule. RECOGNISE A STATE's own 14 XP and initiative are deliberately
+not added — one decision is paid once. Ordinary recognition (1 CP, 14 XP) and
+both earlier exchanges are unchanged.
+
+**Information.** The panel prints only public facts: the state, who it broke
+away from (`ParentOf`), how many states recognise it (every recognition is a
+Public chronicle act), our own position, the commitment, direction and cost.
+The outlook is graded by our political collection on them (§5h's rule); a
+test scans the panel for any read of legitimacy, the true reception or their
+resources.
+
 ## 9a. Bloc politics (GDD §24 amendment)
 
 Measured with a befriend-everyone bot: warm relations with **all fifteen** other

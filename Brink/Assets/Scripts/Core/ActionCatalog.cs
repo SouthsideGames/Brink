@@ -365,6 +365,13 @@ namespace Brink.Core
                 anySuccessor,
                 "No state has declared itself that we have not already answered on.",
                 verbs: new[] { nameof(GameController.RecogniseState) });
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Recognise a state for a commitment", $"{DiplomaticLeverage.OfferCost} CP",
+                "Recognise a breakaway in exchange for one commitment it carries for us. Recognition "
+                + "lands with every consequence RECOGNISE A STATE has and is never withdrawn; their "
+                + "commitment is a treaty term.",
+                anySuccessor,
+                "No state has declared itself that we have not already answered on.",
+                verbs: new[] { nameof(GameController.OfferRecognitionForCommitment) });
 
             bool anyToMediate = false;
             foreach (var other in state.confrontations)
