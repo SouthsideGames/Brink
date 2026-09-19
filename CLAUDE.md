@@ -1620,6 +1620,19 @@ three had passed for a long time:
       Guarded by `MapAndLayoutTests.SettingsPanel_FullResetIsReachable`,
       including the two-step confirm staying two-step.
 
+- [x] **Fold transitions preserve and reflow first-launch state** (spec 09
+      §§3, 11). A Z Fold device exposed three linked lifecycle defects: a root
+      geometry event could measure the content host before its folded width had
+      settled, every assessment refresh called `Restart`, and an already-open
+      Settings panel kept the height measured when it opened. The content host
+      now triggers the authoritative width measurement after its own layout;
+      height-only changes also rebuild capped panels; assessment refreshes keep
+      their answers and use the live grid instead of fixed 72/40-column output;
+      and Settings recomputes its reader cap so pinned CLOSE remains reachable.
+      Assessment mode also suppresses stale crisis chrome from the discarded
+      world. Guarded by `MapAndLayoutTests` at folded and unfolded dimensions;
+      final hardware feel remains part of the end-of-roadmap device pass.
+
 - [x] **The first actor that is not a government** (`InsurgencySystem`, spec 16).
       Every actor on the map was a state, so the only violence available was
       declared, attributed and closed with a verdict — there was **no way to

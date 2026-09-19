@@ -48,11 +48,20 @@ namespace Brink.UI
             Render();
         }
 
+        /// <summary>
+        /// Rebuild for a new measured width without losing an assessment that
+        /// is already in progress. Folding a phone changes geometry, not the
+        /// operator's answers.
+        /// </summary>
+        public void RefreshLayout() => Render();
+
         void Render()
         {
             Root.Clear();
             if (pendingResult != null) RenderIntervention();
             else if (index < AssessmentCatalog.Questions.Count) RenderQuestion();
+            TerminalShellController.ApplyTextPolicy(
+                Root, DisplaySettings.ParagraphSpacing, TerminalMetrics.Columns);
         }
 
         void RenderQuestion()
@@ -61,9 +70,10 @@ namespace Brink.UI
 
             var header = AddLabel("terminal-text-bright");
             header.text =
-                AsciiChart.BoxHeader("STRATEGIC APTITUDE ASSESSMENT", 72) + "\n" +
+                AsciiChart.BoxHeader("STRATEGIC APTITUDE ASSESSMENT", TerminalMetrics.Columns) + "\n" +
                 $" SCENARIO {index + 1} OF {AssessmentCatalog.Questions.Count}\n" +
-                $" {AsciiChart.Bar(index, AssessmentCatalog.Questions.Count, 40)}\n";
+                $" {AsciiChart.Bar(index, AssessmentCatalog.Questions.Count,
+                    System.Math.Max(1, System.Math.Min(40, TerminalMetrics.Columns - 2)))}\n";
 
             var situation = AddLabel();
             situation.style.whiteSpace = WhiteSpace.Normal;
@@ -96,7 +106,7 @@ namespace Brink.UI
 
             var header = AddLabel("terminal-text-bright");
             var sb = new StringBuilder();
-            sb.AppendLine(AsciiChart.BoxHeader("ASSESSMENT COMPLETE", 72));
+            sb.AppendLine(AsciiChart.BoxHeader("ASSESSMENT COMPLETE", TerminalMetrics.Columns));
             sb.AppendLine($" {pendingResult.classificationText}");
             sb.AppendLine();
             sb.AppendLine(" ASSESSED DISPOSITION");

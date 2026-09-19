@@ -108,11 +108,12 @@ namespace Brink.UI
             }
 
             bool shortScreen = heightPt > 0f && heightPt < ShortScreenHeight;
+            bool heightChanged = heightPt > 0f && Math.Abs(heightPt - PanelHeight) > 0.5f;
             if (heightPt > 0f) PanelHeight = heightPt;
             if (charWidthPt > 0.01f) CharWidth = charWidthPt;
             if (contentWidthPt > 0f) ContentWidth = contentWidthPt;
 
-            if (columns == Columns && shortScreen == ShortScreen && size == Size) return false;
+            if (columns == Columns && shortScreen == ShortScreen && size == Size && !heightChanged) return false;
 
             Columns = columns;
             ShortScreen = shortScreen;
@@ -136,6 +137,9 @@ namespace Brink.UI
             Columns = 64;
             ShortScreen = false;
             Size = SizeClass.Compact;
+            PanelHeight = 640f;
+            CharWidth = 8f;
+            ContentWidth = 512f;
         }
     }
 }

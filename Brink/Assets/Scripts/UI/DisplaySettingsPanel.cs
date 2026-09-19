@@ -60,6 +60,16 @@ namespace Brink.UI
             Root.style.display = DisplayStyle.None;
         }
 
+        /// <summary>Keep the reader inside the newly measured screen.</summary>
+        public void RefreshLayout()
+        {
+            reader.style.maxHeight = ReaderHeightFor(
+                TerminalMetrics.PanelHeight, TerminalMetrics.ShortScreen);
+        }
+
+        public static float ReaderHeightFor(float panelHeight, bool shortScreen)
+            => Mathf.Max(44f, panelHeight * (shortScreen ? 0.55f : 0.70f));
+
         void Rebuild()
         {
             reader.Clear();
@@ -72,8 +82,7 @@ namespace Brink.UI
             // Settings may cover most of the screen — unlike the tutorial they
             // are not teaching the panel behind them — but never all of it, and
             // never more than fits: the content scrolls to whatever remains.
-            reader.style.maxHeight =
-                TerminalMetrics.PanelHeight * (TerminalMetrics.ShortScreen ? 0.55f : 0.70f);
+            RefreshLayout();
 
             var title = new Label("DISPLAY");
             title.AddToClassList("terminal-text-bright");
