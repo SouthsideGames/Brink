@@ -416,21 +416,25 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Ceiling points that resume for them when the lift un-embargoes a
-        /// commodity link — the one other thing `LiftSanctions` does. Zero
-        /// unless a Severe-or-worse regime closed a commodity link. Priced by
-        /// the same supply arithmetic as the first slice, bounded by headroom.
+        /// Ceiling points that actually resume for them when our regime goes:
+        /// `TradeSystem.Supply` with our regime lifted the way the lift lifts
+        /// it, minus `Supply` as it stands, bounded by the room they have to
+        /// use it. The authoritative supply rules decide, never the embargo
+        /// flag: their own regime on us, a third state's regime or a `General`
+        /// link still deliver nothing and are priced at nothing, and a
+        /// sub-Severe regime that was closing an open commodity link is priced
+        /// at exactly what reopening it delivers. Read-only.
         /// </summary>
-        public static float EmbargoReliefGain(GameState state, string actorId, string targetId)
+        public static float SupplyReliefGain(GameState state, string actorId, string targetId)
         {
-            var actor = state?.FindCountry(actorId);
             var target = state?.FindCountry(targetId);
             var link = state?.FindTrade(actorId, targetId);
-            if (actor == null || target == null || link == null || !link.embargoed || link.focus == TradeFocus.General) return 0f;
+            if (target == null || link == null || link.focus == TradeFocus.General) return 0f;
             if (state.FindSanction(actorId, targetId) == null) return 0f;
-            float resumed = OwnStock(actor, link.focus) * TradeSystem.MaxSupplyShare * Throughput(link.volume, link.tariff);
+            float now = TradeSystem.Supply(state, targetId, link.focus);
+            float lifted = TradeSystem.SupplyIfLifted(state, targetId, link.focus, actorId, targetId);
             float headroom = Math.Max(0f, 100f - CurrentCeiling(state, target, link.focus));
-            return Math.Max(0f, Math.Min(resumed, headroom));
+            return Math.Max(0f, Math.Min(lifted - now, headroom));
         }
 
         /// <summary>
@@ -443,7 +447,7 @@ namespace Brink.Core
             float treaty = DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
             return treaty
                    + SanctionsReliefValue(state, actorId, targetId) * WillingnessPerPressurePoint
-                   + EmbargoReliefGain(state, actorId, targetId) * WillingnessPerCeilingPoint;
+                   + SupplyReliefGain(state, actorId, targetId) * WillingnessPerCeilingPoint;
         }
 
         /// <summary>Outlook graded by our political collection on them — the `Assess` rule of the first slice.</summary>
@@ -472,7 +476,7 @@ namespace Brink.Core
         /// Put the offer. Actor-generic and free of CP; the player wrapper on
         /// `GameController` spends. Accepted: the regime is removed exactly as
         /// `LiftSanctions` removes it (embargo cleared), the existing 24-month
-        /// détente is set on the pair, and the clause is written through the
+        /// détente is set on the pair (a longer one already running is kept), and the clause is written through the
         /// shared treaty paths — together or not at all. Declined or invalid:
         /// the regime, every other regime and every clause stay as they were.
         /// </summary>
@@ -512,8 +516,9 @@ namespace Brink.Core
 
             // The existing détente, and nothing stronger: neither side may
             // impose new measures on the other while it runs; a declaration of
-            // war voids it (ConfrontationSystem.BeginBy).
-            relationship.sanctionsTruceMonths = EconomySystem.DetenteTruceMonths;
+            // war voids it (ConfrontationSystem.BeginBy). A longer truce already
+            // running is kept — the lift never shortens one.
+            relationship.sanctionsTruceMonths = Math.Max(relationship.sanctionsTruceMonths, EconomySystem.DetenteTruceMonths);
             relationship.relations = Clamp(relationship.relations + 6f);
             relationship.trust = Clamp(relationship.trust + 5f);
             relationship.AddMemory(state.date, "Negotiated an end to sanctions", 1.5f);

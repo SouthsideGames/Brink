@@ -713,8 +713,9 @@ state we are fighting (a war voids any détente the moment it is signed).
 **The concession is the regime itself.** Accepted, it is removed exactly as
 `EconomySystem.LiftSanctions` removes it — the `Sanction` record goes, and an
 embargo on our trade link with them lifts — and the **existing détente** is
-set: `Relationship.sanctionsTruceMonths = DetenteTruceMonths` (24), the same
-field `SeekSanctionsReliefBy` sets. Relations +6 / trust +5 and the "Negotiated
+set: `Relationship.sanctionsTruceMonths = max(existing, DetenteTruceMonths)`
+(24), the same field `SeekSanctionsReliefBy` sets; a longer truce already
+running on the pair is kept, never shortened. Relations +6 / trust +5 and the "Negotiated
 an end to sanctions" memory follow, as for negotiated relief. The commitment is
 then written through `ConcludeNegotiatedTreaty` / `RecordDeepening` exactly as
 in §5h, so direction, conditions and reciprocity behave identically.
@@ -724,10 +725,31 @@ in §5h, so direction, conditions and reciprocity behave identically.
 ```
 value      = Weight(severity) × (1 − SanctionAdaptationFloor × min(1, monthsActive / SanctionAdaptationMonths))
              — the exact term SanctionPressureOn charges them for this regime today
-embargo    = ceiling points that resume when the lift un-embargoes a commodity link (§5h arithmetic, headroom-capped)
-willingness = TreatyWillingness([TheyProvide commitment]) + value × 12 + embargo × 1.5
+supply     = min( TradeSystem.SupplyIfLifted(them, focus, us→them) − TradeSystem.Supply(them, focus),
+                  100 − their current ceiling )
+             — the ceiling points that actually resume for them on our link's commodity
+willingness = TreatyWillingness([TheyProvide commitment]) + value × 12 + supply × 1.5
 accepted if willingness ≥ 50
 ```
+
+**The supply half is priced by what the lift delivers, never by the embargo
+flag.** `TradeSystem.SupplyIfLifted(state, country, focus, liftSender,
+liftTarget)` is `Supply` read as if that one regime were lifted the way
+`LiftSanctions` lifts it — the record gone, the pair's link no longer
+embargoed — with every other closure read exactly as it stands: their own
+regime on us, a third state's regime, another embargo, the focus, the tariff,
+the partner's stock. It shares `Supply`'s single loop (with no pair named it
+*is* `Supply`, and that is the only path anything else calls), it is read-only
+(no preview edits and restores the live world), and `SupplyReliefGain` takes
+the difference and caps it by their headroom. Consequences the tests pin: a
+regime *they* still run on us keeps the link closed under the supply rules, so
+the lift resumes nothing and is priced at nothing whatever the flag says; a
+sub-Severe regime of ours (which sets no flag) that was closing an open
+commodity link is priced at exactly what reopening it delivers; a `General`
+link or no link is nothing; a third state's supply they already draw is never
+re-priced as a gain; the price is bounded by the room they have. In every case
+`SupplyReliefGain` equals the change in their ceiling the accepted exchange
+produces, and phantom supply cannot carry an ask the honest price refuses.
 
 A fresh Coercive regime (1.5) is worth +18 — enough to carry a Transit ask
 (−12.8 in the treaty test) a relationship would otherwise refuse; Severe (2.4)
@@ -757,6 +779,17 @@ requests, proposals, deepening and the supply exchange are unchanged.
 age, a mandate, a running détente. The outlook is graded by our political
 collection on them (§5h's rule); a test scans the panel for any read of their
 live resources or the true reception.
+
+**Inherited, recorded as a follow-up, not changed here.** The lift clears the
+pair's `embargoed` flag exactly as `LiftSanctions` does, even when a regime
+*they* run on us still closes the link under `Supply`. `Supply` is now priced
+truthfully, but the flag has other readers that do not consult sanctions —
+`TradeHealth` and `ImportDisplacement` (`EconomySystem`), the dependence
+target (`DiplomacySystem.MonthlyUpdate`), the map's link glyph, an event gate
+and the AI's hostility count — so those read the link as open while it
+delivers nothing. The same inconsistency follows the ordinary LIFT SANCTIONS
+verb and predates this slice; reconciling the flag with the supply rules is a
+separate piece of work on embargo handling.
 
 **Not in this slice.** Partial lifting or severity reduction; lifting for a
 conditional or bounded clause; recognition or tariff bargaining; an AI caller.

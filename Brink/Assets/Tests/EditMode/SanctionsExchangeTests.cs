@@ -326,11 +326,270 @@ namespace Brink.Tests
         {
             Impose(SanctionSeverity.Coercive); WarmToTheMargin(TreatyCommitment.Transit);
             string before = SaveSystem.ToJson(state); int seq = state.actionSequence;
-            foreach (TreatyCommitment c in Enum.GetValues(typeof(TreatyCommitment))) { DiplomaticLeverage.CanOfferRelief(state, state.playerCountryId, target, c, out _); DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target, c); DiplomaticLeverage.ReliefOfferWillingness(state, state.playerCountryId, target, c); DiplomaticLeverage.SanctionsReliefValue(state, state.playerCountryId, target); DiplomaticLeverage.EmbargoReliefGain(state, state.playerCountryId, target); }
+            foreach (TreatyCommitment c in Enum.GetValues(typeof(TreatyCommitment))) { DiplomaticLeverage.CanOfferRelief(state, state.playerCountryId, target, c, out _); DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target, c); DiplomaticLeverage.ReliefOfferWillingness(state, state.playerCountryId, target, c); DiplomaticLeverage.SanctionsReliefValue(state, state.playerCountryId, target); DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target); }
             Assert.AreEqual(before, SaveSystem.ToJson(state)); Assert.AreEqual(seq, state.actionSequence);
             var a = SaveSystem.FromJson(before); var b = SaveSystem.FromJson(before);
             Assert.IsTrue(DiplomaticLeverage.OfferReliefBy(a, a.playerCountryId, target, TreatyCommitment.Transit)); Assert.IsTrue(DiplomaticLeverage.OfferReliefBy(b, b.playerCountryId, target, TreatyCommitment.Transit));
             Assert.AreEqual(SaveSystem.ToJson(a), SaveSystem.ToJson(b));
+        }
+
+        // ---------- pricing: what the lift actually delivers (spec 04 §5i) ----------
+
+        static float CeilingOf(GameState s, string id, TradeFocus f)
+        {
+            var c = s.FindCountry(id);
+            switch (f)
+            {
+                case TradeFocus.Energy: return EconomySystem.EnergyCeilingFor(s, c);
+                case TradeFocus.Materials: return EconomySystem.MaterialsCeilingFor(s, c);
+                default: return EconomySystem.FoodCeilingFor(s, c);
+            }
+        }
+
+        static void SetStock(CountryState c, TradeFocus f, float v)
+        {
+            if (f == TradeFocus.Energy) c.resources.energy = v;
+            else if (f == TradeFocus.Materials) c.resources.strategicMaterials = v;
+            else c.resources.foodSecurity = v;
+        }
+
+        static void SetEndowment(CountryState c, TradeFocus f, float v)
+        {
+            if (f == TradeFocus.Energy) c.resources.energyEndowment = v;
+            else if (f == TradeFocus.Materials) c.resources.materialsEndowment = v;
+            else c.resources.foodEndowment = v;
+        }
+
+        /// <summary>Supply's own arithmetic for one link at stock 90, volume 40, tariff 20 — the figure every case below is priced against.</summary>
+        const float LinkStock = 90f, LinkVolume = 40f, LinkTariff = 20f;
+        static float OneLink(float stock = LinkStock, float volume = LinkVolume, float tariff = LinkTariff)
+            => stock * TradeSystem.MaxSupplyShare * (volume / 100f * (1f - tariff / 150f));
+
+        TradeRelation Link(string a, string b, TradeFocus f, float volume, float tariff, bool embargoed = false)
+        {
+            var l = new TradeRelation { countryA = a, countryB = b, focus = f, volume = volume, tariff = tariff, embargoed = embargoed, initiatedBy = a };
+            state.trade.Add(l); return l;
+        }
+
+        /// <summary>Nothing but the links a case adds carries this commodity to them, so every figure is accounted for.</summary>
+        void IsolateSupply(TradeFocus f) => state.trade.RemoveAll(l => l.Involves(target) && l.focus == f);
+
+        /// <summary>What the exchange delivered: their ceiling after against before, through the real command path.</summary>
+        float Deliver(TreatyCommitment c, TradeFocus f)
+        {
+            float before = CeilingOf(state, target, f);
+            Assert.IsTrue(gc.OfferSanctionsReliefForCommitment(target, c), "fixture: the offer was not accepted");
+            Assert.IsNull(state.FindSanction(state.playerCountryId, target));
+            return CeilingOf(state, target, f) - before;
+        }
+
+        [Test]
+        public void ReciprocalSanctions_ArePricedAtNothingBecauseTheLiftDeliversNothing()
+        {
+            IsolateSupply(TradeFocus.Energy);
+            var link = Link(state.playerCountryId, target, TradeFocus.Energy, LinkVolume, LinkTariff);
+            state.PlayerCountry.resources.energy = LinkStock;
+            SetEndowment(state.FindCountry(target), TradeFocus.Energy, 20f);
+            Impose(SanctionSeverity.Severe);
+            Assert.IsTrue(link.embargoed, "fixture: a Severe regime embargoes the link");
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, target, state.playerCountryId, SanctionSeverity.Coercive, "RIVALRY"), "fixture: their regime on us");
+            Assert.IsNotNull(state.FindSanction(target, state.playerCountryId));
+            float phantom = OneLink();
+            Assert.Greater(phantom, 10f, "fixture: the link would carry real supply if only our regime closed it");
+            Assert.AreEqual(0f, TradeSystem.Supply(state, target, TradeFocus.Energy), 0.0001f, "fixture: nothing supplies them now");
+            Assert.Less(CeilingOf(state, target, TradeFocus.Energy), 100f - phantom, "fixture: they have the room to use it");
+
+            float priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.AreEqual(0f, priced, 0.0001f, "their remaining regime on us keeps the link closed, so the lift resumes nothing and is priced at nothing");
+            float pressureTerm = DiplomaticLeverage.SanctionsReliefValue(state, state.playerCountryId, target) * DiplomaticLeverage.WillingnessPerPressurePoint;
+            Assert.AreEqual(DiplomacySystem.TreatyWillingness(state, state.playerCountryId, target, TheyProvide(TreatyCommitment.Transit)) + pressureTerm,
+                DiplomaticLeverage.ReliefOfferWillingness(state, state.playerCountryId, target, TreatyCommitment.Transit), 0.001f,
+                "the pressure term is unchanged and carries the ask alone");
+
+            WarmToTheMargin(TreatyCommitment.Transit);
+            float delivered = Deliver(TreatyCommitment.Transit, TradeFocus.Energy);
+            Assert.AreEqual(0f, delivered, 0.0001f, "delivered: nothing");
+            Assert.AreEqual(0f, TradeSystem.Supply(state, target, TradeFocus.Energy), 0.0001f);
+            Assert.IsNotNull(state.FindSanction(target, state.playerCountryId), "their regime on us is theirs and stands");
+            Assert.IsFalse(link.embargoed, "the flag is cleared as LIFT SANCTIONS clears it; the supply rules still close the link on their regime");
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
+        public void ASubSevereRegimeOnAnOpenLink_IsPricedAtExactlyWhatReopeningDelivers(TradeFocus focus)
+        {
+            IsolateSupply(focus);
+            var link = Link(state.playerCountryId, target, focus, LinkVolume, LinkTariff);
+            SetStock(state.PlayerCountry, focus, LinkStock);
+            SetEndowment(state.FindCountry(target), focus, 20f);
+            Impose(SanctionSeverity.Coercive);
+            Assert.IsFalse(link.embargoed, "fixture: a sub-Severe regime sets no embargo flag");
+            float resumed = OneLink();
+            Assert.AreEqual(0f, TradeSystem.Supply(state, target, focus), 0.0001f, "fixture: our regime closes the only link");
+            Assert.Greater(100f - CeilingOf(state, target, focus), resumed + 1f, "fixture: headroom does not bind");
+
+            float priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.AreEqual(resumed, priced, 0.001f, "priced by the supply rules: the open link our regime was closing");
+            Assert.Greater(priced, 10f);
+
+            WarmToTheMargin(TreatyCommitment.Transit);
+            float delivered = Deliver(TreatyCommitment.Transit, focus);
+            Assert.AreEqual(priced, delivered, 0.001f, "priced == delivered");
+            Assert.AreEqual(resumed, TradeSystem.Supply(state, target, focus), 0.001f);
+        }
+
+        [Test]
+        public void AGeneralLinkOrNoLink_IsPricedAtNothingAndDeliversNothing()
+        {
+            state.PlayerCountry.resources.energy = 90f; state.PlayerCountry.resources.strategicMaterials = 90f; state.PlayerCountry.resources.foodSecurity = 90f;
+            Impose(SanctionSeverity.Severe);
+            Assert.IsNull(state.FindTrade(state.playerCountryId, target), "fixture: no link");
+            Assert.AreEqual(0f, DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target), 0.0001f, "no link: nothing to reopen");
+            var link = Link(state.playerCountryId, target, TradeFocus.General, 80f, 0f, embargoed: true);
+            Assert.AreEqual(0f, DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target), 0.0001f, "a General link supplies no commodity, embargoed or not");
+            WarmToTheMargin(TreatyCommitment.Transit);
+            var before = (CeilingOf(state, target, TradeFocus.Energy), CeilingOf(state, target, TradeFocus.Materials), CeilingOf(state, target, TradeFocus.Food));
+            Assert.IsTrue(gc.OfferSanctionsReliefForCommitment(target, TreatyCommitment.Transit));
+            Assert.IsFalse(link.embargoed);
+            Assert.AreEqual(before, (CeilingOf(state, target, TradeFocus.Energy), CeilingOf(state, target, TradeFocus.Materials), CeilingOf(state, target, TradeFocus.Food)),
+                "delivered: nothing on any commodity");
+        }
+
+        [Test]
+        public void HeadroomAndOtherSuppliersBoundThePrice_AndThePriceIsWhatIsDelivered()
+        {
+            IsolateSupply(TradeFocus.Energy);
+            var tgt = state.FindCountry(target);
+            state.PlayerCountry.resources.energy = LinkStock; state.FindCountry(third).resources.energy = 80f;
+            Link(third, target, TradeFocus.Energy, 60f, 10f);
+            Link(state.playerCountryId, target, TradeFocus.Energy, LinkVolume, LinkTariff);
+            Impose(SanctionSeverity.Coercive);
+            SetEndowment(tgt, TradeFocus.Energy, 20f);
+            float others = TradeSystem.Supply(state, target, TradeFocus.Energy);
+            Assert.AreEqual(OneLink(80f, 60f, 10f), others, 0.001f, "fixture: the third state's open link supplies them now");
+            Assert.Greater(others, 5f);
+            float resumed = OneLink();
+
+            // ample room: only OUR link's contribution is priced, never what they already draw from others
+            float priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.AreEqual(resumed, priced, 0.001f, "priced: our link alone");
+            Assert.Less(priced, others + resumed - 1f, "existing supply must not be re-priced as a gain");
+
+            // room for five points only: the price is the room, and so is the delivery
+            float ceiling = CeilingOf(state, target, TradeFocus.Energy);
+            SetEndowment(tgt, TradeFocus.Energy, 20f + (95f - ceiling));
+            Assert.AreEqual(95f, CeilingOf(state, target, TradeFocus.Energy), 0.01f, "fixture: the ceiling did not land at 95");
+            Assert.Greater(resumed, 6f, "fixture: the link would carry more than the room");
+            priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.AreEqual(5f, priced, 0.01f, "bounded by headroom");
+
+            WarmToTheMargin(TreatyCommitment.Transit);
+            float delivered = Deliver(TreatyCommitment.Transit, TradeFocus.Energy);
+            Assert.AreEqual(priced, delivered, 0.01f, "priced == delivered at the ceiling");
+            Assert.AreEqual(others + resumed, TradeSystem.Supply(state, target, TradeFocus.Energy), 0.001f, "the third state's link is still counted; ours reopened");
+        }
+
+        [Test]
+        public void UnrelatedRegimesStand_AndStillCloseTheirOwnLinks()
+        {
+            IsolateSupply(TradeFocus.Energy);
+            state.PlayerCountry.resources.energy = LinkStock; state.FindCountry(third).resources.energy = 80f;
+            SetEndowment(state.FindCountry(target), TradeFocus.Energy, 20f);
+            Link(third, target, TradeFocus.Energy, 60f, 10f);
+            Link(state.playerCountryId, target, TradeFocus.Energy, LinkVolume, LinkTariff);
+            Impose(SanctionSeverity.Coercive);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, third, target, SanctionSeverity.Pressure, "RIVALRY"), "fixture: a third state's regime on them");
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, state.playerCountryId, third, SanctionSeverity.Routine, "PLAYER"), "fixture: our regime on a third state");
+            Assert.AreEqual(0f, TradeSystem.Supply(state, target, TradeFocus.Energy), 0.0001f, "fixture: both links closed by a regime");
+            float resumed = OneLink();
+            float priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.AreEqual(resumed, priced, 0.001f, "only our link reopens; the third state's regime keeps theirs closed");
+
+            WarmToTheMargin(TreatyCommitment.Transit);
+            int count = state.sanctions.Count;
+            float delivered = Deliver(TreatyCommitment.Transit, TradeFocus.Energy);
+            Assert.AreEqual(priced, delivered, 0.001f, "priced == delivered");
+            Assert.AreEqual(count - 1, state.sanctions.Count, "exactly our regime on them went");
+            Assert.IsNotNull(state.FindSanction(third, target)); Assert.IsNotNull(state.FindSanction(state.playerCountryId, third));
+            Assert.AreEqual(resumed, TradeSystem.Supply(state, target, TradeFocus.Energy), 0.001f, "the third state's link is still closed");
+        }
+
+        [Test]
+        public void PricingPreviewsLeaveTheLiveWorldByteIdentical()
+        {
+            IsolateSupply(TradeFocus.Energy);
+            state.PlayerCountry.resources.energy = LinkStock;
+            var link = Link(state.playerCountryId, target, TradeFocus.Energy, LinkVolume, LinkTariff);
+            Impose(SanctionSeverity.Severe);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, target, state.playerCountryId, SanctionSeverity.Coercive, "RIVALRY"));
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, third, target, SanctionSeverity.Pressure, "RIVALRY"));
+            Assert.IsTrue(link.embargoed, "fixture: the pair's link is embargoed");
+            string before = SaveSystem.ToJson(state); int seq = state.actionSequence, sanctions = state.sanctions.Count;
+            for (int i = 0; i < 3; i++)
+            {
+                DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+                TradeSystem.SupplyIfLifted(state, target, TradeFocus.Energy, state.playerCountryId, target);
+                DiplomaticLeverage.ReliefOfferWillingness(state, state.playerCountryId, target, TreatyCommitment.Transit);
+                DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target, TreatyCommitment.Transit);
+                Assert.IsTrue(link.embargoed, "a preview un-embargoed the live link");
+                Assert.AreEqual(sanctions, state.sanctions.Count, "a preview removed a live regime");
+            }
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "a preview changed the live world");
+            Assert.AreEqual(seq, state.actionSequence);
+        }
+
+        [TestCase(30, 30)]
+        [TestCase(6, 24)]
+        [TestCase(0, 24)]
+        public void ALongerStandingDetenteIsKept_AShorterOneIsRaisedToTheDetente(int standing, int expected)
+        {
+            Assert.AreEqual(24, EconomySystem.DetenteTruceMonths, "fixture: the détente constant moved; re-read the cases");
+            Impose(SanctionSeverity.Coercive);
+            var r = state.FindRelationship(state.playerCountryId, target);
+            r.sanctionsTruceMonths = standing;
+            WarmToTheMargin(TreatyCommitment.Transit);
+            Assert.IsTrue(gc.OfferSanctionsReliefForCommitment(target, TreatyCommitment.Transit));
+            Assert.AreEqual(expected, r.sanctionsTruceMonths, "Max(existing, 24)");
+            Assert.IsFalse(EconomySystem.ImposeSanctionsBy(state, target, state.playerCountryId, SanctionSeverity.Coercive, "RIVALRY"), "the bar on new measures runs from there as before");
+        }
+
+        [Test]
+        public void PhantomSupplyCannotBuyACommitment()
+        {
+            IsolateSupply(TradeFocus.Energy);
+            // a large link, so the phantom's margin is wide enough to straddle any step in the treaty test
+            state.PlayerCountry.resources.energy = 100f;
+            SetEndowment(state.FindCountry(target), TradeFocus.Energy, 20f);
+            var link = Link(state.playerCountryId, target, TradeFocus.Energy, 80f, 0f);
+            Impose(SanctionSeverity.Severe);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, target, state.playerCountryId, SanctionSeverity.Coercive, "RIVALRY"), "fixture: their regime on us");
+            Assert.IsTrue(link.embargoed, "fixture: the pair's link is embargoed");
+            float phantom = OneLink(100f, 80f, 0f);
+            Assert.GreaterOrEqual(100f - CeilingOf(state, target, TradeFocus.Energy), phantom, "fixture: flag-only pricing would not have been headroom-capped");
+            float phantomTerm = phantom * DiplomaticLeverage.WillingnessPerCeilingPoint;
+            Assert.Greater(phantomTerm, 50f, "fixture: flag-only pricing would have added a term wide enough to search inside");
+            Assert.AreEqual(0f, DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target), 0.0001f);
+
+            // a relationship where the honest price falls short and the phantom would have carried it
+            var r = state.FindRelationship(state.playerCountryId, target);
+            r.SetThreatPerceivedBy(target, 0f);
+            bool found = false;
+            for (float warmth = 0f; warmth <= 95f && !found; warmth += 0.5f)
+            {
+                r.relations = warmth; r.trust = warmth; r.strategicAlignment = warmth;
+                float honest = DiplomaticLeverage.ReliefOfferWillingness(state, state.playerCountryId, target, TreatyCommitment.Transit);
+                found = honest < 50f && honest + phantomTerm >= 50f;
+            }
+            Assert.IsTrue(found, "fixture: no relations level puts the ask inside the phantom's margin");
+
+            int cp = state.commandPoints.current; float ceiling = CeilingOf(state, target, TradeFocus.Energy); int treaties = state.treaties.Count;
+            Assert.IsFalse(gc.OfferSanctionsReliefForCommitment(target, TreatyCommitment.Transit), "supply that would not arrive must not buy the commitment");
+            Assert.IsNotNull(state.FindSanction(state.playerCountryId, target), "our regime stands");
+            Assert.AreEqual(treaties, state.treaties.Count); Assert.IsNull(state.FindTreaty(state.playerCountryId, target));
+            Assert.AreEqual(ceiling, CeilingOf(state, target, TradeFocus.Energy)); Assert.IsTrue(link.embargoed);
+            Assert.AreEqual(cp - DiplomaticLeverage.OfferCost, state.commandPoints.current);
+            Assert.IsTrue(state.notifications.Exists(n => n.title == "OFFER DECLINED"));
         }
     }
 
