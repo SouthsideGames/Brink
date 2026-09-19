@@ -427,7 +427,27 @@ namespace Brink.Core
                 return false;
             }
 
+            if (!ConcludeNegotiatedTreaty(state, proposerId, targetId, clauses)) return false;
+
+            ApplyReciprocity(state, proposer, target, BalanceOf(clauses));
+            return true;
+        }
+
+        /// <summary>
+        /// The application half of a negotiated treaty, after whichever
+        /// acceptance test admitted it: conclude the treaty and record who
+        /// carries what, relative to countryA. Shared with the supply-for-
+        /// commitment offer (spec 04 §5h) so a clause signed by either route is
+        /// written by one piece of code and reads the same direction.
+        /// </summary>
+        public static bool ConcludeNegotiatedTreaty(GameState state, string proposerId, string targetId,
+            List<TreatyClause> clauses)
+        {
+            if (clauses == null || clauses.Count == 0) return false;
             if (state.FindTreaty(proposerId, targetId) != null) return false;
+
+            var commitments = new List<TreatyCommitment>();
+            foreach (var clause in clauses) commitments.Add(clause.commitment);
             if (!ConcludeTreaty(state, proposerId, targetId, commitments)) return false;
 
             // Record who carries what, relative to countryA.
@@ -447,8 +467,6 @@ namespace Brink.Core
                         effectiveDate = state.date
                     });
             }
-
-            ApplyReciprocity(state, proposer, target, BalanceOf(clauses));
             return true;
         }
 
@@ -551,7 +569,46 @@ namespace Brink.Core
                 return false;
             }
 
+            return RecordDeepening(state, proposerId, targetId, added, renewed, null);
+        }
+
+        /// <summary>
+        /// The application half of deepening, after whichever acceptance test
+        /// admitted it. Plain deepening records no clause (the commitment reads
+        /// as mutual, exactly as before); the supply-for-commitment offer (spec
+        /// 04 §5h) passes the clauses it negotiated so the side they carry is
+        /// written relative to countryA by the same rule a new treaty uses.
+        /// </summary>
+        public static bool RecordDeepening(GameState state, string proposerId, string targetId,
+            List<TreatyCommitment> added, List<TreatyCommitment> renewed, List<TreatyClause> addedClauses)
+        {
+            var treaty = state.FindTreaty(proposerId, targetId);
+            var relationship = state.FindRelationship(proposerId, targetId);
+            var target = state.FindCountry(targetId);
+            if (treaty == null || treaty.broken || relationship == null || target == null) return false;
+            added = added ?? new List<TreatyCommitment>();
+            renewed = renewed ?? new List<TreatyCommitment>();
+            if (added.Count == 0 && renewed.Count == 0) return false;
+            foreach (var commitment in added) if (treaty.Has(commitment)) return false;
+
+            var judged = new List<TreatyCommitment>(added);
+            judged.AddRange(renewed);
+
             treaty.commitments.AddRange(added);
+            if (addedClauses != null)
+                foreach (var clause in addedClauses)
+                {
+                    if (!added.Contains(clause.commitment)) continue;
+                    treaty.clauses.Add(new TreatyClause
+                    {
+                        commitment = clause.commitment,
+                        side = treaty.countryA == proposerId ? clause.side : Flip(clause.side),
+                        trigger = clause.trigger,
+                        triggerCountryId = clause.triggerCountryId,
+                        durationMonths = clause.durationMonths,
+                        effectiveDate = state.date
+                    });
+                }
             foreach (var commitment in renewed)
                 foreach (var clause in treaty.clauses)
                     if (clause.commitment == commitment) { clause.effectiveDate = state.date; break; }
@@ -600,7 +657,7 @@ namespace Brink.Core
         /// slowly rebuilds the assumption of good faith, which is why a reputation
         /// is recoverable but slow: cheap to spend, expensive to earn back.
         /// </summary>
-        static void ApplyReciprocity(GameState state, CountryState proposer,
+        public static void ApplyReciprocity(GameState state, CountryState proposer,
             CountryState target, float balance)
         {
             if (balance > 2.5f)

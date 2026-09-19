@@ -588,6 +588,79 @@ refused for years).
   treaty existed, now offers ADD-commitment buttons with the willingness gate
   explained on refusal. Covered by `DiplomacySecondActTests`.
 
+## 5h. Specific leverage — a supply guarantee for a commitment (roadmap #21, first slice)
+
+`Core/DiplomaticLeverage.cs`; `GameController.OfferSupplyForCommitment(targetId,
+focus, commitment)`; the LEVERAGE panel on DIPLOMACY; `DiplomaticLeverageTests`.
+
+The intended thought is *"I can identify something this particular government
+needs from us and offer a concrete concession for a specific commitment."* Both
+halves of that already existed — a resource `TradeRelation` genuinely lifts the
+importer's ceiling (spec 02 §5, `TradeSystem.Supply`), and a negotiated
+`TreatyClause` says who carries what (§5 above) — but they were judged and
+applied by two verbs on two screens, so the exchange itself could not be said.
+This slice puts them on one table. **It creates no leverage currency**: the
+offer is priced by the systems that own its halves and applied through the
+paths they already use.
+
+**The offer.** A commodity we hold at or above `SurplusFloor` (60 — the same line
+`TradeSystem` uses to call a partner short), guaranteed to them as a link at
+`OfferVolume` 50 and `OfferTariff` 10 (the better end for them), in exchange for
+one commitment they carry (`ClauseSide.TheyProvide`, unconditional, permanent).
+2 CP, spent on the attempt, exactly as a treaty proposal.
+
+**Acceptance, one test for both halves.**
+
+```
+willingness = TreatyWillingness(clauses = [TheyProvide commitment])
+            + SupplyGain × WillingnessPerCeilingPoint (1.5)
+accepted if willingness ≥ 50
+
+SupplyGain = min( our stock × MaxSupplyShare × (offered throughput − current throughput),
+                  max(0, 100 − their current ceiling for that commodity) )
+```
+
+The first term is what `TradeSystem.Supply` would actually add for them over any
+link that already exists — so once they draw our energy on these terms the
+guarantee is worth nothing more and cannot buy a second commitment. The second
+term is **need**: a state already at its ceiling gains nothing from it, so our
+surplus alone buys nothing from a state that does not need it. Dependence,
+rival gravity, encirclement, legitimacy, our reciprocity and the rest all act
+through `TreatyWillingness` unchanged.
+
+**Application, together or not at all.** Accepted: the link is created or raised
+(focus set, volume `max`, tariff `min`, embargo cleared), the importer's
+dependence on us rises by `volume × 0.25` (the direction `TradeSystem` records —
+here they are the buyer), and the clause is written through
+`DiplomacySystem.ConcludeNegotiatedTreaty` (no standing treaty) or
+`DiplomacySystem.RecordDeepening` (a standing one) — the same code a negotiated
+treaty uses, so the side is stored relative to `countryA` by one rule and
+`Carries`/`Receives`/`ClauseIsActive` read it identically. Reciprocity is charged
+on `ValueOf(commitment) − SupplyGain / 6`, so trading a trickle for a defence
+pact still costs our name. Declined: a −0.5 memory and an ADVISORY that says what
+would change it; no link, no clause, no dependence. Invalid: nothing is spent.
+
+**Validity reads public facts only** — our stock, a signed link (including one
+that already carries a different commodity), a signed treaty, a broken treaty, a
+sanctions regime either way, a war between us, and the arms-control regime — so
+a refusal never leaks their position. Their live figure is read once, inside
+the true test, exactly as `TradeSystem.CostToPartner` reads a partner's
+shortfall.
+
+**Information boundary on screen.** The LEVERAGE panel reads our own stocks and
+the *authored* endowment (`WorldFactory.Profiles`, public by spec 08 — every
+state is written with a genuine vulnerability); a breakaway with no profile reads
+"no authored endowment on record". The outlook is graded by our political
+collection on them (`TradeSystem.Assess`'s rule: LIKELY / UNCERTAIN / UNLIKELY),
+never the true reception. A test scans the panel for any read of the target's
+live resources or the true willingness.
+
+**Not in this slice.** Other concessions (lifting our sanctions, tariff cuts,
+arms transfers, recognition) and other asks (basing terms, a vote in the
+chamber, a break with a third state) are the rest of the roadmap item; the
+acceptance shape above is the seam they would use. The AI has no caller yet —
+an AI government short of energy still proposes trade and treaties separately.
+
 ## 9a. Bloc politics (GDD §24 amendment)
 
 Measured with a befriend-everyone bot: warm relations with **all fifteen** other

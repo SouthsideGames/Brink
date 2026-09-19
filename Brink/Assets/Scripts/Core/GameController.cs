@@ -987,6 +987,35 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Offer a supply guarantee they need for one commitment they carry
+        /// (spec 04 §5h). Invalid offers spend nothing; a declined one is a
+        /// spent attempt, exactly like a treaty proposal.
+        /// </summary>
+        public bool OfferSupplyForCommitment(string targetId, Data.TradeFocus focus, Data.TreatyCommitment commitment)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomaticLeverage.CanOffer(State, State.playerCountryId, targetId, focus, commitment,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomaticLeverage.OfferCost, "Supply-for-commitment offer"))
+                return false;
+
+            bool ok = DiplomaticLeverage.OfferBy(State, State.playerCountryId, targetId, focus, commitment);
+            if (ok)
+            {
+                // The treaty paths award the treaty's own XP; this is the
+                // exchange itself, recorded once (spec 07).
+                ProgressionSystem.RecordInitiative(State);
+                ProgressionSystem.AwardXP(State, 12, "Leverage exchange concluded");
+            }
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
         public bool BreakTreaty(string partnerId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
