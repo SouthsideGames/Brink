@@ -824,7 +824,17 @@ and our recognition reaches their judgement only through the warmth it writes.
 The exchange therefore reads the ask **as they would read it once recognised**
 — the same `TreatyWillingness`, on a detached `Relationship.AsIf()` copy
 carrying exactly the warmth `ApplyRecognitionWarmth` writes (one definition,
-shared with `RecogniseBy`) — plus the one share of the world's acceptance our
+shared with `RecogniseBy`), with rival gravity read through a
+`RelationshipLookup` in which a detached copy of our relationship with their
+**parent** carries exactly the cost `ApplyRecognitionParentCost` charges (the
+other definition `RecogniseBy` shares). The parent is a third state gravity
+reads: a breakaway committed to its parent (alignment past 68, a defence pact,
+a shared bloc) pulls against us once recognition drops our relations with the
+parent under 22, and a preview that warmed the pair without cooling the parent
+read gravity from a world that would not exist after acceptance — measured up
+to 37 points high, enough to flip acceptance (at parent relations 10 and
+alignment 90 the uncorrected read was 70.0 against an actual 43.5). Both
+consequences, nothing live touched — plus the one share of the world's acceptance our
 recognition adds (`LegitimacyGain`, the `Legitimacy` arithmetic read forward
 one recognition), at `LegitimacyWillingnessWeight` (45), the weight the treaty
 test itself puts on legitimacy:

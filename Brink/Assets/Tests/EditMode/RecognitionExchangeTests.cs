@@ -316,6 +316,39 @@ namespace Brink.Tests
             Assert.IsTrue(ActionCatalog.All(state).Exists(e => e.label == "Recognise a state for a commitment"));
         }
 
+        /// <summary>
+        /// The parent is a third state rival gravity reads: recognition cools
+        /// us with the parent, and a breakaway committed to its parent then
+        /// pulls against us. The preview must read gravity from the world
+        /// recognition would leave, not the one before it.
+        /// </summary>
+        [TestCase(90f, 25f, 80f)]   // alignment past the 68 line; our −14 crosses the 22 line
+        [TestCase(90f, 10f, 60f)]   // already cold with the parent; recognition deepens it and flips the outcome
+        public void TheCounterfactualCarriesTheParentConsequenceIntoGravity(float successorParentAlignment, float usParent, float usSuccessor)
+        {
+            var sp = state.FindRelationship(successor, parent); sp.strategicAlignment = successorParentAlignment;
+            var up = state.FindRelationship(state.playerCountryId, parent); up.relations = usParent; up.trust = usParent;
+            var us = state.FindRelationship(state.playerCountryId, successor); us.relations = usSuccessor; us.trust = usSuccessor; us.strategicAlignment = usSuccessor; us.SetThreatPerceivedBy(successor, 0f);
+            Assert.Greater(sp.strategicAlignment, 68f, "fixture: the breakaway must be committed to its parent for the parent to radiate");
+            Assert.Less(usParent - 14f, 22f, "fixture: recognition's cost must leave us in real enmity with the parent");
+            var after = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(DiplomacySystem.RecogniseBy(after, after.playerCountryId, successor));
+            float gravityBefore = DiplomacySystem.RivalGravity(state, state.playerCountryId, successor), gravityAfter = DiplomacySystem.RivalGravity(after, after.playerCountryId, successor);
+            Assert.Greater(gravityAfter, gravityBefore + 0.1f, "fixture: recognition must raise gravity on the pair through the parent");
+
+            float once = DiplomaticLeverage.WillingnessOnceRecognised(state, state.playerCountryId, successor, TreatyCommitment.Transit);
+            float actual = DiplomacySystem.TreatyWillingness(after, after.playerCountryId, successor, TheyProvide(TreatyCommitment.Transit));
+            Assert.AreEqual(actual, once, 0.001f, "the counterfactual must equal the ordinary reading after recognition actually lands, parent cost included");
+            Assert.IsFalse(us.recognised); Assert.AreEqual(usParent, up.relations, "the preview cooled the live parent relationship");
+
+            float share = DiplomaticLeverage.LegitimacyGain(state, state.playerCountryId, successor) * DiplomacySystem.LegitimacyWillingnessWeight;
+            bool predicted = actual + share >= 50f;
+            int cp = state.commandPoints.current;
+            Assert.AreEqual(predicted, gc.OfferRecognitionForCommitment(successor, TreatyCommitment.Transit), "acceptance must follow the world recognition leaves");
+            Assert.AreEqual(cp - DiplomaticLeverage.OfferCost, state.commandPoints.current);
+            Assert.AreEqual(predicted, us.recognised);
+        }
+
         [Test]
         public void TheOfferIsDeterministic()
         {

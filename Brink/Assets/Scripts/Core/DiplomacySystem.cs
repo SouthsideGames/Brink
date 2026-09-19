@@ -175,9 +175,35 @@ namespace Brink.Core
         /// the continuous form of the same constraint <see cref="FunctionalCloseness"/>
         /// expresses as a band.</summary>
         public static float Permitted(GameState state, Relationship r, float stored)
+            => Permitted(state, r, stored, null);
+
+        /// <summary>
+        /// The same reading with gravity taken from a supplied relationship
+        /// lookup instead of the live world — a counterfactual ("after this
+        /// recognition") built by <see cref="RelationshipLookup"/>. Null reads
+        /// the live world, which is the only path anything but a preview uses.
+        /// </summary>
+        public static float Permitted(GameState state, Relationship r, float stored,
+            Dictionary<string, Relationship> lookup)
         {
-            float cap = PermittedWarmth(state, r.countryA, r.countryB);
+            float cap = lookup == null
+                ? PermittedWarmth(state, r.countryA, r.countryB)
+                : 100f - RivalGravity(state, r, lookup) * AlignmentGravityWeight;
             return stored < cap ? stored : cap;
+        }
+
+        /// <summary>
+        /// The live relationships keyed as <see cref="RivalGravity"/> reads them,
+        /// with any supplied detached copies standing in for their pairs. The
+        /// copies are never stored; the dictionary is a read-only view.
+        /// </summary>
+        public static Dictionary<string, Relationship> RelationshipLookup(GameState state,
+            params Relationship[] overrides)
+        {
+            var lookup = new Dictionary<string, Relationship>(state.relationships.Count);
+            foreach (var r in state.relationships) lookup[PairKey(r.countryA, r.countryB)] = r;
+            foreach (var r in overrides) if (r != null) lookup[PairKey(r.countryA, r.countryB)] = r;
+            return lookup;
         }
 
         /// <summary>
@@ -807,12 +833,12 @@ namespace Brink.Core
 
         /// <summary>The clause form read on a given relationship object — see the commitment-list overload for the contract.</summary>
         public static float TreatyWillingness(GameState state, string proposerId, string targetId,
-            List<TreatyClause> clauses, Relationship relationship)
+            List<TreatyClause> clauses, Relationship relationship, Dictionary<string, Relationship> lookup = null)
         {
             var commitments = new List<TreatyCommitment>();
             foreach (var clause in clauses) commitments.Add(clause.commitment);
 
-            float willingness = TreatyWillingness(state, proposerId, targetId, commitments, relationship);
+            float willingness = TreatyWillingness(state, proposerId, targetId, commitments, relationship, lookup);
 
             if (relationship == null) return 0f;
 
@@ -859,7 +885,7 @@ namespace Brink.Core
         /// touch the save. Everything else is read from the live world.
         /// </summary>
         public static float TreatyWillingness(GameState state, string proposerId, string targetId,
-            List<TreatyCommitment> commitments, Relationship relationship)
+            List<TreatyCommitment> commitments, Relationship relationship, Dictionary<string, Relationship> lookup = null)
         {
             if (relationship == null) return 0f;
             var player = state.FindCountry(proposerId);
@@ -869,9 +895,9 @@ namespace Brink.Core
             // Read as the warmth the world presently permits, not as raw feeling:
             // signing is a partnership act, and the friend of my enemy cannot be
             // my treaty partner however warmly we regard one another.
-            float willingness = Permitted(state, relationship, relationship.relations) * 0.45f
-                                + Permitted(state, relationship, relationship.trust) * 0.3f
-                                + Permitted(state, relationship, relationship.strategicAlignment) * 0.25f
+            float willingness = Permitted(state, relationship, relationship.relations, lookup) * 0.45f
+                                + Permitted(state, relationship, relationship.trust, lookup) * 0.3f
+                                + Permitted(state, relationship, relationship.strategicAlignment, lookup) * 0.25f
                                 + relationship.DependenceOf(targetId) * 0.15f
                                 + player.pillars.diplomacy * 0.12f
                                 + relationship.memoryWeight * 1.5f;
@@ -1526,19 +1552,8 @@ namespace Brink.Core
             ApplyRecognitionWarmth(relationship, state.date);
 
             // The parent state takes it as a hostile act, because it is one.
-            string parentId = ParentOf(state, successor);
-            var parent = state.FindCountry(parentId);
-            if (parent != null && parent.id != actorId)
-            {
-                var withParent = state.FindRelationship(actorId, parentId);
-                if (withParent != null)
-                {
-                    withParent.relations = Clamp(withParent.relations - 14f);
-                    withParent.trust = Clamp(withParent.trust - 10f);
-                    withParent.AddMemory(state.date,
-                        $"Recognised {successor.displayName} while we still called it ours.", 1f);
-                }
-            }
+            var withParent = RecognitionParentRelationship(state, actorId, successor);
+            if (withParent != null) ApplyRecognitionParentCost(withParent, state.date, successor.displayName);
 
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
                 $"Recognises {successor.displayName}.", Publicity.Public);
@@ -1559,6 +1574,30 @@ namespace Brink.Core
             relationship.trust = Clamp(relationship.trust + 12f);
             relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 10f);
             relationship.AddMemory(date, "Recognised us when it counted.", 0.9f);
+        }
+
+        /// <summary>The actor's relationship with the successor's parent, or null when there is none or the actor is the parent.</summary>
+        public static Relationship RecognitionParentRelationship(GameState state, string actorId, CountryState successor)
+        {
+            string parentId = ParentOf(state, successor);
+            var parent = state.FindCountry(parentId);
+            if (parent == null || parent.id == actorId) return null;
+            return state.FindRelationship(actorId, parentId);
+        }
+
+        /// <summary>
+        /// What recognition costs with the parent: the one definition, applied
+        /// to the live relationship by <see cref="RecogniseBy"/> and to a
+        /// detached copy by the recognition exchange's preview — because the
+        /// parent is a third state rival gravity reads, so a preview that warmed
+        /// the pair without cooling the parent read gravity from a world that
+        /// would not exist after acceptance.
+        /// </summary>
+        public static void ApplyRecognitionParentCost(Relationship withParent, GameDate date, string successorName)
+        {
+            withParent.relations = Clamp(withParent.relations - 14f);
+            withParent.trust = Clamp(withParent.trust - 10f);
+            withParent.AddMemory(date, $"Recognised {successorName} while we still called it ours.", 1f);
         }
 
         /// <summary>

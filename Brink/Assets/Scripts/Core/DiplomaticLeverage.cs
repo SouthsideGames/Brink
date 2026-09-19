@@ -629,16 +629,24 @@ namespace Brink.Core
         /// <summary>
         /// The treaty test read as they would read it once recognised: the same
         /// `TreatyWillingness`, on a detached copy of the relationship carrying
-        /// exactly the warmth `RecogniseBy` writes. The live relationship is
-        /// untouched.
+        /// exactly the warmth `RecogniseBy` writes — and, for rival gravity,
+        /// a detached copy of our relationship with their parent carrying
+        /// exactly the cost `RecogniseBy` charges there, since the parent is a
+        /// third state gravity reads. Both of recognition's consequences,
+        /// nothing live touched.
         /// </summary>
         public static float WillingnessOnceRecognised(GameState state, string actorId, string targetId, TreatyCommitment commitment)
         {
             var live = state?.FindRelationship(actorId, targetId);
-            if (live == null) return 0f;
+            var target = state?.FindCountry(targetId);
+            if (live == null || target == null) return 0f;
+            if (live.recognised) return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
             var asIf = live.AsIf();
-            if (!asIf.recognised) DiplomacySystem.ApplyRecognitionWarmth(asIf, state.date);
-            return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment), asIf);
+            DiplomacySystem.ApplyRecognitionWarmth(asIf, state.date);
+            var withParent = DiplomacySystem.RecognitionParentRelationship(state, actorId, target)?.AsIf();
+            if (withParent != null) DiplomacySystem.ApplyRecognitionParentCost(withParent, state.date, target.displayName);
+            var lookup = DiplomacySystem.RelationshipLookup(state, asIf, withParent);
+            return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment), asIf, lookup);
         }
 
         /// <summary>

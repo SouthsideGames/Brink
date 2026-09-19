@@ -1654,9 +1654,14 @@ three had passed for a long time:
       twice. **Priced by what recognition is already worth**: the ask is read
       through `TreatyWillingness` on a detached `Relationship.AsIf()` copy
       carrying the warmth `ApplyRecognitionWarmth` writes (the one definition
-      `RecogniseBy` also uses), plus one share of legitimacy at the treaty
-      test's own 45-point weight — nothing granted before acceptance, nothing
-      priced twice. `TreatyWillingness` gained an overload that reads a given
+      `RecogniseBy` also uses), with rival gravity read through a
+      `RelationshipLookup` in which a detached copy of our relationship with
+      the **parent** carries `ApplyRecognitionParentCost` (the other shared
+      definition) — the parent is a third state gravity reads, and the first
+      cut cooled nobody, reading up to 37 points high and flipping acceptance
+      for a breakaway committed to its parent — plus one share of legitimacy
+      at the treaty test's own 45-point weight — nothing granted before
+      acceptance, nothing priced twice. `TreatyWillingness` gained an overload that reads a given
       relationship object; the four-argument forms delegate to it with the
       live one, so ordinary acceptance is unchanged. One initiative, 42/32 XP
       as §5h (RECOGNISE A STATE's 14 is not added). `RecognitionExchangeTests`
