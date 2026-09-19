@@ -13,6 +13,17 @@ Cabinet officials should become people the operator learns to govern with rather
 - Personality is derived from existing authoritative state. It creates no new currency or hidden bonus.
 - The player-facing personality layer may profile only the player's own seated officials. It must not bypass intelligence/fog to characterize foreign ministers.
 - Each official exposes a stable institutional identity, temperament, relationship posture, strategic instinct, and resistance level.
+- **Institutional continuity evolves without a second meter.** The seated
+  official's existing `monthsInOffice` reads as newly appointed (under one
+  year), settled (one to four years), established (four to eight years), or
+  entrenched (eight years onward). CABINET shows that reading in both the
+  meeting and the official dossier. Replacement naturally returns the office to
+  newly appointed because a new official begins at month zero; old saves already
+  carry the authoritative tenure and need no migration.
+- Tenure is not automatic hostility or a hidden competence bonus. It adds one
+  level of expected resistance only when an entrenched office is already
+  strained (`trust < 50`), capped by the existing resistance scale. A trusted
+  long-serving ministry remains cooperative.
 - Cabinet meetings show those identities alongside the existing state-dependent concern and pressure.
 - Directed officials acknowledge the human-readable directive label, never an internal command id.
 - Cabinet fault lines are deterministic disagreements derived from meaningful differences such as risk appetite, low trust, asymmetric operator direction, and the structural Military/Economy budget tension.
@@ -44,6 +55,8 @@ The desired player thought is: “I know what this minister is likely to argue, 
 
 ## Tests
 `CabinetMeetingTests` covers read-only behavior, pressure ordering, human directive labels, stable profiles, visible cabinet fault lines, and the foreign-official information boundary.
+It also pins all four continuity thresholds, the strained-only resistance rule,
+player-facing meeting text, and byte-identical save state after reading it.
 
 `CabinetDynamicsTests` covers natural Cabinet alignments, high-resistance intervention readings, and the read-only contract.
 

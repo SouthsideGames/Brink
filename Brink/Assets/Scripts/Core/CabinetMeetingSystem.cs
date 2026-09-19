@@ -21,6 +21,7 @@ namespace Brink.Core
             public string concern;
             public string identity;
             public string relationship;
+            public string continuity;
             public int resistance;
             public int pressure;
         }
@@ -44,6 +45,7 @@ namespace Brink.Core
                     concern = ConcernText(state, country, official.office),
                     identity = profile?.identity ?? "institutional voice",
                     relationship = profile?.relationship ?? "relationship unknown",
+                    continuity = profile?.continuity ?? "continuity unknown",
                     resistance = profile?.resistance ?? 0,
                     pressure = Pressure(state, country, official)
                 });
@@ -69,6 +71,7 @@ namespace Brink.Core
                   .Append(item.title.ToUpperInvariant()).Append(" — ")
                   .Append(item.officialName.ToUpperInvariant()).AppendLine();
                 sb.Append("   ").Append(item.identity.ToUpperInvariant()).Append(" | ").Append(item.relationship).AppendLine();
+                sb.Append("   CONTINUITY: ").Append(item.continuity).AppendLine();
                 sb.Append("   ").Append(item.position).AppendLine();
                 sb.Append("   CONCERN: ").Append(item.concern).AppendLine();
                 if (item.resistance >= 2)

@@ -1633,6 +1633,19 @@ three had passed for a long time:
       world. Guarded by `MapAndLayoutTests` at folded and unfolded dimensions;
       final hardware feel remains part of the end-of-roadmap device pass.
 
+- [x] **Institutional continuity is visible and evolves** (spec 32). Cabinet
+      personality previously read a first-month minister and a ten-year
+      incumbent identically even though `monthsInOffice` was already
+      authoritative, serialized and advanced every month. The profile now
+      describes four tenure bands (newly appointed / settled / established /
+      entrenched), and CABINET prints the result in both the meeting and the
+      official dossier. An entrenched office gains one resistance level only
+      when trust is already below 50; tenure by itself never manufactures
+      opposition or grants a hidden performance modifier. Replacement resets
+      continuity naturally at month zero, so there is no new save field,
+      migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
+      pins every threshold, the strained-only rule and the read-only contract.
+
 - [x] **The first actor that is not a government** (`InsurgencySystem`, spec 16).
       Every actor on the map was a state, so the only violence available was
       declared, attributed and closed with a verdict — there was **no way to
