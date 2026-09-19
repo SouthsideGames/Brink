@@ -803,13 +803,17 @@ namespace Brink.Core
         /// </summary>
         public static float TreatyWillingness(GameState state, string proposerId, string targetId,
             List<TreatyClause> clauses)
+            => TreatyWillingness(state, proposerId, targetId, clauses, state.FindRelationship(proposerId, targetId));
+
+        /// <summary>The clause form read on a given relationship object — see the commitment-list overload for the contract.</summary>
+        public static float TreatyWillingness(GameState state, string proposerId, string targetId,
+            List<TreatyClause> clauses, Relationship relationship)
         {
             var commitments = new List<TreatyCommitment>();
             foreach (var clause in clauses) commitments.Add(clause.commitment);
 
-            float willingness = TreatyWillingness(state, proposerId, targetId, commitments);
+            float willingness = TreatyWillingness(state, proposerId, targetId, commitments, relationship);
 
-            var relationship = state.FindRelationship(proposerId, targetId);
             if (relationship == null) return 0f;
 
             // **How much they can afford to refuse.** A state that depends on us
@@ -843,8 +847,20 @@ namespace Brink.Core
         /// <summary>How willing <paramref name="targetId"/> is to sign with <paramref name="proposerId"/> (0..100).</summary>
         public static float TreatyWillingness(GameState state, string proposerId, string targetId,
             List<TreatyCommitment> commitments)
+            => TreatyWillingness(state, proposerId, targetId, commitments, state.FindRelationship(proposerId, targetId));
+
+        /// <summary>Willingness per point of legitimacy a proposer lacks — and, read the other way, what one share of recognition is worth to a breakaway.</summary>
+        public const float LegitimacyWillingnessWeight = 45f;
+
+        /// <summary>
+        /// The same judgement read on a given relationship object — a live one,
+        /// or a detached <see cref="Relationship.AsIf"/> copy for a
+        /// counterfactual ("would they sign once recognised?") that must not
+        /// touch the save. Everything else is read from the live world.
+        /// </summary>
+        public static float TreatyWillingness(GameState state, string proposerId, string targetId,
+            List<TreatyCommitment> commitments, Relationship relationship)
         {
-            var relationship = state.FindRelationship(proposerId, targetId);
             if (relationship == null) return 0f;
             var player = state.FindCountry(proposerId);
             var target = state.FindCountry(targetId);
@@ -868,7 +884,7 @@ namespace Brink.Core
             // treaties, which is what makes recognition the first thing it
             // needs and the thing worth spending standing on. Exactly zero for
             // any country that was there at world creation.
-            willingness -= (1f - Legitimacy(state, player)) * 45f;
+            willingness -= (1f - Legitimacy(state, player)) * LegitimacyWillingnessWeight;
 
             // Somebody in the room who knows them (spec 04 §5e). Zero unless the
             // foreign minister is actually posted here.
@@ -1507,11 +1523,7 @@ namespace Brink.Core
             var relationship = state.FindRelationship(actorId, successorId);
             if (relationship == null) return false;
 
-            relationship.recognised = true;
-            relationship.relations = Clamp(relationship.relations + 16f);
-            relationship.trust = Clamp(relationship.trust + 12f);
-            relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 10f);
-            relationship.AddMemory(state.date, "Recognised us when it counted.", 0.9f);
+            ApplyRecognitionWarmth(relationship, state.date);
 
             // The parent state takes it as a hostile act, because it is one.
             string parentId = ParentOf(state, successor);
@@ -1531,6 +1543,22 @@ namespace Brink.Core
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
                 $"Recognises {successor.displayName}.", Publicity.Public);
             return true;
+        }
+
+        /// <summary>
+        /// What recognition does to the pair itself: the flag and the warmth of
+        /// a state that has just been admitted to exist. The one definition,
+        /// applied to the live relationship by <see cref="RecogniseBy"/> and to
+        /// a detached copy by the recognition exchange's preview — so what is
+        /// priced and what is delivered cannot drift apart.
+        /// </summary>
+        public static void ApplyRecognitionWarmth(Relationship relationship, GameDate date)
+        {
+            relationship.recognised = true;
+            relationship.relations = Clamp(relationship.relations + 16f);
+            relationship.trust = Clamp(relationship.trust + 12f);
+            relationship.strategicAlignment = Clamp(relationship.strategicAlignment + 10f);
+            relationship.AddMemory(date, "Recognised us when it counted.", 0.9f);
         }
 
         /// <summary>

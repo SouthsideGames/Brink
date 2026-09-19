@@ -141,6 +141,18 @@ namespace Brink.Data
             if (memory.Count > 30) memory.RemoveRange(0, memory.Count - 30);
             memoryWeight += weight;
         }
+
+        /// <summary>
+        /// A detached copy for a counterfactual read ("how would they judge us
+        /// if …"). Own memory list, so nothing written to the copy reaches the
+        /// live relationship; the copy is never stored.
+        /// </summary>
+        public Relationship AsIf()
+        {
+            var copy = (Relationship)MemberwiseClone();
+            copy.memory = new List<string>(memory);
+            return copy;
+        }
     }
 
     /// <summary>

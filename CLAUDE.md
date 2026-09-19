@@ -1646,6 +1646,23 @@ three had passed for a long time:
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
 
+- [x] **Specific diplomatic leverage, slice 3 — recognise a state for a
+      commitment** (roadmap #21, spec 04 §5j). Only a `SecessionSystem`
+      breakaway we have not yet recognised (`CanRecognise` unchanged); the
+      concession is our actual recognition through `RecogniseBy` — grateful
+      new state, angry parent, public record — never withdrawn, so never sold
+      twice. **Priced by what recognition is already worth**: the ask is read
+      through `TreatyWillingness` on a detached `Relationship.AsIf()` copy
+      carrying the warmth `ApplyRecognitionWarmth` writes (the one definition
+      `RecogniseBy` also uses), plus one share of legitimacy at the treaty
+      test's own 45-point weight — nothing granted before acceptance, nothing
+      priced twice. `TreatyWillingness` gained an overload that reads a given
+      relationship object; the four-argument forms delegate to it with the
+      live one, so ordinary acceptance is unchanged. One initiative, 42/32 XP
+      as §5h (RECOGNISE A STATE's 14 is not added). `RecognitionExchangeTests`
+      (PART_A). Roadmap #21's conditional-term work and the embargo-flag
+      follow-up remain open.
+
 - [x] **Specific diplomatic leverage, slice 2 — lift our sanctions for a
       commitment** (roadmap #21, spec 04 §5i). Ours on them only; a regime they
       run against us stays with SEEK SANCTIONS RELIEF. The concession is the

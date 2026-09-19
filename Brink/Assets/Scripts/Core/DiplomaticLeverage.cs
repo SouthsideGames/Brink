@@ -555,6 +555,213 @@ namespace Brink.Core
             return true;
         }
 
+        // =====================================================================
+        // Slice 3 — recognise a breakaway for a commitment it carries. The
+        // concession is our actual recognition, granted through
+        // `DiplomacySystem.RecogniseBy` with every consequence that verb has
+        // (a grateful new state, an angry parent), and it is worth to them
+        // exactly what the game already makes recognition worth: the warmth it
+        // writes into the pair, read through the treaty test on a detached
+        // copy, plus the share of legitimacy one more recognition adds, at the
+        // weight the treaty test charges a breakaway for lacking it. Nothing
+        // is granted before acceptance; nothing is priced twice. Recognition is
+        // never withdrawn by any rule in the game, so it cannot be sold twice,
+        // and their commitment is a treaty term that stands until the treaty is
+        // broken at the treaty-break price.
+        // =====================================================================
+
+        /// <summary>Willingness per treaty-value unit, as the sanctions exchange prices it (12 per pressure point / 2 units per point).</summary>
+        public const float WillingnessPerValueUnit = WillingnessPerPressurePoint / ValueUnitsPerPressurePoint;
+
+        /// <summary>
+        /// Whether we can offer recognition for a commitment: every rule
+        /// `CanRecognise` applies (a state that has always been there, ourselves,
+        /// one we already recognise), then the treaty gates the other exchanges
+        /// apply. Every reason is a public fact.
+        /// </summary>
+        public static bool CanOfferRecognition(GameState state, string actorId, string targetId,
+            TreatyCommitment commitment, out string reason)
+        {
+            reason = "";
+            var actor = state?.FindCountry(actorId);
+            var target = state?.FindCountry(targetId);
+            if (actor == null || target == null || actorId == targetId) { reason = "NO SUCH PARTNER."; return false; }
+            if (!DiplomacySystem.CanRecognise(state, actorId, targetId, out reason)) return false;
+            if (state.FindRelationship(actorId, targetId) == null) { reason = "NO STANDING WITH THEM."; return false; }
+
+            var treaty = state.FindTreaty(actorId, targetId);
+            if (treaty != null && treaty.broken)
+            {
+                reason = "THE STANDING TREATY IS BROKEN. NORMALISE BEFORE ASKING FOR MORE.";
+                return false;
+            }
+            if (treaty != null && treaty.Carries(targetId, commitment) && !treaty.ClauseIsExpired(state, commitment))
+            {
+                reason = $"THEY ALREADY CARRY {Phrase.Caps(commitment)} FOR US.";
+                return false;
+            }
+            if (commitment == TreatyCommitment.ArmsControl && !TechnologySystem.Has(actor, "CAP_ARMSCONTROL"))
+            {
+                reason = "ARMS CONTROL NEEDS A VERIFICATION REGIME WE DO NOT HAVE.";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// The share of the world's acceptance one more recognition adds them —
+        /// the same arithmetic as `DiplomacySystem.Legitimacy`, read forward one
+        /// recognition without granting it. Zero for a state that is not a
+        /// breakaway or that we already recognise.
+        /// </summary>
+        public static float LegitimacyGain(GameState state, string actorId, string targetId)
+        {
+            var target = state?.FindCountry(targetId);
+            if (target == null || !DiplomacySystem.IsSuccessor(state, target)) return 0f;
+            if (state.FindRelationship(actorId, targetId)?.recognised == true) return 0f;
+            int others = Math.Max(1, state.countries.Count - 1);
+            int count = DiplomacySystem.RecognitionCount(state, targetId);
+            float now = Math.Min(1f, count / (float)others);
+            float after = Math.Min(1f, (count + 1) / (float)others);
+            return after - now;
+        }
+
+        /// <summary>
+        /// The treaty test read as they would read it once recognised: the same
+        /// `TreatyWillingness`, on a detached copy of the relationship carrying
+        /// exactly the warmth `RecogniseBy` writes. The live relationship is
+        /// untouched.
+        /// </summary>
+        public static float WillingnessOnceRecognised(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        {
+            var live = state?.FindRelationship(actorId, targetId);
+            if (live == null) return 0f;
+            var asIf = live.AsIf();
+            if (!asIf.recognised) DiplomacySystem.ApplyRecognitionWarmth(asIf, state.date);
+            return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment), asIf);
+        }
+
+        /// <summary>
+        /// What our recognition is worth to them, in willingness points: the
+        /// warmth it adds to how they judge the ask, plus one share of
+        /// legitimacy at the weight the treaty test charges for lacking it.
+        /// Zero once granted.
+        /// </summary>
+        public static float RecognitionValue(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        {
+            if (state?.FindRelationship(actorId, targetId)?.recognised != false) return 0f;
+            float plain = DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
+            float warmth = WillingnessOnceRecognised(state, actorId, targetId, commitment) - plain;
+            return Math.Max(0f, warmth) + LegitimacyGain(state, actorId, targetId) * DiplomacySystem.LegitimacyWillingnessWeight;
+        }
+
+        /// <summary>
+        /// The package: the ask judged as they would judge it once recognised,
+        /// plus the legitimacy one more recognition buys them. The true test —
+        /// decides what happens, never what is shown.
+        /// </summary>
+        public static float RecognitionOfferWillingness(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+            => WillingnessOnceRecognised(state, actorId, targetId, commitment)
+               + LegitimacyGain(state, actorId, targetId) * DiplomacySystem.LegitimacyWillingnessWeight;
+
+        /// <summary>Outlook graded by our political collection on them — the `Assess` rule of the first slice.</summary>
+        public static TradeOutlook AssessRecognitionOffer(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        {
+            if (!CanOfferRecognition(state, actorId, targetId, commitment, out _)) return TradeOutlook.NoTerms;
+            float margin = RecognitionOfferWillingness(state, actorId, targetId, commitment) - 50f;
+            var estimate = IntelligenceSystem.GetEstimate(state, actorId, targetId, IntelDomain.Political);
+            var grade = estimate?.confidence ?? ConfidenceGrade.None;
+            switch (grade)
+            {
+                case ConfidenceGrade.Confirmed:
+                case ConfidenceGrade.High:
+                    return margin >= 0f ? TradeOutlook.Likely : TradeOutlook.Unlikely;
+                case ConfidenceGrade.Moderate:
+                case ConfidenceGrade.Low:
+                    if (margin > 18f) return TradeOutlook.Likely;
+                    if (margin < -18f) return TradeOutlook.Unlikely;
+                    return TradeOutlook.Uncertain;
+                default:
+                    return TradeOutlook.Uncertain;
+            }
+        }
+
+        /// <summary>
+        /// Put the offer. Actor-generic and free of CP; the player wrapper on
+        /// `GameController` spends. Accepted: recognition is granted through
+        /// `RecogniseBy` — the pair warms, the parent takes it as the hostile
+        /// act it is — and the clause is written through the shared treaty
+        /// paths; together or not at all. Declined or invalid: no recognition,
+        /// no clause, nothing else moves.
+        /// </summary>
+        public static bool OfferRecognitionBy(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        {
+            if (!CanOfferRecognition(state, actorId, targetId, commitment, out string reason))
+            {
+                GameLog.Warn("DIPLO", reason ?? "Offer refused.");
+                return false;
+            }
+            var actor = state.FindCountry(actorId);
+            var target = state.FindCountry(targetId);
+            var relationship = state.FindRelationship(actorId, targetId);
+            if (actor == null || target == null || relationship == null) return false;
+
+            float value = RecognitionValue(state, actorId, targetId, commitment);
+            float willingness = RecognitionOfferWillingness(state, actorId, targetId, commitment);
+            if (willingness < 50f)
+            {
+                relationship.AddMemory(state.date, "Rejected a recognition-for-commitment offer", -0.5f);
+                if (actorId == state.playerCountryId)
+                    state.AddNotification(NotificationClass.Advisory, "OFFER DECLINED",
+                        $"{target.displayName} will not carry {Phrase.Of(commitment).ToLowerInvariant()} "
+                        + "for our recognition. "
+                        + (DiplomacySystem.BlockedByRival(state, actorId, targetId)
+                           ?? "What recognition is worth to them does not outweigh what we are asking; a lighter commitment, or more warmth first."),
+                        targetId, desk: ReportingDesk.Diplomacy);
+                GameLog.Info("DIPLO", $"{targetId} declined a recognition-for-{commitment} offer from {actorId}.");
+                return false;
+            }
+
+            // ---- the concession: our recognition, with every consequence RECOGNISE A STATE has ----
+            if (!DiplomacySystem.RecogniseBy(state, actorId, targetId))
+            {
+                GameLog.Error("DIPLO", "Recognition-for-commitment: recognition could not be granted.");
+                return false;
+            }
+
+            // ---- the commitment: a clause they carry, through the treaty paths ----
+            var clauses = Clauses(commitment);
+            var standing = state.FindTreaty(actorId, targetId);
+            bool concluded = standing == null
+                ? DiplomacySystem.ConcludeNegotiatedTreaty(state, actorId, targetId, clauses)
+                : DiplomacySystem.RecordDeepening(state, actorId, targetId,
+                    new List<TreatyCommitment> { commitment }, null, clauses);
+            if (!concluded)
+            {
+                GameLog.Error("DIPLO", "Recognition-for-commitment: the commitment could not be recorded.");
+                return false;
+            }
+
+            float balance = DiplomacySystem.ValueOf(commitment) - value / WillingnessPerValueUnit;
+            DiplomacySystem.ApplyReciprocity(state, actor, target, balance);
+
+            string parentId = DiplomacySystem.ParentOf(state, target);
+            var parent = state.FindCountry(parentId);
+            state.AddNotification(
+                actorId == state.playerCountryId ? NotificationClass.Priority : NotificationClass.Wire,
+                "RECOGNITION FOR A COMMITMENT",
+                $"{actor.displayName} recognises {target.displayName}; {target.displayName} carries "
+                + $"{Phrase.Of(commitment).ToLowerInvariant()}. "
+                + (parent != null && parent.id != actorId ? $"{parent.displayName} takes it as the hostile act it is. " : "")
+                + "Recognition, once given, is not withdrawn; their commitment is a treaty term.",
+                targetId, desk: ReportingDesk.Diplomacy);
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
+                $"Recognised {target.displayName} in exchange for {Phrase.Of(commitment).ToLowerInvariant()}.", Publicity.Public);
+            GameLog.Info("DIPLO", $"{actorId} -> {targetId}: recognition for {commitment} accepted "
+                + $"(willingness {willingness:F1}, recognition value {value:F2}).");
+            return true;
+        }
+
         /// <summary>Our own stock of a commodity — the only resource figure the offer screen may read.</summary>
         public static float OwnStock(CountryState country, TradeFocus focus)
         {
