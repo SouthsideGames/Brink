@@ -790,7 +790,7 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text =
                 "  Accepted, both halves apply at once: our measures end (any embargo on our trade link with them lifts), "
                 + $"and a clause they carry{(standing != null ? " is added to the standing treaty." : " is signed in a new treaty.")}"
-                + $" A détente then holds for {EconomySystem.DetenteTruceMonths} months — neither side may impose new measures on the other "
+                + $" A détente then holds for at least {EconomySystem.DetenteTruceMonths} months — neither side may impose new measures on the other "
                 + "while it runs; a war between us voids it. After it lapses we may sanction them again at the ordinary cost, "
                 + "and their commitment stands regardless. Declined, our measures and every clause stay exactly as they are. "
                 + "Their worth to them is what the measures cost them today: heavier and fresher measures buy more; ones they have adapted to buy less.";

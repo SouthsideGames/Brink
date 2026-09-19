@@ -141,7 +141,9 @@ namespace Brink.Tests
             Assert.AreEqual(cp - DiplomaticLeverage.OfferCost, state.commandPoints.current);
             Assert.AreEqual(initiative + 1, state.initiativesThisYear, "exactly one Diplomacy initiative");
             Assert.AreEqual(xp + 42, state.strategistXP, "30 for the treaty concluded + 12 for the exchange; the LIFT SANCTIONS verb's 10 is not added");
-            Assert.IsTrue(state.notifications.Exists(n => n.title == "SANCTIONS LIFTED FOR A COMMITMENT"));
+            var notice = state.notifications.Find(n => n.title == "SANCTIONS LIFTED FOR A COMMITMENT");
+            Assert.IsNotNull(notice);
+            StringAssert.Contains($"A détente holds for at least {EconomySystem.DetenteTruceMonths} months", notice.body, "a preserved longer truce must not be understated");
         }
 
         [Test]
@@ -300,7 +302,7 @@ namespace Brink.Tests
                 StringAssert.Contains("OUR COERCIVE MEASURES AGAINST", flat);
                 StringAssert.Contains("IN FORCE 12 MONTH(S)", flat);
                 StringAssert.Contains("a clause they carry", flat);
-                StringAssert.Contains($"A détente then holds for {EconomySystem.DetenteTruceMonths} months", flat);
+                StringAssert.Contains($"A détente then holds for at least {EconomySystem.DetenteTruceMonths} months", flat);
                 StringAssert.Contains("a war between us voids it", flat);
                 StringAssert.Contains("their commitment stands regardless", flat);
                 var lifts = new List<Button>(); view.Root.Query<Button>().ForEach(b => { if (b.text.StartsWith("LIFT FOR ")) lifts.Add(b); });
@@ -437,6 +439,36 @@ namespace Brink.Tests
             float delivered = Deliver(TreatyCommitment.Transit, focus);
             Assert.AreEqual(priced, delivered, 0.001f, "priced == delivered");
             Assert.AreEqual(resumed, TradeSystem.Supply(state, target, focus), 0.001f);
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
+        public void OurSevereRegimeOnAFlaggedLink_IsPricedByTheSupplyItReopens(TradeFocus focus)
+        {
+            IsolateSupply(focus);
+            var link = Link(state.playerCountryId, target, focus, LinkVolume, LinkTariff);
+            SetStock(state.PlayerCountry, focus, LinkStock);
+            SetEndowment(state.FindCountry(target), focus, 20f);
+            Impose(SanctionSeverity.Severe);
+            Assert.IsTrue(link.embargoed, "fixture: a Severe regime embargoes the link");
+            Assert.IsNull(state.FindSanction(target, state.playerCountryId), "fixture: no reciprocal regime");
+            Assert.AreEqual(1, state.trade.FindAll(l => l.Involves(state.playerCountryId) && l.Involves(target)).Count, "fixture: exactly one link between the pair");
+            Assert.AreEqual(1, state.trade.FindAll(l => l.Involves(target) && l.focus == focus).Count, "fixture: ours is the only link carrying this commodity to them");
+            Assert.AreSame(link, state.FindTrade(state.playerCountryId, target), "fixture: the pricing reads this link");
+            float resumed = OneLink();
+            Assert.AreEqual(0f, TradeSystem.Supply(state, target, focus), 0.0001f, "fixture: the flagged link supplies nothing now");
+            Assert.Greater(100f - CeilingOf(state, target, focus), resumed + 1f, "fixture: headroom does not bind");
+
+            float priced = DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target);
+            Assert.Greater(priced, 0f, "priced at zero: the lifted read still treats the pair's flagged link as closed, though the accepted lift reopens it");
+            Assert.AreEqual(resumed, priced, 0.001f, "priced: exactly the flagged link's supply");
+
+            WarmToTheMargin(TreatyCommitment.Transit);
+            float delivered = Deliver(TreatyCommitment.Transit, focus);
+            Assert.AreEqual(priced, delivered, 0.001f, "priced == the ceiling increase the accepted exchange delivers");
+            Assert.AreEqual(resumed, TradeSystem.Supply(state, target, focus), 0.001f, "supply reopened");
+            Assert.IsFalse(link.embargoed); Assert.IsNull(state.FindSanction(state.playerCountryId, target), "exactly our regime was removed");
         }
 
         [Test]

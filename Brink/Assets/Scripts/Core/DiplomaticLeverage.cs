@@ -544,7 +544,7 @@ namespace Brink.Core
                 "SANCTIONS LIFTED FOR A COMMITMENT",
                 $"{actor.displayName} lifts its {Phrase.Of(sanction.severity).ToLowerInvariant()} measures against "
                 + $"{target.displayName}; {target.displayName} carries {Phrase.Of(commitment).ToLowerInvariant()}. "
-                + $"A détente holds for {EconomySystem.DetenteTruceMonths} months: neither side may impose new "
+                + $"A détente holds for at least {EconomySystem.DetenteTruceMonths} months: neither side may impose new "
                 + "measures while it runs, and it does not survive a war. Their commitment is a treaty term.",
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
