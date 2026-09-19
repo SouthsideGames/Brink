@@ -172,6 +172,100 @@ namespace Brink.Tests
             Assert.IsTrue(closePinned, "CLOSE is inside the scroller and can leave the screen.");
         }
 
+        [Test]
+        public void SettingsPanel_ReboundsWhenAFoldChangesTheScreenHeight()
+        {
+            TerminalMetrics.Update(900f, 7f, 700f, SizeClass.Large);
+            var panel = new DisplaySettingsPanel(() => { });
+            panel.Toggle();
+            var reader = panel.Root.Q<ScrollView>();
+            float openHeight = reader.style.maxHeight.value.value;
+
+            TerminalMetrics.Update(500f, 7f, 210f, SizeClass.Compact);
+            panel.RefreshLayout();
+            float foldedHeight = reader.style.maxHeight.value.value;
+
+            Assert.AreEqual(DisplaySettingsPanel.ReaderHeightFor(210f, true), foldedHeight, .01f);
+            Assert.Less(foldedHeight, openHeight,
+                "The settings reader kept its unfolded height and pushed CLOSE below the fold.");
+        }
+
+        [Test]
+        public void Assessment_ReflowsWithoutForgettingTheCurrentQuestion()
+        {
+            TerminalMetrics.Update(900f, 7f, 700f, SizeClass.Large);
+            var assessment = new AssessmentScreen(() => { });
+            var index = typeof(AssessmentScreen).GetField("index",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(index);
+            index.SetValue(assessment, 2);
+
+            TerminalMetrics.Update(238f, 7f, 210f, SizeClass.Compact);
+            assessment.RefreshLayout();
+
+            string allText = "";
+            Label questionHeader = null;
+            assessment.Root.Query<Label>().ForEach(label => allText += label.text + "\n");
+            assessment.Root.Query<Label>().ForEach(label =>
+            {
+                if (questionHeader == null && label.ClassListContains("terminal-text-bright"))
+                    questionHeader = label;
+            });
+            StringAssert.Contains("SCENARIO 3 OF", allText,
+                "A geometry-only refresh restarted the assessment.");
+            foreach (var line in allText.Replace("\r", "").Split('\n'))
+                Assert.LessOrEqual(line.Length, TerminalMetrics.Columns,
+                    $"Assessment text still exceeds the folded grid: {line}");
+
+            Assert.IsNotNull(questionHeader);
+            var questionLines = questionHeader.text.Replace("\r", "").Split('\n');
+            Assert.AreEqual(TerminalMetrics.Columns, questionLines[0].Length,
+                "The question header was wrapped after being built to a stale fixed width.");
+            Assert.AreEqual(System.Math.Min(40, TerminalMetrics.Columns - 2),
+                questionLines[2].Trim().Length,
+                "The progress bar no longer derives from the live assessment grid.");
+
+            var answers = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < AssessmentCatalog.Questions.Count; i++) answers.Add(0);
+            var pending = typeof(AssessmentScreen).GetField("pendingResult",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(pending);
+            pending.SetValue(assessment, AssessmentSystem.Evaluate(answers, 7));
+            assessment.RefreshLayout();
+
+            Label completeHeader = null;
+            assessment.Root.Query<Label>().ForEach(label =>
+            {
+                if (completeHeader == null && label.ClassListContains("terminal-text-bright"))
+                    completeHeader = label;
+            });
+            Assert.IsNotNull(completeHeader);
+            Assert.AreEqual(TerminalMetrics.Columns,
+                completeHeader.text.Replace("\r", "").Split('\n')[0].Length,
+                "The completed-assessment header was wrapped from a stale fixed width.");
+        }
+
+        [Test]
+        public void FoldLayoutWaitsForTheContentHostAndDoesNotRestartAssessment()
+        {
+            string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
+                System.IO.Directory.GetCurrentDirectory(),
+                "Assets/Scripts/UI/TerminalShellController.cs"));
+
+            StringAssert.Contains("contentHost.RegisterCallback<GeometryChangedEvent>", source,
+                "The shell only watches its outer root and can read the content host's stale unfolded width.");
+            StringAssert.Contains("if (!assessmentWasVisible) assessmentScreen.Restart()", source,
+                "An ordinary responsive refresh can restart an assessment already in progress.");
+            StringAssert.Contains("assessmentScreen.RefreshLayout()", source,
+                "Assessment content is not rebuilt to the newly measured folded width.");
+            StringAssert.Contains("settingsPanel?.RefreshLayout()", source,
+                "Settings keeps the height it had when it opened and can push CLOSE below the fold.");
+            StringAssert.Contains("!gc.AwaitingAssessment && gc.State.HasOpenCrisis", source,
+                "Crisis chrome from the discarded world can remain visible over first launch.");
+            StringAssert.Contains("bool active = !gc.AwaitingAssessment && crises != null", source,
+                "The crisis overlay can reopen over the first-launch assessment.");
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -327,6 +421,28 @@ namespace Brink.Tests
             }
 
             Assert.AreEqual(2, raised, "Only a real change should force a rebuild.");
+        }
+
+        [Test]
+        public void HeightOnlyChangesRaiseChanged_SoOpenPanelsRebound()
+        {
+            int raised = 0;
+            void Handler() => raised++;
+
+            TerminalMetrics.Changed += Handler;
+            try
+            {
+                TerminalMetrics.Update(500f, 7f, 260f, SizeClass.Compact);
+                TerminalMetrics.Update(500f, 7f, 210f, SizeClass.Compact);
+            }
+            finally
+            {
+                TerminalMetrics.Changed -= Handler;
+            }
+
+            Assert.AreEqual(2, raised,
+                "Both heights are short, but Settings still needs the new physical cap.");
+            Assert.AreEqual(210f, TerminalMetrics.PanelHeight);
         }
 
         // ---------- the wrapping policy ----------

@@ -151,6 +151,14 @@ columns   = clamp(MinColumns, MaxColumns, columns)
 The **one column of headroom** matters: rounding error and the scroll gutter
 should never be the thing that pushes a box rule past the edge.
 
+Both the outer root and the **content host itself** are observed for geometry
+changes. On a fold transition the root can report first while its child still
+has the old width; measuring at that instant preserves the unfolded column count
+and sends preformatted text off the cover screen. The content-host callback
+remeasures after layout settles. A height-only change also raises `Changed`, even
+when both heights fall on the same side of `ShortScreenHeight`, because open
+scrollers and modal caps still need the new physical height.
+
 | Member | Value / meaning |
 |---|---|
 | `MinColumns` | `34` — narrower than this and content is unreadable anyway |
@@ -529,7 +537,10 @@ which is its own kind of missing.
 Now the content lives in a hidden-scroller `ScrollView` capped at 55% of
 `PanelHeight` on short screens, 70% otherwise; the DISPLAY title sits above it
 and CLOSE below it, both pinned — CLOSE is the one control that must never
-leave the screen. The FULL RESET section sits **above** the reference prose,
+leave the screen. That cap is recomputed on every measured geometry change, not
+only when the panel is opened; folding with Settings already visible therefore
+cannot retain the unfolded height and push CLOSE below the screen. The FULL
+RESET section sits **above** the reference prose,
 so on most screens it is visible without scrolling at all. FULL RESET remains
 two-step (FULL RESET → CONFIRM — ERASE EVERYTHING / CANCEL) because there is
 no undo. `MapAndLayoutTests.SettingsPanel_FullResetIsReachable` guards the
@@ -945,6 +956,15 @@ and END MONTH, and shows `AssessmentScreen`: ten scenarios, then the posting /
 intervention screen. Accepting builds the world, switches the shell to terminal
 mode and selects BRIEFING. A full reset returns here. `SelectView` is a no-op
 while `AwaitingAssessment`, so nothing can navigate out from underneath it.
+
+Responsive refreshes **do not restart an assessment already in progress**.
+`Restart` is reserved for the transition into assessment mode; folding or
+unfolding calls `RefreshLayout`, preserving the answer list, current scenario,
+posting, world size and difficulty. The rebuilt labels use the live
+`TerminalMetrics.Columns` (including both ASCII headers and the progress bar)
+and immediately pass through the central text policy. Assessment mode also
+hides both the crisis indicator and crisis overlay, so chrome from the discarded
+world cannot survive a full reset.
 
 `TutorialPanel` sits above the views in the content host, refreshes with the
 shell, never blocks and is always dismissable (GDD §5).
