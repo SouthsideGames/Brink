@@ -876,6 +876,65 @@ The outlook is graded by our political collection on them (§5h's rule); a
 test scans the panel for any read of legitimacy, the true reception or their
 resources.
 
+## 5k. Specific leverage — conditional and time-limited requested commitments (roadmap #21, final core slice)
+
+`DiplomaticLeverage.RequestedClause / RenewableClause`; the `terms` parameter on
+`CanOffer / CanOfferRelief / CanOfferRecognition`, the three willingness and
+offer functions and the three `GameController` verbs; the TERMS FOR WHAT THEY
+WOULD CARRY panel on DIPLOMACY; `LeverageTermsTests`.
+
+**One clause, carried whole.** Every exchange asks for one clause they carry.
+The operator may bound it with the existing conditional-agreement model — the
+`ConflictWithCountry` trigger naming a third state, a supported term (permanent,
+one, three or five years: `DiplomacySystem.SupportedTermMonths`), or both. The
+requested clause is built once (`RequestedClause`: commitment, `TheyProvide`,
+exactly the requested trigger, state and term) and is the clause the gate
+validates, the treaty test prices and the treaty record writes; nothing rebuilds
+a default clause after terms are chosen. Direction is stored relative to
+`countryA` by the shared `ConcludeNegotiatedTreaty` / `RecordDeepening` rule, and
+`effectiveDate` is the day of acceptance.
+
+**Validation before anything is spent.** `DiplomacySystem.ClauseTermsAreValid`
+is the one rule for a clause's condition and term — non-negative term, and a
+conflict trigger that names a real third state, never a signatory — extracted
+from the negotiated-proposal path (which still refuses on it silently). The
+exchanges add the panel's supported-term set. An invalid request is a refused
+control with its reason, spends nothing and changes nothing.
+
+**Pricing.** The ordinary clause test prices the requested clause exactly once:
+trigger and term discounts apply through the same `TreatyWillingness` clause
+overload the negotiation panel uses, and each concession's verified value —
+actual marginal supply (§5h), live sanction pressure plus the supply that
+actually resumes (§5i), recognition's warmth, parent cost and legitimacy share
+(§5j) — is added exactly as before. The recognition counterfactual reads the
+requested clause on its detached copies. Default (unconditional, permanent)
+offers are unchanged.
+
+**Existing commitments.** A promise they still carry — active or dormant — is
+not overwritten (`THEY ALREADY CARRY …`). A commitment the treaty settles the
+other way cannot be reversed here (`… THE OTHER WAY`). A commitment the treaty
+records without a clause is permanent and unconditional, so it reads as still
+carried. An **expired** promise renews on its recorded terms only
+(`RenewableClause`): renewal keeps the recorded side, trigger and term, restarts
+only that clause's clock through `RecordDeepening`'s renewal path, is priced at
+that recorded scope, and is announced as a renewal; a request on different terms
+is refused and says what the record holds. Unrelated clauses keep their clocks.
+
+**Concession versus commitment.** The terms bound only what they carry. What we
+give follows its own existing rules: a supply link is an ordinary trade link we
+may change or withdraw through TRADE; lifted sanctions bring the existing
+détente of at least 24 months; recognition is permanent. Their commitment
+expiring or lying dormant does not reverse any of it, and no rule is implied
+that the game does not enforce. The panel, the acceptance notice and the
+chronicle name the condition and the calendar date the term ends, in the words
+the signed record uses (`IF CONFLICT WITH X`, `EXPIRES BEFORE MMM YYYY`).
+
+**Rewards** are unchanged: 2 CP per attempt, one initiative, the treaty act's own
+award plus 12 (42 created / 32 extended or renewed) under the repetition rule.
+
+**Not in this slice:** an AI caller for any exchange; the embargo-flag follow-up
+of §5i; renewal on different terms (an amendment model does not exist).
+
 ## 9a. Bloc politics (GDD §24 amendment)
 
 Measured with a befriend-everyone bot: warm relations with **all fifteen** other

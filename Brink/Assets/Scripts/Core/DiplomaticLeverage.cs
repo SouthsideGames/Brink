@@ -66,6 +66,11 @@ namespace Brink.Core
         /// </summary>
         public static bool CanOffer(GameState state, string actorId, string targetId,
             TradeFocus focus, TreatyCommitment commitment, out string reason)
+            => CanOffer(state, actorId, targetId, focus, commitment, null, out reason);
+
+        /// <summary>The same gate with the requested condition and term (null = unconditional, permanent).</summary>
+        public static bool CanOffer(GameState state, string actorId, string targetId,
+            TradeFocus focus, TreatyCommitment commitment, TreatyClause terms, out string reason)
         {
             reason = null;
             var actor = state?.FindCountry(actorId);
@@ -108,23 +113,7 @@ namespace Brink.Core
                 return false;
             }
 
-            var treaty = state.FindTreaty(actorId, targetId);
-            if (treaty != null && treaty.broken)
-            {
-                reason = "THE STANDING TREATY IS BROKEN. NORMALISE BEFORE ASKING FOR MORE.";
-                return false;
-            }
-            if (treaty != null && treaty.Carries(targetId, commitment) && !treaty.ClauseIsExpired(state, commitment))
-            {
-                reason = $"THEY ALREADY CARRY {Phrase.Caps(commitment)} FOR US.";
-                return false;
-            }
-            if (commitment == TreatyCommitment.ArmsControl && !TechnologySystem.Has(actor, "CAP_ARMSCONTROL"))
-            {
-                reason = "ARMS CONTROL NEEDS A VERIFICATION REGIME WE DO NOT HAVE.";
-                return false;
-            }
-            return true;
+            return CommitmentGate(state, actor, targetId, commitment, terms, out reason);
         }
 
         /// <summary>
@@ -197,9 +186,9 @@ namespace Brink.Core
         /// to them. The true test — decides what happens, never what is shown.
         /// </summary>
         public static float Willingness(GameState state, string actorId, string targetId,
-            TradeFocus focus, TreatyCommitment commitment)
+            TradeFocus focus, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            float treaty = DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
+            float treaty = DiplomacySystem.TreatyWillingness(state, actorId, targetId, OfferedClauses(state, actorId, targetId, commitment, terms));
             float gain = SupplyGain(state, actorId, targetId, focus);
             return treaty + gain * WillingnessPerCeilingPoint;
         }
@@ -209,10 +198,10 @@ namespace Brink.Core
         /// them supports — the `TradeSystem.Assess` rule. Never the true test.
         /// </summary>
         public static TradeOutlook Assess(GameState state, string actorId, string targetId,
-            TradeFocus focus, TreatyCommitment commitment)
+            TradeFocus focus, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOffer(state, actorId, targetId, focus, commitment, out _)) return TradeOutlook.NoTerms;
-            float margin = Willingness(state, actorId, targetId, focus, commitment) - 50f;
+            if (!CanOffer(state, actorId, targetId, focus, commitment, terms, out _)) return TradeOutlook.NoTerms;
+            float margin = Willingness(state, actorId, targetId, focus, commitment, terms) - 50f;
 
             var estimate = IntelligenceSystem.GetEstimate(state, actorId, targetId, IntelDomain.Political);
             var grade = estimate?.confidence ?? ConfidenceGrade.None;
@@ -238,9 +227,9 @@ namespace Brink.Core
         /// already use. Declined or invalid: nothing is delivered.
         /// </summary>
         public static bool OfferBy(GameState state, string actorId, string targetId,
-            TradeFocus focus, TreatyCommitment commitment)
+            TradeFocus focus, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOffer(state, actorId, targetId, focus, commitment, out string reason))
+            if (!CanOffer(state, actorId, targetId, focus, commitment, terms, out string reason))
             {
                 GameLog.Warn("DIPLO", reason ?? "Offer refused.");
                 return false;
@@ -251,7 +240,7 @@ namespace Brink.Core
             if (actor == null || target == null || relationship == null) return false;
 
             float gain = SupplyGain(state, actorId, targetId, focus);
-            float willingness = Willingness(state, actorId, targetId, focus, commitment);
+            float willingness = Willingness(state, actorId, targetId, focus, commitment, terms);
             if (willingness < 50f)
             {
                 relationship.AddMemory(state.date, "Rejected a supply-for-commitment offer", -0.5f);
@@ -291,12 +280,8 @@ namespace Brink.Core
             relationship.trust = Clamp(relationship.trust + 3f);
 
             // ---- the commitment: a clause they carry, through the treaty paths ----
-            var clauses = Clauses(commitment);
-            var standing = state.FindTreaty(actorId, targetId);
-            bool concluded = standing == null
-                ? DiplomacySystem.ConcludeNegotiatedTreaty(state, actorId, targetId, clauses)
-                : DiplomacySystem.RecordDeepening(state, actorId, targetId,
-                    new List<TreatyCommitment> { commitment }, null, clauses);
+            string termsSentence = TermsSentence(state, actorId, targetId, commitment, terms);
+            bool concluded = RecordCommitment(state, actorId, targetId, commitment, terms);
             if (!concluded)
             {
                 // Cannot happen after CanOffer, but never leave half an exchange.
@@ -316,11 +301,11 @@ namespace Brink.Core
                 + $"{Phrase.Of(focus).ToLowerInvariant()} supply on concessionary terms; {target.displayName} carries "
                 + $"{Phrase.Of(commitment).ToLowerInvariant()}. What the link delivers follows the trade rules and "
                 + "our own stocks; it can be changed or withdrawn through TRADE at the usual cost, and doing so "
-                + "does not cancel their commitment.",
+                + "does not cancel their commitment." + termsSentence,
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
                 $"{Phrase.Of(focus)} supply opened to {target.displayName} in exchange for "
-                + $"{Phrase.Of(commitment).ToLowerInvariant()}.", Publicity.Public);
+                + $"{Phrase.Of(commitment).ToLowerInvariant()}{ChronicleTerms(state, actorId, targetId, commitment, terms)}.", Publicity.Public);
             GameLog.Info("DIPLO", $"{actorId} -> {targetId}: {focus} supply for {commitment} accepted "
                 + $"(willingness {willingness:F1}, gain {gain:F1}).");
             return true;
@@ -357,6 +342,11 @@ namespace Brink.Core
         /// </summary>
         public static bool CanOfferRelief(GameState state, string actorId, string targetId,
             TreatyCommitment commitment, out string reason)
+            => CanOfferRelief(state, actorId, targetId, commitment, null, out reason);
+
+        /// <summary>The same gate with the requested condition and term (null = unconditional, permanent).</summary>
+        public static bool CanOfferRelief(GameState state, string actorId, string targetId,
+            TreatyCommitment commitment, TreatyClause terms, out string reason)
         {
             reason = null;
             var actor = state?.FindCountry(actorId);
@@ -382,23 +372,7 @@ namespace Brink.Core
                 return false;
             }
 
-            var treaty = state.FindTreaty(actorId, targetId);
-            if (treaty != null && treaty.broken)
-            {
-                reason = "THE STANDING TREATY IS BROKEN. NORMALISE BEFORE ASKING FOR MORE.";
-                return false;
-            }
-            if (treaty != null && treaty.Carries(targetId, commitment) && !treaty.ClauseIsExpired(state, commitment))
-            {
-                reason = $"THEY ALREADY CARRY {Phrase.Caps(commitment)} FOR US.";
-                return false;
-            }
-            if (commitment == TreatyCommitment.ArmsControl && !TechnologySystem.Has(actor, "CAP_ARMSCONTROL"))
-            {
-                reason = "ARMS CONTROL NEEDS A VERIFICATION REGIME WE DO NOT HAVE.";
-                return false;
-            }
-            return true;
+            return CommitmentGate(state, actor, targetId, commitment, terms, out reason);
         }
 
         /// <summary>
@@ -442,19 +416,19 @@ namespace Brink.Core
         /// they carry, plus what ending our measures is worth to them. The true
         /// test — decides what happens, never what is shown.
         /// </summary>
-        public static float ReliefOfferWillingness(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static float ReliefOfferWillingness(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            float treaty = DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
+            float treaty = DiplomacySystem.TreatyWillingness(state, actorId, targetId, OfferedClauses(state, actorId, targetId, commitment, terms));
             return treaty
                    + SanctionsReliefValue(state, actorId, targetId) * WillingnessPerPressurePoint
                    + SupplyReliefGain(state, actorId, targetId) * WillingnessPerCeilingPoint;
         }
 
         /// <summary>Outlook graded by our political collection on them — the `Assess` rule of the first slice.</summary>
-        public static TradeOutlook AssessReliefOffer(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static TradeOutlook AssessReliefOffer(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOfferRelief(state, actorId, targetId, commitment, out _)) return TradeOutlook.NoTerms;
-            float margin = ReliefOfferWillingness(state, actorId, targetId, commitment) - 50f;
+            if (!CanOfferRelief(state, actorId, targetId, commitment, terms, out _)) return TradeOutlook.NoTerms;
+            float margin = ReliefOfferWillingness(state, actorId, targetId, commitment, terms) - 50f;
             var estimate = IntelligenceSystem.GetEstimate(state, actorId, targetId, IntelDomain.Political);
             var grade = estimate?.confidence ?? ConfidenceGrade.None;
             switch (grade)
@@ -480,9 +454,9 @@ namespace Brink.Core
         /// shared treaty paths — together or not at all. Declined or invalid:
         /// the regime, every other regime and every clause stay as they were.
         /// </summary>
-        public static bool OfferReliefBy(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static bool OfferReliefBy(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOfferRelief(state, actorId, targetId, commitment, out string reason))
+            if (!CanOfferRelief(state, actorId, targetId, commitment, terms, out string reason))
             {
                 GameLog.Warn("DIPLO", reason ?? "Offer refused.");
                 return false;
@@ -494,7 +468,7 @@ namespace Brink.Core
             if (actor == null || target == null || relationship == null || sanction == null) return false;
 
             float value = SanctionsReliefValue(state, actorId, targetId);
-            float willingness = ReliefOfferWillingness(state, actorId, targetId, commitment);
+            float willingness = ReliefOfferWillingness(state, actorId, targetId, commitment, terms);
             if (willingness < 50f)
             {
                 relationship.AddMemory(state.date, "Rejected a sanctions-for-commitment offer", -0.5f);
@@ -524,12 +498,9 @@ namespace Brink.Core
             relationship.AddMemory(state.date, "Negotiated an end to sanctions", 1.5f);
 
             // ---- the commitment: a clause they carry, through the treaty paths ----
-            var clauses = Clauses(commitment);
-            var standing = state.FindTreaty(actorId, targetId);
-            bool concluded = standing == null
-                ? DiplomacySystem.ConcludeNegotiatedTreaty(state, actorId, targetId, clauses)
-                : DiplomacySystem.RecordDeepening(state, actorId, targetId,
-                    new List<TreatyCommitment> { commitment }, null, clauses);
+            string termsSentence = TermsSentence(state, actorId, targetId, commitment, terms);
+            string chronicleTerms = ChronicleTerms(state, actorId, targetId, commitment, terms);
+            bool concluded = RecordCommitment(state, actorId, targetId, commitment, terms);
             if (!concluded)
             {
                 GameLog.Error("DIPLO", "Sanctions-for-commitment: the commitment could not be recorded.");
@@ -545,11 +516,11 @@ namespace Brink.Core
                 $"{actor.displayName} lifts its {Phrase.Of(sanction.severity).ToLowerInvariant()} measures against "
                 + $"{target.displayName}; {target.displayName} carries {Phrase.Of(commitment).ToLowerInvariant()}. "
                 + $"A détente holds for at least {EconomySystem.DetenteTruceMonths} months: neither side may impose new "
-                + "measures while it runs, and it does not survive a war. Their commitment is a treaty term.",
+                + "measures while it runs, and it does not survive a war. Their commitment is a treaty term." + termsSentence,
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
                 $"Lifted {Phrase.Of(sanction.severity).ToLowerInvariant()} sanctions on {target.displayName} in exchange for "
-                + $"{Phrase.Of(commitment).ToLowerInvariant()}.", Publicity.Public);
+                + $"{Phrase.Of(commitment).ToLowerInvariant()}{chronicleTerms}.", Publicity.Public);
             GameLog.Info("DIPLO", $"{actorId} -> {targetId}: sanctions relief for {commitment} accepted "
                 + $"(willingness {willingness:F1}, relief value {value:F2}).");
             return true;
@@ -581,6 +552,11 @@ namespace Brink.Core
         /// </summary>
         public static bool CanOfferRecognition(GameState state, string actorId, string targetId,
             TreatyCommitment commitment, out string reason)
+            => CanOfferRecognition(state, actorId, targetId, commitment, null, out reason);
+
+        /// <summary>The same gate with the requested condition and term (null = unconditional, permanent).</summary>
+        public static bool CanOfferRecognition(GameState state, string actorId, string targetId,
+            TreatyCommitment commitment, TreatyClause terms, out string reason)
         {
             reason = "";
             var actor = state?.FindCountry(actorId);
@@ -589,23 +565,7 @@ namespace Brink.Core
             if (!DiplomacySystem.CanRecognise(state, actorId, targetId, out reason)) return false;
             if (state.FindRelationship(actorId, targetId) == null) { reason = "NO STANDING WITH THEM."; return false; }
 
-            var treaty = state.FindTreaty(actorId, targetId);
-            if (treaty != null && treaty.broken)
-            {
-                reason = "THE STANDING TREATY IS BROKEN. NORMALISE BEFORE ASKING FOR MORE.";
-                return false;
-            }
-            if (treaty != null && treaty.Carries(targetId, commitment) && !treaty.ClauseIsExpired(state, commitment))
-            {
-                reason = $"THEY ALREADY CARRY {Phrase.Caps(commitment)} FOR US.";
-                return false;
-            }
-            if (commitment == TreatyCommitment.ArmsControl && !TechnologySystem.Has(actor, "CAP_ARMSCONTROL"))
-            {
-                reason = "ARMS CONTROL NEEDS A VERIFICATION REGIME WE DO NOT HAVE.";
-                return false;
-            }
-            return true;
+            return CommitmentGate(state, actor, targetId, commitment, terms, out reason);
         }
 
         /// <summary>
@@ -635,18 +595,19 @@ namespace Brink.Core
         /// third state gravity reads. Both of recognition's consequences,
         /// nothing live touched.
         /// </summary>
-        public static float WillingnessOnceRecognised(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static float WillingnessOnceRecognised(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
             var live = state?.FindRelationship(actorId, targetId);
             var target = state?.FindCountry(targetId);
             if (live == null || target == null) return 0f;
-            if (live.recognised) return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
+            var clauses = OfferedClauses(state, actorId, targetId, commitment, terms);
+            if (live.recognised) return DiplomacySystem.TreatyWillingness(state, actorId, targetId, clauses);
             var asIf = live.AsIf();
             DiplomacySystem.ApplyRecognitionWarmth(asIf, state.date);
             var withParent = DiplomacySystem.RecognitionParentRelationship(state, actorId, target)?.AsIf();
             if (withParent != null) DiplomacySystem.ApplyRecognitionParentCost(withParent, state.date, target.displayName);
             var lookup = DiplomacySystem.RelationshipLookup(state, asIf, withParent);
-            return DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment), asIf, lookup);
+            return DiplomacySystem.TreatyWillingness(state, actorId, targetId, clauses, asIf, lookup);
         }
 
         /// <summary>
@@ -655,11 +616,11 @@ namespace Brink.Core
         /// legitimacy at the weight the treaty test charges for lacking it.
         /// Zero once granted.
         /// </summary>
-        public static float RecognitionValue(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static float RecognitionValue(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
             if (state?.FindRelationship(actorId, targetId)?.recognised != false) return 0f;
-            float plain = DiplomacySystem.TreatyWillingness(state, actorId, targetId, Clauses(commitment));
-            float warmth = WillingnessOnceRecognised(state, actorId, targetId, commitment) - plain;
+            float plain = DiplomacySystem.TreatyWillingness(state, actorId, targetId, OfferedClauses(state, actorId, targetId, commitment, terms));
+            float warmth = WillingnessOnceRecognised(state, actorId, targetId, commitment, terms) - plain;
             return Math.Max(0f, warmth) + LegitimacyGain(state, actorId, targetId) * DiplomacySystem.LegitimacyWillingnessWeight;
         }
 
@@ -668,15 +629,15 @@ namespace Brink.Core
         /// plus the legitimacy one more recognition buys them. The true test —
         /// decides what happens, never what is shown.
         /// </summary>
-        public static float RecognitionOfferWillingness(GameState state, string actorId, string targetId, TreatyCommitment commitment)
-            => WillingnessOnceRecognised(state, actorId, targetId, commitment)
+        public static float RecognitionOfferWillingness(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
+            => WillingnessOnceRecognised(state, actorId, targetId, commitment, terms)
                + LegitimacyGain(state, actorId, targetId) * DiplomacySystem.LegitimacyWillingnessWeight;
 
         /// <summary>Outlook graded by our political collection on them — the `Assess` rule of the first slice.</summary>
-        public static TradeOutlook AssessRecognitionOffer(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static TradeOutlook AssessRecognitionOffer(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOfferRecognition(state, actorId, targetId, commitment, out _)) return TradeOutlook.NoTerms;
-            float margin = RecognitionOfferWillingness(state, actorId, targetId, commitment) - 50f;
+            if (!CanOfferRecognition(state, actorId, targetId, commitment, terms, out _)) return TradeOutlook.NoTerms;
+            float margin = RecognitionOfferWillingness(state, actorId, targetId, commitment, terms) - 50f;
             var estimate = IntelligenceSystem.GetEstimate(state, actorId, targetId, IntelDomain.Political);
             var grade = estimate?.confidence ?? ConfidenceGrade.None;
             switch (grade)
@@ -702,9 +663,9 @@ namespace Brink.Core
         /// paths; together or not at all. Declined or invalid: no recognition,
         /// no clause, nothing else moves.
         /// </summary>
-        public static bool OfferRecognitionBy(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        public static bool OfferRecognitionBy(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms = null)
         {
-            if (!CanOfferRecognition(state, actorId, targetId, commitment, out string reason))
+            if (!CanOfferRecognition(state, actorId, targetId, commitment, terms, out string reason))
             {
                 GameLog.Warn("DIPLO", reason ?? "Offer refused.");
                 return false;
@@ -714,8 +675,8 @@ namespace Brink.Core
             var relationship = state.FindRelationship(actorId, targetId);
             if (actor == null || target == null || relationship == null) return false;
 
-            float value = RecognitionValue(state, actorId, targetId, commitment);
-            float willingness = RecognitionOfferWillingness(state, actorId, targetId, commitment);
+            float value = RecognitionValue(state, actorId, targetId, commitment, terms);
+            float willingness = RecognitionOfferWillingness(state, actorId, targetId, commitment, terms);
             if (willingness < 50f)
             {
                 relationship.AddMemory(state.date, "Rejected a recognition-for-commitment offer", -0.5f);
@@ -738,12 +699,9 @@ namespace Brink.Core
             }
 
             // ---- the commitment: a clause they carry, through the treaty paths ----
-            var clauses = Clauses(commitment);
-            var standing = state.FindTreaty(actorId, targetId);
-            bool concluded = standing == null
-                ? DiplomacySystem.ConcludeNegotiatedTreaty(state, actorId, targetId, clauses)
-                : DiplomacySystem.RecordDeepening(state, actorId, targetId,
-                    new List<TreatyCommitment> { commitment }, null, clauses);
+            string termsSentence = TermsSentence(state, actorId, targetId, commitment, terms);
+            string chronicleTerms = ChronicleTerms(state, actorId, targetId, commitment, terms);
+            bool concluded = RecordCommitment(state, actorId, targetId, commitment, terms);
             if (!concluded)
             {
                 GameLog.Error("DIPLO", "Recognition-for-commitment: the commitment could not be recorded.");
@@ -761,10 +719,10 @@ namespace Brink.Core
                 $"{actor.displayName} recognises {target.displayName}; {target.displayName} carries "
                 + $"{Phrase.Of(commitment).ToLowerInvariant()}. "
                 + (parent != null && parent.id != actorId ? $"{parent.displayName} takes it as the hostile act it is. " : "")
-                + "Recognition, once given, is not withdrawn; their commitment is a treaty term.",
+                + "Recognition, once given, is not withdrawn; their commitment is a treaty term." + termsSentence,
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
-                $"Recognised {target.displayName} in exchange for {Phrase.Of(commitment).ToLowerInvariant()}.", Publicity.Public);
+                $"Recognised {target.displayName} in exchange for {Phrase.Of(commitment).ToLowerInvariant()}{chronicleTerms}.", Publicity.Public);
             GameLog.Info("DIPLO", $"{actorId} -> {targetId}: recognition for {commitment} accepted "
                 + $"(willingness {willingness:F1}, recognition value {value:F2}).");
             return true;
@@ -810,8 +768,148 @@ namespace Brink.Core
             }
         }
 
-        static List<TreatyClause> Clauses(TreatyCommitment commitment)
-            => new List<TreatyClause> { new TreatyClause { commitment = commitment, side = ClauseSide.TheyProvide } };
+        // =====================================================================
+        // Terms (spec 04 §5k). Every exchange asks for one clause THEY carry;
+        // the player may bound it with the existing conditional-agreement
+        // model — a named-conflict trigger, a supported term, or both. The
+        // requested clause is built once here and carried through the gate,
+        // the pricing and the record unchanged; nothing rebuilds a default
+        // clause after the operator has chosen terms.
+        // =====================================================================
+
+        /// <summary>The clause they would carry: the commitment, their side, and exactly the requested condition and term (null = unconditional, permanent).</summary>
+        public static TreatyClause RequestedClause(TreatyCommitment commitment, TreatyClause terms)
+            => new TreatyClause
+            {
+                commitment = commitment,
+                side = ClauseSide.TheyProvide,
+                trigger = terms?.trigger ?? TreatyClauseTrigger.Always,
+                triggerCountryId = terms?.trigger == TreatyClauseTrigger.ConflictWithCountry ? (terms.triggerCountryId ?? "") : "",
+                durationMonths = terms?.durationMonths ?? 0
+            };
+
+        static List<TreatyClause> Clauses(TreatyCommitment commitment) => Clauses(commitment, null);
+        static List<TreatyClause> Clauses(TreatyCommitment commitment, TreatyClause terms)
+            => new List<TreatyClause> { RequestedClause(commitment, terms) };
+
+        /// <summary>
+        /// The standing clause an offer would RENEW rather than add: one the
+        /// treaty already records for this commitment, carried by them, whose
+        /// term has run out. Null otherwise. Renewal keeps the recorded side,
+        /// trigger and term and restarts only that clause's clock — the treaty
+        /// deepening rule — so the offer is judged and written at the recorded
+        /// scope, never at freshly chosen terms.
+        /// </summary>
+        public static TreatyClause RenewableClause(GameState state, string actorId, string targetId, TreatyCommitment commitment)
+        {
+            var treaty = state?.FindTreaty(actorId, targetId);
+            if (treaty == null || treaty.broken || !treaty.Has(commitment)) return null;
+            if (!treaty.Carries(targetId, commitment) || !treaty.ClauseIsExpired(state, commitment)) return null;
+            foreach (var clause in treaty.clauses)
+                if (clause.commitment == commitment)
+                    return new TreatyClause
+                    {
+                        commitment = commitment,
+                        side = ClauseSide.TheyProvide,
+                        trigger = clause.trigger,
+                        triggerCountryId = clause.triggerCountryId ?? "",
+                        durationMonths = clause.durationMonths
+                    };
+            return null;
+        }
+
+        static bool SameTerms(TreatyClause a, TreatyClause b)
+            => a.trigger == b.trigger && a.durationMonths == b.durationMonths
+               && (a.trigger != TreatyClauseTrigger.ConflictWithCountry || (a.triggerCountryId ?? "") == (b.triggerCountryId ?? ""));
+
+        /// <summary>The clauses an offer is priced and written on: the renewal record when one applies, otherwise the requested clause.</summary>
+        static List<TreatyClause> OfferedClauses(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
+        {
+            var renewal = RenewableClause(state, actorId, targetId, commitment);
+            return new List<TreatyClause> { renewal ?? RequestedClause(commitment, terms) };
+        }
+
+        /// <summary>
+        /// The commitment half of every exchange's gate, in one place: the
+        /// standing treaty must not be broken; a promise they still carry —
+        /// active or dormant — is not overwritten; one the treaty settles the
+        /// other way cannot be reversed here; an expired promise renews only on
+        /// its recorded terms; the requested terms must be ones the treaty
+        /// rules accept and the panel offers; arms control needs the regime.
+        /// Every reason is a public fact.
+        /// </summary>
+        static bool CommitmentGate(GameState state, CountryState actor, string targetId, TreatyCommitment commitment, TreatyClause terms, out string reason)
+        {
+            reason = "";
+            var treaty = state.FindTreaty(actor.id, targetId);
+            if (treaty != null && treaty.broken)
+            {
+                reason = "THE STANDING TREATY IS BROKEN. NORMALISE BEFORE ASKING FOR MORE.";
+                return false;
+            }
+            if (treaty != null && treaty.Carries(targetId, commitment) && !treaty.ClauseIsExpired(state, commitment))
+            {
+                reason = $"THEY ALREADY CARRY {Phrase.Caps(commitment)} FOR US.";
+                return false;
+            }
+            if (treaty != null && treaty.Has(commitment) && !treaty.Carries(targetId, commitment))
+            {
+                reason = $"THE TREATY ALREADY SETTLES {Phrase.Caps(commitment)} THE OTHER WAY — IT CANNOT BE REVERSED HERE.";
+                return false;
+            }
+            var requested = RequestedClause(commitment, terms);
+            if (!DiplomacySystem.ClauseTermsAreValid(state, actor.id, targetId, requested, out string why))
+            {
+                reason = why;
+                return false;
+            }
+            if (Array.IndexOf(DiplomacySystem.SupportedTermMonths, requested.durationMonths) < 0)
+            {
+                reason = "UNSUPPORTED TERM — PERMANENT, ONE, THREE OR FIVE YEARS.";
+                return false;
+            }
+            var renewal = RenewableClause(state, actor.id, targetId, commitment);
+            if (renewal != null && !SameTerms(renewal, requested))
+            {
+                reason = $"AN EXPIRED PROMISE RENEWS ON ITS RECORDED TERMS — {Phrase.Caps(commitment)}: "
+                         + (DiplomacySystem.TermsText(state, renewal, state.date) is string t && t.Length > 0 ? t.Replace("EXPIRES BEFORE", "FOR " + renewal.durationMonths / 12 + " YEAR(S), EXPIRING BEFORE") : "PERMANENT, UNCONDITIONAL") + ".";
+                return false;
+            }
+            if (commitment == TreatyCommitment.ArmsControl && !TechnologySystem.Has(actor, "CAP_ARMSCONTROL"))
+            {
+                reason = "ARMS CONTROL NEEDS A VERIFICATION REGIME WE DO NOT HAVE.";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Write the commitment they carry through the shared treaty paths: a new treaty, a deepening, or a renewal of an expired record.</summary>
+        static bool RecordCommitment(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
+        {
+            var standing = state.FindTreaty(actorId, targetId);
+            if (standing == null)
+                return DiplomacySystem.ConcludeNegotiatedTreaty(state, actorId, targetId, Clauses(commitment, terms));
+            if (RenewableClause(state, actorId, targetId, commitment) != null)
+                return DiplomacySystem.RecordDeepening(state, actorId, targetId, null, new List<TreatyCommitment> { commitment }, null);
+            return DiplomacySystem.RecordDeepening(state, actorId, targetId,
+                new List<TreatyCommitment> { commitment }, null, Clauses(commitment, terms));
+        }
+
+        /// <summary>The terms as a parenthetical for the chronicle; empty for an unconditional, permanent clause.</summary>
+        static string ChronicleTerms(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
+        {
+            string text = DiplomacySystem.TermsText(state, OfferedClauses(state, actorId, targetId, commitment, terms)[0], state.date);
+            return text.Length == 0 ? "" : $" ({text.ToLowerInvariant()})";
+        }
+
+        /// <summary>The bargain's terms in one sentence for a notice or the chronicle; empty for an unconditional, permanent clause.</summary>
+        public static string TermsSentence(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
+        {
+            var clause = OfferedClauses(state, actorId, targetId, commitment, terms)[0];
+            string text = DiplomacySystem.TermsText(state, clause, state.date);
+            if (text.Length == 0) return "";
+            return $" Their commitment applies {text.ToLowerInvariant()}; its lapse does not reverse what we gave.";
+        }
 
         static float Throughput(float volume, float tariff) => volume / 100f * (1f - tariff / 150f);
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

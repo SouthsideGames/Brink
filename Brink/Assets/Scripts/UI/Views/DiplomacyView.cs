@@ -46,6 +46,7 @@ namespace Brink.UI.Views
             BuildRelationshipBoard(state);
             BuildTargetSelector(state);
             BuildTreatyControls(state);
+            BuildLeverageTermsControls(state);
             BuildLeverageControls(state);
             BuildSanctionsExchangeControls(state);
             BuildRecognitionExchangeControls(state);
@@ -644,6 +645,52 @@ namespace Brink.UI.Views
         /// side's live figure — and grades the outlook by our collection on them,
         /// the same way a trade proposal is assessed.
         /// </summary>
+        /// <summary>The condition and term the three exchanges ask for, as a clause; null when unconditional and permanent.</summary>
+        TreatyClause LeverageTerms()
+            => string.IsNullOrEmpty(draftTriggerCountryId) && draftDurationMonths <= 0 ? null
+               : new TreatyClause
+               {
+                   trigger = string.IsNullOrEmpty(draftTriggerCountryId) ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry,
+                   triggerCountryId = draftTriggerCountryId,
+                   durationMonths = draftDurationMonths
+               };
+
+        /// <summary>
+        /// Terms for what they would carry (spec 04 §5k): the same trigger and
+        /// term controls the negotiation panel uses, applied to whichever
+        /// exchange below is put. Shown before any button that spends.
+        /// </summary>
+        void BuildLeverageTermsControls(GameState state)
+        {
+            var target = state.FindCountry(selectedTargetId);
+            if (target == null) return;
+            AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("TERMS FOR WHAT THEY WOULD CARRY", W);
+            var row = MakeRow();
+            var triggerCountry = state.FindCountry(draftTriggerCountryId);
+            AddButton(row, string.IsNullOrEmpty(draftTriggerCountryId) ? "TRIGGER: ALWAYS"
+                : $"TRIGGER: CONFLICT WITH {triggerCountry?.displayName.ToUpperInvariant() ?? draftTriggerCountryId}", null, () => { CycleTrigger(state); Refresh(); });
+            AddButton(row, draftDurationMonths <= 0 ? "TERM: PERMANENT" : $"TERM: {draftDurationMonths / 12} YEAR(S)", null, () => { CycleDuration(); Refresh(); });
+            var terms = LeverageTerms();
+            string text = DiplomacySystem.TermsText(state, DiplomaticLeverage.RequestedClause(TreatyCommitment.Transit, terms), state.date);
+            AddText("terminal-text-dim").text =
+                "  Applies to the three exchanges below. Their commitment would be "
+                + (text.Length == 0 ? "unconditional and permanent." : text.ToLowerInvariant() + ".")
+                + " These terms bound only what they carry: what we give follows its own rules — a supply link stays an ordinary "
+                + "trade link we can change or withdraw through TRADE; lifted sanctions bring a détente of at least "
+                + $"{EconomySystem.DetenteTruceMonths} months; recognition is permanent. Their commitment lapsing or lying dormant does not reverse any of it."
+                + " An expired promise they already made renews on its recorded terms, not on these.";
+            var standing = state.FindTreaty(state.playerCountryId, target.id);
+            if (standing != null)
+                foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
+                {
+                    var renewal = DiplomaticLeverage.RenewableClause(state, state.playerCountryId, target.id, commitment);
+                    if (renewal == null) continue;
+                    string recorded = DiplomacySystem.TermsText(state, renewal, state.date);
+                    AddText("terminal-text-dim").text = $"  {Phrase.Caps(commitment)} EXPIRED — RENEWS ON ITS RECORDED TERMS: "
+                        + (recorded.Length == 0 ? "PERMANENT, UNCONDITIONAL" : recorded.Replace("EXPIRES BEFORE", $"{renewal.durationMonths / 12} YEAR(S), EXPIRING BEFORE")) + ".";
+                }
+        }
+
         void BuildLeverageControls(GameState state)
         {
             var player = state.PlayerCountry;
@@ -697,11 +744,11 @@ namespace Brink.UI.Views
             {
                 var captured = commitment;
                 bool canOffer = DiplomaticLeverage.CanOffer(state, state.playerCountryId, target.id,
-                    leverageFocus, captured, out string blocked);
+                    leverageFocus, captured, LeverageTerms(), out string blocked);
                 var button = AddButton(askRow,
                     $"FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
                     {
-                        GameController.Instance.OfferSupplyForCommitment(selectedTargetId, leverageFocus, captured);
+                        GameController.Instance.OfferSupplyForCommitment(selectedTargetId, leverageFocus, captured, LeverageTerms());
                         Refresh();
                     });
                 if (!canOffer) Block(button, blocked);
@@ -716,7 +763,7 @@ namespace Brink.UI.Views
                 var outlookText = new StringBuilder();
                 foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
                 {
-                    var outlook = DiplomaticLeverage.Assess(state, state.playerCountryId, target.id, leverageFocus, commitment);
+                    var outlook = DiplomaticLeverage.Assess(state, state.playerCountryId, target.id, leverageFocus, commitment, LeverageTerms());
                     if (outlook == TradeOutlook.NoTerms) continue;
                     outlookText.Append(outlookText.Length == 0 ? "  OUTLOOK: " : ", ")
                         .Append(Phrase.Caps(commitment)).Append(' ').Append(outlook.ToString().ToUpperInvariant());
@@ -766,10 +813,10 @@ namespace Brink.UI.Views
             foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
             {
                 var captured = commitment;
-                bool can = DiplomaticLeverage.CanOfferRelief(state, state.playerCountryId, target.id, captured, out string blocked);
+                bool can = DiplomaticLeverage.CanOfferRelief(state, state.playerCountryId, target.id, captured, LeverageTerms(), out string blocked);
                 var button = AddButton(row, $"LIFT FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
                 {
-                    GameController.Instance.OfferSanctionsReliefForCommitment(selectedTargetId, captured);
+                    GameController.Instance.OfferSanctionsReliefForCommitment(selectedTargetId, captured, LeverageTerms());
                     Refresh();
                 });
                 if (!can) Block(button, blocked);
@@ -782,7 +829,7 @@ namespace Brink.UI.Views
                 var outlook = new StringBuilder();
                 foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
                 {
-                    var o = DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target.id, commitment);
+                    var o = DiplomaticLeverage.AssessReliefOffer(state, state.playerCountryId, target.id, commitment, LeverageTerms());
                     if (o == TradeOutlook.NoTerms) continue;
                     outlook.Append(outlook.Length == 0 ? "  OUTLOOK: " : ", ").Append(Phrase.Caps(commitment)).Append(' ').Append(o.ToString().ToUpperInvariant());
                 }
@@ -834,10 +881,10 @@ namespace Brink.UI.Views
             foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
             {
                 var captured = commitment;
-                bool can = DiplomaticLeverage.CanOfferRecognition(state, state.playerCountryId, target.id, captured, out string blocked);
+                bool can = DiplomaticLeverage.CanOfferRecognition(state, state.playerCountryId, target.id, captured, LeverageTerms(), out string blocked);
                 var button = AddButton(row, $"RECOGNISE FOR {Phrase.Caps(captured)} [{DiplomaticLeverage.OfferCost} CP]", null, () =>
                 {
-                    GameController.Instance.OfferRecognitionForCommitment(selectedTargetId, captured);
+                    GameController.Instance.OfferRecognitionForCommitment(selectedTargetId, captured, LeverageTerms());
                     Refresh();
                 });
                 if (!can) Block(button, blocked);
@@ -850,7 +897,7 @@ namespace Brink.UI.Views
                 var outlook = new StringBuilder();
                 foreach (TreatyCommitment commitment in System.Enum.GetValues(typeof(TreatyCommitment)))
                 {
-                    var o = DiplomaticLeverage.AssessRecognitionOffer(state, state.playerCountryId, target.id, commitment);
+                    var o = DiplomaticLeverage.AssessRecognitionOffer(state, state.playerCountryId, target.id, commitment, LeverageTerms());
                     if (o == TradeOutlook.NoTerms) continue;
                     outlook.Append(outlook.Length == 0 ? "  OUTLOOK: " : ", ").Append(Phrase.Caps(commitment)).Append(' ').Append(o.ToString().ToUpperInvariant());
                 }

@@ -1646,6 +1646,26 @@ three had passed for a long time:
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
 
+- [x] **Specific diplomatic leverage, final core slice — conditional and
+      time-limited requested commitments** (roadmap #21, spec 04 §5k). All
+      three exchanges ask for one clause they carry, bounded by the existing
+      conditional-agreement model (named-conflict trigger, permanent/1/3/5-year
+      term, or both) — no second condition system. `RequestedClause` is built
+      once and carried through gate, pricing and record; the ordinary clause
+      test prices its scope exactly once and each concession's verified value
+      is added as before. `DiplomacySystem.ClauseTermsAreValid` is the one
+      term rule (extracted from the negotiated-proposal path, which still
+      refuses silently); invalid terms spend nothing. An expired promise
+      renews on its recorded terms only (`RenewableClause`, through
+      `RecordDeepening`'s renewal path) — which also closes a latent hole in
+      slices 1–3, where an expired or opposite-direction record passed the
+      gate and the concession landed before the treaty write failed. The
+      concession never follows the commitment's clock: a supply link stays an
+      ordinary link, lifted sanctions keep their détente, recognition is
+      permanent, and the panel and notices say so with calendar dates.
+      `LeverageTermsTests` (PART_A). Roadmap #21 is core-complete pending
+      combined verification and integration; device confirmation is separate.
+
 - [x] **Specific diplomatic leverage, slice 3 — recognise a state for a
       commitment** (roadmap #21, spec 04 §5j). Only a `SecessionSystem`
       breakaway we have not yet recognised (`CanRecognise` unchanged); the
