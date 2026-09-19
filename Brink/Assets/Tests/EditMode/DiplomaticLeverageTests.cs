@@ -182,10 +182,11 @@ namespace Brink.Tests
             Assert.AreEqual(0, treaty.clauses[0].durationMonths);
             Assert.AreEqual(state.date.SortKey, treaty.clauses[0].effectiveDate.SortKey);
 
-            // Paid through the existing command path, once.
+            // Paid through the existing command path, once: one initiative for
+            // one accepted exchange; XP = the treaty act (30) + the exchange (12).
             Assert.AreEqual(cp - DiplomaticLeverage.OfferCost, state.commandPoints.current);
-            Assert.Greater(state.initiativesThisYear, initiative);
-            Assert.Greater(state.strategistXP, xp);
+            Assert.AreEqual(initiative + 1, state.initiativesThisYear, "exactly one Diplomacy initiative per accepted exchange");
+            Assert.AreEqual(xp + 42, state.strategistXP, "30 for the treaty concluded + 12 for the exchange");
             Assert.IsTrue(state.notifications.Exists(n => n.title == "LEVERAGE ACCEPTED"));
             Assert.IsTrue(state.notifications.Exists(n => n.title == "TREATY SIGNED"));
         }
@@ -365,6 +366,109 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void ExtendingAStandingTreatyRecordsOneInitiativeAndPaysDeepeningPlusExchange()
+        {
+            WarmToTheMargin(TreatyCommitment.Transit);
+            var mutual = new List<TreatyClause> { new TreatyClause { commitment = TreatyCommitment.NonAggression, side = ClauseSide.Mutual } };
+            Assert.IsTrue(DiplomacySystem.ConcludeNegotiatedTreaty(state, state.playerCountryId, target, mutual));
+            int cp = state.commandPoints.current, initiative = state.initiativesThisYear, xp = state.strategistXP;
+            Assert.IsTrue(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.Transit));
+            Assert.AreEqual(cp - DiplomaticLeverage.OfferCost, state.commandPoints.current);
+            Assert.AreEqual(initiative + 1, state.initiativesThisYear, "exactly one Diplomacy initiative per accepted exchange");
+            Assert.AreEqual(xp + 32, state.strategistXP, "20 for the deepening + 12 for the exchange");
+            Assert.IsTrue(state.FindTreaty(state.playerCountryId, target).Carries(state, target, TreatyCommitment.Transit));
+        }
+
+        [Test]
+        public void OrdinaryTreatyAndDeepeningRewardsAreUntouched()
+        {
+            var r = state.FindRelationship(state.playerCountryId, target);
+            r.relations = 90f; r.trust = 85f; r.strategicAlignment = 80f; r.SetThreatPerceivedBy(target, 0f);
+            int initiative = state.initiativesThisYear, xp = state.strategistXP;
+            Assert.IsTrue(gc.ProposeNegotiatedTreaty(target, TheyProvide(TreatyCommitment.NonAggression)));
+            Assert.AreEqual(initiative + 1, state.initiativesThisYear); Assert.AreEqual(xp + 30, state.strategistXP);
+            initiative = state.initiativesThisYear; xp = state.strategistXP;
+            Assert.IsTrue(gc.DeepenTreaty(target, TreatyCommitment.TradePreference));
+            Assert.AreEqual(initiative + 1, state.initiativesThisYear); Assert.AreEqual(xp + 20, state.strategistXP);
+        }
+
+        TradeRelation GeneralLink(float volume, float tariff)
+        {
+            var link = new TradeRelation { countryA = state.playerCountryId, countryB = target, focus = TradeFocus.General, volume = volume, tariff = tariff };
+            state.trade.Add(link); return link;
+        }
+
+        [Test]
+        public void AGeneralLinkBecomesTheCommodityLinkOnAcceptance()
+        {
+            WarmToTheMargin(TreatyCommitment.Transit);
+            var link = GeneralLink(20f, 30f); var them = state.FindCountry(target);
+            float before = EconomySystem.EnergyCeilingFor(state, them);
+            float gain = DiplomaticLeverage.SupplyGain(state, state.playerCountryId, target, TradeFocus.Energy);
+            Assert.Greater(gain, 0f);
+            Assert.IsTrue(DiplomaticLeverage.CanOffer(state, state.playerCountryId, target, TradeFocus.Energy, TreatyCommitment.Transit, out _), "a General link must not block the offer");
+            Assert.IsTrue(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.Transit));
+            Assert.AreSame(link, state.FindTrade(state.playerCountryId, target), "converted in place, not duplicated");
+            Assert.AreEqual(TradeFocus.Energy, link.focus);
+            Assert.AreEqual(DiplomaticLeverage.OfferVolume, link.volume, 0.001f); Assert.AreEqual(DiplomaticLeverage.OfferTariff, link.tariff, 0.001f);
+            Assert.AreEqual(before + gain, EconomySystem.EnergyCeilingFor(state, them), 0.01f, "the priced supply is the supply delivered");
+            Assert.IsTrue(state.FindTreaty(state.playerCountryId, target).Carries(state, target, TreatyCommitment.Transit));
+        }
+
+        [Test]
+        public void AGeneralLinkKeepsStrongerVolumeAndLowerTariff()
+        {
+            WarmToTheMargin(TreatyCommitment.Transit);
+            var link = GeneralLink(70f, 5f); var them = state.FindCountry(target);
+            float before = EconomySystem.EnergyCeilingFor(state, them);
+            float gain = DiplomaticLeverage.SupplyGain(state, state.playerCountryId, target, TradeFocus.Energy);
+            Assert.AreEqual(90f * TradeSystem.MaxSupplyShare * (0.70f * (1f - 5f / 150f)), gain, 0.01f, "priced off the link acceptance leaves behind: volume 70, tariff 5");
+            Assert.IsTrue(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.Transit));
+            Assert.AreEqual(TradeFocus.Energy, link.focus); Assert.AreEqual(70f, link.volume, 0.001f); Assert.AreEqual(5f, link.tariff, 0.001f);
+            Assert.AreEqual(before + gain, EconomySystem.EnergyCeilingFor(state, them), 0.01f);
+        }
+
+        [Test]
+        public void AGeneralLinkIsUntouchedWhenTheOfferIsDeclinedOrInvalid()
+        {
+            var link = GeneralLink(40f, 25f);
+            var r = state.FindRelationship(state.playerCountryId, target); r.relations = 5f; r.trust = 5f; r.SetThreatPerceivedBy(target, 90f);
+            Assert.IsTrue(DiplomaticLeverage.CanOffer(state, state.playerCountryId, target, TradeFocus.Energy, TreatyCommitment.MutualDefense, out _));
+            Assert.IsFalse(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.MutualDefense), "fixture: must be declined");
+            Assert.AreEqual(TradeFocus.General, link.focus); Assert.AreEqual(40f, link.volume, 0.001f); Assert.AreEqual(25f, link.tariff, 0.001f);
+            Assert.AreEqual(1, state.trade.FindAll(l => l.Involves(state.playerCountryId) && l.Involves(target)).Count);
+            // invalid (no CP) and unaffordable attempts leave it alone too
+            state.commandPoints.current = 1; string before = UnityEngine.JsonUtility.ToJson(link);
+            Assert.IsFalse(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.MutualDefense));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(link));
+        }
+
+        [Test]
+        public void ADifferentCommodityLinkIsStillProtected()
+        {
+            WarmToTheMargin(TreatyCommitment.Transit);
+            var link = new TradeRelation { countryA = state.playerCountryId, countryB = target, focus = TradeFocus.Food, volume = 40f, tariff = 20f }; state.trade.Add(link);
+            Assert.IsFalse(DiplomaticLeverage.CanOffer(state, state.playerCountryId, target, TradeFocus.Energy, TreatyCommitment.Transit, out string why));
+            StringAssert.Contains("ALREADY CARRIES FOOD", why);
+            int cp = state.commandPoints.current; Assert.IsFalse(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.Transit)); Assert.AreEqual(cp, state.commandPoints.current);
+            Assert.AreEqual(TradeFocus.Food, link.focus); Assert.AreEqual(40f, link.volume, 0.001f); Assert.AreEqual(20f, link.tariff, 0.001f);
+        }
+
+        [Test]
+        public void AConvertedLinkCannotBeSoldAgain()
+        {
+            WarmToTheMargin(TreatyCommitment.Transit);
+            GeneralLink(20f, 30f);
+            Assert.IsTrue(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.Transit));
+            var r = state.FindRelationship(state.playerCountryId, target); float dependence = r.DependenceOf(target);
+            Assert.AreEqual(0f, DiplomaticLeverage.SupplyGain(state, state.playerCountryId, target, TradeFocus.Energy), 0.001f);
+            Assert.IsFalse(DiplomaticLeverage.CanOffer(state, state.playerCountryId, target, TradeFocus.Energy, TreatyCommitment.IntelligenceSharing, out string why));
+            StringAssert.Contains("NOTHING NEW", why);
+            int cp = state.commandPoints.current; Assert.IsFalse(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.IntelligenceSharing));
+            Assert.AreEqual(cp, state.commandPoints.current); Assert.AreEqual(dependence, r.DependenceOf(target), 0.001f);
+        }
+
+        [Test]
         public void TheLeverageScreenFitsANarrowPhoneAndExplainsRefusals()
         {
             WarmToTheMargin(TreatyCommitment.Transit);
@@ -387,6 +491,13 @@ namespace Brink.Tests
                 Assert.LessOrEqual(max, cols, $"DIPLOMACY at {cols} columns overflows: \"{worst}\"");
                 StringAssert.Contains("LEVERAGE", all);
                 StringAssert.Contains("OUTLOOK", all);
+                StringAssert.Contains("withdraw", all, "the decision point must say the link can be withdrawn");
+                StringAssert.Contains("does not cancel their commitment",
+                    System.Text.RegularExpressions.Regex.Replace(all, @"\s+", " "),
+                    "the decision point must say withdrawing supply leaves their commitment standing");
+                Assert.IsFalse(all.ToUpperInvariant().Contains("GUARANTEE"), "player-facing wording must describe an ordinary supply link");
+                var concession = new List<Button>(); view.Root.Query<Button>().ForEach(b => { if (b.text.Contains("OFFER ") && b.text.EndsWith(" SUPPLY")) concession.Add(b); });
+                Assert.Greater(concession.Count, 0, "OFFER <COMMODITY> SUPPLY control missing");
 
                 var offers = new List<Button>(); view.Root.Query<Button>().ForEach(b => { if (b.text.StartsWith("FOR ")) offers.Add(b); });
                 Assert.AreEqual(Enum.GetValues(typeof(TreatyCommitment)).Length, offers.Count, "one control per commitment");

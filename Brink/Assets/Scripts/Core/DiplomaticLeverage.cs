@@ -9,9 +9,14 @@ namespace Brink.Core
     /// offer a concrete concession this government needs from us in exchange
     /// for one commitment it carries for us.
     ///
-    /// The concession is a resource supply guarantee — a `TradeRelation` on the
-    /// commodity they are short of and we hold in surplus, on concessionary
-    /// terms. The commitment is an ordinary `TreatyClause` they carry. Both
+    /// The concession is an ordinary resource supply link — a `TradeRelation` on
+    /// the commodity they are short of and we hold in surplus, on concessionary
+    /// terms. **Ordinary means ordinary**: what it delivers follows the trade
+    /// rules (`TradeSystem.Supply` reads our live stock, the tariff, embargoes
+    /// and sanctions every month), and we may change or withdraw it later
+    /// through the trade verbs at their usual cost — which does not cancel the
+    /// commitment they signed. The commitment is an ordinary `TreatyClause`
+    /// they carry. Both
     /// halves already exist; what did not exist was a way to put them on the
     /// same table. A trade proposal was judged on its own commercial merits and
     /// a treaty on its own diplomatic ones, so "we will keep your lights on if
@@ -22,7 +27,7 @@ namespace Brink.Core
     /// rival gravity, encirclement, our reciprocity and the rest), and the
     /// supply's worth is the ceiling points `TradeSystem.Supply` would actually
     /// add for them — marginal over any link that already exists, so the same
-    /// guarantee cannot be sold twice. One acceptance test decides both halves,
+    /// supply cannot be sold twice. One acceptance test decides both halves,
     /// and they are applied together or not at all.
     /// </summary>
     public static class DiplomaticLeverage
@@ -36,21 +41,21 @@ namespace Brink.Core
         /// </summary>
         public const float SurplusFloor = 60f;
 
-        /// <summary>Strategic weight a supply guarantee commits, and the concessionary tariff it carries.</summary>
+        /// <summary>Strategic weight the offered link carries, and the concessionary tariff it is opened at.</summary>
         public const float OfferVolume = 50f;
         public const float OfferTariff = 10f;
 
         /// <summary>
-        /// Willingness per ceiling point the guarantee adds for them. Scaled so a
-        /// full guarantee from a rich supplier (~19 points) moves a modest ask
+        /// Willingness per ceiling point the link adds for them. Scaled so a
+        /// full offer from a rich supplier (~19 points) moves a modest ask
         /// across the line and a mutual-defence pact stays a matter of warmth.
         /// </summary>
         public const float WillingnessPerCeilingPoint = 1.5f;
 
         /// <summary>
         /// Ceiling points per unit of treaty value, for the reciprocity ledger.
-        /// A real supply guarantee is worth more to its receiver than a paper
-        /// trade preference (2.5) and less than a guarantee to fight (5).
+        /// A real supply link is worth more to its receiver than a paper trade
+        /// preference (2.5) and less than a guarantee to fight (5).
         /// </summary>
         public const float CeilingPointsPerValueUnit = 6f;
 
@@ -66,7 +71,7 @@ namespace Brink.Core
             var actor = state?.FindCountry(actorId);
             var target = state?.FindCountry(targetId);
             if (actor == null || target == null || actorId == targetId) { reason = "NO SUCH PARTNER."; return false; }
-            if (focus == TradeFocus.General) { reason = "NAME A COMMODITY TO GUARANTEE."; return false; }
+            if (focus == TradeFocus.General) { reason = "NAME A COMMODITY TO OFFER."; return false; }
 
             if (OwnStock(actor, focus) < SurplusFloor)
             {
@@ -86,8 +91,13 @@ namespace Brink.Core
                 return false;
             }
 
+            // A link on another commodity is theirs to keep: converting it would
+            // silently take that supply away. A `General` link supplies no
+            // commodity (`TradeSystem.Supply` returns zero for it), so it may be
+            // converted — its volume and tariff are preserved or improved, the
+            // same re-focusing an ordinary trade proposal performs.
             var link = state.FindTrade(actorId, targetId);
-            if (link != null && link.focus != focus && link.volume > 0f)
+            if (link != null && link.focus != focus && link.focus != TradeFocus.General && link.volume > 0f)
             {
                 reason = $"OUR LINK WITH THEM ALREADY CARRIES {Phrase.Caps(link.focus)} — CHANGE IT THROUGH TRADE.";
                 return false;
@@ -118,7 +128,7 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Ceiling points the guarantee would actually add for them: our link's
+        /// Ceiling points the link would actually add for them: our link's
         /// marginal supply, bounded by the room they have to use it. Zero once
         /// they draw this from us on these terms — which is what stops one
         /// concession buying two commitments — and zero for a state that does
@@ -131,7 +141,7 @@ namespace Brink.Core
             float gain = LinkGain(state, actorId, targetId, focus);
             if (gain <= 0f) return 0f;
 
-            // **Need is what makes it leverage.** A guarantee is worth exactly
+            // **Need is what makes it leverage.** The link is worth exactly
             // the ceiling it lifts: a state already at its ceiling gains
             // nothing however much we could ship, so our surplus alone buys
             // nothing from a state that does not need it. Their live figure is
@@ -154,9 +164,15 @@ namespace Brink.Core
             var link = state.FindTrade(actorId, targetId);
             float current = link == null || link.focus != focus || link.embargoed
                 ? 0f : Throughput(link.volume, link.tariff);
+
+            // The resulting link keeps the better of the existing terms and the
+            // offered ones — for a same-commodity link *and* for a `General` link
+            // being converted — so the marginal supply is priced off the link
+            // acceptance would actually leave behind.
+            bool keepsTerms = link != null && (link.focus == focus || link.focus == TradeFocus.General);
             float offered = Throughput(
-                Math.Max(link?.focus == focus ? link.volume : 0f, OfferVolume),
-                Math.Min(link?.focus == focus ? link.tariff : 100f, OfferTariff));
+                Math.Max(keepsTerms ? link.volume : 0f, OfferVolume),
+                Math.Min(keepsTerms ? link.tariff : 100f, OfferTariff));
 
             // Exactly `TradeSystem.Supply`'s arithmetic for one link: what they
             // can draw is bounded by what we actually have.
@@ -177,7 +193,7 @@ namespace Brink.Core
 
         /// <summary>
         /// How the whole package lands: the commitment judged exactly as a
-        /// negotiated treaty clause they carry, plus what the guarantee is worth
+        /// negotiated treaty clause they carry, plus what the link is worth
         /// to them. The true test — decides what happens, never what is shown.
         /// </summary>
         public static float Willingness(GameState state, string actorId, string targetId,
@@ -242,7 +258,7 @@ namespace Brink.Core
                 if (actorId == state.playerCountryId)
                     state.AddNotification(NotificationClass.Advisory, "OFFER DECLINED",
                         $"{target.displayName} will not carry {Phrase.Of(commitment).ToLowerInvariant()} "
-                        + $"for a {Phrase.Of(focus).ToLowerInvariant()} guarantee. "
+                        + $"for {Phrase.Of(focus).ToLowerInvariant()} supply. "
                         + (DiplomacySystem.BlockedByRival(state, actorId, targetId)
                            ?? "What we can supply does not outweigh what we are asking; a lighter commitment, or more warmth first."),
                         targetId, desk: ReportingDesk.Diplomacy);
@@ -250,7 +266,10 @@ namespace Brink.Core
                 return false;
             }
 
-            // ---- the concession: a supply guarantee on concessionary terms ----
+            // ---- the concession: an ordinary supply link on concessionary terms ----
+            // Terms are only ever kept or improved: volume takes the larger,
+            // tariff the smaller. A `General` link converts to the commodity on
+            // the same rule; `CanOffer` has already refused any other commodity.
             var link = state.FindTrade(actorId, targetId);
             bool created = link == null;
             if (created)
@@ -286,19 +305,21 @@ namespace Brink.Core
             }
 
             // What the terms say about us, on the ledger every other government
-            // reads: the commitment's value against what the guarantee is worth.
+            // reads: the commitment's value against what the link is worth.
             float balance = DiplomacySystem.ValueOf(commitment) - gain / CeilingPointsPerValueUnit;
             DiplomacySystem.ApplyReciprocity(state, actor, target, balance);
 
             state.AddNotification(
                 actorId == state.playerCountryId ? NotificationClass.Priority : NotificationClass.Wire,
                 "LEVERAGE ACCEPTED",
-                $"{target.displayName} accepts: {actor.displayName} guarantees "
-                + $"{Phrase.Of(focus).ToLowerInvariant()} supply; {target.displayName} carries "
-                + $"{Phrase.Of(commitment).ToLowerInvariant()}.",
+                $"{target.displayName} accepts: {actor.displayName} opens "
+                + $"{Phrase.Of(focus).ToLowerInvariant()} supply on concessionary terms; {target.displayName} carries "
+                + $"{Phrase.Of(commitment).ToLowerInvariant()}. What the link delivers follows the trade rules and "
+                + "our own stocks; it can be changed or withdrawn through TRADE at the usual cost, and doing so "
+                + "does not cancel their commitment.",
                 targetId, desk: ReportingDesk.Diplomacy);
             state.AddChronicle(ChronicleCategory.Diplomatic, actorId,
-                $"{Phrase.Of(focus)} supply guaranteed to {target.displayName} in exchange for "
+                $"{Phrase.Of(focus)} supply opened to {target.displayName} in exchange for "
                 + $"{Phrase.Of(commitment).ToLowerInvariant()}.", Publicity.Public);
             GameLog.Info("DIPLO", $"{actorId} -> {targetId}: {focus} supply for {commitment} accepted "
                 + $"(willingness {willingness:F1}, gain {gain:F1}).");
@@ -317,7 +338,7 @@ namespace Brink.Core
             }
         }
 
-        /// <summary>Commodities we could guarantee right now.</summary>
+        /// <summary>Commodities we could offer right now.</summary>
         public static List<TradeFocus> Surpluses(CountryState country)
         {
             var list = new List<TradeFocus>();

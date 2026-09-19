@@ -588,7 +588,7 @@ refused for years).
   treaty existed, now offers ADD-commitment buttons with the willingness gate
   explained on refusal. Covered by `DiplomacySecondActTests`.
 
-## 5h. Specific leverage — a supply guarantee for a commitment (roadmap #21, first slice)
+## 5h. Specific leverage — supply for a commitment (roadmap #21, first slice)
 
 `Core/DiplomaticLeverage.cs`; `GameController.OfferSupplyForCommitment(targetId,
 focus, commitment)`; the LEVERAGE panel on DIPLOMACY; `DiplomaticLeverageTests`.
@@ -604,10 +604,24 @@ offer is priced by the systems that own its halves and applied through the
 paths they already use.
 
 **The offer.** A commodity we hold at or above `SurplusFloor` (60 — the same line
-`TradeSystem` uses to call a partner short), guaranteed to them as a link at
-`OfferVolume` 50 and `OfferTariff` 10 (the better end for them), in exchange for
-one commitment they carry (`ClauseSide.TheyProvide`, unconditional, permanent).
-2 CP, spent on the attempt, exactly as a treaty proposal.
+`TradeSystem` uses to call a partner short), opened to them as an **ordinary
+trade link** at `OfferVolume` 50 and `OfferTariff` 10 (the better end for them,
+or our existing terms where better), in exchange for one commitment they carry
+(`ClauseSide.TheyProvide`, unconditional, permanent). 2 CP, spent on the
+attempt, exactly as a treaty proposal.
+
+**What the supply obligation is, truthfully.** The link is not a guarantee and
+the game never calls it one. What it delivers each month follows the trade
+rules — `TradeSystem.Supply` reads our *live* stock, the tariff, embargoes and
+sanctions either way — so our depletion, a raised tariff or a sanctions regime
+shrinks or closes it. We may change or withdraw it later through the ordinary
+trade verbs at their usual cost (`WITHDRAW FROM TRADE` is 1 CP and −10
+relations / −8 trust; `SET TARIFF` is 1 CP). **Doing so does not cancel their
+commitment**: the clause they carry is a treaty term that only `BreakTreaty`
+ends, at the treaty-break price. The LEVERAGE panel, the acceptance notice and
+the command index all say this at the decision point. No enforcement or
+penalty was added for a withdrawn offer; that asymmetry is a documented
+limitation, not a hidden rule.
 
 **Acceptance, one test for both halves.**
 
@@ -621,15 +635,18 @@ SupplyGain = min( our stock × MaxSupplyShare × (offered throughput − current
 ```
 
 The first term is what `TradeSystem.Supply` would actually add for them over any
-link that already exists — so once they draw our energy on these terms the
-guarantee is worth nothing more and cannot buy a second commitment. The second
+link that already exists, priced off the link acceptance would leave behind
+(the better of the existing terms and the offered ones) — so once they draw our
+energy on these terms the supply is worth nothing more and cannot buy a second
+commitment. The second
 term is **need**: a state already at its ceiling gains nothing from it, so our
 surplus alone buys nothing from a state that does not need it. Dependence,
 rival gravity, encirclement, legitimacy, our reciprocity and the rest all act
 through `TreatyWillingness` unchanged.
 
 **Application, together or not at all.** Accepted: the link is created or raised
-(focus set, volume `max`, tariff `min`, embargo cleared), the importer's
+(focus set, volume `max`, tariff `min`, embargo cleared — terms are only ever
+kept or improved), the importer's
 dependence on us rises by `volume × 0.25` (the direction `TradeSystem` records —
 here they are the buyer), and the clause is written through
 `DiplomacySystem.ConcludeNegotiatedTreaty` (no standing treaty) or
@@ -640,8 +657,25 @@ on `ValueOf(commitment) − SupplyGain / 6`, so trading a trickle for a defence
 pact still costs our name. Declined: a −0.5 memory and an ADVISORY that says what
 would change it; no link, no clause, no dependence. Invalid: nothing is spent.
 
-**Validity reads public facts only** — our stock, a signed link (including one
-that already carries a different commodity), a signed treaty, a broken treaty, a
+**Rewards (spec 07).** One accepted offer is one Diplomacy decision and records
+exactly one initiative. The helpers own the treaty act's award: `ConcludeTreaty`
+records the initiative and 30 XP when a treaty is created, so the wrapper adds
+only the exchange's 12 XP (42 total); `RecordDeepening` awards nothing, so when a
+standing treaty is extended the wrapper records the initiative and pays the
+deepening's 20 XP plus the exchange's 12 (32 total). Ordinary proposals (30 XP,
+one initiative) and ordinary deepening (20 XP, one initiative) are unchanged.
+
+**Existing links.** A link that already carries a *different commodity* is theirs
+to keep and blocks the offer ("change it through TRADE"): converting it would
+silently take that supply away. A `General` link may be converted — it supplies
+no commodity (`Supply` returns zero for it; its only focus-specific effect is
+consumer-sector import displacement, a cost, not a benefit), and conversion
+keeps its volume and tariff where they are better — the same re-focusing an
+ordinary trade proposal performs. Declined or invalid attempts leave any
+existing link byte-identical.
+
+**Validity reads public facts only** — our stock, a signed link on a different
+commodity, a signed treaty, a broken treaty, a
 sanctions regime either way, a war between us, and the arms-control regime — so
 a refusal never leaks their position. Their live figure is read once, inside
 the true test, exactly as `TradeSystem.CostToPartner` reads a partner's
@@ -658,8 +692,9 @@ live resources or the true willingness.
 **Not in this slice.** Other concessions (lifting our sanctions, tariff cuts,
 arms transfers, recognition) and other asks (basing terms, a vote in the
 chamber, a break with a third state) are the rest of the roadmap item; the
-acceptance shape above is the seam they would use. The AI has no caller yet —
-an AI government short of energy still proposes trade and treaties separately.
+acceptance shape above is the seam they would use. One commodity per pair (the
+trade model has one link per pair). The AI has no caller yet — an AI government
+short of energy still proposes trade and treaties separately.
 
 ## 9a. Bloc politics (GDD §24 amendment)
 

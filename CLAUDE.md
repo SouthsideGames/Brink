@@ -1648,20 +1648,28 @@ three had passed for a long time:
 
 - [x] **Specific diplomatic leverage, first slice** (roadmap #21, spec 04 §5h).
       "Something this government needs from us, for a specific commitment."
-      A resource supply guarantee (a `TradeRelation` on a commodity we hold
-      above 60, at volume 50 / tariff 10) offered for one commitment they carry
-      (`TheyProvide` clause). **No new currency and no new mechanism**: priced
-      as `TreatyWillingness` plus the ceiling points `TradeSystem.Supply` would
-      actually add for them — marginal over any existing link and capped by
-      their headroom, so the same guarantee cannot buy twice and a state that
-      does not need it is not bought — and applied through the shared
+      An **ordinary** resource supply link (a `TradeRelation` on a commodity we
+      hold above 60, at volume 50 / tariff 10 or our better existing terms)
+      offered for one commitment they carry (`TheyProvide` clause). It is not
+      a guarantee and is never called one: what it delivers follows the trade
+      rules and our live stock, it can be changed or withdrawn through TRADE
+      at the usual cost, and doing so does not cancel their commitment — said
+      at the decision point. A `General` link converts (it supplies nothing);
+      a different-commodity link is protected. **No new currency and no new
+      mechanism**: priced as `TreatyWillingness` plus the ceiling points
+      `TradeSystem.Supply` would actually add for them — marginal over any
+      existing link and capped by their headroom, so the same supply cannot
+      buy twice and a state that does not need it is not bought — and applied
+      through the shared
       `ConcludeNegotiatedTreaty` / `RecordDeepening` paths extracted from the
       negotiated-treaty and deepening code, so a clause signed either way is
       written by one rule. Accepted: both halves at once. Declined: memory and
       an explanation only. Invalid: nothing spent, every refusal a public fact.
       The LEVERAGE panel reads only our stocks and the authored endowment, and
-      grades the outlook by collection. `DiplomaticLeverageTests` (PART_A).
-      Plain deepening still records no clause — a test pins it.
+      grades the outlook by collection. One accepted offer records exactly one
+      initiative; XP is the treaty act's own award plus 12 for the exchange (42
+      new treaty / 32 extended). `DiplomaticLeverageTests` (PART_A). Plain
+      deepening still records no clause — a test pins it.
 
 - [x] **The first actor that is not a government** (`InsurgencySystem`, spec 16).
       Every actor on the map was a state, so the only violence available was

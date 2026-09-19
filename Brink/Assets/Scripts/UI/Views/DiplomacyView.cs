@@ -655,7 +655,7 @@ namespace Brink.UI.Views
             {
                 AddText("terminal-text-dim").text =
                     $"  We hold no energy, materials or food above {DiplomaticLeverage.SurplusFloor:F0} — "
-                    + "nothing to guarantee anyone. A surplus is what makes an offer.";
+                    + "nothing to offer anyone. A surplus is what makes an offer.";
                 return;
             }
             if (leverageFocus == TradeFocus.General || !surpluses.Contains(leverageFocus))
@@ -667,7 +667,7 @@ namespace Brink.UI.Views
             {
                 var captured = focus;
                 var button = AddButton(focusRow,
-                    $"{(captured == leverageFocus ? "► " : "")}GUARANTEE {Phrase.Caps(captured)}",
+                    $"{(captured == leverageFocus ? "► " : "")}OFFER {Phrase.Caps(captured)} SUPPLY",
                     captured == leverageFocus ? "primary" : null,
                     () => { leverageFocus = captured; Refresh(); });
             }
@@ -676,14 +676,16 @@ namespace Brink.UI.Views
             float? authored = DiplomaticLeverage.AuthoredEndowment(target.id, leverageFocus);
             string need = authored == null
                 ? "NO AUTHORED ENDOWMENT ON RECORD FOR THIS STATE."
-                : authored < 45f ? $"THEIR {Phrase.Caps(leverageFocus)} ENDOWMENT IS THIN — A GUARANTEE IS WORTH SOMETHING TO THEM."
+                : authored < 45f ? $"THEIR {Phrase.Caps(leverageFocus)} ENDOWMENT IS THIN — SUPPLY IS WORTH SOMETHING TO THEM."
                 : authored < DiplomaticLeverage.SurplusFloor ? $"THEIR {Phrase.Caps(leverageFocus)} ENDOWMENT IS MODEST."
                 : $"THEY ARE WELL ENDOWED IN {Phrase.Caps(leverageFocus)} — DO NOT EXPECT IT TO BUY MUCH.";
             var link = state.FindTrade(state.playerCountryId, target.id);
             AddText("terminal-text-dim").text = "  " + need
                 + (link != null && link.focus == leverageFocus
                     ? $"\n  THEY ALREADY DRAW {Phrase.Caps(link.focus)} FROM US AT VOLUME {link.volume:F0}, TARIFF {link.tariff:F0}."
-                    : "");
+                    : link != null && link.focus == TradeFocus.General
+                        ? $"\n  OUR GENERAL TRADE LINK (VOLUME {link.volume:F0}, TARIFF {link.tariff:F0}) WOULD BECOME THE {Phrase.Caps(leverageFocus)} LINK, KEEPING THE BETTER TERMS."
+                        : "");
 
             // The commitment: what we ask them to carry in return.
             var standing = state.FindTreaty(state.playerCountryId, target.id);
@@ -720,11 +722,13 @@ namespace Brink.UI.Views
                 AddText("terminal-text-dim").text = outlookText.ToString();
             }
             AddText("terminal-text-dim").text =
-                $"  Accepted, both halves apply at once: a {Phrase.Of(leverageFocus).ToLowerInvariant()} link at "
-                + $"volume {DiplomaticLeverage.OfferVolume:F0} and tariff {DiplomaticLeverage.OfferTariff:F0} that "
-                + "makes them dependent on us, and a clause they carry"
+                $"  Accepted, both halves apply at once: an ordinary {Phrase.Of(leverageFocus).ToLowerInvariant()} trade link at "
+                + $"volume {DiplomaticLeverage.OfferVolume:F0} and tariff {DiplomaticLeverage.OfferTariff:F0} (or our existing "
+                + "terms where better) that makes them dependent on us, and a clause they carry"
                 + (standing != null ? " added to the standing treaty." : " in a new treaty.")
-                + " Declined, nothing changes but the memory of the ask. The same guarantee cannot buy a second commitment.";
+                + " What the link delivers follows the trade rules and our own stocks; we can change or withdraw it "
+                + "later through TRADE at the usual cost, and doing so does not cancel their commitment."
+                + " Declined, nothing changes but the memory of the ask. The same supply cannot buy a second commitment.";
         }
 
         /// <summary>The clause for a commitment in the current draft, or null.</summary>
