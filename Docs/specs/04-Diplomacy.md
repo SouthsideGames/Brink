@@ -689,13 +689,77 @@ collection on them (`TradeSystem.Assess`'s rule: LIKELY / UNCERTAIN / UNLIKELY),
 never the true reception. A test scans the panel for any read of the target's
 live resources or the true willingness.
 
-**Not in this slice.** Other concessions (lifting our sanctions, tariff cuts,
-arms transfers, recognition) and other asks (basing terms, a vote in the
+**Not in this slice.** Other concessions (tariff cuts, arms transfers,
+recognition — lifting our sanctions is §5i) and other asks (basing terms, a vote in the
 chamber, a break with a third state) are the rest of the roadmap item; the
 acceptance shape above is the seam they would use. One commodity per pair (the
 trade model has one link per pair). The AI has no caller yet — an AI government
 short of energy still proposes trade and treaties separately.
 
+## 5i. Specific leverage — lift our sanctions for a commitment (roadmap #21, slice 2)
+
+`DiplomaticLeverage.CanOfferRelief / OfferReliefBy`;
+`GameController.OfferSanctionsReliefForCommitment(targetId, commitment)`; the
+LIFT OUR SANCTIONS FOR A COMMITMENT panel on DIPLOMACY; `SanctionsExchangeTests`.
+
+*"We will lift the sanctions we imposed on your government if you agree to
+this commitment."* **Ours on them, only.** A regime they run against us is
+theirs to lift (SEEK SANCTIONS RELIEF, spec 02 §4a — unchanged); a third
+state's regime is not ours to trade; the panel and `CanOfferRelief` say which
+of these applies. A chamber-mandated regime is refused (the mandate is not ours
+to trade away — the same rule relief already applies), as is an offer to a
+state we are fighting (a war voids any détente the moment it is signed).
+
+**The concession is the regime itself.** Accepted, it is removed exactly as
+`EconomySystem.LiftSanctions` removes it — the `Sanction` record goes, and an
+embargo on our trade link with them lifts — and the **existing détente** is
+set: `Relationship.sanctionsTruceMonths = DetenteTruceMonths` (24), the same
+field `SeekSanctionsReliefBy` sets. Relations +6 / trust +5 and the "Negotiated
+an end to sanctions" memory follow, as for negotiated relief. The commitment is
+then written through `ConcludeNegotiatedTreaty` / `RecordDeepening` exactly as
+in §5h, so direction, conditions and reciprocity behave identically.
+
+**Pricing, from the sanction mechanics that already exist.**
+
+```
+value      = Weight(severity) × (1 − SanctionAdaptationFloor × min(1, monthsActive / SanctionAdaptationMonths))
+             — the exact term SanctionPressureOn charges them for this regime today
+embargo    = ceiling points that resume when the lift un-embargoes a commodity link (§5h arithmetic, headroom-capped)
+willingness = TreatyWillingness([TheyProvide commitment]) + value × 12 + embargo × 1.5
+accepted if willingness ≥ 50
+```
+
+A fresh Coercive regime (1.5) is worth +18 — enough to carry a Transit ask
+(−12.8 in the treaty test) a relationship would otherwise refuse; Severe (2.4)
++28.8, Existential (3.6) +43; a Routine regime (0.35) +4.2. A regime they have
+adapted to (48 months) is worth half, because it is costing them half. Nothing
+else is priced: no leverage currency, no second sanction model. Reciprocity is
+charged on `ValueOf(commitment) − value × 2`.
+
+**Durability — exactly what the game already enforces, and nothing more.**
+While the détente runs, `ImposeSanctionsBy` refuses new measures from
+*either* side (the player's IMPOSE command spends its CP first and then fails,
+which is that verb's pre-existing behaviour under any détente). A declaration
+of war between the pair voids the détente (`ConfrontationSystem.BeginBy`),
+after which measures may return. After 24 months we may sanction them again at
+the ordinary cost with no penalty. **Their commitment is a treaty term** and
+stands until the treaty is broken at the treaty-break price. The panel, the
+acceptance notice and the command index say all of this; no obligation is
+implied that the game does not enforce.
+
+**Rewards.** One accepted offer records exactly one Diplomacy initiative; XP is
+the treaty act's own award plus 12 for the exchange (42 created / 32 extended),
+under the existing repetition rule. The ordinary LIFT SANCTIONS verb's 10 XP is
+deliberately not added — one decision is paid once. Ordinary lifting, relief
+requests, proposals, deepening and the supply exchange are unchanged.
+
+**Information.** Everything the panel prints is ours: our regime's severity and
+age, a mandate, a running détente. The outlook is graded by our political
+collection on them (§5h's rule); a test scans the panel for any read of their
+live resources or the true reception.
+
+**Not in this slice.** Partial lifting or severity reduction; lifting for a
+conditional or bounded clause; recognition or tariff bargaining; an AI caller.
 ## 9a. Bloc politics (GDD §24 amendment)
 
 Measured with a befriend-everyone bot: warm relations with **all fifteen** other

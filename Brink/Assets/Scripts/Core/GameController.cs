@@ -1029,6 +1029,43 @@ namespace Brink.Core
             return ok;
         }
 
+        /// <summary>
+        /// Lift our sanctions on them for one commitment they carry (spec 04
+        /// §5i). Same command path, attempt cost and reward ownership as the
+        /// supply exchange: invalid offers spend nothing, a declined one is a
+        /// spent attempt; one accepted exchange records exactly one Diplomacy
+        /// initiative; XP is the treaty act's own award (30 from ConcludeTreaty
+        /// when a treaty is created, 20 paid here when one is extended) plus 12
+        /// for the exchange — the ordinary LIFT SANCTIONS verb's own 10 XP is
+        /// deliberately not added, so one decision is paid once.
+        /// </summary>
+        public bool OfferSanctionsReliefForCommitment(string targetId, Data.TreatyCommitment commitment)
+        {
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!DiplomaticLeverage.CanOfferRelief(State, State.playerCountryId, targetId, commitment,
+                    out string reason))
+            {
+                GameLog.Warn("DIPLO", reason);
+                return false;
+            }
+            if (!Turns.SpendCommandPoints(DiplomaticLeverage.OfferCost, "Sanctions-for-commitment offer"))
+                return false;
+
+            bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
+            bool ok = DiplomaticLeverage.OfferReliefBy(State, State.playerCountryId, targetId, commitment);
+            if (ok)
+            {
+                if (extending)
+                {
+                    ProgressionSystem.RecordInitiative(State);
+                    ProgressionSystem.AwardXP(State, 20, "Treaty deepened");
+                }
+                ProgressionSystem.AwardXP(State, 12, "Leverage exchange concluded");
+            }
+            SaveSystem.Save(State, AutosaveSlot);   // CP was spent either way
+            return ok;
+        }
+
         public bool BreakTreaty(string partnerId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
