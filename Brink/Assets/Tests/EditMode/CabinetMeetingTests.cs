@@ -80,9 +80,15 @@ namespace Brink.Tests
 
             official.monthsInOffice = 0;
             StringAssert.Contains("newly appointed", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 11;
+            StringAssert.Contains("newly appointed", InstitutionalPersonalitySystem.ContinuityFor(official));
             official.monthsInOffice = 12;
             StringAssert.Contains("settled in office", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 47;
+            StringAssert.Contains("settled in office", InstitutionalPersonalitySystem.ContinuityFor(official));
             official.monthsInOffice = 48;
+            StringAssert.Contains("established command", InstitutionalPersonalitySystem.ContinuityFor(official));
+            official.monthsInOffice = 95;
             StringAssert.Contains("established command", InstitutionalPersonalitySystem.ContinuityFor(official));
             official.monthsInOffice = 96;
             StringAssert.Contains("entrenched command", InstitutionalPersonalitySystem.ContinuityFor(official));
