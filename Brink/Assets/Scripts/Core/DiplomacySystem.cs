@@ -422,14 +422,7 @@ namespace Brink.Core
         {
             if (clauses == null || clauses.Count == 0) return false;
             foreach (var clause in clauses)
-            {
-                if (clause == null || clause.durationMonths < 0) return false;
-                if (clause.trigger == TreatyClauseTrigger.Always) continue;
-                if (clause.trigger != TreatyClauseTrigger.ConflictWithCountry
-                    || string.IsNullOrEmpty(clause.triggerCountryId)
-                    || clause.triggerCountryId == proposerId || clause.triggerCountryId == targetId
-                    || state.FindCountry(clause.triggerCountryId) == null) return false;
-            }
+                if (!ClauseTermsAreValid(state, proposerId, targetId, clause, out _)) return false;
 
             var commitments = new List<TreatyCommitment>();
             foreach (var clause in clauses) commitments.Add(clause.commitment);
@@ -868,6 +861,53 @@ namespace Brink.Core
             }
 
             return willingness;
+        }
+
+        /// <summary>
+        /// The one rule for a clause's condition and term: a non-negative term,
+        /// and a conflict trigger that names a real third state — never a
+        /// signatory. Extracted from the negotiated-proposal path, which still
+        /// refuses on it silently; the leverage exchanges read the reason.
+        /// </summary>
+        public static bool ClauseTermsAreValid(GameState state, string proposerId, string targetId,
+            TreatyClause clause, out string reason)
+        {
+            reason = "";
+            if (clause == null) { reason = "NO TERMS."; return false; }
+            if (clause.durationMonths < 0) { reason = "A TERM CANNOT BE NEGATIVE."; return false; }
+            if (clause.trigger == TreatyClauseTrigger.Always) return true;
+            if (clause.trigger != TreatyClauseTrigger.ConflictWithCountry) { reason = "UNKNOWN TRIGGER."; return false; }
+            if (string.IsNullOrEmpty(clause.triggerCountryId)) { reason = "A CONFLICT TRIGGER MUST NAME A STATE."; return false; }
+            if (clause.triggerCountryId == proposerId || clause.triggerCountryId == targetId)
+            {
+                reason = "A CONFLICT TRIGGER NAMES A THIRD STATE, NOT A SIGNATORY.";
+                return false;
+            }
+            if (state.FindCountry(clause.triggerCountryId) == null) { reason = "THE NAMED STATE DOES NOT EXIST."; return false; }
+            return true;
+        }
+
+        /// <summary>The terms the negotiation panel offers: permanent, or one, three or five years.</summary>
+        public static readonly int[] SupportedTermMonths = { 0, 12, 36, 60 };
+
+        /// <summary>
+        /// A clause's condition and term in the words the signed record uses
+        /// ("IF CONFLICT WITH X", "EXPIRES BEFORE MMM YYYY"), for a clause that
+        /// would start on <paramref name="from"/>. Empty for an unconditional,
+        /// permanent clause.
+        /// </summary>
+        public static string TermsText(GameState state, TreatyClause clause, GameDate from)
+        {
+            if (clause == null) return "";
+            var parts = new List<string>();
+            if (clause.trigger == TreatyClauseTrigger.ConflictWithCountry)
+                parts.Add($"IF CONFLICT WITH {(state.FindCountry(clause.triggerCountryId)?.displayName ?? clause.triggerCountryId).ToUpperInvariant()}");
+            if (clause.durationMonths > 0)
+            {
+                int total = from.year * 12 + from.month - 1 + clause.durationMonths;
+                parts.Add($"EXPIRES BEFORE {new GameDate(total / 12, total % 12 + 1).DisplayString.ToUpperInvariant()}");
+            }
+            return string.Join(", ", parts);
         }
 
         /// <summary>How willing <paramref name="targetId"/> is to sign with <paramref name="proposerId"/> (0..100).</summary>

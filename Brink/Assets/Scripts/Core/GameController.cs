@@ -1002,10 +1002,10 @@ namespace Brink.Core
         /// 20 XP plus the exchange's 12. Totals: 42 XP when a treaty is created,
         /// 32 XP when one is extended, one initiative either way.
         /// </summary>
-        public bool OfferSupplyForCommitment(string targetId, Data.TradeFocus focus, Data.TreatyCommitment commitment)
+        public bool OfferSupplyForCommitment(string targetId, Data.TradeFocus focus, Data.TreatyCommitment commitment, Data.TreatyClause terms = null)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomaticLeverage.CanOffer(State, State.playerCountryId, targetId, focus, commitment,
+            if (!DiplomaticLeverage.CanOffer(State, State.playerCountryId, targetId, focus, commitment, terms,
                     out string reason))
             {
                 GameLog.Warn("DIPLO", reason);
@@ -1015,7 +1015,7 @@ namespace Brink.Core
                 return false;
 
             bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
-            bool ok = DiplomaticLeverage.OfferBy(State, State.playerCountryId, targetId, focus, commitment);
+            bool ok = DiplomaticLeverage.OfferBy(State, State.playerCountryId, targetId, focus, commitment, terms);
             if (ok)
             {
                 if (extending)
@@ -1039,10 +1039,10 @@ namespace Brink.Core
         /// for the exchange — the ordinary LIFT SANCTIONS verb's own 10 XP is
         /// deliberately not added, so one decision is paid once.
         /// </summary>
-        public bool OfferSanctionsReliefForCommitment(string targetId, Data.TreatyCommitment commitment)
+        public bool OfferSanctionsReliefForCommitment(string targetId, Data.TreatyCommitment commitment, Data.TreatyClause terms = null)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomaticLeverage.CanOfferRelief(State, State.playerCountryId, targetId, commitment,
+            if (!DiplomaticLeverage.CanOfferRelief(State, State.playerCountryId, targetId, commitment, terms,
                     out string reason))
             {
                 GameLog.Warn("DIPLO", reason);
@@ -1052,7 +1052,7 @@ namespace Brink.Core
                 return false;
 
             bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
-            bool ok = DiplomaticLeverage.OfferReliefBy(State, State.playerCountryId, targetId, commitment);
+            bool ok = DiplomaticLeverage.OfferReliefBy(State, State.playerCountryId, targetId, commitment, terms);
             if (ok)
             {
                 if (extending)
@@ -1072,10 +1072,10 @@ namespace Brink.Core
         /// consequence RECOGNISE A STATE has; that verb's own 14 XP and
         /// initiative are not added here — one decision is paid once.
         /// </summary>
-        public bool OfferRecognitionForCommitment(string targetId, Data.TreatyCommitment commitment)
+        public bool OfferRecognitionForCommitment(string targetId, Data.TreatyCommitment commitment, Data.TreatyClause terms = null)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;
-            if (!DiplomaticLeverage.CanOfferRecognition(State, State.playerCountryId, targetId, commitment,
+            if (!DiplomaticLeverage.CanOfferRecognition(State, State.playerCountryId, targetId, commitment, terms,
                     out string reason))
             {
                 GameLog.Warn("DIPLO", reason);
@@ -1085,7 +1085,7 @@ namespace Brink.Core
                 return false;
 
             bool extending = State.FindTreaty(State.playerCountryId, targetId) != null;
-            bool ok = DiplomaticLeverage.OfferRecognitionBy(State, State.playerCountryId, targetId, commitment);
+            bool ok = DiplomaticLeverage.OfferRecognitionBy(State, State.playerCountryId, targetId, commitment, terms);
             if (ok)
             {
                 if (extending)
