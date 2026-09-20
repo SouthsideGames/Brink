@@ -557,6 +557,213 @@ namespace Brink.Tests
             });
         }
 
+        static void ResolveGoodwill(GovernmentState gov)
+            => typeof(GovernmentSystem).GetMethod("DriftFactions", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { gov });
+
+        [TestCase(CivicPosture.Open, 65f)]
+        [TestCase(CivicPosture.Standard, 50f)]
+        [TestCase(CivicPosture.Restrictive, 35f)]
+        public void HeldCivicPolicyTargetsOnlyThePersistedLibertyConcern(CivicPosture posture, float expected)
+        {
+            string before = SaveSystem.ToJson(state);
+            for (int i = 0; i < 20; i++)
+            {
+                Assert.AreEqual(expected, GovernmentSystem.FactionDispositionTarget(OppositionTheme.Liberty, posture));
+                foreach (var theme in new[] { OppositionTheme.Drift, OppositionTheme.Hardship,
+                    OppositionTheme.Corruption, OppositionTheme.War, (OppositionTheme)999 })
+                    Assert.AreEqual(50f, GovernmentSystem.FactionDispositionTarget(theme, posture));
+            }
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(GovernmentType.PresidentialRepublic)]
+        [TestCase(GovernmentType.ParliamentaryRepublic)]
+        [TestCase(GovernmentType.DominantPartyState)]
+        [TestCase(GovernmentType.CentralizedRepublic)]
+        [TestCase(GovernmentType.Monarchy)]
+        public void MonthlyPolicyGoodwillReachesBackingForEveryGovernmentAndActor(GovernmentType type)
+        {
+            foreach (var posture in new[] { CivicPosture.Open, CivicPosture.Standard, CivicPosture.Restrictive })
+            {
+                state = WorldFactory.CreateDebugWorld(seed: 6161);
+                foreach (var c in state.countries)
+                {
+                    var g = c.government;
+                    g.type = type; g.civicPosture = posture; g.factions.Clear();
+                    g.leader.age = 40; g.leader.faction = "GOVERNING PARTY";
+                    g.legislativeSupport = 65; g.eliteCohesion = 65;
+                    g.emergencyPowers = false;
+                    PushElectionsFarOut(g, state.date);
+                    // Persisted concerns, arbitrary names, and duplicate themes:
+                    // neither current regime nor largest-share selection may gate drift.
+                    g.factions.Add(new Faction { name = "First", theme = OppositionTheme.Liberty, share = .2f, disposition = 50 });
+                    g.factions.Add(new Faction { name = "Second", theme = OppositionTheme.Liberty, share = .3f, disposition = 50 });
+                    g.factions.Add(new Faction { name = "Other", theme = OppositionTheme.Corruption, share = .5f, disposition = 20 });
+                }
+                GovernmentSystem.MonthlyUpdate(state);
+                foreach (var c in state.countries)
+                {
+                    var g = c.government;
+                    Assert.AreEqual(type, g.type);
+                    float expected = posture == CivicPosture.Open ? 50.3f : posture == CivicPosture.Restrictive ? 49.7f : 50f;
+                    Assert.AreEqual(expected, g.factions[0].disposition, .00001);
+                    Assert.AreEqual(expected, g.factions[1].disposition, .00001);
+                    Assert.AreEqual(20.6f, g.factions[2].disposition, .00001);
+                    float target = g.IsElective
+                        ? c.governmentApproval * .7f + c.pillars.government * .3f + g.brokeredSupport * .45f
+                            + GovernmentSystem.FactionSupportShift(g) + GovernmentSystem.FactionSupport(g) - OppositionSystem.SupportDrag(g)
+                        : 40f + c.pillars.government * .35f + c.stability * .25f - c.warExhaustion * .15f
+                            + g.brokeredSupport * .45f + GovernmentSystem.FactionCohesionShift(g) + GovernmentSystem.FactionSupport(g);
+                    target = System.Math.Max(0f, System.Math.Min(100f, target));
+                    Assert.AreEqual(65 + (target - 65) * (g.IsElective ? .08f : .06f),
+                        g.IsElective ? g.legislativeSupport : g.eliteCohesion, .0001,
+                        "backing must read this month's goodwill, not last month's");
+                }
+            }
+        }
+
+        [TestCase(0f)]
+        [TestCase(50f)]
+        [TestCase(100f)]
+        public void PolicyGoodwillSaturatesAndRecoversWithoutBuyingPower(float initial)
+        {
+            var c = state.PlayerCountry;
+            var g = c.government;
+            g.factions.Clear();
+            g.factions.Add(new Faction { name = "Persistent reformers", theme = OppositionTheme.Liberty, share = .3f, disposition = initial });
+            string before = SaveSystem.ToJson(state);
+            foreach (var posture in new[] { CivicPosture.Restrictive, CivicPosture.Open, CivicPosture.Standard })
+            {
+                g.civicPosture = posture;
+                float target = posture == CivicPosture.Open ? 65 : posture == CivicPosture.Restrictive ? 35 : 50;
+                float distance = System.Math.Abs(g.factions[0].disposition - target);
+                for (int i = 0; i < 600; i++)
+                {
+                    ResolveGoodwill(g);
+                    float nextDistance = System.Math.Abs(g.factions[0].disposition - target);
+                    Assert.LessOrEqual(nextDistance, distance);
+                    distance = nextDistance;
+                    Assert.That(g.factions[0].disposition, Is.InRange(0f, 100f));
+                }
+                Assert.AreEqual(target, g.factions[0].disposition, .001f);
+            }
+            Assert.AreEqual(.3f, g.factions[0].share);
+            Assert.AreEqual("Persistent reformers", g.factions[0].name);
+            // Restore only intended writes: no hidden rewards, costs, traffic or memory.
+            var restored = SaveSystem.FromJson(before);
+            g.civicPosture = restored.PlayerCountry.government.civicPosture;
+            g.factions[0].disposition = initial;
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void SwitchingPolicyCannotHarvestGoodwillAndCourtingStillFadesTowardPolicy()
+        {
+            WithController(() =>
+            {
+                var c = state.PlayerCountry;
+                var g = c.government;
+                g.type = GovernmentType.PresidentialRepublic;
+                g.civicPosture = CivicPosture.Standard;
+                g.factions.Clear();
+                string empty = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.SetCivicPosture(CivicPosture.Standard));
+                Assert.AreEqual(empty, SaveSystem.ToJson(state));
+                Assert.IsTrue(GameController.Instance.SetCivicPosture(CivicPosture.Open));
+                Assert.AreEqual(0, g.factions.Count, "changing policy must not seed an empty ledger");
+                GovernmentSystem.EnsureFactions(state, c);
+                var bloc = g.factions.Single(f => f.theme == OppositionTheme.Liberty);
+                bloc.disposition = 65;
+                var shares = g.factions.Select(f => f.share).ToArray();
+                for (int i = 0; i < 4; i++)
+                {
+                    var posture = i % 2 == 0 ? CivicPosture.Restrictive : CivicPosture.Open;
+                    float pc = state.politicalCapital;
+                    int initiatives = state.initiativesThisYear;
+                    Assert.IsTrue(GameController.Instance.SetCivicPosture(posture));
+                    Assert.AreEqual(pc - GovernmentSystem.CivicPostureCost, state.politicalCapital);
+                    Assert.AreEqual(initiatives + 1, state.initiativesThisYear, "only the ordinary action reward");
+                    Assert.AreEqual(65, bloc.disposition, "switching without resolving time cannot accumulate goodwill");
+                    CollectionAssert.AreEqual(shares, g.factions.Select(f => f.share));
+                    var saved = SaveSystem.Load().PlayerCountry.government;
+                    Assert.AreEqual(posture, saved.civicPosture);
+                    Assert.AreEqual(65, saved.factions.Single(f => f.theme == OppositionTheme.Liberty).disposition);
+                }
+                state.politicalCapital = 0;
+                string noFunds = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.SetCivicPosture(CivicPosture.Restrictive));
+                Assert.AreEqual(noFunds, SaveSystem.ToJson(state));
+                state.politicalCapital = 20;
+                Assert.IsTrue(GameController.Instance.CourtFaction(OppositionTheme.Liberty));
+                Assert.AreEqual(74, bloc.disposition);
+                ResolveGoodwill(g);
+                Assert.AreEqual(73.82f, bloc.disposition, .00001, "Open is a resting target, not another monthly bonus");
+                Assert.IsTrue(state.notifications.Any(n => n.title == "CIVIC POSTURE CHANGED"
+                    && n.body.Contains("35/100") && n.body.Contains("No bloc goodwill or influence is transferred")));
+            });
+        }
+
+        [Test]
+        public void PolicyGoodwillSurvivesSaveResumeAndDoesNotRewriteConstituencies()
+        {
+            var g = state.PlayerCountry.government;
+            g.type = GovernmentType.PresidentialRepublic; g.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, state.PlayerCountry);
+            g.civicPosture = CivicPosture.Restrictive;
+            for (int i = 0; i < 120; i++) ResolveGoodwill(g);
+            g.type = GovernmentType.Monarchy;
+            var names = g.factions.Select(f => f.name).ToArray();
+            var themes = g.factions.Select(f => f.theme).ToArray();
+            string json = SaveSystem.ToJson(state);
+            var loaded = SaveSystem.FromJson(json);
+            Assert.AreEqual(json, SaveSystem.ToJson(loaded));
+            for (int i = 0; i < 120; i++)
+            {
+                if (i == 60) g.civicPosture = loaded.PlayerCountry.government.civicPosture = CivicPosture.Open;
+                ResolveGoodwill(g);
+                ResolveGoodwill(loaded.PlayerCountry.government);
+            }
+            Assert.AreEqual(SaveSystem.ToJson(state), SaveSystem.ToJson(loaded));
+            CollectionAssert.AreEqual(names, g.factions.Select(f => f.name));
+            CollectionAssert.AreEqual(themes, g.factions.Select(f => f.theme));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void PolicyTargetsAndSharedPoolDilutionAreExplainedWithoutWritingState(int columns)
+        {
+            WithController(() =>
+            {
+                var view = new GovernmentView();
+                view.Refresh();
+                var c = state.PlayerCountry;
+                var g = c.government;
+                g.type = GovernmentType.PresidentialRepublic; g.factions.Clear();
+                g.civicPosture = CivicPosture.Standard; g.corruption = 0; c.livingStandards = 0;
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                string before = SaveSystem.ToJson(state);
+                view.Refresh(); view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var labels = view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text"));
+                string text = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", labels.Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains("OPEN 65, STANDARD 50, RESTRICTIVE 35", text);
+                StringAssert.Contains("Current resting level 50", text);
+                StringAssert.Contains("Switching policy grants no immediate goodwill", text);
+                StringAssert.Contains("a bloc can lose share because others gain", text);
+                foreach (var label in labels)
+                    foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                GovernmentSystem.EnsureFactions(state, c);
+                ResolveShares(state, c);
+                var notice = state.notifications.Last(n => n.title == "POLITICAL INFLUENCE SHIFTS");
+                StringAssert.Contains("A bloc can lose share because others gain", notice.body);
+                StringAssert.Contains("own driver: restrictive civic policy; extra pressure absent", notice.body);
+                Assert.Less(g.factions.Single(f => f.theme == OppositionTheme.Liberty).share, .3f);
+            });
+        }
+
         void WithController(System.Action check)
         {
             var gc = GameController.Instance;

@@ -192,7 +192,7 @@ namespace Brink.UI.Views
             AddText().text = "These are constituencies inside our government, not Cabinet officials or the public opposition. "
                 + "Court one for concentrated support, or use the general bargain below to reach everyone. "
                 + "Courting changes goodwill, not power. Influence shifts gradually with domestic pressures; easing them restores the founding balance. "
-                + "Backing fades toward indifference unless maintained.";
+                + "Goodwill drifts toward the held civic policy's resting level; paid support above it fades.";
             AddText().text = $" Current bloc contribution to {(gov.IsElective ? "legislative support" : "elite cohesion")} target: "
                 + $"{GovernmentSystem.FactionSupport(gov):+0.0;-0.0;0.0}. This is not an immediate change in the total backing bar.";
             if (gov.factions.Count == 0)
@@ -206,10 +206,17 @@ namespace Brink.UI.Views
                 AddText().text = $" Share of {(gov.IsElective ? "chamber" : "elite")}: {faction.share:P0}. "
                     + $"Disposition: {faction.disposition:F0}/100 (50 is indifferent). Concern: {faction.theme}.";
                 var theme = faction.theme;
+                AddText().text = $" Goodwill under held civic policy: OPEN {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Open):F0}, "
+                    + $"STANDARD {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Standard):F0}, "
+                    + $"RESTRICTIVE {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Restrictive):F0} (out of 100). "
+                    + $"Current resting level {GovernmentSystem.FactionDispositionTarget(theme, gov.civicPosture):F0}; each month closes 2% of the gap. "
+                    + "Switching policy grants no immediate goodwill. This is disposition, not influence.";
                 AddText().text = $" Influence if current conditions persist: {influenceTargets[factionIndex++] * 100f:F1}%. "
                     + $"Driver: {GovernmentSystem.FactionInfluenceDriver(theme)}; extra pressure "
                     + (GovernmentSystem.FactionInfluencePressure(player, theme) > 0f ? "present." : "absent.")
-                    + " All blocs draw from the same pool. This is a gradual tendency, not an instant transfer or a vote forecast.";
+                    + " This is this bloc's own pressure, not the only cause of movement. "
+                    + "All blocs draw from the same pool: a bloc can lose share because others gain, even with its own pressure absent. "
+                    + "Recovery also moves shares. This is a gradual tendency, not an instant transfer or a vote forecast.";
                 float patronage = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.PatronageReaction(theme))) - faction.disposition;
                 float inquiry = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.InquiryReaction(theme, gov.corruption))) - faction.disposition;
                 AddText().text = $" Disposition if ordered now: PATRONAGE {patronage:+0.##;-0.##;0}; PUBLIC INQUIRY {inquiry:+0.##;-0.##;0}.";

@@ -31,6 +31,18 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Held civic policy (#23, fourth slice).** The existing monthly bloc drift
+  approaches 65/50/35 for persisted Liberty concerns under Open/Standard/
+  Restrictive posture, and 50 for every other concern, at the existing 2% rate.
+  This replaces neutral recovery, not a second additive reaction. Switching
+  grants no immediate goodwill or power; paid goodwill above target still fades.
+  All governments use the same rule, including retained Liberty blocs after a
+  constitutional change. Pure per-bloc policy targets and the civic-order notice
+  explain it; influence wording explicitly allows dilution by other blocs and
+  recovery. No new persistent field, pipeline, cost, reward or AI-selection change. Native balance
+  and hardware require verification. Further policy reactions and regime-aware
+  identities remain outside this slice; #23 remains partial. Spec 05 §2g.
+
 - **Condition-driven bloc influence (#23, third slice).** Founding weights
   (Drift .45, Liberty/Corruption .30, others .25) are multiplied by bounded
   domestic pressure and normalized. Hardship reads low living standards;

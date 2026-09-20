@@ -808,7 +808,8 @@ What makes it a decision rather than a readout is that **instruments reach
 specific people**. Patronage courts the hardship bloc, because money speaks
 loudest where people are short of it. Courting a named bloc is worth 9 to that
 bloc; the undirected bargain is worth 2 to everyone. Knowing who you are talking
-to is the value. Blocs drift back toward indifference at 0.02/month, so a
+to is the value. Blocs drift toward their held-policy resting goodwill at
+0.02/month (normally indifference; Liberty exceptions below), so a
 coalition is *maintained* rather than bought once — `brokeredSupport`'s rule
 applied to people.
 
@@ -830,7 +831,7 @@ bloc, rather than claiming only a generic chamber bargain.
 The existing consequences are unchanged: +9 disposition to the selected bloc,
 other dispositions untouched, plus ordinary `brokeredSupport`; general bargaining
 still gives +2 to every bloc. Both routes consume the same PC. Shares never
-change through courting. Disposition drifts toward 50 monthly; backing affects
+change through courting. Disposition drifts toward its policy target monthly; backing affects
 the support target, not an immediate grant of votes or authority.
 
 The ledger persists across Cabinet/leader replacement and constitutional changes
@@ -864,7 +865,7 @@ The panel uses the same response functions and shows the clamped change at
 current conditions, without seeding a ledger. Successful player notices name
 each affected bloc and the applied movement, or explicitly say unchanged.
 Inquiries now establish an empty ledger too. Shares/names stay fixed during the action; changes
-persist through the existing save. The monthly 2% approach to neutral and paid
+persist through the existing save. The monthly 2% approach to the policy target and paid
 named courting remain recovery routes. An inquiry is not a free reversal:
 one full patronage/inquiry pair costs 5 PC and 200 treasury and leaves integrity
 disposition down 1, hardship up 3 (before clamps); after a clean-state patronage,
@@ -913,7 +914,9 @@ Goodwill, names, authority and rewards are not changed by the share update;
 the ordinary goodwill decay still runs separately.
 
 GOVERNMENT shows current share, the target if current conditions persist, the
-relevant driver and whether extra pressure is present. It does not promise
+relevant own driver and whether extra pressure is present. It also explains that
+other blocs' pressure can dilute this bloc, and that recovery moves shares:
+the own driver is not a claim about the sole cause of its movement. It does not promise
 that next month's conditions will stay unchanged. A player-only Wire notice
 records before/after shares and contemporaneous targets/drivers at application
 when movement is visible at two decimal percentage precision. Small movements
@@ -922,8 +925,50 @@ ordinary Government-desk reporting, not a new unfilterable interruption.
 
 Numbers are initial authored tuning, requiring independent Unity balance and
 device verification. Old identities remain through regime changes; broader
-policy reactions and regime-aware names remain deferred. World trajectories
+policy reactions beyond the civic slice below and regime-aware names remain deferred. World trajectories
 can change because actual backing targets now read evolving influence.
+
+**Held civic policy (#23, fourth slice).** Liberty constituencies now judge
+the policy held over time, using the existing monthly disposition drift:
+
+| Persisted concern | Open target | Standard target | Restrictive target |
+| --- | --- | --- | --- |
+| Liberty | 65 | 50 | 35 |
+| All other concerns, including Corruption and unknown values | 50 | 50 | 50 |
+
+Every month closes 2% of the gap from current disposition to that target,
+replacing (not stacking with) the old return-to-50 step. At 50, one Open month
+gives 50.3 and one Restrictive month 49.7. Holding a posture converges instead
+of accumulating an unbounded reward or penalty. Standard recovers toward 50;
+Open recovers toward 65. A courted Liberty bloc at 74 drifts to 73.82 under
+Open: policy does not preserve purchased goodwill above its resting level.
+These numbers are initial authored tuning, requiring native balance review.
+
+The persisted concern determines the response, not the bloc name, share, regime
+or whether the country is the player. Every duplicate Liberty bloc responds.
+A non-elective country retaining a Liberty constituency still has that
+constituency; a Corruption concern is not silently treated as pro-repression.
+No identity, concern, share rule, new field or migration is introduced.
+
+The call remains once in the existing government month, after lazy seeding and
+before backing is calculated. Monthly drift grants no XP, initiative or new
+cost. The existing civic-order costs, rewards, authority, AI caller and autosave
+are unchanged. Switching posture transfers no goodwill or shares immediately
+and does not establish an empty ledger; switching repeatedly without time
+passing buys no bloc goodwill. The posture held at monthly resolution is the
+one judged, as with its existing effects; no within-month policy history is
+invented. Ordinary action rewards for switching remain the pre-existing rule.
+
+GOVERNMENT shows each bloc's three possible resting targets, its current one
+and the 2% rate before ordering. The successful civic-order notice explains
+the gradual Liberty response and no immediate transfer. Reads stay pure and
+do not seed old saves. Existing influence notices now explicitly explain
+shared-pool dilution, rather than suggesting an absent own pressure caused it.
+No new recurring goodwill notification is added.
+
+Native Unity balance and device verification remain separate gates. Regime-aware
+identities and reactions to other policy instruments remain outside this slice;
+roadmap #23 is still partial.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
@@ -951,8 +996,8 @@ Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
   If it moves `legislativeSupport`, `eliteCohesion`, `stability`, `unity` or
   `approval`, **move the target, not the value** — all five drift.
 - **Parties and factions** — leader-faction arithmetic (§2b-1), the playable
-  bloc ledger, patronage/inquiry reactions and condition-driven influence (§2g)
-  exist. Broader policy reactions and regime-aware identities extend them,
+  bloc ledger, patronage/inquiry reactions, held-civic-policy goodwill and
+  condition-driven influence (§2g) exist. Further policy reactions and regime-aware identities extend them,
   rather than requiring a parallel faction model.
 - **Secession and state dissolution** — civil conflict currently degrades a state
   but never splits it. Border change (GDD §16) is the missing piece.
