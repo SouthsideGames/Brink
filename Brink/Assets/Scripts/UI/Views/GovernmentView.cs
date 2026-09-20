@@ -35,6 +35,7 @@ namespace Brink.UI.Views
             AddCabinetAdvice(state, Pillar.Government);
             BuildAdministration(state, player);
             BuildPoliticalCondition(state, player);
+            BuildFactions(state, player);
             BuildInstruments(state, player);
             BuildForeignGovernments(state);
         }
@@ -182,6 +183,31 @@ namespace Brink.UI.Views
                 CausalMetric.LivingStandards,
                 CausalMetric.PublicGrievance,
                 CausalMetric.WarExhaustion);
+        }
+
+        void BuildFactions(GameState state, CountryState player)
+        {
+            var gov = player.government;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("INTERNAL POLITICAL BLOCS", W);
+            AddText().text = "These are constituencies inside our government, not Cabinet officials or the public opposition. "
+                + "Court one for concentrated support, or use the general bargain below to reach everyone. "
+                + "Neither changes their share of power. Backing fades toward indifference unless maintained.";
+            AddText().text = $" Current bloc contribution to {(gov.IsElective ? "legislative support" : "elite cohesion")} target: "
+                + $"{GovernmentSystem.FactionSupport(gov):+0.0;-0.0;0.0}. This is not an immediate change in the total backing bar.";
+            if (gov.factions.Count == 0)
+                AddText("terminal-text-dim").text = "Initial constituencies below are a preview. Their ledger is established by the first bargain or monthly review.";
+
+            foreach (var faction in GovernmentSystem.FactionsFor(state, player))
+            {
+                AddText("terminal-text-bright").text = faction.name;
+                AddText().text = $" Share of {(gov.IsElective ? "chamber" : "elite")}: {faction.share:P0}. "
+                    + $"Disposition: {faction.disposition:F0}/100 (50 is indifferent). Concern: {faction.theme}.";
+                var theme = faction.theme;
+                AddButton(MakeRow(), $"COURT {faction.name} [{GovernmentSystem.BuildSupportCost:F0} PC]", null,
+                    () => { GameController.Instance.CourtFaction(theme); Refresh(); });
+            }
+            AddText("terminal-text-dim").text = "Courting raises only the chosen bloc's disposition and also buys general backing. "
+                + "It does not settle the opposition's case or change national policy. Patronage separately reaches the hardship bloc.";
         }
 
         void BuildInstruments(GameState state, CountryState player)

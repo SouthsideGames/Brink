@@ -31,6 +31,14 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Internal political blocs — playable ledger (#23, first slice).** The existing
+  named blocs and `CourtFaction` command are now exposed in GOVERNMENT. Previewing
+  an empty ledger is read-only and uses the same deterministic seed as the first
+  bargain/monthly update. Absent themes refuse before spending; successful notices
+  name the chosen bloc. Authority, PC, rewards, autosave, decay and support-target
+  arithmetic remain the existing paths. No policy-reaction or shifting-share
+  model is claimed; #23 remains partial. Spec 05 §2g.
+
 - Simulation code is plain C# with no UnityEngine scene/component dependencies
   (UnityEngine used only for JsonUtility/Debug) so it is edit-mode testable and
   can run long headless simulations (GDD Phase 9 requires unattended runs).

@@ -685,6 +685,8 @@ namespace Brink.Core
         /// </summary>
         public bool CourtFaction(Data.OppositionTheme bloc)
         {
+            if (!IsRunning || !GovernmentSystem.FactionsFor(State, State.PlayerCountry).Exists(f => f.theme == bloc))
+                return false;
             if (!MayCommand(Data.Pillar.Government)) return false;
             bool ok = GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc);
             if (ok)
