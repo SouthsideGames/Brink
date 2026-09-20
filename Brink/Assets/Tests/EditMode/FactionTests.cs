@@ -377,6 +377,186 @@ namespace Brink.Tests
             });
         }
 
+        static void ResolveShares(GameState world, CountryState country)
+            => typeof(GovernmentSystem).GetMethod("UpdateFactionShares", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { world, country });
+
+        [TestCase(GovernmentType.ParliamentaryRepublic)]
+        [TestCase(GovernmentType.DominantPartyState)]
+        public void InfluenceTargetsFollowConditionsNotCourtingOrReadFrequency(GovernmentType type)
+        {
+            var c = state.PlayerCountry;
+            c.government.type = type;
+            c.government.factions.Clear();
+            c.government.corruption = 0;
+            c.government.civicPosture = CivicPosture.Standard;
+            c.livingStandards = 50;
+            string before = SaveSystem.ToJson(state);
+            var calm = GovernmentSystem.FactionShareTargets(state, c);
+            CollectionAssert.AreEqual(new float[] { .45f, .30f, .25f }, calm);
+            for (int i = 0; i < 20; i++) CollectionAssert.AreEqual(calm, GovernmentSystem.FactionShareTargets(state, c));
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "preview must not establish an old save's ledger");
+            GovernmentSystem.EnsureFactions(state, c);
+            c.livingStandards = 0;
+            var hardship = GovernmentSystem.FactionShareTargets(state, c);
+            Assert.AreEqual(.36f, hardship[0], .00001);
+            Assert.AreEqual(.24f, hardship[1], .00001);
+            Assert.AreEqual(.40f, hardship[2], .00001);
+            GovernmentSystem.CourtFaction(c.government, OppositionTheme.Hardship, 20);
+            CollectionAssert.AreEqual(hardship, GovernmentSystem.FactionShareTargets(state, c), "goodwill cannot buy political weight");
+            c.livingStandards = 80;
+            c.government.corruption = 100;
+            c.government.civicPosture = CivicPosture.Restrictive;
+            var institutional = GovernmentSystem.FactionShareTargets(state, c);
+            Assert.AreEqual(.45f / 1.3f, institutional[0], .00001);
+            Assert.AreEqual(.60f / 1.3f, institutional[1], .00001);
+            Assert.AreEqual(.25f / 1.3f, institutional[2], .00001);
+        }
+
+        [TestCase(-5f, 1f)]
+        [TestCase(0f, 1f)]
+        [TestCase(25f, .5f)]
+        [TestCase(50f, 0f)]
+        [TestCase(100f, 0f)]
+        public void HardshipInfluencePressureHasBoundedEdges(float standards, float expected)
+        {
+            state.PlayerCountry.livingStandards = standards;
+            Assert.AreEqual(expected, GovernmentSystem.FactionInfluencePressure(state.PlayerCountry, OppositionTheme.Hardship));
+        }
+
+        [Test]
+        public void InfluenceConservesPowerSaturatesAndRecoversWithoutResettingGoodwill()
+        {
+            var c = state.PlayerCountry;
+            var g = c.government;
+            g.type = GovernmentType.DominantPartyState;
+            g.factions.Clear();
+            g.corruption = 0; c.livingStandards = 0;
+            GovernmentSystem.EnsureFactions(state, c);
+            var names = g.factions.Select(f => f.name).ToArray();
+            var dispositions = g.factions.Select(f => f.disposition).ToArray();
+            ResolveShares(state, c);
+            Assert.AreEqual(.253f, g.factions[2].share, .00001, "one month closes only 2% of the gap, not an instant transfer");
+            Assert.IsTrue(state.notifications.Any(n => n.title == "POLITICAL INFLUENCE SHIFTS" && n.body.Contains("25.00% -> 25.30%") && n.body.Contains("low living standards")));
+            for (int i = 0; i < 600; i++)
+            {
+                ResolveShares(state, c);
+                Assert.AreEqual(1, g.factions.Sum(f => f.share), .00001);
+                Assert.That(g.factions[2].share, Is.InRange(.25f, .40001f));
+                Assert.IsTrue(g.factions.All(f => f.share > 0));
+            }
+            Assert.AreEqual(.4f, g.factions[2].share, .00001);
+            c.livingStandards = 80;
+            for (int i = 0; i < 600; i++) ResolveShares(state, c);
+            Assert.AreEqual(.25f, g.factions[2].share, .00001, "removing pressure must undo concentration without a new resource");
+            CollectionAssert.AreEqual(names, g.factions.Select(f => f.name));
+            CollectionAssert.AreEqual(dispositions, g.factions.Select(f => f.disposition));
+        }
+
+        [TestCase(GovernmentType.ParliamentaryRepublic)]
+        [TestCase(GovernmentType.DominantPartyState)]
+        public void RealGovernmentMonthUsesNewSharesInItsBackingTarget(GovernmentType type)
+        {
+            var c = state.PlayerCountry;
+            var g = c.government;
+            g.type = type; g.factions.Clear(); g.corruption = 80;
+            g.civicPosture = CivicPosture.Restrictive;
+            g.legislativeSupport = 65; g.eliteCohesion = 65;
+            PushElectionsFarOut(g, state.date);
+            GovernmentSystem.EnsureFactions(state, c);
+            g.factions[0].disposition = 50; g.factions[1].disposition = 20; g.factions[2].disposition = 50;
+            var original = g.factions.Select(f => f.share).ToArray();
+            GovernmentSystem.MonthlyUpdate(state);
+            var targets = GovernmentSystem.FactionShareTargets(state, c);
+            for (int i = 0; i < original.Length; i++)
+                Assert.AreEqual(original[i] + (targets[i] - original[i]) * .02f, g.factions[i].share, .00001);
+            Assert.Greater(g.factions[1].share, .3f, "the monthly pipeline, not a test-only helper, must move power");
+            float target = g.IsElective
+                ? c.governmentApproval * .7f + c.pillars.government * .3f + g.brokeredSupport * .45f
+                    + GovernmentSystem.FactionSupportShift(g) + GovernmentSystem.FactionSupport(g) - OppositionSystem.SupportDrag(g)
+                : 40f + c.pillars.government * .35f + c.stability * .25f - c.warExhaustion * .15f
+                    + g.brokeredSupport * .45f + GovernmentSystem.FactionCohesionShift(g) + GovernmentSystem.FactionSupport(g);
+            target = System.Math.Max(0f, System.Math.Min(100f, target));
+            Assert.AreEqual(65 + (target - 65) * (g.IsElective ? .08f : .06f),
+                g.IsElective ? g.legislativeSupport : g.eliteCohesion, .0001);
+        }
+
+        [Test]
+        public void InfluenceHandlesOtherLedgersAndSaveResumeDeterministically()
+        {
+            var foreign = state.countries.First(c => !c.isPlayer);
+            foreign.government.factions.Clear();
+            foreign.government.factions.Add(new Faction { name = "War", theme = OppositionTheme.War, share = .8f, disposition = 20 });
+            foreign.government.factions.Add(new Faction { name = "Unknown", theme = (OppositionTheme)999, share = .2f, disposition = 80 });
+            float capital = state.politicalCapital;
+            int notices = state.notifications.Count, initiatives = state.initiativesThisYear;
+            var targets = GovernmentSystem.FactionShareTargets(state, foreign);
+            CollectionAssert.AreEqual(new float[] { .5f, .5f }, targets);
+            ResolveShares(state, foreign);
+            Assert.AreEqual(.794f, foreign.government.factions[0].share, .00001);
+            Assert.AreEqual(capital, state.politicalCapital);
+            Assert.AreEqual(notices, state.notifications.Count);
+            Assert.AreEqual(initiatives, state.initiativesThisYear);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            for (int i = 0; i < 120; i++)
+            {
+                ResolveShares(state, foreign);
+                ResolveShares(loaded, loaded.FindCountry(foreign.id));
+            }
+            Assert.AreEqual(SaveSystem.ToJson(state), SaveSystem.ToJson(loaded));
+            foreign.government.factions.Reverse();
+            CollectionAssert.AreEqual(targets, GovernmentSystem.FactionShareTargets(state, foreign));
+        }
+
+        [Test]
+        public void DuplicateConcernsAndReorderedOrZeroLedgersStillShareOnePool()
+        {
+            var c = state.PlayerCountry;
+            c.government.factions.Clear();
+            c.livingStandards = 0;
+            c.government.factions.Add(new Faction { name = "West", theme = OppositionTheme.Hardship, share = 0 });
+            c.government.factions.Add(new Faction { name = "East", theme = OppositionTheme.Hardship, share = 0 });
+            c.government.factions.Add(new Faction { name = "Apparatus", theme = OppositionTheme.Drift, share = 0 });
+            var targets = GovernmentSystem.FactionShareTargets(state, c);
+            Assert.AreEqual(.5f / 1.45f, targets[0], .00001);
+            Assert.AreEqual(targets[0], targets[1]);
+            Assert.AreEqual(.45f / 1.45f, targets[2], .00001);
+            ResolveShares(state, c);
+            CollectionAssert.AreEqual(targets, c.government.factions.Select(f => f.share));
+            c.government.factions.Reverse();
+            CollectionAssert.AreEqual(targets.Reverse(), GovernmentSystem.FactionShareTargets(state, c));
+            Assert.AreEqual(1f, c.government.factions.Sum(f => f.share), .00001);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void InfluenceReadoutExplainsTheTendencyWithoutChangingTheLedger(int columns)
+        {
+            WithController(() =>
+            {
+                var view = new GovernmentView();
+                view.Refresh();
+                state.PlayerCountry.government.factions.Clear();
+                state.PlayerCountry.livingStandards = 0;
+                state.PlayerCountry.government.corruption = 0;
+                state.PlayerCountry.government.civicPosture = CivicPosture.Standard;
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var labels = view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text"));
+                string text = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", labels.Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains("conditions persist: 40.0%", text);
+                StringAssert.Contains("Driver: low living standards; extra pressure present", text);
+                StringAssert.Contains("not an instant transfer", text);
+                Assert.AreEqual(3, view.Root.Query<Button>().ToList().Count(b => b.text.StartsWith("COURT ")));
+                foreach (var label in labels)
+                    foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+            });
+        }
+
         void WithController(System.Action check)
         {
             var gc = GameController.Instance;
