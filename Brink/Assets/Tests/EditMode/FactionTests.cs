@@ -197,6 +197,186 @@ namespace Brink.Tests
             });
         }
 
+        [TestCase(GovernmentType.ParliamentaryRepublic)]
+        [TestCase(GovernmentType.DominantPartyState)]
+        public void PatronageAndInquiryCreateOpposedBlocReactions(GovernmentType type)
+        {
+            var country = state.PlayerCountry;
+            var gov = country.government;
+            gov.type = type;
+            gov.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            foreach (var f in gov.factions) f.disposition = 50;
+            var names = gov.factions.Select(f => f.name).ToArray();
+            var shares = gov.factions.Select(f => f.share).ToArray();
+            state.politicalCapital = 20;
+            country.resources.treasury = 1000;
+            gov.corruption = 20;
+            Assert.IsTrue(GovernmentSystem.DistributePatronageBy(state, country.id));
+            CollectionAssert.AreEqual(new float[] { 50, 45, 57 }, gov.factions.Select(f => f.disposition));
+            Assert.AreEqual(19, state.politicalCapital);
+            Assert.AreEqual(800, country.resources.treasury);
+            Assert.AreEqual(27, gov.corruption);
+            Assert.AreEqual(0.1f, GovernmentSystem.FactionSupport(gov), 0.0001);
+            Assert.IsTrue(GovernmentSystem.LaunchInquiryBy(state, country.id));
+            CollectionAssert.AreEqual(new float[] { 50, 49, 53 }, gov.factions.Select(f => f.disposition));
+            Assert.AreEqual(15, state.politicalCapital);
+            Assert.AreEqual(16, gov.corruption);
+            CollectionAssert.AreEqual(names, gov.factions.Select(f => f.name));
+            CollectionAssert.AreEqual(shares, gov.factions.Select(f => f.share));
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            CollectionAssert.AreEqual(gov.factions.Select(f => f.disposition), loaded.PlayerCountry.government.factions.Select(f => f.disposition));
+            StringAssert.Contains(gov.factions[1].name + ": disposition +4", state.notifications.Last(n => n.title == "INQUIRY CONCLUDED").body);
+        }
+
+        [TestCase(0f, 0f)]
+        [TestCase(5.5f, 2f)]
+        [TestCase(11f, 4f)]
+        [TestCase(100f, 4f)]
+        public void InquiryGoodwillIsLimitedToCorruptionActuallyRemoved(float corruption, float reaction)
+        {
+            var country = state.PlayerCountry;
+            GovernmentSystem.EnsureFactions(state, country);
+            var gov = country.government;
+            gov.factions.Clear();
+            foreach (OppositionTheme theme in System.Enum.GetValues(typeof(OppositionTheme)))
+                gov.factions.Add(new Faction { name = theme.ToString(), theme = theme, share = 0.2f, disposition = 50 });
+            gov.corruption = corruption;
+            state.politicalCapital = 20;
+            Assert.IsTrue(GovernmentSystem.LaunchInquiryBy(state, country.id));
+            foreach (var f in gov.factions)
+            {
+                float expected = f.theme == OppositionTheme.Hardship ? -reaction
+                    : f.theme == OppositionTheme.Liberty || f.theme == OppositionTheme.Corruption ? reaction : 0;
+                Assert.AreEqual(50 + expected, f.disposition, 0.0001, f.name);
+            }
+        }
+
+        [Test]
+        public void AbsentPolicyConstituenciesDoNotSpreadReactionsAndRefusalsDoNotSeed()
+        {
+            var country = state.PlayerCountry;
+            country.government.factions.Clear();
+            state.politicalCapital = 0;
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(GovernmentSystem.LaunchInquiryBy(state, country.id));
+            Assert.IsFalse(GovernmentSystem.DistributePatronageBy(state, country.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            state.politicalCapital = 20;
+            country.resources.treasury = 0;
+            before = SaveSystem.ToJson(state);
+            Assert.IsFalse(GovernmentSystem.DistributePatronageBy(state, country.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            country.government.factions.Add(new Faction { name = "Only war", theme = OppositionTheme.War, share = 1, disposition = 50 });
+            country.resources.treasury = 1000;
+            Assert.IsTrue(GovernmentSystem.DistributePatronageBy(state, country.id));
+            Assert.IsTrue(GovernmentSystem.LaunchInquiryBy(state, country.id));
+            Assert.AreEqual(50, country.government.factions.Single().disposition);
+        }
+
+        [Test]
+        public void PolicyReactionsClampReportAppliedMovementAndCanRecover()
+        {
+            WithController(() =>
+            {
+                var country = state.PlayerCountry;
+                var gov = country.government;
+                gov.type = GovernmentType.DominantPartyState;
+                gov.factions.Clear();
+                GovernmentSystem.EnsureFactions(state, country);
+                gov.factions[1].disposition = 2;
+                gov.factions[2].disposition = 98;
+                country.resources.treasury = 1000;
+                int initiatives = state.initiativesThisYear;
+                Assert.IsTrue(GameController.Instance.DistributePatronage());
+                Assert.AreEqual(initiatives + 1, state.initiativesThisYear);
+                Assert.AreEqual(0, gov.factions[1].disposition);
+                Assert.AreEqual(100, gov.factions[2].disposition);
+                string notice = state.notifications.Last(n => n.title == "PATRONAGE DISTRIBUTED").body;
+                StringAssert.Contains(gov.factions[1].name + ": disposition -2", notice);
+                StringAssert.Contains(gov.factions[2].name + ": disposition +2", notice);
+                Assert.AreEqual(0, SaveSystem.Load().PlayerCountry.government.factions[1].disposition);
+                Assert.IsTrue(GameController.Instance.CourtFaction(gov.factions[1].theme));
+                Assert.AreEqual(9, gov.factions[1].disposition);
+                RunGovernmentMonths(1);
+                Assert.Greater(gov.factions[1].disposition, 9);
+                Assert.Less(gov.factions[2].disposition, 100);
+            });
+        }
+
+        [Test]
+        public void ForeignPoliciesUseTheirOwnLedgerAndInquiryClampsItsReport()
+        {
+            var country = state.countries.First(c => !c.isPlayer);
+            country.government.type = GovernmentType.DominantPartyState;
+            country.government.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            foreach (var f in country.government.factions) f.disposition = 50;
+            state.FindAI(country.id).politicalCapital = 20;
+            country.resources.treasury = 1000;
+            country.government.corruption = 20;
+            float pc = state.politicalCapital;
+            int initiatives = state.initiativesThisYear, notices = state.notifications.Count;
+            Assert.IsTrue(GovernmentSystem.DistributePatronageBy(state, country.id));
+            CollectionAssert.AreEqual(new float[] { 50, 45, 57 }, country.government.factions.Select(f => f.disposition));
+            Assert.IsTrue(GovernmentSystem.LaunchInquiryBy(state, country.id));
+            CollectionAssert.AreEqual(new float[] { 50, 49, 53 }, country.government.factions.Select(f => f.disposition));
+            Assert.AreEqual(15, state.FindAI(country.id).politicalCapital);
+            Assert.AreEqual(pc, state.politicalCapital);
+            Assert.AreEqual(initiatives, state.initiativesThisYear);
+            Assert.AreEqual(notices, state.notifications.Count);
+
+            var player = state.PlayerCountry;
+            player.government.factions.Clear();
+            player.government.factions.Add(new Faction { name = "Reform", theme = OppositionTheme.Liberty, share = 0.5f, disposition = 98 });
+            player.government.factions.Add(new Faction { name = "Recipients", theme = OppositionTheme.Hardship, share = 0.5f, disposition = 2 });
+            player.government.corruption = 11;
+            state.politicalCapital = 20;
+            Assert.IsTrue(GovernmentSystem.LaunchInquiryBy(state, player.id));
+            CollectionAssert.AreEqual(new float[] { 100, 0 }, player.government.factions.Select(f => f.disposition));
+            string notice = state.notifications.Last(n => n.title == "INQUIRY CONCLUDED").body;
+            StringAssert.Contains("Reform: disposition +2", notice);
+            StringAssert.Contains("Recipients: disposition -2", notice);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void BlocPolicyPreviewIsPureClampedAndMatchesTheAction(int columns)
+        {
+            WithController(() =>
+            {
+                var view = new GovernmentView();
+                view.Refresh(); // existing chamber initialisation
+                var country = state.PlayerCountry;
+                var gov = country.government;
+                gov.factions.Clear();
+                gov.corruption = 5.5f;
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var labels = view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text"));
+                string text = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", labels.Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains("PUBLIC INQUIRY +2", text);
+                StringAssert.Contains("PUBLIC INQUIRY -2", text);
+                foreach (var label in labels)
+                    foreach (var line in (label.text ?? "").Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                GovernmentSystem.EnsureFactions(state, country);
+                var expected = gov.factions.Select(f => f.disposition + GovernmentSystem.InquiryReaction(f.theme, gov.corruption)).ToArray();
+                Assert.IsTrue(GameController.Instance.LaunchInquiry());
+                CollectionAssert.AreEqual(expected, gov.factions.Select(f => f.disposition));
+                CollectionAssert.AreEqual(expected, SaveSystem.Load().PlayerCountry.government.factions.Select(f => f.disposition));
+                foreach (var f in gov.factions)
+                    f.disposition = f.theme == OppositionTheme.Hardship ? 98f : 2f;
+                view.Refresh();
+                string clamped = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", view.Root.Query<Label>().ToList().Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains("PATRONAGE +2", clamped);
+                StringAssert.Contains("PATRONAGE -2", clamped);
+            });
+        }
+
         void WithController(System.Action check)
         {
             var gc = GameController.Instance;

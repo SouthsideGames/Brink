@@ -322,6 +322,34 @@ namespace Brink.Core
             faction.disposition = Clamp(faction.disposition + amount);
         }
 
+        /// <summary>Nominal disposition movement; callers clamp it to the existing ledger.</summary>
+        public static float PatronageReaction(OppositionTheme theme)
+            => theme == OppositionTheme.Hardship ? 7f
+             : theme == OppositionTheme.Liberty || theme == OppositionTheme.Corruption ? -5f : 0f;
+
+        // An empty inquiry earns no bloc goodwill. Price only the favours it removes.
+        public static float InquiryReaction(OppositionTheme theme, float corruption)
+        {
+            float fraction = Math.Max(0f, Math.Min(InquiryCorruptionRelief, corruption)) / InquiryCorruptionRelief;
+            return (theme == OppositionTheme.Hardship ? -4f
+                : theme == OppositionTheme.Liberty || theme == OppositionTheme.Corruption ? 4f : 0f) * fraction;
+        }
+
+        static string ApplyBlocReactions(GameState state, CountryState country, bool inquiry, float corruption)
+        {
+            EnsureFactions(state, country);
+            string report = "";
+            foreach (var bloc in country.government.factions)
+            {
+                float before = bloc.disposition;
+                bloc.disposition = Clamp(before + (inquiry
+                    ? InquiryReaction(bloc.theme, corruption) : PatronageReaction(bloc.theme)));
+                float applied = bloc.disposition - before;
+                if (applied != 0f) report += $" {bloc.name}: disposition {applied:+0.##;-0.##;0}.";
+            }
+            return report.Length == 0 ? " Bloc dispositions unchanged." : report;
+        }
+
         /// <summary>
         /// Blocs drift back toward indifference, so a coalition is *maintained*
         /// rather than bought once — the `brokeredSupport` rule, applied to the
@@ -1849,14 +1877,12 @@ namespace Brink.Core
             // cost a slowly-regrowing pillar and nothing else.
             gov.corruption = Clamp(gov.corruption + PatronageCorruption);
 
-            // Money speaks loudest where people are short of it (spec 05 §2g).
-            EnsureFactions(state, country);
-            CourtFaction(gov, OppositionTheme.Hardship, 7f);
+            string blocReport = ApplyBlocReactions(state, country, inquiry: false, corruption: 0f);
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "PATRONAGE DISTRIBUTED",
-                    "Appointments, contracts and quiet favours. Everyone is content, and the " +
-                    "machinery is a little worse than it was.", countryId, desk: ReportingDesk.Government);
+                    "Appointments, contracts and quiet favours. The machinery is a little worse than it was." + blocReport,
+                    countryId, desk: ReportingDesk.Government);
             return true;
         }
 
@@ -1896,11 +1922,12 @@ namespace Brink.Core
             }
 
             // What an inquiry is actually for (spec 05 §2e): it takes favours
-            // back out of the system. Deliberately less than patronage puts in,
-            // so buying support and then auditing it is a net loss rather than a
-            // laundering cycle.
+            // back out of the system: 11 removed versus patronage's 7 added.
+            // The inquiry costs more PC and disturbs backing; it is not a free undo.
+            float corruptionBefore = country.government.corruption;
             country.government.corruption =
                 Clamp(country.government.corruption - InquiryCorruptionRelief);
+            string blocReport = ApplyBlocReactions(state, country, inquiry: true, corruption: corruptionBefore);
 
             country.pillars.government = Growth.Apply(country.pillars.government, 2.5f);
             country.counterIntel.counterIntelligence =
@@ -1914,10 +1941,10 @@ namespace Brink.Core
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "INQUIRY CONCLUDED",
-                    weakest != null
+                    (weakest != null
                         ? $"Findings delivered. {weakest.displayName} has been put on notice and the " +
-                          "department is sharper for it. Nobody involved is grateful."
-                        : "Findings delivered. The machinery is sharper and nobody is grateful.",
+                          "department is sharper for it. Its arrangements have been disturbed."
+                        : "Findings delivered. The machinery is sharper and its arrangements disturbed.") + blocReport,
                     countryId, desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, countryId,
                 "Public inquiry into the conduct of government.", Publicity.Public);

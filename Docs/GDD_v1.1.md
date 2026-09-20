@@ -763,6 +763,14 @@ Government type changes how power works rather than granting a generic modifier.
 
 The pillar includes Political Capital, constitutional authority, civic posture, public messaging, political bargaining, patronage, inquiries, institutional reform, appointments, emergency powers, leadership succession and elections.
 
+Internal blocs react differently to patronage and public inquiries: hardship
+constituencies welcome favours, while liberty/integrity constituencies resist
+them; removing real corruption reverses that trade-off. An empty inquiry earns
+no bloc goodwill. Reactions use the existing persistent dispositions and backing
+targets, with visible consequences before ordering, fixed power shares and the
+existing recovery toward neutral. Broader policy reactions and shifting shares
+remain future work (spec 05 §2g).
+
 Domestic politics now contains an **Opposition** with a concrete case and theme—Hardship, War, Corruption, Liberty or Drift. The operator may concede or confront it, but the correct instrument depends on what the public is actually angry about; confronting a visible hardship or unpopular war can make the case stronger.
 
 Regime breakdown, coups, civil conflict and secession emerge from accumulated conditions rather than random game-over cards. The operator remains at the terminal when the country enters a worse political state.

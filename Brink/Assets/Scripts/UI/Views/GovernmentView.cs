@@ -195,7 +195,7 @@ namespace Brink.UI.Views
             AddText().text = $" Current bloc contribution to {(gov.IsElective ? "legislative support" : "elite cohesion")} target: "
                 + $"{GovernmentSystem.FactionSupport(gov):+0.0;-0.0;0.0}. This is not an immediate change in the total backing bar.";
             if (gov.factions.Count == 0)
-                AddText("terminal-text-dim").text = "Initial constituencies below are a preview. Their ledger is established by the first bargain or monthly review.";
+                AddText("terminal-text-dim").text = "Initial constituencies below are a preview. Their ledger is established by the first bargain, patronage, inquiry or monthly review.";
 
             foreach (var faction in GovernmentSystem.FactionsFor(state, player))
             {
@@ -203,11 +203,15 @@ namespace Brink.UI.Views
                 AddText().text = $" Share of {(gov.IsElective ? "chamber" : "elite")}: {faction.share:P0}. "
                     + $"Disposition: {faction.disposition:F0}/100 (50 is indifferent). Concern: {faction.theme}.";
                 var theme = faction.theme;
+                float patronage = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.PatronageReaction(theme))) - faction.disposition;
+                float inquiry = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.InquiryReaction(theme, gov.corruption))) - faction.disposition;
+                AddText().text = $" Disposition if ordered now: PATRONAGE {patronage:+0.##;-0.##;0}; PUBLIC INQUIRY {inquiry:+0.##;-0.##;0}.";
                 AddButton(MakeRow(), $"COURT {faction.name} [{GovernmentSystem.BuildSupportCost:F0} PC]", null,
                     () => { GameController.Instance.CourtFaction(theme); Refresh(); });
             }
             AddText("terminal-text-dim").text = "Courting raises only the chosen bloc's disposition and also buys general backing. "
-                + "It does not settle the opposition's case or change national policy. Patronage separately reaches the hardship bloc.";
+                + "It does not settle the opposition's case or change national policy. Patronage pleases hardship blocs and angers liberty/corruption blocs. "
+                + "Inquiries reverse that trade-off in proportion to corruption actually removed; a clean inquiry changes no dispositions. Shares stay fixed.";
         }
 
         void BuildInstruments(GameState state, CountryState player)
