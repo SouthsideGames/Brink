@@ -837,8 +837,45 @@ The ledger persists across Cabinet/leader replacement and constitutional changes
 under the existing rules; there is no new reset or migration. Empty ledgers seed
 from the government type at first use. These are constituencies, not officials
 or the opposition case: courting neither settles a grievance nor changes policy.
-This slice exposes existing politics; faction-specific policy reactions, changes
-in power share and regime-aware renaming remain outside it. Roadmap #23 is partial.
+The first slice exposed existing politics. The policy slice below adds two
+opposed reactions; changes in power share and regime-aware renaming remain
+outside it. Roadmap #23 is partial.
+
+**Patronage and inquiry reactions (#23, second slice).** Both actor-generic
+verbs now reach the existing ledger, after their normal affordability gates.
+No new action, currency, persistent field, AI selection rule or reward is added.
+
+| Existing bloc concern | Patronage | Inquiry removing 11 corruption |
+| --- | --- | --- |
+| Hardship | +7 disposition | −4 disposition |
+| Liberty or Corruption | −5 | +4 |
+| Drift, War, other | 0 | 0 |
+
+Patronage rewards recipients of favours at the expense of clean-government
+constituencies. An inquiry removes those favours, reversing who approves.
+The inquiry response scales by `min(11, max(0, corruptionBefore)) / 11`:
+5.5 corruption buys half the response, zero buys none. Its other established
+institutional effects and costs still apply at zero corruption. Each disposition
+clamps to 0–100. The rule uses persisted concerns, not current regime labels;
+every matching bloc reacts, and an absent concern does **not** redistribute
+its reaction to unrelated blocs through the generic courting fallback.
+
+The panel uses the same response functions and shows the clamped change at
+current conditions, without seeding a ledger. Successful player notices name
+each affected bloc and the applied movement, or explicitly say unchanged.
+Inquiries now establish an empty ledger too. Shares/names stay fixed; changes
+persist through the existing save. The monthly 2% approach to neutral and paid
+named courting remain recovery routes. An inquiry is not a free reversal:
+one full patronage/inquiry pair costs 5 PC and 200 treasury and leaves integrity
+disposition down 1, hardship up 3 (before clamps); after a clean-state patronage,
+only 7/11 of an inquiry response is available.
+
+Foreign governments use these same verbs in their existing consolidation path,
+so their backing targets can change and unattended trajectories need not match
+the previous slice. Exact magnitudes are authored initial tuning, not certified
+balance. This does not implement broader policy reactions, shifting shares or
+regime-aware names. Device confirmation and independent Unity verification remain
+separate gates.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
@@ -865,8 +902,8 @@ Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
   `AISystem.ConsolidateHome` unless it is genuinely operator-interface.
   If it moves `legislativeSupport`, `eliteCohesion`, `stability`, `unity` or
   `approval`, **move the target, not the value** — all five drift.
-- **Parties and factions** — leader-faction arithmetic (§2b-1) and the playable
-  bloc ledger (§2g) exist. Policy-specific reactions and shifting shares of
+- **Parties and factions** — leader-faction arithmetic (§2b-1), the playable
+  bloc ledger and patronage/inquiry reactions (§2g) exist. Broader policy reactions and shifting shares of
   political power would extend them, not require a parallel faction model.
 - **Secession and state dissolution** — civil conflict currently degrades a state
   but never splits it. Border change (GDD §16) is the missing piece.

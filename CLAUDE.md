@@ -31,13 +31,22 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Bloc policy reactions (#23, second slice).** Existing patronage pleases
+  Hardship (+7) and displeases Liberty/Corruption (−5); inquiry reverses that
+  trade-off (−4/+4), scaled to corruption actually removable, so clean inquiries
+  buy no goodwill. Both actor-generic paths use the existing ledger after cost
+  gates. UI previews clamp the same rules; notices report applied movements.
+  Names/shares, rewards, monthly recovery, schema and AI selection stay unchanged;
+  foreign backing and world trajectories can change. No balance or device
+  certification is implied. Spec 05 §2g; #23 remains partial.
+
 - **Internal political blocs — playable ledger (#23, first slice).** The existing
   named blocs and `CourtFaction` command are now exposed in GOVERNMENT. Previewing
   an empty ledger is read-only and uses the same deterministic seed as the first
   bargain/monthly update. Absent themes refuse before spending; successful notices
   name the chosen bloc. Authority, PC, rewards, autosave, decay and support-target
-  arithmetic remain the existing paths. No policy-reaction or shifting-share
-  model is claimed; #23 remains partial. Spec 05 §2g.
+  arithmetic remain the existing paths. This first slice did not add policy
+  reactions or shifting shares; see the subsequent reaction slice above. Spec 05 §2g.
 
 - Simulation code is plain C# with no UnityEngine scene/component dependencies
   (UnityEngine used only for JsonUtility/Debug) so it is edit-mode testable and
