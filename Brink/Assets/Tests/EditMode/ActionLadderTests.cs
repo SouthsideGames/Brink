@@ -338,6 +338,236 @@ namespace Brink.Tests
 
         // ---------- 8. detection and programme state are untouched ----------
 
+        // ---------- 7. a pre-emption that can no longer act releases the slot ----------
+
+        /// <summary>
+        /// Put `observer` in the state where every response to `holder`'s finished
+        /// programme has already been made: a station already at full penetration,
+        /// counter-intelligence already hardened, no legend to build, no sanction
+        /// worth imposing, no deterrent it can afford to begin, and no war to
+        /// settle. The programme stays fully visible throughout.
+        /// </summary>
+        static void ExhaustEveryResponse(GameState state, string observerId, string holderId)
+        {
+            var observer = state.FindCountry(observerId);
+            var ai = Observer(state, observerId);
+
+            state.networks.RemoveAll(n => n.ownerId == observerId && n.targetId == holderId);
+            state.networks.Add(new IntelNetwork
+            {
+                ownerId = observerId, targetId = holderId,
+                focus = IntelDomain.Military, penetration = 100f
+            });
+            observer.counterIntel.counterIntelligence = 60f;   // already hardened
+            observer.counterIntel.deceptionStrength = 55f;     // no room for a fresh legend
+            ai.profile.aggression = 30f;                       // below the coercion appetite
+            observer.resources.treasury = 0f;                  // cannot fund a deterrent
+
+            Assert.IsFalse(state.IsAtWar(observerId), "fixture: the observer must not be at war");
+            Assert.Greater(EndgameSystem.KnownPreparation(state, observerId, holderId,
+                    EndgameType.StrategicDestruction), 0f,
+                "fixture: the programme must stay visible — this is about response, not detection");
+        }
+
+        /// <summary>
+        /// Make a programme visible whether or not the holder already has one of
+        /// that type under way. `EndgamePreparation` lookup returns the *first*
+        /// match, so appending a second entry beside a low-progress one leaves
+        /// the low figure authoritative and the programme invisible — a fixture
+        /// that quietly tests nothing once the world has been run for a month.
+        /// </summary>
+        static void MakeProgrammeVisible(GameState state, string holderId, EndgameType type)
+        {
+            var holder = state.FindCountry(holderId);
+            Assert.IsNotNull(holder, $"no such country {holderId}");
+            foreach (var existing in holder.endgames.preparations)
+                if (existing.type == type) { existing.progress = 100f; return; }
+            holder.endgames.preparations.Add(new EndgamePreparation { type = type, progress = 100f });
+        }
+
+        static AIObjectiveType? OnlyObjective(AIState ai)
+            => ai.objectives.Count == 0 ? (AIObjectiveType?)null : ai.objectives[0].type;
+
+        [Test]
+        public void ADetectedProgrammeWithAResponseLeftStillRaisesOne()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            var ai = Observer(state, "IND");
+            var ind = state.FindCountry("IND");
+
+            Assert.IsTrue(AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"),
+                "fixture: a government with no station on the holder plainly has a response left");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(1, ai.objectives.Count, "Standard difficulty keeps exactly one objective");
+            Assert.AreEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai),
+                "a visible finished programme with an available response must still command the slot");
+            Assert.GreaterOrEqual(ai.actionsThisMonth, 1, "and the response must actually have been carried out");
+        }
+
+        [Test]
+        public void AnExhaustedPreemptionReleasesTheOnlyObjectiveSlot()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            ExhaustEveryResponse(state, "IND", "RUS");
+            var ai = Observer(state, "IND");
+            var ind = state.FindCountry("IND");
+
+            Assert.IsFalse(AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"),
+                "fixture: every response this government commands is already made");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreEqual(1, ai.objectives.Count);
+            Assert.AreNotEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai),
+                "an answered threat held the only action slot, so nothing else could ever be chosen — "
+                + "the threat is still visible and still counted as threat, but it commands no further response");
+            Assert.Greater(EndgameSystem.KnownPreparation(state, "IND", "RUS",
+                    EndgameType.StrategicDestruction), 0f,
+                "releasing the slot must not have hidden the programme");
+        }
+
+        [Test]
+        public void AfterTheSlotIsReleasedAnotherObjectiveIsSelectedAndActs()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            ExhaustEveryResponse(state, "IND", "RUS");
+            var ai = Observer(state, "IND");
+
+            AISystem.MonthlyThink(state);
+
+            Assert.AreNotEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai));
+            Assert.GreaterOrEqual(ai.actionsThisMonth, 1,
+                "the freed slot produced no action at all, which is starvation by another name");
+        }
+
+        [Test]
+        public void AMateriallyNewThreatIsAnsweredAgain()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            ExhaustEveryResponse(state, "IND", "RUS");
+            var ai = Observer(state, "IND");
+            var ind = state.FindCountry("IND");
+            AISystem.MonthlyThink(state);
+            Assert.AreNotEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai), "fixture: the slot was released");
+
+            // A second state's programme becomes visible. Nothing has been done
+            // about that one, so pre-emption is relevant again — no memory, no
+            // cooldown, just a response that exists where none did before.
+            MakeProgrammeVisible(state, "DEU", EndgameType.StrategicDestruction);
+            Assert.Greater(EndgameSystem.KnownPreparation(state, "IND", "DEU",
+                    EndgameType.StrategicDestruction), 0f, "fixture: the new programme must be visible");
+            Assert.IsTrue(AISystem.PreemptionResponseRemains(state, ai, ind, "DEU"));
+
+            // Governments re-plan on their own review cadence rather than every
+            // month (`3 + patience/20`, so at most eight), which is deliberate:
+            // one that re-planned monthly would read as noise. The claim here is
+            // that the threat can take the slot back at the next review, not
+            // that it interrupts the current objective mid-course.
+            string target = null;
+            for (int cycle = 0; cycle < 10 && target == null; cycle++)
+            {
+                AISystem.MonthlyThink(state);
+                if (OnlyObjective(ai) == AIObjectiveType.PreemptProgramme) target = ai.objectives[0].targetId;
+            }
+
+            Assert.AreEqual("DEU", target,
+                "a newly visible programme nobody has answered must be able to take the slot back, "
+                + "and be aimed at the threat that still has a response rather than the answered one");
+        }
+
+        [Test]
+        public void AResponseThatBecomesAvailableAgainRestoresThePreemption()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            ExhaustEveryResponse(state, "IND", "RUS");
+            var ai = Observer(state, "IND");
+            var ind = state.FindCountry("IND");
+            Assert.IsFalse(AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"));
+
+            // Counter-intelligence decays; hardening at home is worth doing again.
+            ind.counterIntel.counterIntelligence = 20f;
+
+            Assert.IsTrue(AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"),
+                "the same threat must command a response again once one exists");
+            AISystem.MonthlyThink(state);
+            Assert.AreEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai));
+        }
+
+        [Test]
+        public void SustainedResponsesAreNotCutShort()
+        {
+            state.difficulty = Difficulty.Standard;
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            var ai = Observer(state, "IND");
+
+            // Six consecutive planning cycles with a response still available:
+            // the objective is not switched off early, and it is not a cooldown.
+            int held = 0;
+            for (int month = 0; month < 6; month++)
+            {
+                AISystem.MonthlyThink(state);
+                if (OnlyObjective(ai) == AIObjectiveType.PreemptProgramme) held++;
+            }
+            Assert.GreaterOrEqual(held, 4,
+                $"pre-emption held the slot in only {held} of six cycles while responses remained — "
+                + "this correction withdraws an exhausted objective, it does not time one out");
+        }
+
+        [Test]
+        public void CollectionThatCannotDeepenIsNotAnAction()
+        {
+            // `CounterRival`'s last step adds four points of penetration. The
+            // figure caps at 100, so past that it returned true every month for
+            // a change it could not make: an action that consumed the budget and
+            // moved nothing.
+            var ind = state.FindCountry("IND");
+            var ai = Observer(state, "IND");
+            state.networks.RemoveAll(n => n.ownerId == "IND" && n.targetId == "RUS");
+            state.networks.Add(new IntelNetwork
+            {
+                ownerId = "IND", targetId = "RUS",
+                focus = IntelDomain.Military, penetration = 100f
+            });
+            ind.counterIntel.counterIntelligence = 60f;
+            ind.counterIntel.deceptionStrength = 55f;
+            ai.profile.aggression = 30f;
+
+            var method = typeof(AISystem).GetMethod("CounterRival",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method, "CounterRival was renamed without updating its guard");
+
+            bool acted = (bool)method.Invoke(null, new object[] { state, ai, ind, "RUS", new System.Random(3) });
+
+            Assert.IsFalse(acted,
+                "a government reported an action for topping up a station already at full penetration");
+            Assert.AreEqual(100f, state.FindNetwork("IND", "RUS").penetration, 0f,
+                "and it must not have pretended to move the figure either");
+        }
+
+        [Test]
+        public void TheEligibilityQuestionChangesNothing()
+        {
+            PlantVisibleProgramme(state, "RUS", EndgameType.StrategicDestruction);
+            var ai = Observer(state, "IND");
+            var ind = state.FindCountry("IND");
+
+            string before = SaveSystem.ToJson(state);
+            int sequence = state.actionSequence;
+            bool first = AISystem.PreemptionResponseRemains(state, ai, ind, "RUS");
+            for (int i = 0; i < 20; i++)
+                Assert.AreEqual(first, AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"),
+                    "the same question answered differently on the same state is not deterministic");
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "asking whether a response remains changed the world");
+            Assert.AreEqual(sequence, state.actionSequence, "asking whether a response remains consumed randomness");
+        }
+
         [Test]
         public void ProgrammeDetectionAndStateAreUnchangedBySelection()
         {

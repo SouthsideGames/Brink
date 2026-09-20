@@ -113,11 +113,13 @@ collection against that state to see at all; a *finished* one crosses the
 threshold on its own signature, so the world gets exactly one free warning and
 it is that the thing is ready.
 
-**The percentage is applied as a ratio, and the boundary is exact by
-construction** (`ProgressVisibilityPercent` and `DisclosureThreshold`, both 45).
-Written as `progress * 0.45f` it was not: `0.45f` is 0.449999988079071, so a
-finished programme computed 44.999998807907104 at runtime and missed its own
-threshold by 1.2×10⁻⁶. The free warning was therefore never issued —
+**The percentage is applied as a ratio so that the boundary this rule is about
+is exact** (`ProgressVisibilityPercent` and `DisclosureThreshold`, both 45).
+Written as `progress * 0.45f` it was not: `0.45f` is 0.449999988079071 and the
+product reached the comparison without being rounded back to `float`, so a
+finished programme was measured at 44.999998807907104 and missed its own
+threshold by about 1.2×10⁻⁶. The claim made here is narrow and tested: progress
+100 with no collection discloses, progress 99 with no collection does not. The free warning was therefore never issued —
 `AISystem.DetectedProgramme` read no alarm, no `PreemptProgramme` objective was
 ever raised against a programme nobody had also collected against, and the one
 consequence this section promises did not exist. A literal that cannot represent

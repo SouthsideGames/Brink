@@ -256,7 +256,17 @@ namespace Brink.Core
                 //
                 // Deliberately not gated on caution: this is the one conclusion
                 // a cautious government is *more* moved by, not less.
-                if (programme > 15f)
+                // **Raised only while pre-empting it would still do something.**
+                // A finished programme is visible for good, so this candidate is
+                // permanently available and scores above everything else; at
+                // Standard difficulty the action budget is one, so a government
+                // that had already answered as far as it could answer kept the
+                // slot forever and never asserted a claim, expanded influence or
+                // consolidated at home again. The threat is not forgotten and
+                // the score is untouched — the objective simply stops being
+                // raised once every response it commands is exhausted, and is
+                // raised again the moment one becomes available.
+                if (programme > 15f && PreemptionResponseRemains(state, ai, country, other.id))
                     candidates.Add(new AIObjective
                     {
                         type = AIObjectiveType.PreemptProgramme,
@@ -723,9 +733,96 @@ namespace Brink.Core
         /// 3. **Reach for the fallback.** If neither is open, do what a
         ///    threatened state does — collect, coerce and align against them.
         /// </summary>
+        /// <summary>
+        /// Whether pre-empting <paramref name="targetId"/> still commands a
+        /// response that would change something. Read-only, and derived
+        /// entirely from world state the game already keeps: no alarm meter, no
+        /// cooldown and no memory of what was tried. Each branch mirrors the
+        /// corresponding branch of <see cref="PreemptProgramme"/>, so selection
+        /// and execution cannot disagree about what a response is.
+        ///
+        /// A threat that has been answered as far as it can be answered stays
+        /// fully visible and keeps raising threat; it simply stops commanding
+        /// the action slot. It commands it again the moment the world supplies
+        /// a new answer — a war with the holder, a treasury that can fund
+        /// another deterrent, a capability that matures, a station lost, a
+        /// counter-intelligence reservoir that has decayed, or a different state
+        /// whose programme becomes visible (each target is judged separately).
+        /// </summary>
+        public static bool PreemptionResponseRemains(GameState state, AIState ai, CountryState country,
+            string targetId)
+        {
+            if (country == null || string.IsNullOrEmpty(targetId)) return false;
+
+            // 1. Terms can be sought while we are actually fighting them.
+            var confrontation = state.ActiveConfrontationFor(country.id);
+            if (confrontation != null && !confrontation.resolved && confrontation.Involves(targetId))
+                return true;
+
+            // 2. A deterrent of our own, while there is one left to build and
+            //    the capability, pillar and treasury permit beginning it.
+            foreach (EndgameType type in Enum.GetValues(typeof(EndgameType)))
+            {
+                if (type == EndgameType.TotalMobilization) continue;
+                if (country.endgames.ProgressFor(type) >= 100f) continue;
+                if (EndgameSystem.CanPrepare(state, country, type, out _)) return true;
+            }
+
+            // 3. The ordinary tools of a threatened state — but only where one
+            //    of them is a response rather than routine collection.
+            return CounterRivalHasDistinctResponse(state, ai, country, targetId);
+        }
+
+        /// <summary>
+        /// Whether <see cref="CounterRival"/> holds a step that is a *response*
+        /// to a decisive foreign programme rather than the ordinary business of
+        /// watching a rival: opening a station where there is none, hardening at
+        /// home, mounting a legend, or bringing coercion to bear.
+        ///
+        /// **Deepening an existing station is deliberately not one of them, and
+        /// that exclusion is the whole correction.** Networks decay, so there is
+        /// always another four points of penetration to add; measured over two
+        /// 20-year worlds that single step was the reason pre-emption stayed
+        /// eligible in 66% and 71% of the months it held the slot, while
+        /// counter-intelligence sat near 80 and nothing else was available. A
+        /// permanently visible programme therefore kept the only action slot
+        /// forever on the strength of routine collection. Collection still
+        /// happens — `CounterRival` is a separate objective whose priority
+        /// already carries this programme's alarm through `threat`, so the
+        /// threat is neither forgotten nor discounted; it simply competes
+        /// instead of pre-empting everything else in perpetuity.
+        /// </summary>
+        static bool CounterRivalHasDistinctResponse(GameState state, AIState ai, CountryState country, string targetId)
+        {
+            if (country == null || string.IsNullOrEmpty(targetId)) return false;
+
+            if (state.FindNetwork(country.id, targetId) == null) return true;
+            if (country.counterIntel.counterIntelligence < 45f) return true;
+            if (DeceptionAvailable(state, country, targetId)) return true;
+            return state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f
+                   && EconomySystem.SanctionCauseStands(state, country.id, targetId);
+        }
+
+        /// <summary>
+        /// The deterministic half of <see cref="MountDeception"/>'s gate: a real
+        /// service, room to build a fresh legend, and grounds to think somebody
+        /// is looking. The appetite roll is deliberately not asked here — an
+        /// eligibility question may not consume the month's randomness.
+        /// </summary>
+        static bool DeceptionAvailable(GameState state, CountryState country, string targetId)
+            => country.pillars.intelligence >= 45f
+               && country.counterIntel.deceptionStrength <= 40f
+               && SuspectsCollection(state, country, targetId);
+
         static bool PreemptProgramme(GameState state, AIState ai, CountryState country,
             string targetId, Random rng)
         {
+            // One rule, asked twice: `FormObjectives` asks it before raising the
+            // objective, and it is asked again here because the world may have
+            // moved between planning and acting. Declining costs no action, so
+            // the budget falls through to whatever else was selected.
+            if (!PreemptionResponseRemains(state, ai, country, targetId)) return false;
+
             var confrontation = state.ActiveConfrontationFor(country.id);
             bool againstThem = confrontation != null
                                && !confrontation.resolved
@@ -1000,7 +1097,11 @@ namespace Brink.Core
                 }
             }
 
-            // 5. Otherwise deepen collection.
+            // 5. Otherwise deepen collection — while there is depth left to
+            //    add. `Clamp` holds penetration at 100, so past that this
+            //    branch returned true every month for a figure it could not
+            //    move: an action that consumed the budget and changed nothing.
+            if (network.penetration >= 100f) return false;
             network.penetration = Clamp(network.penetration + 4f);
             return true;
         }
@@ -1017,17 +1118,14 @@ namespace Brink.Core
         static bool MountDeception(GameState state, AIState ai, CountryState country,
             string targetId, Random rng)
         {
-            // Building legends takes a real service.
-            if (country.pillars.intelligence < 45f) return false;
-            if (country.counterIntel.deceptionStrength > 40f) return false;
-
-            // No point deceiving someone who is not looking at us — as far as we
-            // can tell. Whether a foreign service is inside us, and how deep, is
-            // what counter-intelligence has to *earn*; reading their network's
-            // penetration directly was a free mole hunt. We know they are looking
-            // if we have caught them at it, or if our own service is strong
-            // enough to assume it of a hostile state.
-            if (!SuspectsCollection(state, country, targetId)) return false;
+            // Building legends takes a real service, room for a fresh legend,
+            // and somebody worth misleading. Whether a foreign service is inside
+            // us, and how deep, is what counter-intelligence has to *earn*;
+            // reading their network's penetration directly was a free mole hunt.
+            // We know they are looking if we have caught them at it, or if our
+            // own service is strong enough to assume it of a hostile state.
+            // Shared with the eligibility predicate so the two cannot drift.
+            if (!DeceptionAvailable(state, country, targetId)) return false;
 
             // Difficulty is reasoning quality, never a stat cheat (GDD §24.3):
             // a sharper government notices the opportunity to mislead more often

@@ -272,15 +272,20 @@ namespace Brink.Core
             // A finished one crosses the threshold on its own signature alone —
             // the world gets exactly one warning, and it is that it is ready.
             //
-            // **The percentage is applied as a ratio, not as `0.45f`, and that is
-            // load-bearing.** `0.45f` is 0.449999988079071 exactly, so a finished
-            // programme read `100 * 0.45f = 44.999998807907104` at runtime and
-            // missed its own threshold by 1.2e-06: the one warning the design
-            // promises was never issued, and no government ever pre-empted a
-            // programme it had not also collected against. A literal that cannot
-            // represent the boundary it defines is the boundary being wrong.
-            // `progress * 45f / 100f` is exact at 100 and at every other whole
-            // percentage, so the authored rule is what the code computes.
+            // **The percentage is applied as a ratio, not as `0.45f`, and that
+            // is load-bearing.** `0.45f` is 0.449999988079071, and the product
+            // reached this comparison without being rounded back to `float`, so
+            // a finished programme was measured at 44.999998807907104 and missed
+            // its own threshold by about 1.2e-06. The free warning the design
+            // promises was therefore never issued. Measured, not inferred: with
+            // the old form, progress 100 and penetration 0 returned −1, and so
+            // did penetration 1e-06, while 0.01 disclosed.
+            //
+            // `progress * 45f / 100f` computes the authored boundary exactly at
+            // 100, which is the case the rule is about. No wider claim is made
+            // here about other progress values: what is asserted, and tested, is
+            // that 100 with no collection discloses and 99 with no collection
+            // does not.
             float visibility = penetration + progress * ProgressVisibilityPercent / 100f;
             if (visibility < DisclosureThreshold) return -1f;
             return progress;

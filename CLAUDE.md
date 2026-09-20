@@ -1646,40 +1646,49 @@ three had passed for a long time:
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
 
-- [x] **The five known suite failures were one defect, and it was 1.2×10⁻⁶
-      wide** (spec 14 §6, spec 06, spec 04 §8a). Four programme-detection tests
-      and the world-heat bound had been failing together, and they shared a
-      cause: `EndgameSystem.KnownPreparation` gated disclosure on
-      `penetration + progress * 0.45f >= 45`, and `0.45f` is 0.449999988079071,
-      so a **finished** programme computed 44.999998807907104 and missed its own
-      threshold. The rule the code comment, the spec and three test names all
-      state — *a finished programme crosses the threshold on its own signature,
-      the world gets exactly one free warning* — had never once fired.
-      **The consequence was not cosmetic.** `AISystem.DetectedProgramme` reads
-      that function, so the alarm was always zero, `PreemptProgramme` was never
-      raised for the case it exists for, and governments spent their action
-      budget on `AssertClaim` instead. Six seeds × 360 months, before → after
-      the one-expression repair: chosen AI-vs-AI wars **61 → 7**, satellite
-      fronts 64 → 43, distinct warring pairs 52 → 6, repeated pairings 8 → 0,
-      unresolved wars 1 → 0; 5% of months have any AI war, mean concurrency
-      0.06. That lands at 1.17 wars per 30-year world against the documented
-      ~1.25 baseline. **No test was changed, weakened or retuned, and no
-      expectation was obsolete** — `TheWorldFightsItsOwnWars` passes at its
-      original ceiling of 40.
-      Fixed by applying the percentage as a ratio (`progress *
-      ProgressVisibilityPercent / 100f`, both constants 45), which is exact at
-      100 and at every whole percentage, and by naming the two constants so the
-      equality that *is* the rule can be asserted.
-      **The lesson, and it is new to this file: a threshold written with a
-      decimal literal is a threshold that may not contain its own boundary.**
-      The naive check misleads — an inline `100f * 0.45f` in a test is
-      constant-folded to exactly 45 and looks correct, while the runtime
-      multiply of a value loaded from state is not. Tell them apart by feeding
-      the value through the real call, as `TheDisclosureThresholdIsExactAtAFinishedProgramme`
-      does. **And: when a world-health bound breaks, look for the mechanism that
-      stopped working before concluding the bound is stale.** Bisection said the
-      count had been over the ceiling since before read-time rival gravity, which
-      invited exactly the wrong repair.
+- [x] **The five known suite failures were one defect — and repairing it
+      exposed a second one** (spec 14 §6, spec 06, spec 04 §8a).
+      `EndgameSystem.KnownPreparation` gated disclosure on
+      `penetration + progress * 0.45f >= 45`. `0.45f` is 0.449999988079071 and
+      the product reached the comparison without being rounded back to `float`,
+      so a **finished** programme measured 44.999998807907104 and missed its own
+      threshold by about 1.2×10⁻⁶. The rule the code comment, the spec and three
+      test names all state — *a finished programme crosses the threshold on its
+      own signature, the world gets exactly one free warning* — had never fired
+      for a government that was not also collecting. Measured, not inferred:
+      progress 100 with penetration 0 returned −1, penetration 1e-06 also
+      returned −1, and 0.01 disclosed. Fixed by applying the percentage as a
+      ratio (`progress * ProgressVisibilityPercent / 100f`, both constants 45),
+      which computes the boundary the rule is about exactly.
+      **Two traps worth keeping.** An inline `100f * 0.45f` written in a test is
+      constant-folded to exactly 45 and looks correct, so the naive check
+      misleads; feed the value through the real call. And a threshold written
+      with a decimal literal may simply not contain its own boundary.
+      **The second defect was the consequence.** `AISystem.DetectedProgramme`
+      reads that function, so with detection working a permanently visible
+      programme scored `60 + alarm × 1.6` every month forever — and at Standard
+      difficulty the action budget is **one**. Pre-emption took 81% of all
+      government-months, `AssertClaim` fell to exactly zero in the second and
+      third decade of every seed, and counter-espionage stopped almost entirely
+      (3,346 → 5). AI-vs-AI wars fell 61 → 7, and **that fall was starvation,
+      not health.** It was caught only because the verification census counted
+      objectives and executed effects; the suite was fully green throughout.
+      The correction is eligibility, not score: `PreemptionResponseRemains` is
+      read-only, derived from existing world state, shared by selection and
+      execution, and asks whether a *response* remains — terms to seek, a
+      deterrent that can be begun, a station to open, hardening to do, a legend,
+      coercion. **Deepening an existing station is excluded on purpose**:
+      networks decay, so that one step was why pre-emption stayed eligible in
+      66–71% of the months it held the slot. `CounterRival` still deepens
+      collection under its own objective, whose priority already carries the
+      programme through `threat`.
+      Breadth returns: counter-espionage 5 → 3,604, `CounterRival` 1,186 →
+      7,283, pre-emption's third-decade share ~95% → ~40%. **`AssertClaim` and
+      the war count did not move**, because a finished instrument adds 60 to
+      `threat` for as long as it exists and ~84% of pairs can see one by year 30.
+      Whether that world should fight fewer wars is a design question, left open
+      and not tuned. `WorldHeatTests.AnAnsweredProgrammeDoesNotHoldTheActionSlot`
+      guards it with a monopolisation bound rather than a diversity quota.
 
 - [x] **Specific diplomatic leverage, final core slice — conditional and
       time-limited requested commitments** (roadmap #21, spec 04 §5k). All
