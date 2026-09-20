@@ -544,6 +544,18 @@ aggressor swarmed by a large bloc), confrontation-months 71–152 per decade (wa
 separately: wars a government chose against the old ceiling of 40 across six
 worlds, fronts against 72.
 
+**Those ceilings held, and the breach that looked like tuning was not** (2026-09
+suite repair). The test failed at 61 chosen wars for months, which reads as an
+aggression problem and is not one: `EndgameSystem.KnownPreparation` missed its
+own disclosure boundary by 1.2×10⁻⁶, so no government ever pre-empted a finished
+foreign programme and the action budget went to `AssertClaim` instead (spec 14
+§6, spec 06). Repairing the boundary alone took the same six seeds from 61
+chosen wars to **7**, fronts from 64 to 43, repeated pairings from 8 to 0 and
+unresolved wars from 1 to 0 — inside every bound this section set, at 1.17 wars
+per 30-year world against the documented ~1.25. Neither ceiling was moved. When
+a world-health bound breaks, look for the mechanism that stopped working before
+concluding the bound is stale.
+
 ## 9. Joint exercises (GDD §15.3)
 
 `Core/ExerciseSystem.cs` is documented in full in **spec 01 §6** because its

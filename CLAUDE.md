@@ -1646,6 +1646,41 @@ three had passed for a long time:
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
 
+- [x] **The five known suite failures were one defect, and it was 1.2×10⁻⁶
+      wide** (spec 14 §6, spec 06, spec 04 §8a). Four programme-detection tests
+      and the world-heat bound had been failing together, and they shared a
+      cause: `EndgameSystem.KnownPreparation` gated disclosure on
+      `penetration + progress * 0.45f >= 45`, and `0.45f` is 0.449999988079071,
+      so a **finished** programme computed 44.999998807907104 and missed its own
+      threshold. The rule the code comment, the spec and three test names all
+      state — *a finished programme crosses the threshold on its own signature,
+      the world gets exactly one free warning* — had never once fired.
+      **The consequence was not cosmetic.** `AISystem.DetectedProgramme` reads
+      that function, so the alarm was always zero, `PreemptProgramme` was never
+      raised for the case it exists for, and governments spent their action
+      budget on `AssertClaim` instead. Six seeds × 360 months, before → after
+      the one-expression repair: chosen AI-vs-AI wars **61 → 7**, satellite
+      fronts 64 → 43, distinct warring pairs 52 → 6, repeated pairings 8 → 0,
+      unresolved wars 1 → 0; 5% of months have any AI war, mean concurrency
+      0.06. That lands at 1.17 wars per 30-year world against the documented
+      ~1.25 baseline. **No test was changed, weakened or retuned, and no
+      expectation was obsolete** — `TheWorldFightsItsOwnWars` passes at its
+      original ceiling of 40.
+      Fixed by applying the percentage as a ratio (`progress *
+      ProgressVisibilityPercent / 100f`, both constants 45), which is exact at
+      100 and at every whole percentage, and by naming the two constants so the
+      equality that *is* the rule can be asserted.
+      **The lesson, and it is new to this file: a threshold written with a
+      decimal literal is a threshold that may not contain its own boundary.**
+      The naive check misleads — an inline `100f * 0.45f` in a test is
+      constant-folded to exactly 45 and looks correct, while the runtime
+      multiply of a value loaded from state is not. Tell them apart by feeding
+      the value through the real call, as `TheDisclosureThresholdIsExactAtAFinishedProgramme`
+      does. **And: when a world-health bound breaks, look for the mechanism that
+      stopped working before concluding the bound is stale.** Bisection said the
+      count had been over the ceiling since before read-time rival gravity, which
+      invited exactly the wrong repair.
+
 - [x] **Specific diplomatic leverage, final core slice — conditional and
       time-limited requested commitments** (roadmap #21, spec 04 §5k). All
       three exchanges ask for one clause they carry, bounded by the existing

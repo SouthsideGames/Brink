@@ -237,6 +237,20 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// How much of its own progress a programme shows through movement,
+        /// spending and people, as a percentage — the signature it cannot hide.
+        /// </summary>
+        public const float ProgressVisibilityPercent = 45f;
+
+        /// <summary>
+        /// Visibility at or above which a programme is disclosed to an observer.
+        /// Equal to <see cref="ProgressVisibilityPercent"/> by construction, so a
+        /// completed programme is disclosed with no collection at all and a
+        /// programme short of completion needs collection to make up the balance.
+        /// </summary>
+        public const float DisclosureThreshold = 45f;
+
+        /// <summary>
         /// What an observer can learn about a foreign state's preparations. This
         /// is not public information: it requires collection against them, and
         /// the closer an instrument is to readiness the harder it is to conceal.
@@ -257,8 +271,18 @@ namespace Brink.Core
             // A programme close to completion leaks: movement, spending, people.
             // A finished one crosses the threshold on its own signature alone —
             // the world gets exactly one warning, and it is that it is ready.
-            float visibility = penetration + progress * 0.45f;
-            if (visibility < 45f) return -1f;
+            //
+            // **The percentage is applied as a ratio, not as `0.45f`, and that is
+            // load-bearing.** `0.45f` is 0.449999988079071 exactly, so a finished
+            // programme read `100 * 0.45f = 44.999998807907104` at runtime and
+            // missed its own threshold by 1.2e-06: the one warning the design
+            // promises was never issued, and no government ever pre-empted a
+            // programme it had not also collected against. A literal that cannot
+            // represent the boundary it defines is the boundary being wrong.
+            // `progress * 45f / 100f` is exact at 100 and at every other whole
+            // percentage, so the authored rule is what the code computes.
+            float visibility = penetration + progress * ProgressVisibilityPercent / 100f;
+            if (visibility < DisclosureThreshold) return -1f;
             return progress;
         }
 

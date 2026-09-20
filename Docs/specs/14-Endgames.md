@@ -108,10 +108,23 @@ not in the position those two thresholds describe.
 ## 6. Visibility
 
 `EndgameSystem.KnownPreparation(state, observerId, targetId, type)` returns −1
-unless `penetration + progress × 0.45 ≥ 45`. An early programme needs collection
-against that state to see at all; a *finished* one crosses the threshold on its
-own signature, so the world gets exactly one free warning and it is that the
-thing is ready. The STRATEGIC
+unless `penetration + progress × 45 / 100 ≥ 45`. An early programme needs
+collection against that state to see at all; a *finished* one crosses the
+threshold on its own signature, so the world gets exactly one free warning and
+it is that the thing is ready.
+
+**The percentage is applied as a ratio, and the boundary is exact by
+construction** (`ProgressVisibilityPercent` and `DisclosureThreshold`, both 45).
+Written as `progress * 0.45f` it was not: `0.45f` is 0.449999988079071, so a
+finished programme computed 44.999998807907104 at runtime and missed its own
+threshold by 1.2×10⁻⁶. The free warning was therefore never issued —
+`AISystem.DetectedProgramme` read no alarm, no `PreemptProgramme` objective was
+ever raised against a programme nobody had also collected against, and the one
+consequence this section promises did not exist. A literal that cannot represent
+the boundary it defines is the boundary being wrong; the two constants are equal
+by construction and a test asserts they stay equal, because that equality *is*
+the "finished discloses for free" rule.
+`EndgameSystemTests.TheDisclosureThresholdIsExactAtAFinishedProgramme`. The STRATEGIC
 view's *Foreign Programmes* panel reads through this and says so explicitly when
 empty: "Nothing reported. This is not the same as nothing existing."
 
