@@ -1100,7 +1100,20 @@ re-running it:
    (every mirrored call carries a ~40-line stack trace × seventy country-decades)
    and that is what killed the run. Mirroring is now on only to print the report;
    16.7 MB. **Never mirror during a playthrough.**
-3. **A narrow fixture can be the only thing holding a test up.**
+3. **`extract-failures.sh`'s completion guard is Windows-only, and on macOS it
+   fires on every healthy run.** It requires `"Server process was shutdown"`,
+   a package-manager line that appears in **zero** of the twenty macOS batch
+   logs this project has produced, while those same logs end with Unity's
+   orderly `Application is shutting down` / `Cleanup mono` sequence and exit 0.
+   So the one guard written to stop a stale results file being trusted cries
+   wolf every time here — the failure mode this file already names for the
+   telemetry detector. Tell a real kill from this by three things the guard
+   does not look at: the exit code, whether the results file was written in
+   this run's time window, and whether the totals moved when tests were added.
+   **Do not read the guard's silence as a pass on Windows or its warning as a
+   failure on macOS without checking those.** Not fixed here; it is a harness
+   aid and the fix belongs with whoever next touches that script.
+4. **A narrow fixture can be the only thing holding a test up.**
    `TerritorySystemTests` has three tests whose injected values drift *the
    direction the assertion looks for* — adding `GovernmentSystem` there converts
    three real tests into three that always pass. Documented at the wiring line;
@@ -1689,6 +1702,38 @@ three had passed for a long time:
       Whether that world should fight fewer wars is a design question, left open
       and not tuned. `WorldHeatTests.AnAnsweredProgrammeDoesNotHoldTheActionSlot`
       guards it with a monopolisation bound rather than a diversity quota.
+      **Releasing a slot is only half of freeing it.** Verification found the
+      other half: `PreemptProgramme` declined an answered plan correctly and
+      charged nothing, but the objective stayed in the list until the review
+      clock came round — three to eight months — and **nothing was planned in its
+      place**, so the freed slot sat empty. 22.4% of all government-months at
+      Standard, where the budget is one, and 9.9% at Challenging. The planner now
+      reopens when a *stored* pre-emption stops satisfying the same predicate
+      that raised it (`HoldsAnAnsweredPreemption`), one extra condition on the
+      existing review gate: no new budget, no retry, no second dispatch, and the
+      answered plan cannot come back because the candidate gate asks the same
+      question. Measured after: **zero stranded months at both difficulties**;
+      breadth widens again (counter-espionage 3,604 → 6,638, `CounterRival`
+      7,283 → 11,313, pre-emption's third-decade share ~40% → ~28%) while wars
+      stay at 7 and `AssertClaim` at 132 → 138, so nothing was manufactured.
+      **Key it on eligibility, never on whether the month produced an action.**
+      `MountDeception` and the coercion step each ask a roll the eligibility
+      predicate deliberately does not, so reconsidering after a quiet month
+      re-plans after every failed roll and keeps re-planning until one succeeds —
+      a reroll loop wearing a planner's clothes. A mutation that makes exactly
+      that substitution is caught.
+      The execution-side check is now unreachable with a false answer through the
+      monthly path and is **kept anyway**, because what it defends is the rule
+      that selection and execution agree about what a response is. It is pinned
+      by a test that drives `AISystem.Act` directly, which is the only way to
+      reach a dispatcher whose planner has already corrected the plan.
+      **Two fixtures were measuring the defect rather than the claim.**
+      `SustainedResponsesAreNotCutShort` said "six cycles with a response still
+      available" and read the default world, where IND's only response is opening
+      its first station — taken in month one, after which nothing remains. It
+      passed only because an answered objective used to linger. Restated with the
+      premise its assertion rests on (counter-intelligence at 20, so hardening
+      outlasts the window) and now asserts the premise held.
 
 - [x] **Specific diplomatic leverage, final core slice — conditional and
       time-limited requested commitments** (roadmap #21, spec 04 §5k). All

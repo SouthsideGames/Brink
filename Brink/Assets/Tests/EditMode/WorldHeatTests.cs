@@ -146,6 +146,69 @@ namespace Brink.Tests
                 + "what leaves every other objective unreachable");
         }
 
+        /// <summary>
+        /// **Releasing the slot is only half of it: something else has to be able
+        /// to take it.**
+        ///
+        /// `PreemptProgramme` correctly declines once the world has answered the
+        /// threat, but an objective is planned on a review cadence of three to
+        /// eight months, so a plan answered in the first month of its cycle used
+        /// to be declined every month until the next review while nothing else
+        /// was planned. The slot was freed and then left empty. Measured over
+        /// three seeds and 360 months before the planner learned to reconsider
+        /// such a plan: 22.4% of all government-months at Standard, where the
+        /// action budget is one, and 9.9% at Challenging. Measured after: zero at
+        /// both.
+        ///
+        /// The bound is deliberately far above the measured figure and far below
+        /// the defect. It says the avoidable case is gone, and it names no action
+        /// density and no objective that must be chosen — a world that is quiet
+        /// because its governments have nothing worth doing is a legitimate
+        /// world, and this must not be the test that forbids it.
+        /// </summary>
+        [Test, Timeout(900000)]
+        public void AnAnsweredPreemptionDoesNotLeaveTheSlotEmpty()
+        {
+            int[] seeds = { 4242, 2468 };
+            int govMonths = 0, preemptMonths = 0, stranded = 0;
+
+            foreach (int seed in seeds)
+            {
+                var state = WorldFactory.CreateDebugWorld(seed);
+                Assert.AreEqual(Difficulty.Standard, state.difficulty,
+                    "fixture: the single-slot case is where an empty slot costs the whole month");
+                var turns = new TurnManager(state);
+                SimulationPipeline.Wire(turns, state);
+
+                for (int month = 0; month < 240; month++)
+                {
+                    turns.EndMonth();
+                    foreach (var ai in state.aiStates)
+                    {
+                        var country = state.FindCountry(ai.countryId);
+                        if (country == null) continue;
+                        govMonths++;
+                        if (ai.objectives.Count == 0) continue;
+                        if (ai.objectives[0].type != AIObjectiveType.PreemptProgramme) continue;
+
+                        preemptMonths++;
+                        if (ai.actionsThisMonth > 0) continue;
+                        if (AISystem.PreemptionResponseRemains(state, ai, country, ai.objectives[0].targetId ?? ""))
+                            continue;   // a response remains and simply did not fire — a quiet month, not a stranded one
+
+                        stranded++;
+                    }
+                }
+            }
+
+            Assert.Greater(preemptMonths, 0,
+                "no government pre-empted anything in forty years, so this guard proved nothing");
+            Assert.Less(stranded * 50, govMonths,
+                $"{stranded} of {govMonths} government-months were spent holding a pre-emption the world "
+                + "had already answered, taking no action and planning nothing else — the objective slot "
+                + "is being released and then wasted");
+        }
+
         /// <summary>The target of this government's current objective, or empty.</summary>
         static string TargetOf(AIState ai)
             => ai.objectives.Count == 0 ? "" : ai.objectives[0].targetId ?? "";

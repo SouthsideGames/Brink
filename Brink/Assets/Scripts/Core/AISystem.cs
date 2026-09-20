@@ -177,8 +177,20 @@ namespace Brink.Core
             foreach (var objective in ai.objectives) objective.monthsPursued++;
 
             // Patient governments stay the course; impatient ones churn.
+            //
+            // A plan the world has already answered is the one exception, and it
+            // is not impatience. `HoldsAnAnsweredPreemption` asks only whether a
+            // pre-emption we are still carrying has run out of responses — the
+            // same question that raised it. Without this, a government that
+            // finished hardening in the first month of its cycle declined the
+            // objective every month until the next review and planned nothing
+            // else: the slot was correctly released by `PreemptProgramme` and then
+            // left empty. Measured at 22.4% of government-months at Standard,
+            // where the budget is one, and 9.9% at Challenging.
             int reviewInterval = 3 + (int)(ai.profile.patience / 20f);
-            if (ai.objectives.Count > 0 && ai.objectives[0].monthsPursued % reviewInterval != 0)
+            if (ai.objectives.Count > 0
+                && ai.objectives[0].monthsPursued % reviewInterval != 0
+                && !HoldsAnAnsweredPreemption(state, ai, country))
                 return;
 
             var candidates = new List<AIObjective>();
@@ -774,6 +786,41 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// Whether a pre-emption this government is still carrying has since run
+        /// out of responses, so the plan is worth reconsidering now rather than at
+        /// the next scheduled review.
+        ///
+        /// **This asks about eligibility, never about whether last month produced
+        /// an action, and that distinction is the whole design.** A response can
+        /// exist and still not fire: `MountDeception` asks an appetite roll and
+        /// `CounterRival`'s coercion step asks a 20% roll, both deliberately
+        /// outside <see cref="PreemptionResponseRemains"/> so an eligibility
+        /// question never consumes the month's randomness. Keying reconsideration
+        /// on a quiet month would re-plan after every failed roll and keep
+        /// re-planning until one succeeded — a reroll loop wearing a planner's
+        /// clothes. Keying it on eligibility means an unlucky month leaves the
+        /// plan exactly where it was, because the response is still there to try
+        /// again; only a response that has genuinely gone returns true here.
+        ///
+        /// Every objective is examined rather than the first, because above
+        /// Standard the budget holds more than one and the answered pre-emption
+        /// can be the second of them.
+        ///
+        /// Read-only and free of randomness, like the predicate it defers to, so
+        /// asking the question cannot change the answer to anything else.
+        /// </summary>
+        static bool HoldsAnAnsweredPreemption(GameState state, AIState ai, CountryState country)
+        {
+            for (int i = 0; i < ai.objectives.Count; i++)
+            {
+                var objective = ai.objectives[i];
+                if (objective.type != AIObjectiveType.PreemptProgramme) continue;
+                if (!PreemptionResponseRemains(state, ai, country, objective.targetId)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Whether <see cref="CounterRival"/> holds a step that is a *response*
         /// to a decisive foreign programme rather than the ordinary business of
         /// watching a rival: opening a station where there is none, hardening at
@@ -817,10 +864,25 @@ namespace Brink.Core
         static bool PreemptProgramme(GameState state, AIState ai, CountryState country,
             string targetId, Random rng)
         {
-            // One rule, asked twice: `FormObjectives` asks it before raising the
-            // objective, and it is asked again here because the world may have
-            // moved between planning and acting. Declining costs no action, so
-            // the budget falls through to whatever else was selected.
+            // One rule, asked twice. `FormObjectives` asks it before raising the
+            // objective and again before carrying a stored one, so a plan the
+            // world has answered is reconsidered rather than dispatched — which
+            // means this check should no longer be reached with a false answer
+            // through the monthly path, and the long-run census measures exactly
+            // zero such months at both Standard and Challenging.
+            //
+            // **It stays, and it is tested at the dispatcher rather than through
+            // the planner.** What it defends is not a schedule but the rule that
+            // selection and execution agree about what a response is: without it
+            // this method falls through to `CounterRival`, whose last step
+            // deepens a station that has almost always got another four points to
+            // give, so an answered plan reaching dispatch by any route at all
+            // would spend the month's only action on routine collection and
+            // report it as a pre-emption. Measured at roughly 6,000
+            // government-months when the planner still carried such plans.
+            // `ActionLadderTests.AStalePreemptionDoesNotFallThroughToRoutineCollection`
+            // drives `Act` directly to keep that guarantee independent of what the
+            // planner happens to do.
             if (!PreemptionResponseRemains(state, ai, country, targetId)) return false;
 
             var confrontation = state.ActiveConfrontationFor(country.id);
