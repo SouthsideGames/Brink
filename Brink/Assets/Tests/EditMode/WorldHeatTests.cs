@@ -41,6 +41,196 @@ namespace Brink.Tests
             return state;
         }
 
+        // ---------- an answered threat does not hold the action slot ----------
+
+        /// <summary>
+        /// The long-run guard on the correction to programme pre-emption.
+        ///
+        /// A finished foreign programme is visible for good and scores above
+        /// every other objective, so before this it was selected in 81% of all
+        /// government-months once detection worked — and at Standard difficulty
+        /// the action budget is one, so `AssertClaim` fell to exactly zero in
+        /// the second and third decade of every seed while the "response" was
+        /// adding four points to a collection figure already capped at 100.
+        ///
+        /// **What this measures, and why it is not a diversity quota.** It does
+        /// not require any government to rotate through objectives, to reach any
+        /// particular mix of them, or to start a single war. It measures whether
+        /// a pre-emption month *did* anything: it compares everything a
+        /// pre-emption response can move — terms sought, a deterrent of one's
+        /// own, a station opened or deepened, home hardening, a legend, a
+        /// coercive measure — across the month, and fails when one government
+        /// holds the slot against one target while moving none of it for a year
+        /// on end. A world where every government legitimately pre-empts every
+        /// month passes, provided those months do something. Sampling the
+        /// eligibility predicate after the month would be the wrong instant:
+        /// a response taken during the month is often the last one available,
+        /// and a government that hardens at home each time the figure decays is
+        /// responding, not stuck.
+        /// </summary>
+        [Test, Timeout(900000)]
+        public void AnAnsweredProgrammeDoesNotHoldTheActionSlot()
+        {
+            const int inertRunLimit = 12;
+            int[] seeds = { 4242, 2468 };
+            int preemptMonths = 0, inertMonths = 0, worstRun = 0;
+            int lateMonths = 0, latePreempt = 0;
+            string worstWho = "";
+
+            foreach (int seed in seeds)
+            {
+                var state = WorldFactory.CreateDebugWorld(seed);
+                Assert.AreEqual(Difficulty.Standard, state.difficulty,
+                    "fixture: this is the single-slot case, which is where starvation bites");
+                var turns = new TurnManager(state);
+                SimulationPipeline.Wire(turns, state);
+                var inertRun = new Dictionary<string, int>();
+
+                for (int month = 0; month < 240; month++)
+                {
+                    var before = new Dictionary<string, string>();
+                    foreach (var ai in state.aiStates)
+                    {
+                        var c = state.FindCountry(ai.countryId);
+                        if (c != null) before[ai.countryId] = ResponseState(state, c, TargetOf(ai));
+                    }
+
+                    turns.EndMonth();
+
+                    foreach (var ai in state.aiStates)
+                    {
+                        var country = state.FindCountry(ai.countryId);
+                        if (country == null || ai.objectives.Count == 0) continue;
+                        var objective = ai.objectives[0];
+                        string key = seed + ":" + ai.countryId + "->" + (objective.targetId ?? "");
+                        if (month >= 160) lateMonths++;
+                        if (objective.type != AIObjectiveType.PreemptProgramme) { inertRun[key] = 0; continue; }
+
+                        preemptMonths++;
+                        if (month >= 160) latePreempt++;
+                        bool moved = !before.TryGetValue(ai.countryId, out string was)
+                                     || was != ResponseState(state, country, objective.targetId);
+                        if (moved) { inertRun[key] = 0; continue; }
+
+                        inertMonths++;
+                        int run = inertRun.TryGetValue(key, out int r) ? r + 1 : 1;
+                        inertRun[key] = run;
+                        if (run > worstRun) { worstRun = run; worstWho = key + " by month " + month; }
+                    }
+                }
+            }
+
+            Assert.Greater(preemptMonths, 0,
+                "no government pre-empted anything in twenty years, so this guard proved nothing");
+            Assert.Less(worstRun, inertRunLimit,
+                $"a government held the pre-emption slot for {worstRun} consecutive months without moving "
+                + $"anything its response commands ({worstWho}) — an answered threat is occupying the only "
+                + "action slot, which is what starves every other objective. "
+                + $"{inertMonths} of {preemptMonths} pre-emption months moved nothing at all.");
+            Assert.Less(inertMonths, preemptMonths / 2,
+                $"{inertMonths} of {preemptMonths} pre-emption months moved nothing the response commands — "
+                + "the world is going through the motions rather than responding");
+
+            // **A monopolisation bound, not a diversity quota.** It names no
+            // objective that must be chosen and no war that must be fought; it
+            // says only that one objective may not own the overwhelming majority
+            // of every government's every month once the world has matured. The
+            // margin is wide and measured: with the correction the late share
+            // sits near 40%, and with deepening a decayed station counted as a
+            // response to an existential programme it sat near 95%.
+            Assert.Greater(lateMonths, 0, "no late government-months were sampled");
+            float lateShare = latePreempt / (float)lateMonths;
+            Assert.Less(lateShare, 0.70f,
+                $"pre-emption held {latePreempt} of {lateMonths} government-months ({lateShare:P0}) after "
+                + "year thirteen — a permanently visible programme is owning the only action slot, which is "
+                + "what leaves every other objective unreachable");
+        }
+
+        /// <summary>
+        /// **Releasing the slot is only half of it: something else has to be able
+        /// to take it.**
+        ///
+        /// `PreemptProgramme` correctly declines once the world has answered the
+        /// threat, but an objective is planned on a review cadence of three to
+        /// eight months, so a plan answered in the first month of its cycle used
+        /// to be declined every month until the next review while nothing else
+        /// was planned. The slot was freed and then left empty. Measured over
+        /// three seeds and 360 months before the planner learned to reconsider
+        /// such a plan: 22.4% of all government-months at Standard, where the
+        /// action budget is one, and 9.9% at Challenging. Measured after: zero at
+        /// both.
+        ///
+        /// The bound is deliberately far above the measured figure and far below
+        /// the defect. It says the avoidable case is gone, and it names no action
+        /// density and no objective that must be chosen — a world that is quiet
+        /// because its governments have nothing worth doing is a legitimate
+        /// world, and this must not be the test that forbids it.
+        /// </summary>
+        [Test, Timeout(900000)]
+        public void AnAnsweredPreemptionDoesNotLeaveTheSlotEmpty()
+        {
+            int[] seeds = { 4242, 2468 };
+            int govMonths = 0, preemptMonths = 0, stranded = 0;
+
+            foreach (int seed in seeds)
+            {
+                var state = WorldFactory.CreateDebugWorld(seed);
+                Assert.AreEqual(Difficulty.Standard, state.difficulty,
+                    "fixture: the single-slot case is where an empty slot costs the whole month");
+                var turns = new TurnManager(state);
+                SimulationPipeline.Wire(turns, state);
+
+                for (int month = 0; month < 240; month++)
+                {
+                    turns.EndMonth();
+                    foreach (var ai in state.aiStates)
+                    {
+                        var country = state.FindCountry(ai.countryId);
+                        if (country == null) continue;
+                        govMonths++;
+                        if (ai.objectives.Count == 0) continue;
+                        if (ai.objectives[0].type != AIObjectiveType.PreemptProgramme) continue;
+
+                        preemptMonths++;
+                        if (ai.actionsThisMonth > 0) continue;
+                        if (AISystem.PreemptionResponseRemains(state, ai, country, ai.objectives[0].targetId ?? ""))
+                            continue;   // a response remains and simply did not fire — a quiet month, not a stranded one
+
+                        stranded++;
+                    }
+                }
+            }
+
+            Assert.Greater(preemptMonths, 0,
+                "no government pre-empted anything in forty years, so this guard proved nothing");
+            Assert.Less(stranded * 50, govMonths,
+                $"{stranded} of {govMonths} government-months were spent holding a pre-emption the world "
+                + "had already answered, taking no action and planning nothing else — the objective slot "
+                + "is being released and then wasted");
+        }
+
+        /// <summary>The target of this government's current objective, or empty.</summary>
+        static string TargetOf(AIState ai)
+            => ai.objectives.Count == 0 ? "" : ai.objectives[0].targetId ?? "";
+
+        /// <summary>
+        /// Everything a pre-emption response can move, as one comparable string:
+        /// terms sought (a war ending), a deterrent of our own, a station, home
+        /// hardening, a legend, a coercive measure.
+        /// </summary>
+        static string ResponseState(GameState state, CountryState country, string targetId)
+        {
+            float own = 0f;
+            foreach (EndgameType type in System.Enum.GetValues(typeof(EndgameType)))
+                own += country.endgames.ProgressFor(type);
+            var network = string.IsNullOrEmpty(targetId) ? null : state.FindNetwork(country.id, targetId);
+            bool sanction = !string.IsNullOrEmpty(targetId) && state.FindSanction(country.id, targetId) != null;
+            bool atWar = !string.IsNullOrEmpty(targetId)
+                         && ConfrontationSystem.ExistingBetween(state, country.id, targetId) != null;
+            return $"{own:F2}|{network?.penetration ?? -1f:F2}|{country.counterIntel.counterIntelligence:F2}"
+                   + $"|{country.counterIntel.deceptionStrength:F2}|{sanction}|{atWar}";
+        }
+
         // ---------- the AI world fights its own wars ----------
 
         // Six 30-year worlds on the full pipeline — 180 world-years, against

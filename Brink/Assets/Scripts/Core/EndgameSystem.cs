@@ -237,6 +237,20 @@ namespace Brink.Core
         }
 
         /// <summary>
+        /// How much of its own progress a programme shows through movement,
+        /// spending and people, as a percentage — the signature it cannot hide.
+        /// </summary>
+        public const float ProgressVisibilityPercent = 45f;
+
+        /// <summary>
+        /// Visibility at or above which a programme is disclosed to an observer.
+        /// Equal to <see cref="ProgressVisibilityPercent"/> by construction, so a
+        /// completed programme is disclosed with no collection at all and a
+        /// programme short of completion needs collection to make up the balance.
+        /// </summary>
+        public const float DisclosureThreshold = 45f;
+
+        /// <summary>
         /// What an observer can learn about a foreign state's preparations. This
         /// is not public information: it requires collection against them, and
         /// the closer an instrument is to readiness the harder it is to conceal.
@@ -257,8 +271,23 @@ namespace Brink.Core
             // A programme close to completion leaks: movement, spending, people.
             // A finished one crosses the threshold on its own signature alone —
             // the world gets exactly one warning, and it is that it is ready.
-            float visibility = penetration + progress * 0.45f;
-            if (visibility < 45f) return -1f;
+            //
+            // **The percentage is applied as a ratio, not as `0.45f`, and that
+            // is load-bearing.** `0.45f` is 0.449999988079071, and the product
+            // reached this comparison without being rounded back to `float`, so
+            // a finished programme was measured at 44.999998807907104 and missed
+            // its own threshold by about 1.2e-06. The free warning the design
+            // promises was therefore never issued. Measured, not inferred: with
+            // the old form, progress 100 and penetration 0 returned −1, and so
+            // did penetration 1e-06, while 0.01 disclosed.
+            //
+            // `progress * 45f / 100f` computes the authored boundary exactly at
+            // 100, which is the case the rule is about. No wider claim is made
+            // here about other progress values: what is asserted, and tested, is
+            // that 100 with no collection discloses and 99 with no collection
+            // does not.
+            float visibility = penetration + progress * ProgressVisibilityPercent / 100f;
+            if (visibility < DisclosureThreshold) return -1f;
             return progress;
         }
 

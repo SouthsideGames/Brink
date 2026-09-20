@@ -1100,7 +1100,20 @@ re-running it:
    (every mirrored call carries a ~40-line stack trace × seventy country-decades)
    and that is what killed the run. Mirroring is now on only to print the report;
    16.7 MB. **Never mirror during a playthrough.**
-3. **A narrow fixture can be the only thing holding a test up.**
+3. **`extract-failures.sh`'s completion guard is Windows-only, and on macOS it
+   fires on every healthy run.** It requires `"Server process was shutdown"`,
+   a package-manager line that appears in **zero** of the twenty macOS batch
+   logs this project has produced, while those same logs end with Unity's
+   orderly `Application is shutting down` / `Cleanup mono` sequence and exit 0.
+   So the one guard written to stop a stale results file being trusted cries
+   wolf every time here — the failure mode this file already names for the
+   telemetry detector. Tell a real kill from this by three things the guard
+   does not look at: the exit code, whether the results file was written in
+   this run's time window, and whether the totals moved when tests were added.
+   **Do not read the guard's silence as a pass on Windows or its warning as a
+   failure on macOS without checking those.** Not fixed here; it is a harness
+   aid and the fix belongs with whoever next touches that script.
+4. **A narrow fixture can be the only thing holding a test up.**
    `TerritorySystemTests` has three tests whose injected values drift *the
    direction the assertion looks for* — adding `GovernmentSystem` there converts
    three real tests into three that always pass. Documented at the wiring line;
@@ -1645,6 +1658,82 @@ three had passed for a long time:
       continuity naturally at month zero, so there is no new save field,
       migration, currency, pipeline hook or AI rule. `CabinetMeetingTests`
       pins every threshold, the strained-only rule and the read-only contract.
+
+- [x] **The five known suite failures were one defect — and repairing it
+      exposed a second one** (spec 14 §6, spec 06, spec 04 §8a).
+      `EndgameSystem.KnownPreparation` gated disclosure on
+      `penetration + progress * 0.45f >= 45`. `0.45f` is 0.449999988079071 and
+      the product reached the comparison without being rounded back to `float`,
+      so a **finished** programme measured 44.999998807907104 and missed its own
+      threshold by about 1.2×10⁻⁶. The rule the code comment, the spec and three
+      test names all state — *a finished programme crosses the threshold on its
+      own signature, the world gets exactly one free warning* — had never fired
+      for a government that was not also collecting. Measured, not inferred:
+      progress 100 with penetration 0 returned −1, penetration 1e-06 also
+      returned −1, and 0.01 disclosed. Fixed by applying the percentage as a
+      ratio (`progress * ProgressVisibilityPercent / 100f`, both constants 45),
+      which computes the boundary the rule is about exactly.
+      **Two traps worth keeping.** An inline `100f * 0.45f` written in a test is
+      constant-folded to exactly 45 and looks correct, so the naive check
+      misleads; feed the value through the real call. And a threshold written
+      with a decimal literal may simply not contain its own boundary.
+      **The second defect was the consequence.** `AISystem.DetectedProgramme`
+      reads that function, so with detection working a permanently visible
+      programme scored `60 + alarm × 1.6` every month forever — and at Standard
+      difficulty the action budget is **one**. Pre-emption took 81% of all
+      government-months, `AssertClaim` fell to exactly zero in the second and
+      third decade of every seed, and counter-espionage stopped almost entirely
+      (3,346 → 5). AI-vs-AI wars fell 61 → 7, and **that fall was starvation,
+      not health.** It was caught only because the verification census counted
+      objectives and executed effects; the suite was fully green throughout.
+      The correction is eligibility, not score: `PreemptionResponseRemains` is
+      read-only, derived from existing world state, shared by selection and
+      execution, and asks whether a *response* remains — terms to seek, a
+      deterrent that can be begun, a station to open, hardening to do, a legend,
+      coercion. **Deepening an existing station is excluded on purpose**:
+      networks decay, so that one step was why pre-emption stayed eligible in
+      66–71% of the months it held the slot. `CounterRival` still deepens
+      collection under its own objective, whose priority already carries the
+      programme through `threat`.
+      Breadth returns: counter-espionage 5 → 3,604, `CounterRival` 1,186 →
+      7,283, pre-emption's third-decade share ~95% → ~40%. **`AssertClaim` and
+      the war count did not move**, because a finished instrument adds 60 to
+      `threat` for as long as it exists and ~84% of pairs can see one by year 30.
+      Whether that world should fight fewer wars is a design question, left open
+      and not tuned. `WorldHeatTests.AnAnsweredProgrammeDoesNotHoldTheActionSlot`
+      guards it with a monopolisation bound rather than a diversity quota.
+      **Releasing a slot is only half of freeing it.** Verification found the
+      other half: `PreemptProgramme` declined an answered plan correctly and
+      charged nothing, but the objective stayed in the list until the review
+      clock came round — three to eight months — and **nothing was planned in its
+      place**, so the freed slot sat empty. 22.4% of all government-months at
+      Standard, where the budget is one, and 9.9% at Challenging. The planner now
+      reopens when a *stored* pre-emption stops satisfying the same predicate
+      that raised it (`HoldsAnAnsweredPreemption`), one extra condition on the
+      existing review gate: no new budget, no retry, no second dispatch, and the
+      answered plan cannot come back because the candidate gate asks the same
+      question. Measured after: **zero stranded months at both difficulties**;
+      breadth widens again (counter-espionage 3,604 → 6,638, `CounterRival`
+      7,283 → 11,313, pre-emption's third-decade share ~40% → ~28%) while wars
+      stay at 7 and `AssertClaim` at 132 → 138, so nothing was manufactured.
+      **Key it on eligibility, never on whether the month produced an action.**
+      `MountDeception` and the coercion step each ask a roll the eligibility
+      predicate deliberately does not, so reconsidering after a quiet month
+      re-plans after every failed roll and keeps re-planning until one succeeds —
+      a reroll loop wearing a planner's clothes. A mutation that makes exactly
+      that substitution is caught.
+      The execution-side check is now unreachable with a false answer through the
+      monthly path and is **kept anyway**, because what it defends is the rule
+      that selection and execution agree about what a response is. It is pinned
+      by a test that drives `AISystem.Act` directly, which is the only way to
+      reach a dispatcher whose planner has already corrected the plan.
+      **Two fixtures were measuring the defect rather than the claim.**
+      `SustainedResponsesAreNotCutShort` said "six cycles with a response still
+      available" and read the default world, where IND's only response is opening
+      its first station — taken in month one, after which nothing remains. It
+      passed only because an answered objective used to linger. Restated with the
+      premise its assertion rests on (counter-intelligence at 20, so hardening
+      outlasts the window) and now asserts the premise held.
 
 - [x] **Specific diplomatic leverage, final core slice — conditional and
       time-limited requested commitments** (roadmap #21, spec 04 §5k). All

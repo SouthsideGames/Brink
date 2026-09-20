@@ -432,6 +432,54 @@ namespace Brink.Tests
                 "CHN", EndgameType.StateDestabilization), 0.01f);
         }
 
+        /// <summary>
+        /// The disclosure rule is an exact boundary, and it has to be computed
+        /// so that it is. Written as `progress * 0.45f` the product evaluated to
+        /// 44.999998807907104 at runtime, 1.2e-06 short of its own threshold, so
+        /// a finished programme never disclosed without collection: the one
+        /// warning the design promises was never issued, `AISystem`'s
+        /// `DetectedProgramme` read no alarm, and no government pre-empted a
+        /// programme it had not also collected against. A literal that cannot
+        /// represent the boundary it defines is the boundary being wrong.
+        /// </summary>
+        [Test]
+        public void TheDisclosureThresholdIsExactAtAFinishedProgramme()
+        {
+            Assert.AreEqual(EndgameSystem.ProgressVisibilityPercent, EndgameSystem.DisclosureThreshold, 0f,
+                "a finished programme discloses on its own signature only while the visible share of "
+                + "progress equals the threshold; changing one without the other repeals the rule");
+
+            var china = state.FindCountry("CHN");
+            china.endgames.preparations.Add(new EndgamePreparation
+            {
+                type = EndgameType.StateDestabilization,
+                progress = 100f
+            });
+            Assert.IsNull(state.FindNetwork(state.playerCountryId, "CHN"),
+                "fixture: this asserts the no-collection case, so there must be no network");
+
+            Assert.AreEqual(100f, EndgameSystem.KnownPreparation(state, state.playerCountryId,
+                    "CHN", EndgameType.StateDestabilization), 0f,
+                "a finished programme has to cross the threshold on its own signature alone");
+
+            // A programme short of completion still needs somebody watching.
+            china.endgames.preparations[0].progress = 99f;
+            Assert.AreEqual(-1f, EndgameSystem.KnownPreparation(state, state.playerCountryId,
+                    "CHN", EndgameType.StateDestabilization), 0f,
+                "one point short of ready became visible for free, so concealment buys nothing");
+
+            state.networks.Add(new IntelNetwork
+            {
+                ownerId = state.playerCountryId,
+                targetId = "CHN",
+                focus = IntelDomain.Political,
+                penetration = 1f
+            });
+            Assert.AreEqual(99f, EndgameSystem.KnownPreparation(state, state.playerCountryId,
+                    "CHN", EndgameType.StateDestabilization), 0f,
+                "collection that makes up the balance has to disclose it");
+        }
+
         [Test]
         public void AProgrammeNearingReadiness_LeaksEvenWithoutCollection()
         {
