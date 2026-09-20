@@ -838,8 +838,8 @@ under the existing rules; there is no new reset or migration. Empty ledgers seed
 from the government type at first use. These are constituencies, not officials
 or the opposition case: courting neither settles a grievance nor changes policy.
 The first slice exposed existing politics. The policy slice below adds two
-opposed reactions; changes in power share and regime-aware renaming remain
-outside it. Roadmap #23 is partial.
+opposed reactions; the influence slice then adds gradual power shifts.
+Regime-aware renaming remains outside them. Roadmap #23 is partial.
 
 **Patronage and inquiry reactions (#23, second slice).** Both actor-generic
 verbs now reach the existing ledger, after their normal affordability gates.
@@ -863,7 +863,7 @@ its reaction to unrelated blocs through the generic courting fallback.
 The panel uses the same response functions and shows the clamped change at
 current conditions, without seeding a ledger. Successful player notices name
 each affected bloc and the applied movement, or explicitly say unchanged.
-Inquiries now establish an empty ledger too. Shares/names stay fixed; changes
+Inquiries now establish an empty ledger too. Shares/names stay fixed during the action; changes
 persist through the existing save. The monthly 2% approach to neutral and paid
 named courting remain recovery routes. An inquiry is not a free reversal:
 one full patronage/inquiry pair costs 5 PC and 200 treasury and leaves integrity
@@ -873,9 +873,57 @@ only 7/11 of an inquiry response is available.
 Foreign governments use these same verbs in their existing consolidation path,
 so their backing targets can change and unattended trajectories need not match
 the previous slice. Exact magnitudes are authored initial tuning, not certified
-balance. This does not implement broader policy reactions, shifting shares or
-regime-aware names. Device confirmation and independent Unity verification remain
-separate gates.
+balance. This policy slice did not implement broader reactions, shifting shares
+or regime-aware names; see the subsequent influence slice below.
+
+**Condition-driven influence (#23, third slice).** Shares now evolve monthly;
+goodwill and power are deliberately different. Courting changes disposition,
+not the share target. No new command, reward, budget, field or migration exists.
+
+Each bloc has an authored founding weight: Drift .45, Liberty/Corruption .30,
+Hardship .25. Other concerns use neutral .25. A bloc's raw target weight is
+`foundingWeight * (1 + pressure)`, with pressure bounded to 0–1:
+
+- Hardship: `clamp((50 - livingStandards) / 50, 0, 1)`.
+- Corruption: `clamp(corruption / 100, 0, 1)`.
+- Liberty: 1 under Restrictive civic posture, otherwise 0.
+- Drift, War and unrecognised concerns: 0 in this deliberately limited slice.
+
+Normalize all raw weights to one common pool. Every month each share closes
+2% of the gap to its target. Current shares are also normalized (nonnegative
+weights; an all-zero ledger starts at targets) so even a non-unit legacy ledger
+cannot create power. Targets never use today's shares as founding weights:
+that would compound influence until one bloc owned everything. Duplicate
+concerns each receive the corresponding authored weight, and list order and
+names do not determine targets. Seeding remains the existing 45/30/25 balance;
+viewing an empty ledger computes the same targets without persisting it.
+
+For the ordinary three-bloc ledger, maximum hardship alone changes the target
+45/30/25 to 36/24/40; maximum institutional pressure alone gives about
+34.62/46.15/19.23. Shares approach rather than instantly take these values.
+Removing pressure restores the founding target, including after save/load.
+No bloc can disappear under the positive target weights, and increasing one
+share reduces the rest. This is influence inside government, **not** a forecast
+of election seats or a new public-opinion model.
+
+The existing government update calls the rule once, after domestic conditions
+update and before `FactionSupport` feeds that month's backing target. Both
+player and foreign governments use it. No AI-specific caller or bonus exists.
+Goodwill, names, authority and rewards are not changed by the share update;
+the ordinary goodwill decay still runs separately.
+
+GOVERNMENT shows current share, the target if current conditions persist, the
+relevant driver and whether extra pressure is present. It does not promise
+that next month's conditions will stay unchanged. A player-only Wire notice
+records before/after shares and contemporaneous targets/drivers at application
+when movement is visible at two decimal percentage precision. Small movements
+that do not change that displayed precision do not generate traffic. This is
+ordinary Government-desk reporting, not a new unfilterable interruption.
+
+Numbers are initial authored tuning, requiring independent Unity balance and
+device verification. Old identities remain through regime changes; broader
+policy reactions and regime-aware names remain deferred. World trajectories
+can change because actual backing targets now read evolving influence.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
@@ -903,8 +951,9 @@ Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
   If it moves `legislativeSupport`, `eliteCohesion`, `stability`, `unity` or
   `approval`, **move the target, not the value** — all five drift.
 - **Parties and factions** — leader-faction arithmetic (§2b-1), the playable
-  bloc ledger and patronage/inquiry reactions (§2g) exist. Broader policy reactions and shifting shares of
-  political power would extend them, not require a parallel faction model.
+  bloc ledger, patronage/inquiry reactions and condition-driven influence (§2g)
+  exist. Broader policy reactions and regime-aware identities extend them,
+  rather than requiring a parallel faction model.
 - **Secession and state dissolution** — civil conflict currently degrades a state
   but never splits it. Border change (GDD §16) is the missing piece.
 - **Hereditary succession.** Saudi Arabia is seated as a `Monarchy`, so the type

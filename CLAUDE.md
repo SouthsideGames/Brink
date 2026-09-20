@@ -31,12 +31,23 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Condition-driven bloc influence (#23, third slice).** Founding weights
+  (Drift .45, Liberty/Corruption .30, others .25) are multiplied by bounded
+  domestic pressure and normalized. Hardship reads low living standards;
+  Corruption reads corruption; Liberty reads restrictive civic policy. Monthly
+  shares close 2% of the gap, before backing reads them, for every government.
+  Calm conditions restore founding targets, not permanently compounded shares.
+  Courting still buys goodwill rather than power. Pure UI targets and application-
+  time Wire receipts explain the change. Existing serialized shares suffice;
+  no pipeline, action, resource or schema change. Broader reactions and naming
+  remain outside this slice; #23 remains partial. Spec 05 §2g.
+
 - **Bloc policy reactions (#23, second slice).** Existing patronage pleases
   Hardship (+7) and displeases Liberty/Corruption (−5); inquiry reverses that
   trade-off (−4/+4), scaled to corruption actually removable, so clean inquiries
   buy no goodwill. Both actor-generic paths use the existing ledger after cost
   gates. UI previews clamp the same rules; notices report applied movements.
-  Names/shares, rewards, monthly recovery, schema and AI selection stay unchanged;
+  This second slice left names/shares, rewards, recovery, schema and AI selection unchanged;
   foreign backing and world trajectories can change. No balance or device
   certification is implied. Spec 05 §2g; #23 remains partial.
 

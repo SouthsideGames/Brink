@@ -767,9 +767,13 @@ Internal blocs react differently to patronage and public inquiries: hardship
 constituencies welcome favours, while liberty/integrity constituencies resist
 them; removing real corruption reverses that trade-off. An empty inquiry earns
 no bloc goodwill. Reactions use the existing persistent dispositions and backing
-targets, with visible consequences before ordering, fixed power shares and the
-existing recovery toward neutral. Broader policy reactions and shifting shares
-remain future work (spec 05 §2g).
+targets, with visible consequences before ordering and recovery toward neutral.
+Political influence evolves separately: hardship, corruption and restrictive
+policy gradually increase the weight of the corresponding constituencies at
+others' expense. Shares approach bounded condition-driven targets; easing the
+pressure restores the founding balance. Courting buys goodwill, not power, and
+influence is not a prediction of electoral seats. Broader policy reactions and
+regime-aware bloc names remain future work (spec 05 §2g).
 
 Domestic politics now contains an **Opposition** with a concrete case and theme—Hardship, War, Corruption, Liberty or Drift. The operator may concede or confront it, but the correct instrument depends on what the public is actually angry about; confronting a visible hardship or unpopular war can make the case stronger.
 

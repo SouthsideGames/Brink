@@ -243,24 +243,93 @@ namespace Brink.Core
             {
                 name = gov.IsElective ? "THE CHAMBER MAJORITY" : "THE PARTY APPARATUS",
                 theme = OppositionTheme.Drift,
-                share = 0.45f,
+                share = FactionBaseWeight(OppositionTheme.Drift),
                 disposition = Clamp(Vary(58f))
             });
             factions.Add(new Faction
             {
                 name = gov.IsElective ? "THE REFORM BENCH" : "THE SECURITY ORGANS",
                 theme = institutional,
-                share = 0.30f,
+                share = FactionBaseWeight(institutional),
                 disposition = Clamp(Vary(48f))
             });
             factions.Add(new Faction
             {
                 name = "THE PROVINCES",
                 theme = OppositionTheme.Hardship,
-                share = 0.25f,
+                share = FactionBaseWeight(OppositionTheme.Hardship),
                 disposition = Clamp(Vary(50f))
             });
             return factions;
+        }
+
+        public const float FactionShareAdjustmentRate = 0.02f;
+
+        // The authored founding balance, not a copy of today's shares: pressure
+        // must have a resting point and be reversible, rather than compounding.
+        static float FactionBaseWeight(OppositionTheme theme)
+            => theme == OppositionTheme.Drift ? 0.45f
+             : theme == OppositionTheme.Liberty || theme == OppositionTheme.Corruption ? 0.30f : 0.25f;
+
+        public static float FactionInfluencePressure(CountryState country, OppositionTheme theme)
+        {
+            switch (theme)
+            {
+                case OppositionTheme.Hardship: return Clamp((50f - country.livingStandards) * 2f) / 100f;
+                case OppositionTheme.Corruption: return Clamp(country.government.corruption) / 100f;
+                case OppositionTheme.Liberty: return country.government.civicPosture == CivicPosture.Restrictive ? 1f : 0f;
+                default: return 0f;
+            }
+        }
+
+        public static string FactionInfluenceDriver(OppositionTheme theme)
+            => theme == OppositionTheme.Hardship ? "low living standards"
+             : theme == OppositionTheme.Corruption ? "corruption"
+             : theme == OppositionTheme.Liberty ? "restrictive civic policy" : "founding institutional weight";
+
+        /// <summary>Pure current-condition targets, in ledger order. Does not seed an empty save.</summary>
+        public static float[] FactionShareTargets(GameState state, CountryState country)
+        {
+            var factions = FactionsFor(state, country);
+            var targets = new float[factions.Count];
+            float total = 0f;
+            for (int i = 0; i < factions.Count; i++)
+            {
+                var theme = factions[i].theme;
+                targets[i] = FactionBaseWeight(theme) * (1f + FactionInfluencePressure(country, theme));
+                total += targets[i];
+            }
+            for (int i = 0; i < targets.Length; i++) targets[i] /= total;
+            return targets;
+        }
+
+        // Called once by the existing government month, after conditions update
+        // and before the backing target reads the ledger. No action or reward.
+        static void UpdateFactionShares(GameState state, CountryState country)
+        {
+            var factions = country.government.factions;
+            var targets = FactionShareTargets(state, country);
+            float total = 0f;
+            foreach (var bloc in factions) total += Math.Max(0f, bloc.share);
+            string report = "";
+            for (int i = 0; i < factions.Count; i++)
+            {
+                var bloc = factions[i];
+                float before = bloc.share;
+                float current = total > 0f ? Math.Max(0f, before) / total : targets[i];
+                bloc.share = Approach(current, targets[i], FactionShareAdjustmentRate);
+                if (country.isPlayer && Math.Round(before * 100f, 2) != Math.Round(bloc.share * 100f, 2))
+                {
+                    string pressure = FactionInfluencePressure(country, bloc.theme) > 0f ? "present" : "absent";
+                    report += $" {bloc.name}: {before * 100f:F2}% -> {bloc.share * 100f:F2}%" +
+                        $" (current-condition target {targets[i] * 100f:F2}%; driver: {FactionInfluenceDriver(bloc.theme)}; extra pressure {pressure}).";
+                }
+            }
+            if (report.Length > 0)
+                state.AddNotification(NotificationClass.Wire, "POLITICAL INFLUENCE SHIFTS",
+                    "All blocs share one pool of influence: gains reduce others' shares. " +
+                    "Pressure changes the balance gradually; easing it restores the founding balance." + report,
+                    country.id, desk: ReportingDesk.Government);
         }
 
         /// <summary>
@@ -1115,6 +1184,8 @@ namespace Brink.Core
             // undamped rate.
             country.pillars.government =
                 Growth.Apply(country.pillars.government, (gov.leader.competence - 50f) * 0.004f);
+
+            UpdateFactionShares(state, country);
 
             if (gov.IsElective)
             {
