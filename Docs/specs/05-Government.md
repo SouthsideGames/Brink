@@ -801,8 +801,8 @@ target*, exactly as `brokeredSupport` already does.
 FactionSupport = Σ (disposition − 50) × share / Σ share × 0.4,  clamped ±20
 ```
 
-Zero by construction at indifference, so it retunes nothing until somebody is
-courted — the same discipline as the fiscal multipliers.
+Zero at indifference. Initial dispositions are 58/48/50 with deterministic
+jitter, so the initial contribution is small, not necessarily zero.
 
 What makes it a decision rather than a readout is that **instruments reach
 specific people**. Patronage courts the hardship bloc, because money speaks
@@ -813,8 +813,32 @@ coalition is *maintained* rather than bought once — `brokeredSupport`'s rule
 applied to people.
 
 Seeded lazily by `EnsureFactions` and deterministically from the country id, so
-an old save gains a coalition on load — **no migration** — and gains the same
-one every time.
+an old save gains a coalition at its first monthly update or bargain — **no
+migration** — and gains the same one every time. `FactionsFor` previews that
+same seed without persisting it; opening GOVERNMENT never establishes a ledger.
+
+**Playable ledger (roadmap #23, first slice).** GOVERNMENT now shows each named
+bloc, its existing power share, disposition, concern and the ledger's current
+contribution to the legislative-support or elite-cohesion target. Each bloc has
+a COURT control through the existing `GameController.CourtFaction` path: normal
+Government authority, 2 PC, one initiative, nominal 10 XP under the repetition
+rule, and autosave. The chosen theme must exist before any spend; an absent
+theme no longer silently buys an untargeted bargain. Authority and affordability
+refusals are printed by the common terminal gates. The notice identifies the
+bloc, rather than claiming only a generic chamber bargain.
+
+The existing consequences are unchanged: +9 disposition to the selected bloc,
+other dispositions untouched, plus ordinary `brokeredSupport`; general bargaining
+still gives +2 to every bloc. Both routes consume the same PC. Shares never
+change through courting. Disposition drifts toward 50 monthly; backing affects
+the support target, not an immediate grant of votes or authority.
+
+The ledger persists across Cabinet/leader replacement and constitutional changes
+under the existing rules; there is no new reset or migration. Empty ledgers seed
+from the government type at first use. These are constituencies, not officials
+or the opposition case: courting neither settles a grievance nor changes policy.
+This slice exposes existing politics; faction-specific policy reactions, changes
+in power share and regime-aware renaming remain outside it. Roadmap #23 is partial.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
@@ -841,12 +865,9 @@ Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
   `AISystem.ConsolidateHome` unless it is genuinely operator-interface.
   If it moves `legislativeSupport`, `eliteCohesion`, `stability`, `unity` or
   `approval`, **move the target, not the value** — all five drift.
-- **Parties and factions** — GDD §13 wants parties with priorities that can
-  materially redirect strategy. Today `Leader.faction` is a display string
-  (`OPPOSITION`, `REFORM BLOC`, `PARTY LEADERSHIP`, `GOVERNING PARTY`,
-  `MILITARY COUNCIL`) that **no rule reads**. A real faction system with
-  parliamentary arithmetic is the natural next step and would make
-  `legislativeSupport` far more interesting.
+- **Parties and factions** — leader-faction arithmetic (§2b-1) and the playable
+  bloc ledger (§2g) exist. Policy-specific reactions and shifting shares of
+  political power would extend them, not require a parallel faction model.
 - **Secession and state dissolution** — civil conflict currently degrades a state
   but never splits it. Border change (GDD §16) is the missing piece.
 - **Hereditary succession.** Saudi Arabia is seated as a `Monarchy`, so the type

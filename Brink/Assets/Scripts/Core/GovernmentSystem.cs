@@ -222,6 +222,15 @@ namespace Brink.Core
         {
             var gov = country.government;
             if (gov.factions.Count > 0) return;
+            gov.factions.AddRange(FactionsFor(state, country));
+        }
+
+        /// <summary>Read the existing ledger, or preview its deterministic seed without writing a save.</summary>
+        public static System.Collections.Generic.List<Faction> FactionsFor(GameState state, CountryState country)
+        {
+            var gov = country.government;
+            if (gov.factions.Count > 0) return gov.factions;
+            var factions = new System.Collections.Generic.List<Faction>();
 
             var rng = new Random(unchecked(state.rngSeed * 5501 + Hash.Of(country.id)));
             float Vary(float mid) => mid + (float)(rng.NextDouble() * 16.0 - 8.0);
@@ -230,27 +239,28 @@ namespace Brink.Core
             OppositionTheme institutional = gov.IsElective
                 ? OppositionTheme.Liberty : OppositionTheme.Corruption;
 
-            gov.factions.Add(new Faction
+            factions.Add(new Faction
             {
                 name = gov.IsElective ? "THE CHAMBER MAJORITY" : "THE PARTY APPARATUS",
                 theme = OppositionTheme.Drift,
                 share = 0.45f,
                 disposition = Clamp(Vary(58f))
             });
-            gov.factions.Add(new Faction
+            factions.Add(new Faction
             {
                 name = gov.IsElective ? "THE REFORM BENCH" : "THE SECURITY ORGANS",
                 theme = institutional,
                 share = 0.30f,
                 disposition = Clamp(Vary(48f))
             });
-            gov.factions.Add(new Faction
+            factions.Add(new Faction
             {
                 name = "THE PROVINCES",
                 theme = OppositionTheme.Hardship,
                 share = 0.25f,
                 disposition = Clamp(Vary(50f))
             });
+            return factions;
         }
 
         /// <summary>
@@ -1763,6 +1773,10 @@ namespace Brink.Core
         {
             var country = state.FindCountry(countryId);
             if (country == null) return false;
+            // A named bargain must name a real constituency, not silently become
+            // an undirected payment. Validate before spending or seeding old saves.
+            if (courting.HasValue && !FactionsFor(state, country).Exists(f => f.theme == courting.Value))
+                return false;
             if (!SpendPoliticalCapitalBy(state, countryId, BuildSupportCost, "Political bargaining"))
                 return false;
 
@@ -1781,7 +1795,10 @@ namespace Brink.Core
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory,
                     gov.IsElective ? "LEGISLATIVE BARGAIN STRUCK" : "ELITE ACCOMMODATION REACHED",
-                    gov.IsElective
+                    courting.HasValue
+                        ? $"{FactionFor(gov, courting.Value).name} has been courted. Other blocs' dispositions are unchanged. "
+                          + "The bargain also strengthens general backing; both gains fade unless maintained."
+                        : gov.IsElective
                         ? "Concessions traded for votes. The chamber will carry us further than it did."
                         : "Portfolios and guarantees exchanged. The inner circle is holding.",
                     countryId, desk: ReportingDesk.Government);

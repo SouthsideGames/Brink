@@ -1,6 +1,12 @@
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
+using Brink.UI;
+using Brink.UI.Views;
+using UnityEngine.UIElements;
+using System.Reflection;
+using System.IO;
+using System.Linq;
 
 namespace Brink.Tests
 {
@@ -50,6 +56,171 @@ namespace Brink.Tests
             => gov.nextElectionDate = new GameDate(now.year + 30, now.month);
 
         // ---------- the chamber ----------
+
+        [Test]
+        public void PreviewingAnUnseededLedgerIsPureAndMatchesItsEventualSeed()
+        {
+            var country = state.PlayerCountry;
+            country.government.factions.Clear();
+            string before = SaveSystem.ToJson(state);
+            var preview = GovernmentSystem.FactionsFor(state, country);
+            Assert.AreEqual(3, preview.Count);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            GovernmentSystem.EnsureFactions(state, country);
+            Assert.AreNotSame(preview, country.government.factions);
+            for (int i = 0; i < preview.Count; i++)
+            {
+                Assert.AreEqual(preview[i].name, country.government.factions[i].name);
+                Assert.AreEqual(preview[i].disposition, country.government.factions[i].disposition);
+                Assert.AreEqual(preview[i].share, country.government.factions[i].share);
+                Assert.AreEqual(preview[i].theme, country.government.factions[i].theme);
+            }
+        }
+
+        [Test]
+        public void AnAbsentBlocCannotConsumePoliticalCapitalOrSeedTheLedger()
+        {
+            state.PlayerCountry.government.factions.Clear();
+            state.politicalCapital = 20;
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportBy(state, state.playerCountryId, OppositionTheme.War));
+            Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportBy(state, state.playerCountryId, (OppositionTheme)999));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            WithController(() =>
+            {
+                state.authorizedPillarMask = 0;
+                state.PlayerCountry.government.type = GovernmentType.PresidentialRepublic;
+                string untouched = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.CourtFaction(OppositionTheme.War));
+                Assert.AreEqual(untouched, SaveSystem.ToJson(state), "invalid names must not even buy constitutional approval");
+            });
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void GovernmentActuallyOffersEveryBlocWithoutWritingTheWorld(int columns)
+        {
+            WithController(() =>
+            {
+                // Let the pre-existing foreign-government readout initialize its
+                // own read models before measuring this panel's purity.
+                var view = new GovernmentView();
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                Assert.AreEqual(columns, TerminalMetrics.Columns);
+                view.Refresh();
+                state.PlayerCountry.government.factions.Clear();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                var buttons = view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("COURT ")).ToList();
+                var factions = GovernmentSystem.FactionsFor(state, state.PlayerCountry);
+                Assert.AreEqual(factions.Count, buttons.Count);
+                foreach (var faction in factions)
+                    Assert.IsTrue(buttons.Any(b => b.text == $"COURT {faction.name} [2 PC]" && b.enabledSelf));
+                foreach (var label in view.Root.Query<Label>().ToList())
+                    if (label.ClassListContains("terminal-text"))
+                        foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            });
+        }
+
+        [Test]
+        public void PressingTheNamedBlocButtonCourtsThatBlocExactlyOnceAndSavesIt()
+        {
+            WithController(() =>
+            {
+                GovernmentSystem.EnsureFactions(state, state.PlayerCountry);
+                var gov = state.PlayerCountry.government;
+                foreach (var f in gov.factions) f.disposition = 50;
+                var selected = gov.factions[2];
+                int initiatives = state.initiativesThisYear;
+                float capital = state.politicalCapital;
+                float backing = GovernmentSystem.FactionSupport(gov);
+                var view = new GovernmentView();
+                view.Refresh();
+                var button = view.Root.Query<Button>().ToList().Single(b => b.text == $"COURT {selected.name} [2 PC]");
+                // Unity's manipulator dispatches the callback; the optional
+                // dotnet UI shim exposes SendClick instead (no layout engine).
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                if (clickable != null)
+                {
+                    var invoke = clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.IsNotNull(invoke, "the test must invoke the real button callback");
+                    invoke.Invoke(clickable, new object[] { null });
+                }
+                else
+                {
+                    var click = typeof(Button).GetMethod("SendClick");
+                    Assert.IsNotNull(click, "neither Unity nor the harness can click this control");
+                    click.Invoke(button, null);
+                }
+                Assert.AreEqual(capital - GovernmentSystem.BuildSupportCost, state.politicalCapital);
+                Assert.AreEqual(initiatives + 1, state.initiativesThisYear);
+                Assert.AreEqual(59, selected.disposition);
+                foreach (var f in gov.factions.Where(f => f != selected)) Assert.AreEqual(50, f.disposition);
+                Assert.Greater(gov.brokeredSupport, 0);
+                Assert.Greater(GovernmentSystem.FactionSupport(gov), backing);
+                var saved = SaveSystem.Load();
+                Assert.AreEqual(59, saved.PlayerCountry.government.factions[2].disposition);
+                Assert.IsTrue(state.notifications.Any(n => n.body.Contains(selected.name)));
+            });
+        }
+
+        [Test]
+        public void BlocButtonsExplainBothAffordabilityAndConstitutionalRefusal()
+        {
+            WithController(() =>
+            {
+                var view = new GovernmentView();
+                state.politicalCapital = 0;
+                view.Refresh();
+                var buttons = view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("COURT ")).ToList();
+                Assert.AreEqual(3, buttons.Count);
+                foreach (var b in buttons)
+                {
+                    Assert.IsFalse(b.enabledSelf);
+                    Assert.IsNotEmpty(TerminalView.BlockedReason(b));
+                }
+                state.politicalCapital = 20;
+                state.authorizedPillarMask = 0;
+                state.PlayerCountry.government.type = GovernmentType.ParliamentaryRepublic;
+                view.Refresh();
+                foreach (var b in view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("COURT ")))
+                {
+                    Assert.IsFalse(b.enabledSelf);
+                    StringAssert.Contains("constitution", TerminalView.BlockedReason(b));
+                }
+                float before = state.politicalCapital;
+                Assert.IsFalse(GameController.Instance.CourtFaction(OppositionTheme.Hardship));
+                Assert.AreEqual(before, state.politicalCapital);
+            });
+        }
+
+        void WithController(System.Action check)
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State;
+            var previousTurns = gc.Turns;
+            string previousDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-faction-tests-" + System.Guid.NewGuid());
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                state.politicalCapital = 20;
+                state.authorizedPillarMask = ~0;
+                check();
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                SaveSystem.SaveDirectoryOverride = previousDirectory;
+                TerminalMetrics.ResetForTests();
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
 
         [Test]
         public void ANewGoverningFactionInheritsAThinnerChamber()
