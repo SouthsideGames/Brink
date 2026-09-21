@@ -31,6 +31,22 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Visible national projects (#24, industrial first slice).** Existing industrial
+  programmes gain derived names, funded progress and remaining-commitment readouts,
+  with a latest-five own-country project record in ECONOMY. Chronicle lifecycle
+  entries persist on normal save; the existing STOP action still does not autosave.
+  Player completion reports applied/clamped benefits; foreign completion remains
+  descriptive. No new state, funding/effect arithmetic, RNG, pipeline or catalogue
+  change. Legacy names derive without mutation and unknown dates stay unknown.
+  This does not create physical map sites or complete #24. Spec 02 §3a; Claude's
+  native review and Kareem's hardware gate remain distinct from author checks.
+  Author .NET comparison: 1875/1843/31/1 versus 1857/1825/31/1
+  (total/pass/fail/unexecuted), all 18 additions passing, no shared outcome or
+  normalized failure-message changes; standard balance output identical.
+  IndustrialSystemTests 30/30; nine mutations caught, baseline/no-op/restored
+  all 30/30. Native Unity has not been measured by the author. Save fingerprints
+  intentionally differ because project history and notification text change.
+
 - **Reciprocal embargo removal.** `EconomySystem.RemoveSanction` is the shared
   post-gate mutation for ordinary lifting, negotiated relief, lapse, leverage
   and both peace terms. A surviving Severe/Existential regime in either direction

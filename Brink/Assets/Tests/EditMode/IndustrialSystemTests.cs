@@ -1,7 +1,12 @@
 using System;
+using System.Linq;
+using System.Reflection;
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -40,6 +45,189 @@ namespace Brink.Tests
         }
 
         // ---------- it is a real sink ----------
+
+        [TestCase(IndustrialScale.Maintenance)]
+        [TestCase(IndustrialScale.Expansion)]
+        [TestCase(IndustrialScale.Modernisation)]
+        public void ProjectIdentityAndFundedProgressSurviveReloadWithoutReadSideEffects(IndustrialScale scale)
+        {
+            var player = state.PlayerCountry;
+            Assert.IsTrue(IndustrialSystem.Begin(state, turns, EconomicSector.Energy, scale));
+            var programme = player.economy.programmes.Single();
+            string name = IndustrialSystem.ProjectName(programme);
+            StringAssert.Contains("National Energy Works", name);
+            StringAssert.Contains(programme.started.DisplayString, name);
+            StringAssert.Contains(name, state.chronicle.Last().text);
+            Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+            float money = player.resources.treasury;
+            IndustrialSystem.MonthlyUpdate(state); // one paid month; no other systems in this measurement
+            Assert.AreEqual(money - IndustrialSystem.MonthlyCostFor(scale), player.resources.treasury);
+            state.date = new GameDate(2000, 1); // calendar time is not funded progress
+            string before = SaveSystem.ToJson(state);
+            string progress = IndustrialSystem.ProjectProgress(player, programme);
+            StringAssert.Contains($"FUNDED WORK: 1/{IndustrialSystem.MonthsFor(scale)}", progress);
+            StringAssert.Contains("Treasury now covers", progress);
+            Assert.AreEqual(name, IndustrialSystem.ProjectName(programme));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            var loaded = SaveSystem.FromJson(before);
+            Assert.AreEqual(name, IndustrialSystem.ProjectName(loaded.PlayerCountry.economy.programmes.Single()));
+            Assert.AreEqual(progress, IndustrialSystem.ProjectProgress(loaded.PlayerCountry, loaded.PlayerCountry.economy.programmes.Single()));
+        }
+
+        [Test]
+        public void LegacyProjectHasAnHonestUnknownDateAndReadsDoNotBackfillIt()
+        {
+            var programme = new IndustrialProgramme { sector = EconomicSector.Finance,
+                scale = IndustrialScale.Expansion, monthsRemaining = 17 };
+            state.PlayerCountry.economy.programmes.Add(programme);
+            string before = SaveSystem.ToJson(state);
+            StringAssert.Contains("START DATE UNKNOWN", IndustrialSystem.ProjectName(programme));
+            StringAssert.Contains("FUNDED WORK: 7/24", IndustrialSystem.ProjectProgress(state.PlayerCountry, programme));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ProjectFailureKeepsItsNameAndLossWithoutDeliveringOrRefunding(bool cancel)
+        {
+            var player = state.PlayerCountry;
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, player.id, EconomicSector.Industry, IndustrialScale.Expansion));
+            var programme = player.economy.programmes.Single();
+            string name = IndustrialSystem.ProjectName(programme);
+            IndustrialSystem.MonthlyUpdate(state);
+            float output = player.economy.Sector(EconomicSector.Industry).output;
+            float endowment = player.resources.industrialEndowment;
+            if (!cancel) player.resources.treasury = IndustrialSystem.MonthlyCostFor(programme.scale) - 1;
+            float money = player.resources.treasury;
+            if (cancel) Assert.IsTrue(IndustrialSystem.Cancel(state, player.id, programme.sector));
+            else
+            {
+                StringAssert.Contains("falls short", IndustrialSystem.ProjectProgress(player, programme));
+                IndustrialSystem.MonthlyUpdate(state);
+            }
+            Assert.IsEmpty(player.economy.programmes);
+            Assert.AreEqual(money, player.resources.treasury);
+            Assert.AreEqual(output, player.economy.Sector(EconomicSector.Industry).output);
+            Assert.AreEqual(endowment, player.resources.industrialEndowment);
+            StringAssert.Contains(name, state.chronicle.Last().text);
+            StringAssert.StartsWith(cancel ? "PROJECT CANCELLED:" : "PROJECT LAPSED:", state.chronicle.Last().text);
+            Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(state.chronicle.Last().text, loaded.chronicle.Last().text);
+            int count = state.chronicle.Count;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(count, state.chronicle.Count, "failure is recorded once, not every month");
+        }
+
+        [TestCase(EconomicSector.Industry)]
+        [TestCase(EconomicSector.Energy)]
+        [TestCase(EconomicSector.Finance)]
+        public void CompletedProjectReportsAppliedClampedBenefitsAndPersistsItsRecord(EconomicSector kind)
+        {
+            var player = state.PlayerCountry;
+            var sector = player.economy.Sector(kind);
+            sector.output = 99f; sector.health = 99.5f;
+            player.resources.industrialEndowment = 100f;
+            player.resources.industrialCapacity = 100f;
+            player.resources.energyEndowment = 100f;
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, player.id, kind, IndustrialScale.Maintenance));
+            string name = IndustrialSystem.ProjectName(player.economy.programmes.Single());
+            for (int m = 0; m < IndustrialSystem.MonthsFor(IndustrialScale.Maintenance); m++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsEmpty(player.economy.programmes);
+            Assert.AreEqual(100f, sector.output); Assert.AreEqual(100f, sector.health);
+            var entry = state.chronicle.Last();
+            StringAssert.Contains(name, entry.text);
+            StringAssert.Contains("sector output +1, sector health +0.5", entry.text);
+            StringAssert.Contains("industrial endowment 0, energy endowment 0", entry.text);
+            Assert.AreEqual(Publicity.Public, entry.publicity);
+            Assert.AreEqual(entry.text, state.notifications.Last(n => n.title == "PROGRAMME COMPLETE").body);
+            Assert.AreEqual(entry.text, SaveSystem.FromJson(SaveSystem.ToJson(state)).chronicle.Last().text);
+        }
+
+        [TestCase(EconomicSector.Industry, 3.15f, 0f)]
+        [TestCase(EconomicSector.Technology, 1.4f, 0f)]
+        [TestCase(EconomicSector.Energy, 0f, 2.45f)]
+        public void CompletedProjectNamesTheRealEndowmentItBuilt(EconomicSector kind, float industryGain, float energyGain)
+        {
+            var player = state.PlayerCountry;
+            player.resources.industrialCapacity = player.resources.industrialEndowment = 50f;
+            player.resources.energyEndowment = 50f;
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, player.id, kind, IndustrialScale.Maintenance));
+            for (int m = 0; m < 12; m++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(50f + industryGain, player.resources.industrialEndowment, .0001f);
+            Assert.AreEqual(50f + energyGain, player.resources.energyEndowment, .0001f);
+            StringAssert.Contains($"industrial endowment {industryGain:+0.##;-0.##;0}, energy endowment {energyGain:+0.##;-0.##;0}", state.chronicle.Last().text);
+            int count = state.chronicle.Count;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(count, state.chronicle.Count, "completion recorded once");
+        }
+
+        [Test]
+        public void RefusedProjectDoesNotInventAnEvent()
+        {
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, state.playerCountryId, EconomicSector.Energy, IndustrialScale.Expansion));
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(IndustrialSystem.BeginBy(state, state.playerCountryId, EconomicSector.Energy, IndustrialScale.Expansion));
+            Assert.IsFalse(IndustrialSystem.BeginBy(state, "UNKNOWN", EconomicSector.Energy, IndustrialScale.Expansion));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void ForeignCompletionDoesNotPublishHiddenAppliedFiguresOrNotifyThePlayer()
+        {
+            var foreign = state.FindCountry("CHN");
+            foreign.resources.treasury = 400000f;
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, foreign.id, EconomicSector.Energy, IndustrialScale.Maintenance));
+            int notices = state.notifications.Count;
+            for (int m = 0; m < 12; m++) IndustrialSystem.MonthlyUpdate(state);
+            var entry = state.chronicle.Last();
+            Assert.AreEqual(foreign.id, entry.countryId);
+            Assert.AreEqual(Publicity.Public, entry.publicity);
+            StringAssert.StartsWith("PROJECT COMPLETE:", entry.text);
+            StringAssert.DoesNotContain("Applied points", entry.text);
+            Assert.AreEqual(notices, state.notifications.Count);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void ProjectPanelIsPureBoundedAndShowsOnlyOurLatestFiveRecords(int columns)
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                state.authorizedPillarMask = ~0;
+                Assert.IsTrue(IndustrialSystem.BeginBy(state, state.playerCountryId, EconomicSector.Energy, IndustrialScale.Expansion));
+                for (int n = 0; n < 7; n++) state.AddChronicle(ChronicleCategory.Economic, state.playerCountryId, "PROJECT TEST " + n);
+                state.AddChronicle(ChronicleCategory.Economic, "CHN", "PROJECT FOREIGN SECRET");
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new EconomyView();
+                view.Refresh(); // existing council/view lazy initialization is outside this read measurement
+                string before = SaveSystem.ToJson(state);
+                view.Refresh(); view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var labels = view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text"));
+                string text = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", labels.Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains("NATIONAL PROJECTS", text);
+                StringAssert.Contains("National Energy Works", text);
+                StringAssert.Contains("FUNDED WORK: 0/24", text);
+                StringAssert.Contains("4560 AT CURRENT TERMS", text);
+                StringAssert.Contains("PROJECT TEST 2", text);
+                StringAssert.Contains("PROJECT TEST 6", text);
+                StringAssert.DoesNotContain("PROJECT TEST 1", text);
+                StringAssert.DoesNotContain("PROJECT FOREIGN SECRET", text);
+                foreach (var label in labels)
+                    foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                TerminalMetrics.ResetForTests();
+            }
+        }
 
         [Test]
         public void AProgrammeCostsTreasuryEveryMonthItRuns()

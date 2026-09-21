@@ -97,6 +97,29 @@ namespace Brink.Core
 
         // ---------- ordering ----------
 
+        /// <summary>A descriptive project name, derived without new save state or RNG.</summary>
+        public static string ProjectName(IndustrialProgramme programme)
+        {
+            string started = programme.started.month >= 1 && programme.started.month <= 12
+                ? programme.started.DisplayString : "START DATE UNKNOWN";
+            return $"National {Phrase.Of(programme.sector)} Works / {Phrase.Of(programme.scale)} / {started}";
+        }
+
+        /// <summary>Funded work, not elapsed calendar time. Read-only, including legacy saves.</summary>
+        public static string ProjectProgress(CountryState country, IndustrialProgramme programme)
+        {
+            int duration = MonthsFor(programme.scale);
+            int remaining = Math.Max(0, Math.Min(duration, programme.monthsRemaining));
+            float cost = MonthlyCostFor(programme.scale);
+            return $"FUNDED WORK: {duration - remaining}/{duration} MONTHS. "
+                + $"REMAINING: {remaining} MONTHS AT {cost:F0}/MO ({remaining * cost:F0} AT CURRENT TERMS).\n"
+                + (country.resources.treasury >= cost
+                    ? "Treasury now covers the next instalment."
+                    : "Treasury now falls short of the next instalment.")
+                + " Funding is checked when work resolves; income and other commitments can change this. "
+                + "If funding fails, the project lapses without completion benefits or a refund.";
+        }
+
         public static bool CanBegin(GameState state, string actorId, out string reason)
         {
             var country = state.FindCountry(actorId);
@@ -126,17 +149,20 @@ namespace Brink.Core
             foreach (var existing in country.economy.programmes)
                 if (existing.sector == sector) return false;
 
-            country.economy.programmes.Add(new IndustrialProgramme
+            var programme = new IndustrialProgramme
             {
                 sector = sector,
                 scale = scale,
                 monthsRemaining = MonthsFor(scale),
                 started = state.date
-            });
+            };
+            country.economy.programmes.Add(programme);
+            state.AddChronicle(ChronicleCategory.Economic, actorId,
+                $"PROJECT BEGUN: {ProjectName(programme)}. {MonthsFor(scale)} funded months at {MonthlyCostFor(scale):F0}/MO.");
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "PROGRAMME BEGUN",
-                    $"{Phrase.Of(sector)} — {scale.ToString().ToUpperInvariant()}. "
+                    $"{ProjectName(programme)}. "
                     + $"{MonthsFor(scale)} months at {MonthlyCostFor(scale):F0} a month.",
                     actorId, desk: ReportingDesk.Economy);
 
@@ -174,11 +200,15 @@ namespace Brink.Core
             for (int i = country.economy.programmes.Count - 1; i >= 0; i--)
             {
                 if (country.economy.programmes[i].sector != sector) continue;
+                var programme = country.economy.programmes[i];
                 country.economy.programmes.RemoveAt(i);
+                string stopped = $"PROJECT CANCELLED: {ProjectName(programme)}. "
+                    + "Work stops without completion benefits. What has been spent is spent.";
+                state.AddChronicle(ChronicleCategory.Economic, actorId, stopped);
 
                 if (country.isPlayer)
                     state.AddNotification(NotificationClass.Advisory, "PROGRAMME CANCELLED",
-                        $"{Phrase.Of(sector)} work stops. What has been spent is spent.",
+                        stopped,
                         actorId, desk: ReportingDesk.Economy);
                 return true;
             }
@@ -205,10 +235,12 @@ namespace Brink.Core
                     if (country.resources.treasury < cost)
                     {
                         eco.programmes.RemoveAt(i);
+                        string lapsed = $"PROJECT LAPSED: {ProjectName(programme)}. "
+                            + "The treasury cannot carry the next instalment. No completion benefits; no refund.";
+                        state.AddChronicle(ChronicleCategory.Economic, country.id, lapsed);
                         if (country.isPlayer)
                             state.AddNotification(NotificationClass.Priority, "PROGRAMME LAPSED",
-                                $"{Phrase.Of(programme.sector)} work has stopped: the treasury "
-                                + "cannot carry it. What was spent is spent.",
+                                lapsed,
                                 country.id, desk: ReportingDesk.Economy);
                         continue;
                     }
@@ -236,6 +268,11 @@ namespace Brink.Core
         {
             float yield = YieldFor(programme.scale);
             var sector = country.economy.Sector(programme.sector);
+            float outputBefore = sector?.output ?? 0f;
+            float healthBefore = sector?.health ?? 0f;
+            float industryBefore = country.resources.industrialEndowment;
+            float energyBefore = country.resources.energyEndowment;
+            float economyBefore = country.pillars.economy;
 
             if (sector != null)
             {
@@ -262,15 +299,24 @@ namespace Brink.Core
 
             country.pillars.economy = Growth.Apply(country.pillars.economy, yield * 0.16f);
 
+            string completed = $"PROJECT COMPLETE: {ProjectName(programme)}. "
+                + $"Applied points: sector output {(sector?.output ?? 0f) - outputBefore:+0.##;-0.##;0}, "
+                + $"sector health {(sector?.health ?? 0f) - healthBefore:+0.##;-0.##;0}, "
+                + $"industrial endowment {country.resources.industrialEndowment - industryBefore:+0.##;-0.##;0}, "
+                + $"energy endowment {country.resources.energyEndowment - energyBefore:+0.##;-0.##;0}, "
+                + $"Economy pillar {country.pillars.economy - economyBefore:+0.##;-0.##;0}. "
+                + "Later conditions can still change capacity and functioning.";
+            // Public foreign completion remains descriptive, never a disclosure
+            // of hidden clamped sector or resource values.
             state.AddChronicle(ChronicleCategory.Economic, country.id,
-                $"{country.displayName} completes {programme.scale.ToString().ToLowerInvariant()} "
-                + $"of its {Phrase.Of(programme.sector).ToLowerInvariant()} sector.", Publicity.Public);
+                country.isPlayer ? completed : $"PROJECT COMPLETE: {ProjectName(programme)}. "
+                    + $"{country.displayName} completes its {Phrase.Of(programme.sector).ToLowerInvariant()} project.",
+                Publicity.Public);
 
             if (country.isPlayer)
             {
                 state.AddNotification(NotificationClass.Priority, "PROGRAMME COMPLETE",
-                    $"{Phrase.Of(programme.sector)} — {programme.scale.ToString().ToUpperInvariant()} "
-                    + "finished. The capacity is there now, and so is the upkeep it implies.",
+                    completed,
                     country.id, desk: ReportingDesk.Economy);
                 ProgressionSystem.AwardXP(state, 30, "Industrial programme completed");
             }
