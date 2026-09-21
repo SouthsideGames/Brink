@@ -227,7 +227,20 @@ annual growth from well-connected states, which is why absolute grades and GDP
 across the whole balance harness fell at the same time (spec 12 §6).
 
 Setting a tariff costs 1 CP. Embargo is applied automatically by Severe-or-above
-sanctions and cleared when they are lifted or lapse.
+sanctions. Ending one regime clears it only if no Severe-or-above regime
+remains on that pair in either direction. Ordinary lifting, negotiated relief,
+monthly lapse, a leverage exchange and either peace term share
+`EconomySystem.RemoveSanction` after their own gates. The helper removes only
+the named record and reconciles that pair's flag; no cost, reward, notice or
+other regime is changed by it. Removing an absent record is inert.
+
+**The full embargo and commodity closure are distinct.** Routine, Pressure and
+Coercive regimes still block commodity `Supply` in either direction but do not
+impose a full trade embargo; lifting the last severe regime while one of those
+remains restores the existing general-trade readers, not commodity supply.
+This correction preserves that severity rule rather than turning every sanction
+into a full embargo. No save field or migration is added. It fixes removal-time
+state; it does not retroactively repair an already-cleared flag in an old save.
 
 ## 4. Sanctions and blowback
 
@@ -286,7 +299,7 @@ target is still regarded as a threat —
 stillHostile = relations < 30  OR  threat perceived by the sender > 55
 ```
 
-Lapsing clears the embargo on the link and announces itself (`SANCTIONS LAPSE`).
+Lapsing reconciles the pair's embargo as in §3 and announces itself (`SANCTIONS LAPSE`).
 
 This exists because nothing ever lifted an AI's measures and `monthsActive` was
 written and never read, so a sanction imposed in year two was still running in
@@ -311,7 +324,7 @@ the sender's **own blowback** (×8 — their cost is the lever), surviving warmt
 and trust, minus the threat they still perceive (×0.45) and −20 while the
 target is at war. Threshold 50; refusal tells the player which lever is short.
 
-Success lifts the sanction, un-embargoes the link, warms the pair, and sets a
+Success lifts the sanction, reconciles the link's embargo (§3), warms the pair, and sets a
 **détente**: `Relationship.sanctionsTruceMonths = 24`, during which
 `ImposeSanctionsBy` refuses new measures between the pair — one gate, binding
 the player exactly as it binds the AI. Opening a confrontation between the

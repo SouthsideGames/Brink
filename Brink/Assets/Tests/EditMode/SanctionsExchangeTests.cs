@@ -419,6 +419,24 @@ namespace Brink.Tests
         [TestCase(TradeFocus.Energy)]
         [TestCase(TradeFocus.Materials)]
         [TestCase(TradeFocus.Food)]
+        public void ReliefExchangePreservesTheirSevereEmbargo(TradeFocus focus)
+        {
+            IsolateSupply(focus);
+            var link = Link(state.playerCountryId, target, focus, LinkVolume, LinkTariff);
+            Impose(SanctionSeverity.Severe);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, target, state.playerCountryId, SanctionSeverity.Severe));
+            float health = EconomySystem.TradeHealth(state, target);
+            Assert.AreEqual(0f, DiplomaticLeverage.SupplyReliefGain(state, state.playerCountryId, target));
+            WarmToTheMargin(TreatyCommitment.Transit);
+            Assert.AreEqual(0f, Deliver(TreatyCommitment.Transit, focus), 0.0001f);
+            Assert.IsTrue(link.embargoed, "their severe regime still embargoes the link");
+            Assert.IsNotNull(state.FindSanction(target, state.playerCountryId));
+            Assert.AreEqual(health, EconomySystem.TradeHealth(state, target), 0.0001f);
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
         public void ASubSevereRegimeOnAnOpenLink_IsPricedAtExactlyWhatReopeningDelivers(TradeFocus focus)
         {
             IsolateSupply(focus);

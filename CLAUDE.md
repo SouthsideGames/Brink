@@ -31,6 +31,19 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Reciprocal embargo removal.** `EconomySystem.RemoveSanction` is the shared
+  post-gate mutation for ordinary lifting, negotiated relief, lapse, leverage
+  and both peace terms. A surviving Severe/Existential regime in either direction
+  keeps the pair embargoed; ending the last one clears it. Other regimes and
+  caller costs/rewards are untouched. Sub-Severe measures still close commodity
+  supply without a full embargo, as before. No schema/migration change and no
+  retroactive old-save flag repair. Specs 02 §3 and 04 §5i; native verification
+  remains Claude's gate, separate from the author's .NET harness.
+  Author comparison: 1857/1825/31/1 against 1841/1809/31/1
+  (total/pass/fail/unexecuted), all 16 additions passing, no shared outcome or
+  normalized failure-message changes; standard balance output identical.
+  Seven mutations caught; baseline/no-op/restored 56/56 in the runnable subset.
+
 - **Bloc hardening (#23).** `FactionsFor` returns detached entries as well as a
   detached list, whether previewed or already seeded. The exact paid controller
   route is `CourtFactionAtIndex`; the theme route retains its existing name.
