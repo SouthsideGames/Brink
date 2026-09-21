@@ -41,6 +41,10 @@ and not the place to start from cold.
   four additions pass, zero shared outcome/message changes, standard balance
   identical. Focused/restored 63/63; restoring AddFigure fails the 34-column
   credit row (36 chars) and 49-column restructuring notice (58 chars).
+  Claude's native review found the four new cases failed only on the eight-digit
+  debt expectation: Unity/Mono F0 prints 12345678f as 12345680. Use the measured
+  portable seven-digit 9876000f in this layout fixture; do not change production
+  formatting to satisfy a harness-only literal. Native re-verification is pending.
 
 - **Visible national projects (#24, industrial first slice).** Existing industrial
   programmes gain derived names, funded progress and remaining-commitment readouts,

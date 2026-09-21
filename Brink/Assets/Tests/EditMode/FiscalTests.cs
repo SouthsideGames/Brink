@@ -68,7 +68,9 @@ namespace Brink.Tests
                     Assert.LessOrEqual(line.Length, columns, line);
                 StringAssert.Contains("UNQUESTIONED (84)",
                     System.Text.RegularExpressions.Regex.Replace(ordinary.text, @"\s+", " "));
-                Player.fiscal.sovereignDebt = 12345678f;
+                // Seven digits: Unity/Mono F0 rounds 12345678f to 12345680,
+                // unlike the .NET harness. Test layout, not formatter precision.
+                Player.fiscal.sovereignDebt = 9876000f;
                 Player.fiscal.energyReserve = 100f;
                 Player.fiscal.materialsReserve = 99f;
                 Player.fiscal.foodReserve = 98f;
@@ -85,7 +87,7 @@ namespace Brink.Tests
                         Assert.LessOrEqual(line.Length, columns, line);
                     string text = System.Text.RegularExpressions.Regex.Replace(panel.text, @"\s+", " ");
                     StringAssert.Contains($"{FiscalSystem.CreditText(standing)} ({standing:F0})", text);
-                    StringAssert.Contains("12345678", text);
+                    StringAssert.Contains("9876000", text);
                     StringAssert.Contains("100 / 99 / 98", text);
                     StringAssert.Contains("remembered for 120 more months", text);
                     Assert.AreEqual(before, SaveSystem.ToJson(state));
