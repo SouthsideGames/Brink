@@ -30,6 +30,23 @@ namespace Brink.Core
         public static bool Has(CountryState country, string capabilityId)
             => country.technology.Has(capabilityId);
 
+        /// <summary>Remaining commitment from saved terms, not a guessed start date or sunk cost.</summary>
+        public static string ProjectReadout(CountryState country, ResearchProgram program)
+        {
+            int remaining = Math.Max(0, program.monthsRemaining);
+            return $"RESEARCH PROJECT: {program.label}\n"
+                + $"REMAINING: {remaining} MONTHS AT {program.monthlyCost:F0}/MO "
+                + $"({remaining * program.monthlyCost:F0} AT SAVED TERMS).\n"
+                + (country.resources.treasury >= program.monthlyCost
+                    ? "Treasury now covers the next instalment. "
+                    : "Treasury now falls short of the next instalment. ")
+                + "Funding is checked when work resolves; other income and commitments can change this. "
+                + "Unfunded work is wound up, not paused; no refund.\n"
+                + (country.technology.Has(program.capabilityId)
+                    ? "Capability already held: this work still costs money, but cannot grant a second copy."
+                    : "Completion develops capability, not equipment, personnel, infrastructure or money.");
+        }
+
         /// <summary>
         /// 0..1 effectiveness of a held capability. Shallow knowledge delivers
         /// less than mastery, so a stolen edge is real but partial.
@@ -105,7 +122,7 @@ namespace Brink.Core
                 $"{definition.name}: {definition.researchMonths} months at " +
                 $"{definition.monthlyCost:F0} per month.", player.id);
             state.AddChronicle(ChronicleCategory.System, player.id,
-                $"{definition.name} research programme authorized.");
+                $"RESEARCH AUTHORIZED: {definition.name}. {definition.researchMonths} months at {definition.monthlyCost:F0}/MO.");
             return true;
         }
 
@@ -189,7 +206,7 @@ namespace Brink.Core
                             $"{program.label} cannot be funded and has been wound up.", country.id,
                             desk: ReportingDesk.Economy);
                     state.AddChronicle(ChronicleCategory.System, country.id,
-                        $"{program.label} programme suspended for lack of funds.");
+                        $"RESEARCH WOUND UP: {program.label}. Funding failed; work ended without a refund.");
                     continue;
                 }
 
@@ -359,7 +376,8 @@ namespace Brink.Core
             // foreign programme is the dossier's business.
             if (country.isPlayer)
                 state.AddChronicle(ChronicleCategory.System, country.id,
-                    $"{definition.name} capability acquired ({source}).");
+                    $"CAPABILITY ACQUIRED: {definition.name} ({source}). "
+                    + "Capability is not equipment, personnel, infrastructure or money.");
             GameLog.Info("TECH", $"{country.id} acquired {capabilityId} ({source}).");
         }
 

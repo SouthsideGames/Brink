@@ -28,6 +28,36 @@ A programme requires prerequisites, a minimum industrial base, a minimum pillar
 level, and four months' funding in hand. An unfunded programme is **wound up**,
 not run for free.
 
+### Visible research projects (#24, presentation slice)
+
+RESEARCH now shows the full saved programme label, remaining months, saved
+monthly cost and their product (AT SAVED TERMS). This is remaining commitment,
+not money already spent or a promised completion date. ResearchProgram stores
+neither start date nor original duration; the view does not invent either from
+the current catalogue. Negative legacy remaining months display as zero without
+changing saved state. The next-instalment reading is a current treasury snapshot,
+explicitly subject to intervening income and commitments.
+
+Unfunded work is wound up, not paused, without a refund. Completion develops
+capability, not equipment, personnel, infrastructure or money. If diffusion has
+already provided the capability while research continues, the panel states the
+existing rule honestly: funding continues, but Grant cannot award a second copy.
+No cancellation command or change to that rule is introduced.
+
+The existing authorization, funding-failure and acquisition chronicle entries
+gain RESEARCH AUTHORIZED, RESEARCH WOUND UP and CAPABILITY ACQUIRED prefixes.
+Entry counts, publicity and foreign-notification rules are unchanged. The
+latest five matching own-country System entries appear newest-first; acquisitions
+retain their Developed/Shared/Observed/Stolen source and are not all presented as
+research completions. Legacy generic entries remain in history, not retrofitted.
+Foreign starts/acquisitions remain unchronicled as before; existing foreign
+funding-failure entries are unchanged in count and excluded from this panel.
+
+No new persistent field, schema, RNG, grant, cost, maturity or pipeline change.
+Controller start autosave and resolved-month save behavior remain unchanged.
+Hardware remains unverified. #24 remains partial: physical sites, bespoke
+construction and procurement presentation are not part of this slice.
+
 ## 3. Capability catalog
 
 | Pillar | Capability | Effect |
