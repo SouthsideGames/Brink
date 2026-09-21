@@ -322,13 +322,14 @@ namespace Brink.Core
                 {
                     string pressure = FactionInfluencePressure(country, bloc.theme) > 0f ? "present" : "absent";
                     report += $" {bloc.name}: {before * 100f:F2}% -> {bloc.share * 100f:F2}%" +
-                        $" (current-condition target {targets[i] * 100f:F2}%; driver: {FactionInfluenceDriver(bloc.theme)}; extra pressure {pressure}).";
+                        $" (current-condition target {targets[i] * 100f:F2}%; own driver: {FactionInfluenceDriver(bloc.theme)}; extra pressure {pressure}).";
                 }
             }
             if (report.Length > 0)
                 state.AddNotification(NotificationClass.Wire, "POLITICAL INFLUENCE SHIFTS",
                     "All blocs share one pool of influence: gains reduce others' shares. " +
-                    "Pressure changes the balance gradually; easing it restores the founding balance." + report,
+                    "A bloc can lose share because others gain, even with its own pressure absent. " +
+                    "Movement also reflects gradual recovery toward the current balance." + report,
                     country.id, desk: ReportingDesk.Government);
         }
 
@@ -420,14 +421,22 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Blocs drift back toward indifference, so a coalition is *maintained*
-        /// rather than bought once — the `brokeredSupport` rule, applied to the
-        /// people rather than to the number.
+        /// Held policy sets Liberty blocs' resting goodwill; all other concerns
+        /// remain neutral. This reads the persisted concern, not the regime or
+        /// name, so constitutional changes cannot erase a constituency's views.
         /// </summary>
+        public static float FactionDispositionTarget(OppositionTheme theme, CivicPosture posture)
+            => theme != OppositionTheme.Liberty ? 50f
+             : posture == CivicPosture.Open ? 65f
+             : posture == CivicPosture.Restrictive ? 35f : 50f;
+
+        // The existing monthly recovery, not a reward for switching policy.
+        // Paid goodwill can exceed the target and still fades back toward it.
         static void DriftFactions(GovernmentState gov)
         {
             foreach (var faction in gov.factions)
-                faction.disposition = Approach(faction.disposition, 50f, 0.02f);
+                faction.disposition = Approach(faction.disposition,
+                    FactionDispositionTarget(faction.theme, gov.civicPosture), 0.02f);
         }
 
         // ---------- constitutional change (spec 05 §2f) ----------
@@ -2090,7 +2099,9 @@ namespace Brink.Core
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Priority, "CIVIC POSTURE CHANGED",
-                    $"The state now holds its society on {PostureText(posture)} terms.",
+                    $"The state now holds its society on {PostureText(posture)} terms. " +
+                    $"Existing Liberty blocs' goodwill will move gradually toward {FactionDispositionTarget(OppositionTheme.Liberty, posture):F0}/100; " +
+                    "other concerns return toward 50. No bloc goodwill or influence is transferred by this order.",
                     countryId, desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, countryId,
                 $"Civic posture set to {PostureText(posture)}.", Publicity.Public);

@@ -772,7 +772,12 @@ Political influence evolves separately: hardship, corruption and restrictive
 policy gradually increase the weight of the corresponding constituencies at
 others' expense. Shares approach bounded condition-driven targets; easing the
 pressure restores the founding balance. Courting buys goodwill, not power, and
-influence is not a prediction of electoral seats. Broader policy reactions and
+influence is not a prediction of electoral seats. Held civic policy separately
+sets Liberty blocs' resting goodwill: Open 65, Standard 50, Restrictive 35,
+approached at 2% of the gap each month. Other concerns retain neutral 50.
+Switching grants no immediate goodwill; bought support above the resting level
+still fades. Persisted concerns, not current regime labels, determine responses
+for player and foreign governments alike. Further policy reactions and
 regime-aware bloc names remain future work (spec 05 §2g).
 
 Domestic politics now contains an **Opposition** with a concrete case and theme—Hardship, War, Corruption, Liberty or Drift. The operator may concede or confront it, but the correct instrument depends on what the public is actually angry about; confronting a visible hardship or unpopular war can make the case stronger.
