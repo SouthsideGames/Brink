@@ -244,7 +244,7 @@ namespace Brink.UI.Views
         /// </summary>
         void BuildInvestment(CountryState player)
         {
-            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("INDUSTRIAL PROGRAMMES", W);
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("NATIONAL PROJECTS", W);
 
             var running = player.economy.programmes;
             AddText("terminal-text-dim").text =
@@ -255,6 +255,8 @@ namespace Brink.UI.Views
 
             foreach (var programme in running)
             {
+                AddText("terminal-text-bright").text = IndustrialSystem.ProjectName(programme);
+                AddText("terminal-text-dim").text = IndustrialSystem.ProjectProgress(player, programme);
                 var captured = programme;
                 var cancelRow = new VisualElement();
                 cancelRow.AddToClassList("button-row");
@@ -268,6 +270,20 @@ namespace Brink.UI.Views
                     Refresh();
                 });
             }
+
+            var record = new StringBuilder("RECENT PROJECT RECORD (LATEST 5)\n");
+            int shown = 0;
+            var chronicle = GameController.Instance.State.chronicle;
+            for (int i = chronicle.Count - 1; i >= 0 && shown < 5; i--)
+            {
+                var entry = chronicle[i];
+                if (entry.countryId != player.id || entry.category != ChronicleCategory.Economic
+                    || entry.text == null || !entry.text.StartsWith("PROJECT ", System.StringComparison.Ordinal)) continue;
+                record.AppendLine($"{entry.date.DisplayString}: {entry.text}");
+                shown++;
+            }
+            if (shown == 0) record.AppendLine("No recorded project events yet. Older projects may have only a general history entry.");
+            AddText("terminal-text-dim").text = record.ToString();
 
             if (!IndustrialSystem.CanBegin(GameController.Instance.State,
                     GameController.Instance.State.playerCountryId, out string blocked))

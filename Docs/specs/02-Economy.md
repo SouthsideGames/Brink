@@ -242,6 +242,51 @@ This correction preserves that severity rule rather than turning every sanction
 into a full embargo. No save field or migration is added. It fixes removal-time
 state; it does not retroactively repair an already-cleared flag in an old save.
 
+## 3a. Visible national projects — industrial first slice (#24)
+
+`IndustrialSystem.ProjectName` and `ProjectProgress`, surfaced under NATIONAL
+PROJECTS in ECONOMY, reuse `IndustrialProgramme`'s sector, scale, start date and
+remaining months. Names are descriptive (`National Energy Works / Expansion /
+JAN 1984`), not unique identifiers or user-authored names; restarting the same
+sector/scale in the same month can repeat one. An absent legacy start month reads
+START DATE UNKNOWN without backfilling the save. "Works" labels sector investment,
+not a newly simulated geographical site.
+
+Progress is **funded work**, total authored duration minus remaining months,
+not calendar age. Remaining commitment is months × current monthly cost, labelled
+AT CURRENT TERMS rather than money already spent or a guaranteed completion date.
+The next-instalment reading compares the treasury now with one instalment; it
+explicitly warns that income and other commitments can change it before work
+resolves. No extra forecast, charge, pause, grace period or automatic financing.
+
+The existing rules remain: 2 CP to begin, at most three programmes and one per
+sector, monthly payments, no partial completion yield, cancellation without a
+refund, and lapse when the next instalment cannot be paid. Maintenance/Expansion/
+Modernisation retain 12/24/36 months and 95/190/340 per month. Effects and rewards
+are unchanged. The existing STOP action and its save timing are unchanged: it
+does not itself autosave; the cancelled state and record persist on the next
+normal save. Beginning still uses the controller's autosave.
+
+The existing chronicle now records PROJECT BEGUN, CANCELLED and LAPSED as secret
+economic entries for the actor, once at the transition. Completion keeps its
+existing public entry and notification count, now named. The player's completion
+receipt reports applied sector-output/health, industrial/energy-endowment and
+Economy-pillar changes after clamping, rounded to at most two decimal places.
+Foreign public completion remains descriptive: it never publishes the hidden
+applied figures. No extra upkeep is implied by the receipt.
+
+The project panel shows the latest five matching entries for our country, newest
+first; older entries remain in the existing history. Legacy generic completion
+entries are not rewritten or guessed into project records. Readout uses the
+terminal text policy and does not change state. No new field, schema version,
+pipeline, catalogue entry, RNG call or funding/effect arithmetic.
+
+**Remaining #24 work:** site-linked physical construction, bespoke projects and
+their effects, custom persistent identities/names if required, and research or
+procurement presentation. This slice is visibility for real existing industrial
+work, not completion of the entire roadmap item. Device confirmation and broader
+balance remain separate gates.
+
 ## 4. Sanctions and blowback
 
 Five severities with a damage weight, and blowback at 40% of that weight

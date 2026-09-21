@@ -732,6 +732,14 @@ The current implementation also includes **public finance**: taxation, budget po
 
 Economic warfare has blowback. Trade exposure, sanctions, embargoes, reserves, adaptation and diplomatic cooperation determine whether coercion hurts the sender, the target or both.
 
+Industrial investments are surfaced as **visible national projects**: a descriptive
+sector/scale/start-date name, funded progress, remaining commitment and records of
+completion, cancellation or funding failure. These reuse the existing industrial
+programme, not a second construction simulation. Completed work reports actual
+applied benefits; later conditions can still erode capacity and functioning.
+This first #24 slice does not add map sites, bespoke megaprojects or research-project
+presentation. See spec 02 §3a.
+
 ## 7.3 Intelligence
 
 Foreign capability is observed through estimates with margins and confidence grades. Networks collect in Military, Economic, Political and Diplomatic domains; stale information degrades.
