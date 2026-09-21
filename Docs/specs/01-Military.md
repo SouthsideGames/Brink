@@ -219,6 +219,13 @@ and exactly symmetric between the two parties. It feeds:
 | `OccupiedValue` | 0.12, capped at 25 | readiness target in `MilitarySystem` — garrison drag, the other direction |
 | `DefensiveDepth` | 0.15 | reserved for defensive resolution (PLANNED) |
 
+Completed energy-site works additionally contribute 7 energy-ceiling points per
+owned, non-denied EnergyRegion (`energyWorks`; economy spec §3b). This is separate
+from held-minus-original strategic value: construction at home must not cancel
+itself. The works stay with the site through ownership changes; denial suppresses
+their output without destroying them. Other territory yields, original values,
+occupation bills and military resolution are unchanged.
+
 **Occupation is a trade, not income.** `TerritorySystem.MonthlyUpdate` charges,
 per point of occupied strategic value: −0.55 treasury, −0.006 stability, +0.008
 war exhaustion. The readiness cost is charged in a different place and in a

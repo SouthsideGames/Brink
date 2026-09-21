@@ -403,6 +403,15 @@ namespace Brink.Core
             return ok;
         }
 
+        public bool BeginEnergySiteProject(string locationId)
+        {
+            if (!IsRunning || !IndustrialSystem.CanBeginSite(State, State.playerCountryId, locationId, out _)) return false;
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            bool ok = IndustrialSystem.BeginSite(State, Turns, locationId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         // ---------- fiscal statecraft (spec 02 §9, spec 25 Tranche A) ----------
         //
         // Each of these spends the operator's resource, delegates to the

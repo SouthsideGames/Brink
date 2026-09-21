@@ -65,6 +65,13 @@ Per-country state (`CountryState`) nests `PillarScores`, `NationalResources`,
 `TechnologyState`, `EndgameState`, and `cabinet` — five `Official` records, one
 per pillar, for **every** country (§2c).
 
+`IndustrialProgramme.locationId` is optional: null/empty preserves national
+investment. `StrategicLocation.energyWorks` defaults false and records completed
+site infrastructure independently of who built it. These additive fields need
+no version bump from 7 or migration. Existing work is never relocated and old
+locations never acquire works on load. Pause is derived from live denial and
+ownership, not a separate saved timer; monthsRemaining retains funded progress.
+
 ### 2a. Parallel lists stand in for dictionaries
 
 `xpReasons` (`List<string>`) and `xpReasonCounts` (`List<int>`) are a map from an

@@ -287,6 +287,60 @@ procurement presentation. This slice is visibility for real existing industrial
 work, not completion of the entire roadmap item. Device confirmation and broader
 balance remain separate gates.
 
+## 3b. Energy works tied to a site (#24)
+
+The first physical project reuses `IndustrialProgramme`, with an optional
+`locationId`. Empty means the existing national investment, unchanged. The new
+order is `BeginEnergySiteProject`: select an owned EnergyRegion, spend 2 CP under
+Economy authority, and fund 12 months at 95/month (1140 total). It shares the
+three-programme capacity and the one-Energy-programme slot, including national
+Energy work. A completed site cannot be ordered again. Invalid, contested,
+already-built and unavailable sites refuse before spending; affordability still
+uses the ordinary command-point rule. Actor-generic `BeginSiteBy` skips operator
+CP and authorization rewards but has the same eligibility and monthly funding. No AI caller
+is added in this slice.
+
+On each industrial tick, resolve site availability before charging. Missing,
+wrong-type or differently owned sites **abandon** the project, with a single
+secret PROJECT ABANDONED record and player notice; no further payment, benefits
+or refund. Ownership is observed at resolution, not recorded as an event stream.
+An owned site denied by `InsurgencySystem.Denies` **pauses**: no charge, no progress,
+no repeated record, and no funding lapse even if treasury is empty. Once denial
+ends, work resumes from its remaining funded months; then ordinary failure to
+pay lapses it. Cancellation retains the existing no-refund and next-save timing.
+Pausing continues to occupy the queue slot.
+
+Completion sets `StrategicLocation.energyWorks` once. Each owned, non-denied
+EnergyRegion with works adds **7** to `TerritorySystem.EnergySwing`, hence the
+energy ceiling, before the existing 0..100 national clamp. It does not refill
+energy instantly or grant national sector, endowment or pillar bonuses. The
+economy tick precedes industry, so monthly resource recovery sees newly finished
+work on the next economy tick. The receipt records the actual immediate ceiling
+change, which can be smaller than seven or zero at the cap. Completion retains
+the existing 30 XP; authorization retains 14 XP and one initiative, subject to
+normal repetition rules. Foreign completion is descriptive, without hidden
+applied figures or player rewards/notices.
+
+Works stay on the location after capture, return, annexation or secession: the
+current owner receives the contribution and the former owner loses it. Denial
+suppresses it for everyone until control returns; it does not erase the works.
+The original strategicValue is unchanged, so home construction cannot cancel
+itself out in the held-minus-original calculation. No extra upkeep, damage,
+demolition, upgrade or repeat-build loop is introduced. Seven points is initial
+tuning, not certified multi-seed policy balance.
+
+ECONOMY names every owned energy site, its state, funding terms and failure
+rules; each BUILD button captures that site's id. Full names sit outside the
+short button. Own-country MAP installations share the readout, but foreign
+construction and exact operating contributions are not revealed there. Existing
+project history carries site names at the event, falling back to id if a site
+has disappeared. Names are descriptive, not new persistent identities.
+
+Save version remains 7: missing locationId is national work and missing
+energyWorks is false. Both non-default values survive reload; no migration or
+retroactive development is required. Native Unity, hardware, new AI behavior and
+broader physical project types remain separate work. #24 is not declared complete.
+
 ## 4. Sanctions and blowback
 
 Five severities with a damage weight, and blowback at 40% of that weight

@@ -46,6 +46,280 @@ namespace Brink.Tests
 
         // ---------- it is a real sink ----------
 
+        StrategicLocation EnergySite(string id = "TEST_ENERGY")
+        {
+            var site = new StrategicLocation { id = id, displayName = "Test Energy Region " + id,
+                type = LocationType.EnergyRegion, ownerId = state.playerCountryId, originalOwnerId = state.playerCountryId };
+            state.locations.Add(site);
+            return site;
+        }
+
+        [TestCase(50f, 7f)]
+        [TestCase(98f, 2f)]
+        [TestCase(100f, 0f)]
+        public void SiteCompletionBuildsGroundNotNationalBonusesAndReportsTheAppliedCeiling(float endowment, float gain)
+        {
+            var site = EnergySite();
+            var player = state.PlayerCountry;
+            state.trade.Clear(); player.technology.capabilities.Clear();
+            player.resources.energyEndowment = endowment;
+            float ceiling = EconomySystem.EnergyCeilingFor(state, player);
+            Assert.AreEqual(endowment, ceiling, .001f, "fixture must have no other ceiling input");
+            string sectors = UnityEngine.JsonUtility.ToJson(player.economy);
+            float energy = player.resources.energy, pillar = player.pillars.economy;
+            float money = player.resources.treasury;
+            int xp = state.strategistXP, initiative = state.initiativesThisYear, cp = state.commandPoints.current;
+            Assert.IsTrue(IndustrialSystem.BeginSite(state, turns, site.id));
+            Assert.AreEqual(cp - 2, state.commandPoints.current);
+            Assert.AreEqual(initiative + 1, state.initiativesThisYear);
+            for (int i = 0; i < 11; i++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsFalse(site.energyWorks);
+            Assert.AreEqual(ceiling, EconomySystem.EnergyCeilingFor(state, player));
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsTrue(site.energyWorks);
+            Assert.IsEmpty(player.economy.programmes);
+            Assert.AreEqual(money - 12 * 95f, player.resources.treasury);
+            Assert.AreEqual(ceiling + gain, EconomySystem.EnergyCeilingFor(state, player), .001f);
+            Assert.AreEqual(energy, player.resources.energy, "completion is not a refill");
+            Assert.AreEqual(endowment, player.resources.energyEndowment);
+            Assert.AreEqual(pillar, player.pillars.economy);
+            Assert.AreEqual(sectors, UnityEngine.JsonUtility.ToJson(player.economy));
+            Assert.AreEqual(xp + 44, state.strategistXP, "14 begin + 30 completion, first use");
+            StringAssert.Contains($"applied energy-ceiling change {gain:+0.##;-0.##;0}", state.chronicle.Last().text);
+            StringAssert.Contains(site.displayName, state.chronicle.Last().text);
+            Assert.IsFalse(IndustrialSystem.BeginSiteBy(state, player.id, site.id));
+            int records = state.chronicle.Count;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(records, state.chronicle.Count);
+        }
+
+        [Test]
+        public void ContestedSitePausesWithoutPaymentOrProgressAndResumesAfterReload()
+        {
+            var site = EnergySite();
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, state.playerCountryId, site.id));
+            IndustrialSystem.MonthlyUpdate(state);
+            state.insurgencies.Add(new Insurgency { locationId = site.id, strength = InsurgencySystem.ContestThreshold });
+            state.PlayerCountry.resources.treasury = 0f;
+            var programme = state.PlayerCountry.economy.programmes.Single();
+            int history = state.chronicle.Count;
+            for (int i = 0; i < 6; i++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(11, programme.monthsRemaining);
+            Assert.AreEqual(0f, state.PlayerCountry.resources.treasury);
+            Assert.AreEqual(history, state.chronicle.Count, "paused work does not lapse or spam records");
+            StringAssert.Contains("PAUSED", IndustrialSystem.SiteReadout(state, site));
+            state = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(site.id, state.PlayerCountry.economy.programmes.Single().locationId);
+            state.insurgencies.Clear();
+            state.PlayerCountry.resources.treasury = 11 * 95;
+            for (int i = 0; i < 11; i++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsTrue(state.FindLocation(site.id).energyWorks);
+            Assert.AreEqual(0f, state.PlayerCountry.resources.treasury);
+        }
+
+        [TestCase("lost")]
+        [TestCase("missing")]
+        [TestCase("cancel")]
+        [TestCase("unfunded")]
+        public void UnfinishedSiteLosesSpentMoneyButNeverDeliversOrChargesAfterAbandonment(string cause)
+        {
+            var site = EnergySite();
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, state.playerCountryId, site.id));
+            IndustrialSystem.MonthlyUpdate(state);
+            if (cause == "lost")
+            {
+                site.ownerId = "CHN";
+                state.insurgencies.Add(new Insurgency { locationId = site.id, strength = 100f });
+            }
+            if (cause == "missing") state.locations.Remove(site);
+            if (cause == "unfunded") state.PlayerCountry.resources.treasury = 94f;
+            float money = state.PlayerCountry.resources.treasury;
+            if (cause == "cancel") Assert.IsTrue(IndustrialSystem.Cancel(state, state.playerCountryId, EconomicSector.Energy));
+            else IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsEmpty(state.PlayerCountry.economy.programmes);
+            Assert.AreEqual(money, state.PlayerCountry.resources.treasury);
+            Assert.IsFalse(site.energyWorks);
+            StringAssert.StartsWith(cause == "cancel" ? "PROJECT CANCELLED:" : cause == "unfunded" ? "PROJECT LAPSED:" : "PROJECT ABANDONED:", state.chronicle.Last().text);
+            int history = state.chronicle.Count;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(history, state.chronicle.Count);
+        }
+
+        [Test]
+        public void CompletedSiteFollowsOwnershipAndContestationWithoutChangingItsOriginalValue()
+        {
+            var site = EnergySite();
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, state.playerCountryId, site.id));
+            for (int i = 0; i < 12; i++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(7f, TerritorySystem.EnergySwing(state, state.playerCountryId), .001f);
+            float foreignBefore = TerritorySystem.EnergySwing(state, "CHN");
+            site.ownerId = "CHN";
+            Assert.AreEqual(0f, TerritorySystem.EnergySwing(state, state.playerCountryId), .001f);
+            Assert.AreEqual(foreignBefore + 7f, TerritorySystem.EnergySwing(state, "CHN"), .001f);
+            state.insurgencies.Add(new Insurgency { locationId = site.id, strength = InsurgencySystem.ContestThreshold });
+            Assert.AreEqual(foreignBefore, TerritorySystem.EnergySwing(state, "CHN"), .001f);
+            state.insurgencies.Clear(); site.ownerId = state.playerCountryId;
+            Assert.AreEqual(7f, TerritorySystem.EnergySwing(state, state.playerCountryId), .001f);
+            Assert.AreEqual(0f, site.strategicValue);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(loaded.FindLocation(site.id).energyWorks);
+            Assert.AreEqual(7f, TerritorySystem.EnergySwing(loaded, loaded.playerCountryId), .001f);
+        }
+
+        [Test]
+        public void SiteCeilingReachesTheLiveEconomyTickAndAnUnfundedResumeLapses()
+        {
+            var site = EnergySite();
+            state.PlayerCountry.resources.energyEndowment = 30f;
+            state.PlayerCountry.resources.energy = 30f; // near the target, not pinned at the +0.35 recovery-speed cap
+            state.PlayerCountry.technology.capabilities.Clear(); state.trade.Clear(); state.sanctions.Clear();
+            var control = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            site.energyWorks = true;
+            EconomySystem.MonthlyUpdate(control); EconomySystem.MonthlyUpdate(state);
+            Assert.Greater(state.PlayerCountry.resources.energy, control.PlayerCountry.resources.energy,
+                "a built site must reach real resources, not just its readout");
+            site.energyWorks = false;
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, state.playerCountryId, site.id));
+            state.insurgencies.Add(new Insurgency { locationId = site.id, strength = 100 });
+            state.PlayerCountry.resources.treasury = 0;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(1, state.PlayerCountry.economy.programmes.Count);
+            state.insurgencies.Clear(); IndustrialSystem.MonthlyUpdate(state);
+            Assert.IsEmpty(state.PlayerCountry.economy.programmes);
+            Assert.IsFalse(site.energyWorks);
+            StringAssert.StartsWith("PROJECT LAPSED:", state.chronicle.Last().text);
+        }
+
+        [TestCase("foreign")]
+        [TestCase("type")]
+        [TestCase("complete")]
+        [TestCase("contested")]
+        [TestCase("busy")]
+        [TestCase("full")]
+        [TestCase("cp")]
+        [TestCase("missing")]
+        public void InvalidSiteOrderIsPureAndDoesNotSpend(string problem)
+        {
+            var site = EnergySite();
+            if (problem == "foreign") site.ownerId = "CHN";
+            if (problem == "type") site.type = LocationType.Capital;
+            if (problem == "complete") site.energyWorks = true;
+            if (problem == "contested") state.insurgencies.Add(new Insurgency { locationId = site.id, strength = 100 });
+            if (problem == "busy") Assert.IsTrue(IndustrialSystem.BeginBy(state, state.playerCountryId, EconomicSector.Energy, IndustrialScale.Expansion));
+            if (problem == "full")
+                foreach (var sector in new[] { EconomicSector.Industry, EconomicSector.Finance, EconomicSector.Technology })
+                    Assert.IsTrue(IndustrialSystem.BeginBy(state, state.playerCountryId, sector, IndustrialScale.Maintenance));
+            if (problem == "cp") state.commandPoints.current = 1;
+            if (problem == "missing") state.locations.Remove(site);
+            state.authorizedPillarMask = ~0;
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(IndustrialSystem.BeginSite(state, turns, site.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void LegacyFieldsDefaultToNationalWorkAndNoSiteOutput()
+        {
+            Assert.IsTrue(IndustrialSystem.BeginBy(state, state.playerCountryId, EconomicSector.Energy, IndustrialScale.Maintenance));
+            string json = System.Text.RegularExpressions.Regex.Replace(SaveSystem.ToJson(state), @",?\s*""locationId""\s*:\s*(null|"""")", "");
+            json = System.Text.RegularExpressions.Regex.Replace(json, @",?\s*""energyWorks""\s*:\s*false", "");
+            var loaded = SaveSystem.FromJson(json);
+            Assert.IsTrue(string.IsNullOrEmpty(loaded.PlayerCountry.economy.programmes.Single().locationId));
+            Assert.IsFalse(loaded.locations.Any(s => s.energyWorks));
+            float original = loaded.PlayerCountry.resources.energyEndowment;
+            for (int i = 0; i < 12; i++) IndustrialSystem.MonthlyUpdate(loaded);
+            Assert.AreEqual(Math.Min(100, original + 2.45f), loaded.PlayerCountry.resources.energyEndowment, .001f);
+            Assert.AreEqual(7, loaded.saveVersion);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void SitePanelButtonsTargetTheirOwnGroundAndReadsStayPure(int columns)
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State; var previousTurns = gc.Turns;
+            try
+            {
+                var first = EnergySite("FIRST"); var second = EnergySite("SECOND");
+                state.authorizedPillarMask = ~0;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, turns);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new EconomyView(); view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var buttons = view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("BUILD ENERGY WORKS")).ToList();
+                Assert.GreaterOrEqual(buttons.Count, 2);
+                foreach (var b in buttons) Assert.LessOrEqual(b.text.Length + 4, columns);
+                foreach (var label in view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text")))
+                    foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                SaveSystem.Save(state); // sentinel: the persisted order must come from the click below
+                int cp = state.commandPoints.current;
+                var button = buttons.Last();
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                Assert.AreEqual(second.id, state.PlayerCountry.economy.programmes.Single().locationId);
+                Assert.AreEqual(cp - 2, state.commandPoints.current);
+                Assert.AreEqual(second.id, SaveSystem.Load().PlayerCountry.economy.programmes.Single().locationId,
+                    "the controller saves the selected site, not merely the in-memory order");
+                Assert.IsFalse(first.energyWorks);
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                TerminalMetrics.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void ForeignSiteWorkUsesTheSameFundingButPublishesNoHiddenFigures()
+        {
+            var site = EnergySite(); site.ownerId = site.originalOwnerId = "CHN";
+            var country = state.FindCountry("CHN");
+            country.resources.treasury = 1140f;
+            int notices = state.notifications.Count, cp = state.commandPoints.current, xp = state.strategistXP;
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, "CHN", site.id));
+            for (int i = 0; i < 12; i++) IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(0f, country.resources.treasury);
+            Assert.IsTrue(site.energyWorks);
+            Assert.AreEqual(notices, state.notifications.Count);
+            Assert.AreEqual(cp, state.commandPoints.current);
+            Assert.AreEqual(xp, state.strategistXP);
+            Assert.AreEqual(Publicity.Public, state.chronicle.Last().publicity);
+            StringAssert.DoesNotContain("applied", state.chronicle.Last().text);
+            StringAssert.DoesNotContain("+7", state.chronicle.Last().text);
+        }
+
+        [Test]
+        public void MapShowsOwnSiteStatusButDoesNotRevealForeignConstruction()
+        {
+            var site = EnergySite();
+            Assert.IsTrue(IndustrialSystem.BeginSiteBy(state, state.playerCountryId, site.id));
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                var view = new WorldMapView();
+                typeof(WorldMapView).GetField("zoomed", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(view, true);
+                view.Refresh();
+                string Labels() => string.Join(" ", view.Root.Query<Label>().ToList().Select(l => l.text));
+                StringAssert.Contains("ENERGY SITE:", Labels());
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                site.ownerId = "CHN"; site.energyWorks = true;
+                typeof(WorldMapView).GetField("selectedCountryId", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(view, "CHN");
+                view.Refresh();
+                StringAssert.DoesNotContain("ENERGY SITE:", Labels());
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); }
+        }
+
         [TestCase(IndustrialScale.Maintenance)]
         [TestCase(IndustrialScale.Expansion)]
         [TestCase(IndustrialScale.Modernisation)]

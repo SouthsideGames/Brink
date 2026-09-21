@@ -37,6 +37,8 @@ namespace Brink.Data
         public IndustrialScale scale;
         public int monthsRemaining;
         public GameDate started;
+        /// <summary>Empty for legacy/national work; otherwise an energy-region project.</summary>
+        public string locationId;
     }
 
     /// <summary>One sector's condition. Output is capacity; health is current functioning.</summary>

@@ -249,12 +249,12 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text =
                 $"  {running.Count} of {IndustrialSystem.MaxProgrammes} under way."
                 + (running.Count > 0
-                    ? $"  Committed: {TotalMonthlyCost(player):F0} a month."
+                    ? $"  Committed: {TotalMonthlyCost(player):F0} a month while work is active; contested sites pause without payment."
                     : "  Money spent here becomes capacity in years, not months.");
 
             foreach (var programme in running)
             {
-                AddText("terminal-text-bright").text = IndustrialSystem.ProjectName(programme);
+                AddText("terminal-text-bright").text = IndustrialSystem.ProjectName(programme, GameController.Instance.State);
                 AddText("terminal-text-dim").text = IndustrialSystem.ProjectProgress(player, programme);
                 var captured = programme;
                 var cancelRow = new VisualElement();
@@ -283,6 +283,8 @@ namespace Brink.UI.Views
             }
             if (shown == 0) record.AppendLine("No recorded project events yet. Older projects may have only a general history entry.");
             AddText("terminal-text-dim").text = record.ToString();
+
+            BuildEnergySites(GameController.Instance.State);
 
             if (!IndustrialSystem.CanBegin(GameController.Instance.State,
                     GameController.Instance.State.playerCountryId, out string blocked))
@@ -339,6 +341,34 @@ namespace Brink.UI.Views
             foreach (var programme in player.economy.programmes)
                 total += IndustrialSystem.MonthlyCostFor(programme.scale);
             return total;
+        }
+
+        void BuildEnergySites(GameState state)
+        {
+            AddText("terminal-text-bright").text = "ENERGY SITE PROJECTS";
+            AddText("terminal-text-dim").text =
+                $"One build per energy region: {IndustrialSystem.MonthsFor(IndustrialScale.Maintenance)} funded months "
+                + $"at {IndustrialSystem.MonthlyCostFor(IndustrialScale.Maintenance):F0}/MO for +{IndustrialSystem.SiteEnergyPoints:0.##} "
+                + "energy-ceiling points before the national cap, not an immediate refill. Uses the Energy project slot. "
+                + "Contested work pauses unpaid; restored control resumes it. Ownership loss at monthly resolution abandons work. "
+                + "Cancellation or failed funding refunds nothing. Completed works stay with the ground; no national sector bonus.";
+            bool found = false;
+            foreach (var site in state.locations)
+            {
+                if (site.ownerId != state.playerCountryId || site.type != LocationType.EnergyRegion) continue;
+                found = true;
+                AddText("terminal-text-dim").text = IndustrialSystem.SiteReadout(state, site);
+                bool allowed = IndustrialSystem.CanBeginSite(state, state.playerCountryId, site.id, out string reason);
+                var row = MakeRow();
+                string id = site.id;
+                var button = new Button(() => { GameController.Instance.BeginEnergySiteProject(id); Refresh(); })
+                    { text = $"BUILD ENERGY WORKS [{IndustrialSystem.CpCost} CP]" };
+                button.AddToClassList("cmd-button");
+                button.SetEnabled(allowed);
+                row.Add(button);
+                if (!allowed) AddText("terminal-text-dim").text = reason;
+            }
+            if (!found) AddText("terminal-text-dim").text = "No energy region under our control.";
         }
 
         void BuildTrade(GameState state)

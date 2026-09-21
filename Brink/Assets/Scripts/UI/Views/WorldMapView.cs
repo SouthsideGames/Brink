@@ -108,6 +108,11 @@ namespace Brink.UI.Views
 
             AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("INSTALLATIONS", W);
             AddText().text = AsciiCountryMap.DescribeSites(state, selectedCountryId);
+            // Construction state is our government's record, not free foreign collection.
+            if (selectedCountryId == state.playerCountryId)
+                foreach (var site in state.locations)
+                    if (site.ownerId == selectedCountryId && site.type == LocationType.EnergyRegion)
+                        AddText("terminal-text-dim").text = IndustrialSystem.SiteReadout(state, site);
             BuildForeignPresence(state);
         }
 

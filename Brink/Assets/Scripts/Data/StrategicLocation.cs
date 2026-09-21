@@ -62,6 +62,9 @@ namespace Brink.Data
         public float defenseValue;     // 0..100 terrain/fortification advantage
         public float strategicValue;   // 0..100 what losing it costs the owner
 
+        /// <summary>Completed energy works stay with the ground. False in old saves.</summary>
+        public bool energyWorks;
+
         /// <summary>Garrison strength currently holding the location, 0..100.</summary>
         public float garrison;
 
