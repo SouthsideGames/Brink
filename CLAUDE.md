@@ -31,6 +31,19 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Visible research projects (#24).** Full saved labels, remaining funding at
+  saved terms and latest-five own research/acquisition records use existing
+  state and chronicle entries. No invented start date or funded-work total;
+  no new record count, funding, grant, maturity or foreign-disclosure rule.
+  Already-held work explicitly says it still costs and grants no second copy.
+  Acquisitions retain their actual source. Spec 13; #24 remains partial and
+  native Unity/device verification remain separate gates.
+  Author paired .NET runs: 1890/1858/31/1 versus 1879/1847/31/1, eleven
+  additions pass, no shared outcome/normalized-message changes, standard balance
+  identical. Focused 81/80/1 (existing source-path scan failure); seven mutations
+  caught at 1/1/4/4/4/3/4, baseline/no-op/restored 29/29 excluding that scan.
+  Chronicle text changes intentionally prevent full-save byte parity claims.
+
 - **Public-finance narrow-width repair.** The fiscal readout uses AddText rather
   than AddFigure, so long values and restructuring prose pass through the shared
   text policy. No truncation, financial logic or global Row formatter change.

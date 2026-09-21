@@ -43,10 +43,23 @@ namespace Brink.UI.Views
             sb.AppendLine($" RUNNING: {player.technology.programs.Count}/{TechnologySystem.MaxPrograms}");
 
             foreach (var program in player.technology.programs)
-                sb.AppendLine($"   {AsciiChart.Cell(program.label.ToUpperInvariant(), AsciiChart.NameWidth(W, 0.45f))} " +
-                              $"{program.monthsRemaining,3} MO REMAINING AT {program.monthlyCost:F0}/MO");
+                sb.AppendLine(TechnologySystem.ProjectReadout(player, program));
             if (player.technology.programs.Count == 0)
                 sb.AppendLine("   Nothing under way. Capability takes years and costs every month of them.");
+
+            sb.AppendLine("\n RECENT RESEARCH RECORD (LATEST 5)");
+            int shown = 0;
+            for (int i = state.chronicle.Count - 1; i >= 0 && shown < 5; i--)
+            {
+                var entry = state.chronicle[i];
+                if (entry.countryId != player.id || entry.category != ChronicleCategory.System || entry.text == null) continue;
+                if (!entry.text.StartsWith("RESEARCH AUTHORIZED:", System.StringComparison.Ordinal)
+                    && !entry.text.StartsWith("RESEARCH WOUND UP:", System.StringComparison.Ordinal)
+                    && !entry.text.StartsWith("CAPABILITY ACQUIRED:", System.StringComparison.Ordinal)) continue;
+                sb.AppendLine($"{entry.date.DisplayString}: {entry.text}");
+                shown++;
+            }
+            if (shown == 0) sb.AppendLine("No recorded research events yet. Older work may have only a general history entry.");
 
             sb.AppendLine();
             sb.AppendLine(" CAPABILITIES HELD");

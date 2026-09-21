@@ -1,9 +1,14 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -105,6 +110,106 @@ namespace Brink.Tests
                     Assert.NotNull(CapabilityCatalog.Find(prerequisite),
                         $"Dangling prerequisite {prerequisite}.");
             }
+        }
+
+        [Test]
+        public void ResearchProjectReadsSavedTermsWithoutInventingElapsedWork()
+        {
+            Assert.IsTrue(TechnologySystem.BeginResearch(state, turns, "CAP_PRECISION"));
+            var program = state.PlayerCountry.technology.programs.Single();
+            program.monthlyCost = 123f; program.monthsRemaining = 7;
+            state.PlayerCountry.resources.treasury = 122f;
+            string before = SaveSystem.ToJson(state);
+            string text = TechnologySystem.ProjectReadout(state.PlayerCountry, program);
+            StringAssert.Contains(program.label, text);
+            StringAssert.Contains("7 MONTHS AT 123/MO (861 AT SAVED TERMS)", text);
+            StringAssert.Contains("falls short", text);
+            StringAssert.Contains("not paused; no refund", text);
+            StringAssert.Contains("not equipment", text);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            var loaded = SaveSystem.FromJson(before);
+            Assert.AreEqual(text, TechnologySystem.ProjectReadout(loaded.PlayerCountry, loaded.PlayerCountry.technology.programs.Single()));
+            state.PlayerCountry.resources.treasury = 123f;
+            StringAssert.Contains("covers", TechnologySystem.ProjectReadout(state.PlayerCountry, program));
+            program.monthsRemaining = -1;
+            StringAssert.Contains("0 MONTHS", TechnologySystem.ProjectReadout(state.PlayerCountry, program));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ResearchRecordDistinguishesWoundUpAndAcquired(bool complete)
+        {
+            int cp = state.commandPoints.current;
+            Assert.IsTrue(TechnologySystem.BeginResearch(state, turns, "CAP_PRECISION"));
+            Assert.AreEqual(cp - TechnologySystem.StartResearchCost, state.commandPoints.current);
+            StringAssert.StartsWith("RESEARCH AUTHORIZED:", state.chronicle.Last().text);
+            Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(TechnologySystem.BeginResearch(state, turns, "CAP_PRECISION"));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            var program = state.PlayerCountry.technology.programs.Single();
+            program.monthsRemaining = 1;
+            float cost = program.monthlyCost;
+            state.PlayerCountry.resources.treasury = complete ? cost : cost - 1;
+            typeof(TechnologySystem).GetMethod("AdvancePrograms", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { state, state.PlayerCountry });
+            Assert.IsEmpty(state.PlayerCountry.technology.programs);
+            Assert.AreEqual(complete, state.PlayerCountry.technology.Has("CAP_PRECISION"));
+            Assert.AreEqual(complete ? 0f : cost - 1, state.PlayerCountry.resources.treasury);
+            var record = state.chronicle.Last();
+            StringAssert.StartsWith(complete ? "CAPABILITY ACQUIRED:" : "RESEARCH WOUND UP:", record.text);
+            StringAssert.Contains(complete ? "Developed" : "without a refund", record.text);
+            Assert.AreEqual(record.text, SaveSystem.FromJson(SaveSystem.ToJson(state)).chronicle.Last().text);
+        }
+
+        [TestCase(CapabilitySource.Developed)]
+        [TestCase(CapabilitySource.Shared)]
+        [TestCase(CapabilitySource.Observed)]
+        [TestCase(CapabilitySource.Stolen)]
+        public void AcquisitionRecordPreservesTheRealSource(CapabilitySource source)
+        {
+            var grant = typeof(TechnologySystem).GetMethod("Grant", BindingFlags.Static | BindingFlags.NonPublic);
+            grant.Invoke(null, new object[] { state, state.PlayerCountry, "CAP_PRECISION", source });
+            StringAssert.StartsWith("CAPABILITY ACQUIRED:", state.chronicle.Last().text);
+            StringAssert.Contains($"({source})", state.chronicle.Last().text);
+            Assert.AreEqual(source, state.PlayerCountry.technology.Find("CAP_PRECISION").source);
+            int count = state.chronicle.Count;
+            grant.Invoke(null, new object[] { state, state.PlayerCountry, "CAP_PRECISION", source });
+            Assert.AreEqual(count, state.chronicle.Count, "No invented second acquisition.");
+            var program = new ResearchProgram { capabilityId = "CAP_PRECISION", label = "Old work", monthsRemaining = 5, monthlyCost = 123f };
+            StringAssert.Contains("cannot grant a second copy", TechnologySystem.ProjectReadout(state.PlayerCountry, program));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void ResearchPanelKeepsFullNamesAndOnlyFiveOwnRecords(int columns)
+        {
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                Assert.IsTrue(TechnologySystem.BeginResearch(state, turns, "CAP_PRECISION"));
+                state.PlayerCountry.technology.programs.Single().label = "A deliberately long national research project name";
+                for (int n = 0; n < 7; n++) state.AddChronicle(ChronicleCategory.System, state.playerCountryId, "RESEARCH WOUND UP: marker " + n);
+                state.AddChronicle(ChronicleCategory.System, "CHN", "RESEARCH AUTHORIZED: FOREIGN HIDDEN");
+                state.AddChronicle(ChronicleCategory.System, state.playerCountryId, "Old generic research entry");
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new TechnologyView(); view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                var panel = view.Root.Query<Label>().ToList().Single(l => (l.text ?? "").Contains("RESEARCH PROGRAMMES"));
+                string text = Regex.Replace(panel.text, @"\s+", " ");
+                StringAssert.Contains("A deliberately long national research project name", text);
+                StringAssert.Contains("marker 6", text); StringAssert.Contains("marker 2", text);
+                StringAssert.DoesNotContain("marker 1", text); StringAssert.DoesNotContain("FOREIGN HIDDEN", text);
+                StringAssert.DoesNotContain("Old generic research entry", text);
+                Assert.Less(text.IndexOf("marker 6"), text.IndexOf("marker 2"));
+                foreach (string line in panel.text.Split('\n')) Assert.LessOrEqual(line.Length, columns, line);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); TerminalMetrics.ResetForTests(); }
         }
 
         [Test]

@@ -842,6 +842,12 @@ Technology remains capability-based rather than a sixth pillar or Civilization-s
 
 The capability catalogue has expanded substantially from the original skeleton and includes capabilities that unlock entirely new options as well as efficiencies.
 
+Research project readouts show full names, remaining funding at saved terms and
+recent own-country authorization, funding-failure and acquisition records.
+Acquisition source remains explicit: receiving knowledge is not the same as
+developing it. No start date or elapsed work is invented from data the save does
+not retain. This is #24 presentation work, not physical construction (spec 13).
+
 Each pillar has access to a decisive strategic instrument after years of preparation and the required national capability:
 
 - Military — Strategic Destruction
