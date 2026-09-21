@@ -466,14 +466,14 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Held policy sets Liberty blocs' resting goodwill; all other concerns
+        /// Held policy and emergency authority set Liberty blocs' resting goodwill; all other concerns
         /// remain neutral. This reads the persisted concern, not the regime or
         /// name, so constitutional changes cannot erase a constituency's views.
         /// </summary>
-        public static float FactionDispositionTarget(OppositionTheme theme, CivicPosture posture)
+        public static float FactionDispositionTarget(OppositionTheme theme, CivicPosture posture, bool emergencyPowers = false)
             => theme != OppositionTheme.Liberty ? 50f
-             : posture == CivicPosture.Open ? 65f
-             : posture == CivicPosture.Restrictive ? 35f : 50f;
+             : (posture == CivicPosture.Open ? 65f
+             : posture == CivicPosture.Restrictive ? 35f : 50f) - (emergencyPowers ? 10f : 0f);
 
         // The existing monthly recovery, not a reward for switching policy.
         // Paid goodwill can exceed the target and still fades back toward it.
@@ -481,7 +481,7 @@ namespace Brink.Core
         {
             foreach (var faction in gov.factions)
                 faction.disposition = Approach(faction.disposition,
-                    FactionDispositionTarget(faction.theme, gov.civicPosture), 0.02f);
+                    FactionDispositionTarget(faction.theme, gov.civicPosture, gov.emergencyPowers), 0.02f);
         }
 
         // ---------- constitutional change (spec 05 §2f) ----------
@@ -1293,7 +1293,8 @@ namespace Brink.Core
                 if (country.isPlayer)
                 {
                     state.AddNotification(NotificationClass.Advisory, "EMERGENCY POWERS LAPSED",
-                        "Extraordinary authority has expired. Normal command capacity restored.", country.id,
+                        "Extraordinary authority has expired. Normal command capacity restored. " +
+                        "Liberty blocs' goodwill will now drift toward the ordinary civic-policy resting level; lost goodwill is not instantly restored.", country.id,
                         desk: ReportingDesk.Government);
                 }
                 state.AddChronicle(ChronicleCategory.Political, country.id,
@@ -1882,7 +1883,9 @@ namespace Brink.Core
             state.commandPoints.current += 2;
 
             state.AddNotification(NotificationClass.Priority, "EMERGENCY POWERS DECLARED",
-                $"Extraordinary authority in force for {EmergencyPowersDuration} months. +2 CP per month.", player.id);
+                $"Extraordinary authority in force for {EmergencyPowersDuration} months. +2 CP per month. " +
+                $"While it lasts, existing Liberty blocs' goodwill drifts toward {FactionDispositionTarget(OppositionTheme.Liberty, gov.civicPosture, true):F0}/100 " +
+                "(10 below the ordinary civic-policy resting level). No bloc goodwill or influence is transferred immediately; expiry restores the target, not lost goodwill.", player.id);
             state.AddChronicle(ChronicleCategory.Political, player.id,
                 "Emergency powers declared.", Publicity.Public);
             ProgressionSystem.RecordInitiative(state);
@@ -2158,7 +2161,8 @@ namespace Brink.Core
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Priority, "CIVIC POSTURE CHANGED",
                     $"The state now holds its society on {PostureText(posture)} terms. " +
-                    $"Existing Liberty blocs' goodwill will move gradually toward {FactionDispositionTarget(OppositionTheme.Liberty, posture):F0}/100; " +
+                    $"Existing Liberty blocs' goodwill will move gradually toward {FactionDispositionTarget(OppositionTheme.Liberty, posture, gov.emergencyPowers):F0}/100; " +
+                    (gov.emergencyPowers ? "this includes the 10-point reduction while emergency powers remain in force. " : "") +
                     "other concerns return toward 50. No bloc goodwill or influence is transferred by this order.",
                     countryId, desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, countryId,
