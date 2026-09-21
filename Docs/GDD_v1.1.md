@@ -777,8 +777,11 @@ sets Liberty blocs' resting goodwill: Open 65, Standard 50, Restrictive 35,
 approached at 2% of the gap each month. Other concerns retain neutral 50.
 Switching grants no immediate goodwill; bought support above the resting level
 still fades. Persisted concerns, not current regime labels, determine responses
-for player and foreign governments alike. Further policy reactions and
-regime-aware bloc names remain future work (spec 05 §2g).
+for player and foreign governments alike. Constitutional settlements and coups
+rename authored blocs to fit elective or non-elective institutions without
+replacing their concerns, goodwill or influence. Old-to-new records preserve
+continuity; custom identities survive. Further policy reactions remain future
+work (spec 05 §2g).
 
 Domestic politics now contains an **Opposition** with a concrete case and theme—Hardship, War, Corruption, Liberty or Drift. The operator may concede or confront it, but the correct instrument depends on what the public is actually angry about; confronting a visible hardship or unpopular war can make the case stronger.
 

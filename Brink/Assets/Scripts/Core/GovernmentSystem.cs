@@ -221,7 +221,11 @@ namespace Brink.Core
         public static void EnsureFactions(GameState state, CountryState country)
         {
             var gov = country.government;
-            if (gov.factions.Count > 0) return;
+            if (gov.factions.Count > 0)
+            {
+                RefreshFactionNames(state, country);
+                return;
+            }
             gov.factions.AddRange(FactionsFor(state, country));
         }
 
@@ -241,14 +245,14 @@ namespace Brink.Core
 
             factions.Add(new Faction
             {
-                name = gov.IsElective ? "THE CHAMBER MAJORITY" : "THE PARTY APPARATUS",
+                name = FactionName(OppositionTheme.Drift, gov.type),
                 theme = OppositionTheme.Drift,
                 share = FactionBaseWeight(OppositionTheme.Drift),
                 disposition = Clamp(Vary(58f))
             });
             factions.Add(new Faction
             {
-                name = gov.IsElective ? "THE REFORM BENCH" : "THE SECURITY ORGANS",
+                name = FactionName(institutional, gov.type),
                 theme = institutional,
                 share = FactionBaseWeight(institutional),
                 disposition = Clamp(Vary(48f))
@@ -264,6 +268,47 @@ namespace Brink.Core
         }
 
         public const float FactionShareAdjustmentRate = 0.02f;
+
+        static string FactionName(OppositionTheme theme, GovernmentType type)
+        {
+            bool elective = type == GovernmentType.PresidentialRepublic || type == GovernmentType.ParliamentaryRepublic;
+            switch (theme)
+            {
+                case OppositionTheme.Drift:
+                    return elective ? "THE CHAMBER MAJORITY"
+                        : type == GovernmentType.Monarchy ? "THE ROYAL COURT"
+                        : type == GovernmentType.CentralizedRepublic ? "THE STATE APPARATUS" : "THE PARTY APPARATUS";
+                case OppositionTheme.Liberty: return elective ? "THE REFORM BENCH" : "THE REFORM CIRCLE";
+                case OppositionTheme.Corruption: return elective ? "THE OVERSIGHT BLOC" : "THE SECURITY ORGANS";
+                default: return null;
+            }
+        }
+
+        // Mutating transition/legacy-save repair, never a view read. Recognise
+        // authored aliases by concern: custom names and political history survive.
+        public static void RefreshFactionNames(GameState state, CountryState country)
+        {
+            var gov = country.government;
+            var changes = new System.Collections.Generic.List<string>();
+            foreach (var faction in gov.factions)
+            {
+                string name = FactionName(faction.theme, gov.type);
+                if (name == null || name == faction.name) continue;
+                bool authored = false;
+                foreach (GovernmentType type in Enum.GetValues(typeof(GovernmentType)))
+                    if (faction.name == FactionName(faction.theme, type)) authored = true;
+                if (!authored) continue;
+                changes.Add($"{faction.name} → {name}");
+                faction.name = name;
+            }
+            if (changes.Count == 0) return;
+            string body = string.Join("; ", changes) +
+                ". These are the same blocs under the current institutions; concerns, goodwill and influence are unchanged by the renaming.";
+            state.AddChronicle(ChronicleCategory.Political, country.id, body);
+            if (country.isPlayer)
+                state.AddNotification(NotificationClass.Wire, "BLOC IDENTITIES UPDATED", body,
+                    country.id, desk: ReportingDesk.Government);
+        }
 
         // The authored founding balance, not a copy of today's shares: pressure
         // must have a resting point and be reversible, rather than compounding.
@@ -565,6 +610,7 @@ namespace Brink.Core
         {
             var was = gov.type;
             gov.type = gov.constitutionalTarget;
+            RefreshFactionNames(state, country);
             gov.constitutionalMonthsRemaining = 0;
             gov.constitutionalSupport = 0f;
 

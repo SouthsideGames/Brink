@@ -924,8 +924,8 @@ that do not change that displayed precision do not generate traffic. This is
 ordinary Government-desk reporting, not a new unfilterable interruption.
 
 Numbers are initial authored tuning, requiring independent Unity balance and
-device verification. Old identities remain through regime changes; broader
-policy reactions beyond the civic slice below and regime-aware names remain deferred. World trajectories
+device verification. Bloc continuity survives regime changes (naming below); broader
+policy reactions beyond the civic slice below remain deferred. World trajectories
 can change because actual backing targets now read evolving influence.
 
 **Held civic policy (#23, fourth slice).** Liberty constituencies now judge
@@ -966,9 +966,38 @@ do not seed old saves. Existing influence notices now explicitly explain
 shared-pool dilution, rather than suggesting an absent own pressure caused it.
 No new recurring goodwill notification is added.
 
-Native Unity balance and device verification remain separate gates. Regime-aware
-identities and reactions to other policy instruments remain outside this slice;
-roadmap #23 is still partial.
+Native Unity balance and device verification remain separate gates. Reactions
+to other policy instruments remain outside this slice; roadmap #23 is still partial.
+
+**Regime-aware identities (#23, fifth slice).** The existing ledger survives a
+constitutional settlement or successful coup, including its object order,
+concerns, shares and dispositions. Only recognised authored names change:
+
+| Persisted concern | Elective institutions | Non-elective institutions |
+|---|---|---|
+| Drift | THE CHAMBER MAJORITY | THE PARTY APPARATUS (dominant-party), THE STATE APPARATUS (centralized), THE ROYAL COURT (monarchy) |
+| Liberty | THE REFORM BENCH | THE REFORM CIRCLE |
+| Corruption | THE OVERSIGHT BLOC | THE SECURITY ORGANS |
+
+THE PROVINCES and other concerns keep their names. This is institutional
+vocabulary, not a new faction or a claim that all non-elective regimes are
+identical. A retained Liberty constituency never becomes a Corruption bloc:
+policy reactions still follow the persisted concern. Custom names and names
+not matching that concern's authored aliases are untouched.
+
+Both successful transition paths refresh immediately; failure does not. An
+old save with obsolete authored names is repaired on its next `EnsureFactions`
+mutation (monthly update, bargain or bloc reaction), never by `FactionsFor` or
+opening a view. An empty ledger stays empty at transition and is seeded later
+using the current institutions. Renaming draws no randomness and has no cost,
+reward, backing change, new field or save-version bump. Repeated repair is inert.
+
+Each actual rename batch appends one secret political chronicle entry listing
+old → new names, leaving earlier entries intact; only the player receives its
+Government-desk Wire notice. Foreign internal identities are not broadcast.
+The notice explicitly distinguishes renaming from changed concerns, goodwill
+or influence. Existing panels, COURT controls and action receipts read the
+persisted names. Hardware layout remains a device gate; #23 remains partial.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
@@ -997,7 +1026,7 @@ Coups over 40 years fell from 95–114 to 24–48 on the audit's seeds.
   `approval`, **move the target, not the value** — all five drift.
 - **Parties and factions** — leader-faction arithmetic (§2b-1), the playable
   bloc ledger, patronage/inquiry reactions, held-civic-policy goodwill and
-  condition-driven influence (§2g) exist. Further policy reactions and regime-aware identities extend them,
+  condition-driven influence and regime-aware names (§2g) exist. Further policy reactions extend them,
   rather than requiring a parallel faction model.
 - **Secession and state dissolution** — civil conflict currently degrades a state
   but never splits it. Border change (GDD §16) is the missing piece.
