@@ -1924,6 +1924,14 @@ namespace Brink.Core
         /// </summary>
         public static bool BuildPoliticalSupportBy(GameState state, string countryId,
             OppositionTheme? courting)
+            => BuildPoliticalSupportBy(state, countryId, courting, null);
+
+        /// <summary>Court exactly one ledger entry, including a minority sharing another bloc's concern.</summary>
+        public static bool BuildPoliticalSupportForFactionBy(GameState state, string countryId, int factionIndex)
+            => BuildPoliticalSupportBy(state, countryId, null, factionIndex);
+
+        static bool BuildPoliticalSupportBy(GameState state, string countryId,
+            OppositionTheme? courting, int? factionIndex)
         {
             var country = state.FindCountry(countryId);
             if (country == null) return false;
@@ -1931,13 +1939,17 @@ namespace Brink.Core
             // an undirected payment. Validate before spending or seeding old saves.
             if (courting.HasValue && !FactionsFor(state, country).Exists(f => f.theme == courting.Value))
                 return false;
+            if (factionIndex.HasValue && (factionIndex.Value < 0 || factionIndex.Value >= FactionsFor(state, country).Count))
+                return false;
             if (!SpendPoliticalCapitalBy(state, countryId, BuildSupportCost, "Political bargaining"))
                 return false;
 
             var gov = country.government;
             EnsureFactions(state, country);
 
-            if (courting.HasValue) CourtFaction(gov, courting.Value, 9f);
+            var selected = factionIndex.HasValue ? gov.factions[factionIndex.Value]
+                : courting.HasValue ? FactionFor(gov, courting.Value) : null;
+            if (selected != null) selected.disposition = Clamp(selected.disposition + 9f);
             else foreach (var faction in gov.factions)
                 faction.disposition = Clamp(faction.disposition + 2f);
 
@@ -1949,8 +1961,8 @@ namespace Brink.Core
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory,
                     gov.IsElective ? "LEGISLATIVE BARGAIN STRUCK" : "ELITE ACCOMMODATION REACHED",
-                    courting.HasValue
-                        ? $"{FactionFor(gov, courting.Value).name} has been courted. Other blocs' dispositions are unchanged. "
+                    selected != null
+                        ? $"{selected.name} has been courted. Other blocs' dispositions are unchanged. "
                           + "The bargain also strengthens general backing; both gains fade unless maintained."
                         : gov.IsElective
                         ? "Concessions traded for votes. The chamber will carry us further than it did."

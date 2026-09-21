@@ -31,6 +31,14 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Exact named bloc courting (#23 correctness follow-up).** COURT buttons
+  capture their own ledger index, so duplicate concerns no longer redirect a
+  minority's button to the largest bloc. Shared application keeps +9/clamping,
+  2 PC, backing, rewards and save behavior; legacy theme callers retain their
+  largest-bloc rule. Both entry points validate before spend/seeding, and the
+  controller validates before authority. No new identity field or policy tuning.
+  Spec 05 §2g. Other review notes and hardware remain separate.
+
 - **Regime-aware bloc identities (#23, fifth slice).** Constitutional completion
   and successful coups refresh authored elective/non-elective names without
   reseeding or changing concerns, goodwill or shares. Custom names survive.

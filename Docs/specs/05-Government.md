@@ -999,6 +999,24 @@ The notice explicitly distinguishes renaming from changed concerns, goodwill
 or influence. Existing panels, COURT controls and action receipts read the
 persisted names. Hardware layout remains a device gate; #23 remains partial.
 
+**Exact named courting (#23 correctness follow-up).** Each COURT control now
+captures its ledger index, rather than passing only its concern. Two blocs
+sharing a theme can be courted independently, including a smaller constituency;
+the receipt identifies the actual selected entry. Existing theme-based callers
+still choose the largest matching bloc, and general bargaining still raises
+every disposition by 2. The exact route shares the existing bargain application:
++9 clamped disposition on that entry only, unchanged shares, normal diminishing
+brokered support, 2 PC, one initiative, nominal 10 XP and player autosave.
+
+Indices are validated before constitutional approval, spending or lazy seeding
+at the controller and before spending/seeding at the actor-generic entry point.
+An empty ledger uses the same deterministic preview and seed order. This is a
+current-ledger index, not a new persistent ID: normal production paths retain
+ledger order. The UI captures a separate index per button, not the advancing
+loop counter. No policy weight, drift, cost, reward or AI choice was retuned.
+Duplicate-theme targeting is closed; the other recorded review notes remain
+separate, as do device testing and any future multi-seed policy-tuning gate.
+
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 
 `RegimeSystem.UpdateConspiracy` decayed conspiracy *only* below a pressure of
