@@ -775,6 +775,9 @@ pressure restores the founding balance. Courting buys goodwill, not power, and
 influence is not a prediction of electoral seats. Held civic policy separately
 sets Liberty blocs' resting goodwill: Open 65, Standard 50, Restrictive 35,
 approached at 2% of the gap each month. Other concerns retain neutral 50.
+Emergency authority lowers Liberty's resting target by ten while in force,
+through that same drift. Declaring it grants no immediate bloc movement;
+expiry restores the ordinary target, not the goodwill lost while it was held.
 Switching grants no immediate goodwill; bought support above the resting level
 still fades. Persisted concerns, not current regime labels, determine responses
 for player and foreign governments alike. Constitutional settlements and coups

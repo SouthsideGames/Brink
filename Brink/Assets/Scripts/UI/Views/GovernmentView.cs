@@ -192,7 +192,7 @@ namespace Brink.UI.Views
             AddText().text = "These are constituencies inside our government, not Cabinet officials or the public opposition. "
                 + "Court one for concentrated support, or use the general bargain below to reach everyone. "
                 + "Courting changes goodwill, not power. Influence shifts gradually with domestic pressures; easing them restores the founding balance. "
-                + "Goodwill drifts toward the held civic policy's resting level; paid support above it fades.";
+                + "Goodwill drifts toward the held policy's resting level, including emergency authority; paid support above it fades.";
             AddText().text = $" Current bloc contribution to {(gov.IsElective ? "legislative support" : "elite cohesion")} target: "
                 + $"{GovernmentSystem.FactionSupport(gov):+0.0;-0.0;0.0}. This is not an immediate change in the total backing bar.";
             if (gov.factions.Count == 0)
@@ -210,8 +210,11 @@ namespace Brink.UI.Views
                 AddText().text = $" Goodwill under held civic policy: OPEN {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Open):F0}, "
                     + $"STANDARD {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Standard):F0}, "
                     + $"RESTRICTIVE {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Restrictive):F0} (out of 100). "
-                    + $"Current resting level {GovernmentSystem.FactionDispositionTarget(theme, gov.civicPosture):F0}; each month closes 2% of the gap. "
+                    + $"Current resting level {GovernmentSystem.FactionDispositionTarget(theme, gov.civicPosture, gov.emergencyPowers):F0}; each month closes 2% of the gap. "
                     + "Switching policy grants no immediate goodwill. This is disposition, not influence.";
+                if (theme == OppositionTheme.Liberty)
+                    AddText().text = " Emergency powers lower these ordinary resting levels by 10 while in force. "
+                        + "Expiry restores the target, not lost goodwill; recovery takes time.";
                 AddText().text = $" Influence if current conditions persist: {influenceTargets[factionIndex++] * 100f:F1}%. "
                     + $"Driver: {GovernmentSystem.FactionInfluenceDriver(theme)}; extra pressure "
                     + (GovernmentSystem.FactionInfluencePressure(player, theme) > 0f ? "present." : "absent.")
@@ -249,6 +252,8 @@ namespace Brink.UI.Views
             if (gov.emergencyPowers)
                 Block(emergency, "EMERGENCY AUTHORITY IS ALREADY IN FORCE.");
             row1.Add(emergency);
+            AddText("terminal-text-dim").text = "Emergency authority also lowers Liberty blocs' goodwill target by 10 while it lasts, "
+                + "with the same monthly 2% drift. Other bloc concerns are unchanged. Declaring it transfers no immediate bloc goodwill or influence.";
 
             if (gov.AllowsEarlyElection)
                 AddButton(row1, $"CALL EARLY ELECTION [{GovernmentSystem.EarlyElectionCost:F0} PC]", "danger",

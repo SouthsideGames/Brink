@@ -855,6 +855,166 @@ namespace Brink.Tests
             => typeof(GovernmentSystem).GetMethod("DriftFactions", BindingFlags.Static | BindingFlags.NonPublic)
                 .Invoke(null, new object[] { gov });
 
+        [TestCase(CivicPosture.Open, 55f)]
+        [TestCase(CivicPosture.Standard, 40f)]
+        [TestCase(CivicPosture.Restrictive, 25f)]
+        public void EmergencyGoodwillTargetIsPureAndLimitedToLiberty(CivicPosture posture, float target)
+        {
+            string before = SaveSystem.ToJson(state);
+            Assert.AreEqual(target, GovernmentSystem.FactionDispositionTarget(OppositionTheme.Liberty, posture, true));
+            Assert.AreEqual(target + 10, GovernmentSystem.FactionDispositionTarget(OppositionTheme.Liberty, posture, false));
+            foreach (var theme in new[] { OppositionTheme.Drift, OppositionTheme.Hardship,
+                OppositionTheme.Corruption, OppositionTheme.War, (OppositionTheme)999 })
+                Assert.AreEqual(50, GovernmentSystem.FactionDispositionTarget(theme, posture, true));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(GovernmentType.PresidentialRepublic)]
+        [TestCase(GovernmentType.ParliamentaryRepublic)]
+        [TestCase(GovernmentType.DominantPartyState)]
+        [TestCase(GovernmentType.CentralizedRepublic)]
+        [TestCase(GovernmentType.Monarchy)]
+        public void EmergencyGoodwillUsesPersistedConcernsForEveryActor(GovernmentType type)
+        {
+            foreach (var c in state.countries)
+            {
+                var g = c.government;
+                g.type = type; g.civicPosture = CivicPosture.Standard;
+                g.leader.age = 40; g.legislativeSupport = g.eliteCohesion = 80;
+                PushElectionsFarOut(g, state.date);
+                g.emergencyPowers = true; g.emergencyPowersMonthsRemaining = 6;
+                g.factions.Clear();
+                g.factions.Add(new Faction { name = "First", theme = OppositionTheme.Liberty, share = .2f, disposition = 50 });
+                g.factions.Add(new Faction { name = "Second", theme = OppositionTheme.Liberty, share = .3f, disposition = 50 });
+                g.factions.Add(new Faction { name = "Not pro-emergency", theme = OppositionTheme.Corruption, share = .5f, disposition = 50 });
+            }
+            GovernmentSystem.MonthlyUpdate(state);
+            foreach (var c in state.countries)
+            {
+                var g = c.government;
+                Assert.AreEqual(type, g.type);
+                Assert.AreEqual(49.8f, g.factions[0].disposition, .00001);
+                Assert.AreEqual(49.8f, g.factions[1].disposition, .00001);
+                Assert.AreEqual(50, g.factions[2].disposition);
+                Assert.Less(GovernmentSystem.FactionSupport(g), 0);
+                Assert.AreEqual(5, g.emergencyPowersMonthsRemaining);
+            }
+        }
+
+        [Test]
+        public void EmergencyExpiryRestoresTheTargetNotGoodwillAndSaveResumeMatches()
+        {
+            var g = state.PlayerCountry.government;
+            g.type = GovernmentType.PresidentialRepublic;
+            g.leader.age = 40; g.legislativeSupport = 80;
+            PushElectionsFarOut(g, state.date);
+            g.civicPosture = CivicPosture.Standard;
+            g.emergencyPowers = true; g.emergencyPowersMonthsRemaining = 6;
+            g.factions.Clear();
+            g.factions.Add(new Faction { name = "Reformers", theme = OppositionTheme.Liberty, share = 1, disposition = 50 });
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(SaveSystem.ToJson(state), SaveSystem.ToJson(loaded));
+            float expected = 50;
+            for (int month = 1; month <= 12; month++)
+            {
+                // Drift precedes expiry: the sixth (last authorised) month still counts.
+                expected += ((month <= 6 ? 40 : 50) - expected) * .02f;
+                GovernmentSystem.MonthlyUpdate(state);
+                GovernmentSystem.MonthlyUpdate(loaded);
+                Assert.AreEqual(expected, g.factions[0].disposition, .00001, "month " + month);
+                Assert.AreEqual(month < 6, g.emergencyPowers);
+                if (month == 6)
+                {
+                    Assert.Less(g.factions[0].disposition, 50);
+                    StringAssert.Contains("not instantly restored", state.notifications.Last(n => n.title == "EMERGENCY POWERS LAPSED").body);
+                }
+                state.date = state.date.NextMonth(); loaded.date = loaded.date.NextMonth();
+                Assert.AreEqual(SaveSystem.ToJson(state), SaveSystem.ToJson(loaded));
+            }
+        }
+
+        [Test]
+        public void SustainedEmergencyGoodwillIsBoundedAndCannotWriteAnythingElse()
+        {
+            var g = state.PlayerCountry.government;
+            g.factions.Clear();
+            g.factions.Add(new Faction { name = "Custom", theme = OppositionTheme.Liberty, share = .4f, disposition = 100 });
+            g.civicPosture = CivicPosture.Restrictive; g.emergencyPowers = true;
+            string before = SaveSystem.ToJson(state);
+            for (int i = 0; i < 600; i++) ResolveGoodwill(g);
+            Assert.AreEqual(25, g.factions[0].disposition, .001);
+            g.emergencyPowers = false;
+            ResolveGoodwill(g);
+            Assert.AreEqual(25.2f, g.factions[0].disposition, .001);
+            for (int i = 0; i < 600; i++) ResolveGoodwill(g);
+            Assert.AreEqual(35, g.factions[0].disposition, .001);
+            g.emergencyPowers = true; g.factions[0].disposition = 100;
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "no shares, costs, rewards, identity or traffic changes in drift");
+        }
+
+        [Test]
+        public void DeclaringEmergencyDoesNotSeedOrBuyGoodwillAndPostureNoticeUsesActualTarget()
+        {
+            WithController(() =>
+            {
+                var g = state.PlayerCountry.government;
+                g.type = GovernmentType.PresidentialRepublic; g.civicPosture = CivicPosture.Standard;
+                g.emergencyPowers = false; g.factions.Clear();
+                state.politicalCapital = 0;
+                string refused = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.DeclareEmergencyPowers());
+                Assert.AreEqual(refused, SaveSystem.ToJson(state));
+                state.politicalCapital = 20;
+                float cost = GovernmentSystem.EmergencyPowersCost * 1.4f *
+                    (1 - TechnologySystem.Effectiveness(state.PlayerCountry, "CAP_EMERGENCY") * .35f);
+                int initiative = state.initiativesThisYear;
+                Assert.IsTrue(GameController.Instance.DeclareEmergencyPowers());
+                Assert.AreEqual(20 - cost, state.politicalCapital, .0001);
+                Assert.AreEqual(initiative + 1, state.initiativesThisYear);
+                Assert.AreEqual(0, g.factions.Count);
+                StringAssert.Contains("40/100", state.notifications.Last(n => n.title == "EMERGENCY POWERS DECLARED").body);
+                Assert.IsTrue(SaveSystem.Load().PlayerCountry.government.emergencyPowers);
+                string active = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.DeclareEmergencyPowers());
+                Assert.AreEqual(active, SaveSystem.ToJson(state));
+                GovernmentSystem.EnsureFactions(state, state.PlayerCountry);
+                var before = g.factions.Select(f => f.disposition).ToArray();
+                Assert.IsTrue(GameController.Instance.SetCivicPosture(CivicPosture.Open));
+                StringAssert.Contains("55/100", state.notifications.Last(n => n.title == "CIVIC POSTURE CHANGED").body);
+                CollectionAssert.AreEqual(before, g.factions.Select(f => f.disposition));
+            });
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void EmergencyBlocTargetsAreExplainedBeforeOrderingAndWhileActive(int columns)
+        {
+            WithController(() =>
+            {
+                var g = state.PlayerCountry.government;
+                g.type = GovernmentType.PresidentialRepublic; g.civicPosture = CivicPosture.Standard; g.factions.Clear();
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new GovernmentView(); view.Refresh(); // existing chamber setup
+                foreach (bool active in new[] { false, true })
+                {
+                    g.emergencyPowers = active;
+                    string before = SaveSystem.ToJson(state);
+                    view.Refresh(); view.Refresh();
+                    Assert.AreEqual(before, SaveSystem.ToJson(state));
+                    var labels = view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text"));
+                    string text = System.Text.RegularExpressions.Regex.Replace(string.Join(" ", labels.Select(l => l.text)), @"\s+", " ");
+                    StringAssert.Contains("Current resting level " + (active ? "40" : "50"), text);
+                    StringAssert.Contains("lower these ordinary resting levels by 10", text);
+                    StringAssert.Contains("Expiry restores the target, not lost goodwill", text);
+                    StringAssert.Contains("Other bloc concerns are unchanged", text);
+                    foreach (var label in labels)
+                        foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                }
+            });
+        }
+
         [TestCase(CivicPosture.Open, 65f)]
         [TestCase(CivicPosture.Standard, 50f)]
         [TestCase(CivicPosture.Restrictive, 35f)]

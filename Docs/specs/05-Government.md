@@ -349,6 +349,8 @@ capacity, or the `AuthoritySystem` distribution (§2d).
 (non-elective) and stability −2 on declaration, grant an immediate +2 CP, and
 drain approval −0.8, unity −0.4 and legislative support −1.2 every month they
 remain in force. They do not survive a change of leadership or a coup.
+While in force they also lower Liberty blocs' civic-policy goodwill target by
+10, through the ordinary monthly drift (§2g below), not an immediate penalty.
 
 **The monthly +2 CP is derived, not baked in.** It is computed each month in
 `TurnManager` from `government.emergencyPowers`. An earlier build added it
@@ -1016,6 +1018,50 @@ ledger order. The UI captures a separate index per button, not the advancing
 loop counter. No policy weight, drift, cost, reward or AI choice was retuned.
 Duplicate-theme targeting is closed; the other recorded review notes remain
 separate, as do device testing and any future multi-seed policy-tuning gate.
+
+**Held emergency authority (#23, next policy slice).** Liberty blocs judge
+extraordinary authority for as long as it is held, not just on the declaration.
+The existing `FactionDispositionTarget` combines civic posture with the existing
+`emergencyPowers` flag:
+
+| Liberty resting goodwill | Open | Standard | Restrictive |
+|---|---|---|---|
+| Ordinary authority | 65 | 50 | 35 |
+| Emergency authority | 55 | 40 | 25 |
+
+The ten-point reduction is authored initial tuning, smaller than the existing
+fifteen-point civic-posture step; it requires multi-seed sustained-policy review,
+not merely the standard bots' balance report. Other concerns, including
+Corruption and unknown values, still target 50. No bloc is presumed to favor
+emergency rule from its name or government type. Duplicate and retained Liberty
+blocs obey the same rule, including in foreign/non-elective governments if the
+flag is present. Declaring emergency powers remains an operator-only instrument;
+this adds no AI caller.
+
+This replaces the resting target in the existing 2% monthly drift, never stacks
+a second drift or a flat monthly subtraction. A bloc at 50 under Standard
+emergency rule moves to 49.8 in the first month. Repeated months approach 40
+rather than draining forever. Bought goodwill above the target still fades.
+The government month drifts before decrementing emergency duration, so the last
+authorized month counts. Expiry, leadership replacement or constitutional change
+clears the flag through existing paths; the next drift uses the ordinary target.
+Lost goodwill does not instantly return. No new field, counter, migration or
+pipeline hook is added; existing saves already preserve the required state.
+
+Declaration changes no bloc immediately and does not seed an empty ledger. It
+retains its existing PC cost, CP benefit, authority, duration, initiative, XP and
+autosave. Civic changes while an emergency is active report the combined target.
+The bloc panel and emergency control explain the effect before ordering;
+declaration and lapse notices distinguish a restored target from restored
+goodwill. Names, concerns, influence rules and shares are not directly changed.
+Changed goodwill can affect backing and later world outcomes through existing
+systems.
+
+Author-side comparison uses five seeds, three held civic postures, and never /
+one declaration / affordable renewal for 120 months followed by 60 recovery
+months on both base and feature. It is not a native Unity certification; Claude
+must independently verify the committed tree. Hardware testing is deferred by
+Kareem until #23 is fully implemented. This slice alone does not close #23.
 
 ### 7b. Conspiracy has a resting point (core stability repair, 2026-09)
 

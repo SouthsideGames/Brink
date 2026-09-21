@@ -31,6 +31,18 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Held emergency authority (#23, policy extension).** The existing goodwill
+  target reads `emergencyPowers`: Liberty targets are 55/40/25 instead of
+  65/50/35, with the same once-monthly 2% drift. Other concerns remain at 50;
+  names and regimes do not imply approval of emergency rule. The last authorized
+  month counts, then recovery follows the ordinary civic target without an
+  instant refund. No declaration-time bloc mutation, new state or AI caller;
+  costs, rewards, duration and command benefit are unchanged. Panel and notices
+  explain the combined target. Spec 05 §2g; native verification belongs to Claude.
+  Sustained-policy comparison must cover multiple seeds and recovery, not only
+  standard bots. Kareem has deferred hardware testing until #23 is fully
+  implemented; this slice does not declare it complete.
+
 - **Exact named bloc courting (#23 correctness follow-up).** COURT buttons
   capture their own ledger index, so duplicate concerns no longer redirect a
   minority's button to the largest bloc. Shared application keeps +9/clamping,
