@@ -691,7 +691,7 @@ namespace Brink.Core
             return FinishFactionBargain(GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc));
         }
 
-        public bool CourtFaction(int factionIndex)
+        public bool CourtFactionAtIndex(int factionIndex)
         {
             if (!IsRunning || factionIndex < 0 || factionIndex >= GovernmentSystem.FactionsFor(State, State.PlayerCountry).Count)
                 return false;

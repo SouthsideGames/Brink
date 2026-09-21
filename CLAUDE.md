@@ -31,6 +31,24 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Bloc hardening (#23).** `FactionsFor` returns detached entries as well as a
+  detached list, whether previewed or already seeded. The exact paid controller
+  route is `CourtFactionAtIndex`; the theme route retains its existing name.
+  Both names are registered under the existing COURT command-index entry.
+  Policy previews and application share the final clamp, and nonzero applied
+  changes below .01 print signed `<0.01`, not signed zero. COURT controls reserve
+  four columns for padding and abbreviate only the button name; the full ledger
+  identity stays above and in the receipt. Neutral concerns explain their single
+  50 target without three identical posture values. No political value changes.
+  The legacy uncosted theme helper remains explicitly documented for compatibility
+  and arithmetic tests, not gameplay. Native verification and hardware remain
+  separate gates; this hardening does not alone declare #23 complete.
+  Author comparison: five seeds, USA/China, all three difficulties, Standard
+  posture, never/once/repeated declarations, 180 months: all 90 final saves
+  hash-identical base versus hardening under .NET. This broadens regression
+  coverage, not certification of the emergency penalty's tuning; China has no
+  Liberty bloc in these arms and declaration schedules retain all other effects.
+
 - **Held emergency authority (#23, policy extension).** The existing goodwill
   target reads `emergencyPowers`: Liberty targets are 55/40/25 instead of
   65/50/35, with the same once-monthly 2% drift. Other concerns remain at 50;

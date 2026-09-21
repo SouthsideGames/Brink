@@ -112,7 +112,7 @@ namespace Brink.Tests
                 state.PlayerCountry.government.type = GovernmentType.PresidentialRepublic;
                 state.authorizedPillarMask = 0;
                 string before = SaveSystem.ToJson(state);
-                Assert.IsFalse(GameController.Instance.CourtFaction(index));
+                Assert.IsFalse(GameController.Instance.CourtFactionAtIndex(index));
                 Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportForFactionBy(state, state.playerCountryId, index));
                 Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportForFactionBy(state, "ABSENT", index));
                 Assert.AreEqual(before, SaveSystem.ToJson(state));
@@ -130,17 +130,17 @@ namespace Brink.Tests
                 gov.factions.Add(new Faction { name = "MINOR", theme = OppositionTheme.Liberty, share = .2f, disposition = 96 });
                 state.politicalCapital = 1;
                 string before = SaveSystem.ToJson(state);
-                Assert.IsFalse(GameController.Instance.CourtFaction(1));
+                Assert.IsFalse(GameController.Instance.CourtFactionAtIndex(1));
                 Assert.AreEqual(before, SaveSystem.ToJson(state));
                 state.politicalCapital = 20;
                 gov.type = GovernmentType.ParliamentaryRepublic;
                 state.authorizedPillarMask = 0;
-                Assert.IsFalse(GameController.Instance.CourtFaction(1));
+                Assert.IsFalse(GameController.Instance.CourtFactionAtIndex(1));
                 Assert.AreEqual(20, state.politicalCapital);
                 Assert.AreEqual(96, gov.factions[1].disposition);
                 gov.type = GovernmentType.PresidentialRepublic;
                 state.authorizedPillarMask = ~0;
-                Assert.IsTrue(GameController.Instance.CourtFaction(1));
+                Assert.IsTrue(GameController.Instance.CourtFactionAtIndex(1));
                 Assert.AreEqual(100, gov.factions[1].disposition);
                 Assert.AreEqual(50, gov.factions[0].disposition);
                 Assert.IsTrue(GameController.Instance.CourtFaction(OppositionTheme.Liberty));
@@ -179,7 +179,7 @@ namespace Brink.Tests
                 country.government.factions.Clear();
                 var preview = GovernmentSystem.FactionsFor(state, country);
                 Assert.AreEqual(0, country.government.factions.Count);
-                Assert.IsTrue(GameController.Instance.CourtFaction(2));
+                Assert.IsTrue(GameController.Instance.CourtFactionAtIndex(2));
                 for (int i = 0; i < preview.Count; i++)
                 {
                     var actual = country.government.factions[i];
@@ -345,7 +345,7 @@ namespace Brink.Tests
                 view.Refresh();
                 Assert.AreEqual(before, SaveSystem.ToJson(state));
                 foreach (var bloc in country.government.factions)
-                    Assert.IsTrue(view.Root.Query<Button>().ToList().Any(b => b.text == $"COURT {bloc.name} [2 PC]"));
+                    Assert.IsTrue(view.Root.Query<Button>().ToList().Any(b => b.text == $"COURT {AsciiChart.Cell(bloc.name, columns - 17).TrimEnd()} [2 PC]"));
                 foreach (var label in view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text")))
                     foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
             });
@@ -411,7 +411,7 @@ namespace Brink.Tests
                 var factions = GovernmentSystem.FactionsFor(state, state.PlayerCountry);
                 Assert.AreEqual(factions.Count, buttons.Count);
                 foreach (var faction in factions)
-                    Assert.IsTrue(buttons.Any(b => b.text == $"COURT {faction.name} [2 PC]" && b.enabledSelf));
+                    Assert.IsTrue(buttons.Any(b => b.text == $"COURT {AsciiChart.Cell(faction.name, columns - 17).TrimEnd()} [2 PC]" && b.enabledSelf));
                 foreach (var label in view.Root.Query<Label>().ToList())
                     if (label.ClassListContains("terminal-text"))
                         foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
@@ -855,6 +855,119 @@ namespace Brink.Tests
             => typeof(GovernmentSystem).GetMethod("DriftFactions", BindingFlags.Static | BindingFlags.NonPublic)
                 .Invoke(null, new object[] { gov });
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void FactionReadsAreDetachedIncludingEveryEntry(bool seeded)
+        {
+            var c = state.PlayerCountry;
+            c.government.factions.Clear();
+            if (seeded) GovernmentSystem.EnsureFactions(state, c);
+            string before = SaveSystem.ToJson(state);
+            var first = GovernmentSystem.FactionsFor(state, c);
+            var second = GovernmentSystem.FactionsFor(state, c);
+            Assert.AreNotSame(first, second);
+            for (int i = 0; i < first.Count; i++)
+            {
+                Assert.AreNotSame(first[i], second[i]);
+                Assert.AreEqual(first[i].name, second[i].name);
+                Assert.AreEqual(first[i].theme, second[i].theme);
+                Assert.AreEqual(first[i].share, second[i].share);
+                Assert.AreEqual(first[i].disposition, second[i].disposition);
+                first[i].name = "Overwritten"; first[i].theme = OppositionTheme.War;
+                first[i].share = 0; first[i].disposition = 0;
+            }
+            first.Clear(); second.Reverse();
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.AreEqual(3, GovernmentSystem.FactionsFor(state, c).Count);
+        }
+
+        [TestCase(.000001f, "+<0.01")]
+        [TestCase(-.000001f, "-<0.01")]
+        [TestCase(.009f, "+<0.01")]
+        [TestCase(-.009f, "-<0.01")]
+        [TestCase(0f, "0")]
+        [TestCase(2f, "+2")]
+        public void TinyAppliedBlocChangesDoNotClaimSignedZero(float amount, string text)
+            => Assert.AreEqual(text, GovernmentSystem.BlocDispositionChangeText(amount));
+
+        [Test]
+        public void TinyInquiryPreviewMatchesActualSignedReceiptWithoutChangingArithmetic()
+        {
+            WithController(() =>
+            {
+                var c = state.PlayerCountry;
+                var g = c.government;
+                g.corruption = .001f; g.factions.Clear();
+                g.factions.Add(new Faction { name = "Reform", theme = OppositionTheme.Liberty, share = .5f, disposition = 50 });
+                g.factions.Add(new Faction { name = "Recipients", theme = OppositionTheme.Hardship, share = .5f, disposition = 50 });
+                var expected = g.factions.Select(f => System.Math.Max(0, System.Math.Min(100,
+                    f.disposition + GovernmentSystem.InquiryReaction(f.theme, g.corruption)))).ToArray();
+                var view = new GovernmentView(); view.Refresh();
+                string text = string.Join(" ", view.Root.Query<Label>().ToList().Select(l => l.text));
+                StringAssert.Contains("PUBLIC INQUIRY +<0.01", text);
+                StringAssert.Contains("PUBLIC INQUIRY -<0.01", text);
+                Assert.IsTrue(GameController.Instance.LaunchInquiry());
+                CollectionAssert.AreEqual(expected, g.factions.Select(f => f.disposition));
+                string receipt = state.notifications.Last(n => n.title == "INQUIRY CONCLUDED").body;
+                StringAssert.Contains("Reform: disposition +<0.01", receipt);
+                StringAssert.Contains("Recipients: disposition -<0.01", receipt);
+                Assert.Greater(g.factions[0].disposition, 50);
+                Assert.Less(g.factions[1].disposition, 50);
+            });
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void LongNamedButtonsFitAndStillCourtTheirExactLedgerEntry(int columns)
+        {
+            WithController(() =>
+            {
+                var g = state.PlayerCountry.government;
+                g.factions.Clear();
+                string first = string.Join(" ", Enumerable.Repeat("REGIONAL COALITION", 12));
+                string second = first + " TWO";
+                g.factions.Add(new Faction { name = first, theme = OppositionTheme.Hardship, share = .7f, disposition = 50 });
+                g.factions.Add(new Faction { name = second, theme = OppositionTheme.Hardship, share = .3f, disposition = 50 });
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new GovernmentView(); view.Refresh();
+                var buttons = view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("COURT ")).ToList();
+                Assert.AreEqual(2, buttons.Count);
+                foreach (var b in buttons)
+                {
+                    Assert.LessOrEqual(b.text.Length, columns - 4, "leave margin for button padding");
+                    StringAssert.EndsWith(" [2 PC]", b.text);
+                    StringAssert.Contains("…", b.text);
+                }
+                Assert.IsTrue(view.Root.Query<Label>().ToList().Any(l =>
+                    System.Text.RegularExpressions.Regex.Replace(l.text ?? "", @"\s+", " ").Trim() == second),
+                    "the full name must remain visible above its abbreviated control");
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(buttons[1]);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(buttons[1], null);
+                Assert.AreEqual(50, g.factions[0].disposition);
+                Assert.AreEqual(59, g.factions[1].disposition);
+                StringAssert.Contains(second + " has been courted", state.notifications.Last().body);
+            });
+        }
+
+        [Test]
+        public void NeutralBlocPanelIsCompactAndExactApiIsUnambiguous()
+        {
+            Assert.IsNotNull(typeof(GameController).GetMethod("CourtFactionAtIndex", new[] { typeof(int) }));
+            Assert.IsNull(typeof(GameController).GetMethod("CourtFaction", new[] { typeof(int) }));
+            WithController(() =>
+            {
+                GovernmentSystem.EnsureFactions(state, state.PlayerCountry);
+                var view = new GovernmentView(); view.Refresh();
+                var labels = view.Root.Query<Label>().ToList();
+                Assert.AreEqual(2, labels.Count(l => (l.text ?? "").Contains("Goodwill returns toward 50")));
+                Assert.IsFalse(labels.Any(l => (l.text ?? "").Contains("OPEN 50, STANDARD 50")));
+            });
+        }
+
         [TestCase(CivicPosture.Open, 55f)]
         [TestCase(CivicPosture.Standard, 40f)]
         [TestCase(CivicPosture.Restrictive, 25f)]
@@ -981,6 +1094,8 @@ namespace Brink.Tests
                 var before = g.factions.Select(f => f.disposition).ToArray();
                 Assert.IsTrue(GameController.Instance.SetCivicPosture(CivicPosture.Open));
                 StringAssert.Contains("55/100", state.notifications.Last(n => n.title == "CIVIC POSTURE CHANGED").body);
+                StringAssert.Contains("55/100. This includes", state.notifications.Last(n => n.title == "CIVIC POSTURE CHANGED").body);
+                StringAssert.Contains("force. Other concerns", state.notifications.Last(n => n.title == "CIVIC POSTURE CHANGED").body);
                 CollectionAssert.AreEqual(before, g.factions.Select(f => f.disposition));
             });
         }

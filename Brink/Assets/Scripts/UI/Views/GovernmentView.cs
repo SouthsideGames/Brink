@@ -207,7 +207,9 @@ namespace Brink.UI.Views
                 AddText().text = $" Share of {(gov.IsElective ? "chamber" : "elite")}: {faction.share:P0}. "
                     + $"Disposition: {faction.disposition:F0}/100 (50 is indifferent). Concern: {faction.theme}.";
                 var theme = faction.theme;
-                AddText().text = $" Goodwill under held civic policy: OPEN {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Open):F0}, "
+                AddText().text = theme != OppositionTheme.Liberty
+                    ? " Goodwill returns toward 50 at 2% of the gap each month, regardless of civic posture or emergency authority."
+                    : $" Goodwill under held civic policy: OPEN {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Open):F0}, "
                     + $"STANDARD {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Standard):F0}, "
                     + $"RESTRICTIVE {GovernmentSystem.FactionDispositionTarget(theme, CivicPosture.Restrictive):F0} (out of 100). "
                     + $"Current resting level {GovernmentSystem.FactionDispositionTarget(theme, gov.civicPosture, gov.emergencyPowers):F0}; each month closes 2% of the gap. "
@@ -221,11 +223,14 @@ namespace Brink.UI.Views
                     + " This is this bloc's own pressure, not the only cause of movement. "
                     + "All blocs draw from the same pool: a bloc can lose share because others gain, even with its own pressure absent. "
                     + "Recovery also moves shares. This is a gradual tendency, not an instant transfer or a vote forecast.";
-                float patronage = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.PatronageReaction(theme))) - faction.disposition;
-                float inquiry = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.InquiryReaction(theme, gov.corruption))) - faction.disposition;
-                AddText().text = $" Disposition if ordered now: PATRONAGE {patronage:+0.##;-0.##;0}; PUBLIC INQUIRY {inquiry:+0.##;-0.##;0}.";
-                AddButton(MakeRow(), $"COURT {faction.name} [{GovernmentSystem.BuildSupportCost:F0} PC]", null,
-                    () => { GameController.Instance.CourtFaction(selectedIndex); Refresh(); });
+                float patronage = GovernmentSystem.BlocDispositionAfterPolicy(faction, false, gov.corruption) - faction.disposition;
+                float inquiry = GovernmentSystem.BlocDispositionAfterPolicy(faction, true, gov.corruption) - faction.disposition;
+                AddText().text = $" Disposition if ordered now: PATRONAGE {GovernmentSystem.BlocDispositionChangeText(patronage)}; "
+                    + $"PUBLIC INQUIRY {GovernmentSystem.BlocDispositionChangeText(inquiry)}.";
+                string cost = $" [{GovernmentSystem.BuildSupportCost:F0} PC]";
+                string name = AsciiChart.Cell(faction.name, System.Math.Max(1, W - 6 - cost.Length - 4)).TrimEnd();
+                AddButton(MakeRow(), $"COURT {name}{cost}", null,
+                    () => { GameController.Instance.CourtFactionAtIndex(selectedIndex); Refresh(); });
             }
             AddText("terminal-text-dim").text = "Courting raises only the chosen bloc's disposition and also buys general backing. "
                 + "It does not settle the opposition's case or change national policy. Patronage pleases hardship blocs and angers liberty/corruption blocs. "

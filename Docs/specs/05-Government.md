@@ -1016,8 +1016,33 @@ An empty ledger uses the same deterministic preview and seed order. This is a
 current-ledger index, not a new persistent ID: normal production paths retain
 ledger order. The UI captures a separate index per button, not the advancing
 loop counter. No policy weight, drift, cost, reward or AI choice was retuned.
-Duplicate-theme targeting is closed; the other recorded review notes remain
-separate, as do device testing and any future multi-seed policy-tuning gate.
+Duplicate-theme targeting is closed. The controller's exact route is named
+`CourtFactionAtIndex(int)` to distinguish it from `CourtFaction(OppositionTheme)`.
+
+**Read and presentation hardening (#23).** `FactionsFor` returns a detached list
+of detached entries for an existing ledger as well as for a preview. Mutating a
+query result cannot alter the saved government; real mutations use the existing
+paid or monthly paths. The legacy uncosted theme helper has no production callers
+and remains only for compatibility and arithmetic tests.
+
+Policy previews and application use the same final clamped disposition. A real
+applied change smaller than .01 prints `+<0.01` or `-<0.01`; exact zero is still
+unchanged, with no rounding of the actual effect. Neutral concerns show one
+target of 50 regardless of posture or emergency authority; Liberty retains the
+full target comparison. COURT buttons reserve four grid columns for padding and
+abbreviate long names, preserving the cost suffix and exact ledger-index target.
+The full name remains in the readout above and in the receipt. These changes do
+not retune goodwill, influence, costs, rewards, emergency timing or AI behaviour.
+Character-grid assertions do not certify glyph widths or hardware layout; those
+remain Kareem's deferred device gate, including the existing Unicode arrow.
+
+Author hardening comparison: five seeds, USA/China, all three difficulties,
+Standard civic posture and never/once/repeated emergency declarations over 180
+months yield 90/90 identical final save hashes between base and hardening under
+.NET. This measures non-interference, not the ten-point penalty in isolation:
+declaration schedules retain all existing emergency effects. China's ordinary
+ledger has no Liberty bloc in those runs. Native reproduction, broader operator
+coverage and hardware remain distinct from this evidence.
 
 **Held emergency authority (#23, next policy slice).** Liberty blocs judge
 extraordinary authority for as long as it is held, not just on the declaration.

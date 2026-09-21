@@ -229,11 +229,13 @@ namespace Brink.Core
             gov.factions.AddRange(FactionsFor(state, country));
         }
 
-        /// <summary>Read the existing ledger, or preview its deterministic seed without writing a save.</summary>
+        /// <summary>Detached read snapshot, or deterministic seed preview. Neither exposes writable save state.</summary>
         public static System.Collections.Generic.List<Faction> FactionsFor(GameState state, CountryState country)
         {
             var gov = country.government;
-            if (gov.factions.Count > 0) return gov.factions;
+            if (gov.factions.Count > 0)
+                return gov.factions.ConvertAll(f => new Faction
+                    { name = f.name, theme = f.theme, share = f.share, disposition = f.disposition });
             var factions = new System.Collections.Generic.List<Faction>();
 
             var rng = new Random(unchecked(state.rngSeed * 5501 + Hash.Of(country.id)));
@@ -423,7 +425,11 @@ namespace Brink.Core
             return best;
         }
 
-        /// <summary>Move one bloc's disposition. Actor-generic by construction.</summary>
+        /// <summary>
+        /// Legacy uncosted helper, retained for compatibility and arithmetic tests;
+        /// no production caller. Gameplay uses the paid BuildPoliticalSupportBy /
+        /// BuildPoliticalSupportForFactionBy paths, never this bypass.
+        /// </summary>
         public static void CourtFaction(GovernmentState gov, OppositionTheme theme, float amount)
         {
             var faction = FactionFor(gov, theme);
@@ -450,6 +456,16 @@ namespace Brink.Core
                 : theme == OppositionTheme.Liberty || theme == OppositionTheme.Corruption ? 4f : 0f) * fraction;
         }
 
+        /// <summary>Same final clamped value for the preview and the paid policy's application.</summary>
+        public static float BlocDispositionAfterPolicy(Faction bloc, bool inquiry, float corruption)
+            => Clamp(bloc.disposition + (inquiry
+                ? InquiryReaction(bloc.theme, corruption) : PatronageReaction(bloc.theme)));
+
+        public static string BlocDispositionChangeText(float applied)
+            => applied == 0f ? "0"
+             : Math.Abs(applied) < .01f ? (applied > 0f ? "+<0.01" : "-<0.01")
+             : applied.ToString("+0.##;-0.##;0");
+
         static string ApplyBlocReactions(GameState state, CountryState country, bool inquiry, float corruption)
         {
             EnsureFactions(state, country);
@@ -457,10 +473,9 @@ namespace Brink.Core
             foreach (var bloc in country.government.factions)
             {
                 float before = bloc.disposition;
-                bloc.disposition = Clamp(before + (inquiry
-                    ? InquiryReaction(bloc.theme, corruption) : PatronageReaction(bloc.theme)));
+                bloc.disposition = BlocDispositionAfterPolicy(bloc, inquiry, corruption);
                 float applied = bloc.disposition - before;
-                if (applied != 0f) report += $" {bloc.name}: disposition {applied:+0.##;-0.##;0}.";
+                if (applied != 0f) report += $" {bloc.name}: disposition {BlocDispositionChangeText(applied)}.";
             }
             return report.Length == 0 ? " Bloc dispositions unchanged." : report;
         }
@@ -2161,9 +2176,9 @@ namespace Brink.Core
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Priority, "CIVIC POSTURE CHANGED",
                     $"The state now holds its society on {PostureText(posture)} terms. " +
-                    $"Existing Liberty blocs' goodwill will move gradually toward {FactionDispositionTarget(OppositionTheme.Liberty, posture, gov.emergencyPowers):F0}/100; " +
-                    (gov.emergencyPowers ? "this includes the 10-point reduction while emergency powers remain in force. " : "") +
-                    "other concerns return toward 50. No bloc goodwill or influence is transferred by this order.",
+                    $"Existing Liberty blocs' goodwill will move gradually toward {FactionDispositionTarget(OppositionTheme.Liberty, posture, gov.emergencyPowers):F0}/100. " +
+                    (gov.emergencyPowers ? "This includes the 10-point reduction while emergency powers remain in force. " : "") +
+                    "Other concerns return toward 50. No bloc goodwill or influence is transferred by this order.",
                     countryId, desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, countryId,
                 $"Civic posture set to {PostureText(posture)}.", Publicity.Public);
