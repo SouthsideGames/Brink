@@ -265,6 +265,7 @@ namespace Brink.Core
 
             // Power passes to those who took it. Institutions centralize.
             gov.type = GovernmentType.CentralizedRepublic;
+            GovernmentSystem.RefreshFactionNames(state, country);
             gov.consecutiveTermLimit = 0;
             gov.termLengthMonths = 0;
             gov.emergencyPowers = false;

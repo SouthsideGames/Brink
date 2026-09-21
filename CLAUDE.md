@@ -31,6 +31,16 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Regime-aware bloc identities (#23, fifth slice).** Constitutional completion
+  and successful coups refresh authored elective/non-elective names without
+  reseeding or changing concerns, goodwill or shares. Custom names survive.
+  `EnsureFactions` repairs legacy labels on mutation, never on a view read;
+  empty ledgers retain lazy seeding. One old-to-new secret chronicle entry and
+  player-only Government Wire record actual changes; repeat refresh is inert.
+  No new state, schema, pipeline, cost or reward. Spec 05 §2g defines aliases.
+  Native Unity verification belongs to Claude; device testing remains Kareem's.
+  #23 remains partial; other open review notes are not folded into this slice.
+
 - **Held civic policy (#23, fourth slice).** The existing monthly bloc drift
   approaches 65/50/35 for persisted Liberty concerns under Open/Standard/
   Restrictive posture, and 50 for every other concern, at the existing 2% rate.

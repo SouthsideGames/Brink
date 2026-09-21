@@ -57,6 +57,166 @@ namespace Brink.Tests
 
         // ---------- the chamber ----------
 
+        [TestCase(GovernmentType.PresidentialRepublic, "THE CHAMBER MAJORITY")]
+        [TestCase(GovernmentType.ParliamentaryRepublic, "THE CHAMBER MAJORITY")]
+        [TestCase(GovernmentType.DominantPartyState, "THE PARTY APPARATUS")]
+        [TestCase(GovernmentType.CentralizedRepublic, "THE STATE APPARATUS")]
+        [TestCase(GovernmentType.Monarchy, "THE ROYAL COURT")]
+        public void ConstitutionalSettlementRenamesButDoesNotReplaceBlocs(GovernmentType target, string institutionalName)
+        {
+            var country = state.PlayerCountry;
+            var gov = country.government;
+            gov.type = target == GovernmentType.PresidentialRepublic || target == GovernmentType.ParliamentaryRepublic
+                ? GovernmentType.CentralizedRepublic : GovernmentType.PresidentialRepublic;
+            gov.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            var blocs = gov.factions.ToArray();
+            var themes = blocs.Select(f => f.theme).ToArray();
+            var shares = blocs.Select(f => f.share).ToArray();
+            var goodwill = blocs.Select(f => f.disposition).ToArray();
+            float support = GovernmentSystem.FactionSupport(gov);
+            string oldName = blocs[0].name;
+            state.AddChronicle(ChronicleCategory.Political, country.id, oldName);
+            gov.constitutionalTarget = target;
+            typeof(GovernmentSystem).GetMethod("CompleteConstitutionalChange", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { state, country, gov });
+            Assert.AreEqual(target, gov.type);
+            Assert.AreEqual(institutionalName, blocs[0].name);
+            Assert.AreEqual(gov.IsElective ? "THE OVERSIGHT BLOC" : "THE REFORM CIRCLE", blocs[1].name);
+            CollectionAssert.AreEqual(blocs, gov.factions);
+            CollectionAssert.AreEqual(themes, blocs.Select(f => f.theme));
+            CollectionAssert.AreEqual(shares, blocs.Select(f => f.share));
+            CollectionAssert.AreEqual(goodwill, blocs.Select(f => f.disposition));
+            Assert.AreEqual(support, GovernmentSystem.FactionSupport(gov));
+            Assert.IsTrue(state.chronicle.Any(e => e.text == oldName), "old records must not be rewritten");
+            Assert.IsTrue(state.chronicle.Any(e => e.text.Contains(oldName + " → " + blocs[0].name)));
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            CollectionAssert.AreEqual(blocs.Select(f => f.name), loaded.PlayerCountry.government.factions.Select(f => f.name));
+        }
+
+        [Test]
+        public void SuccessfulCoupRenamesImmediatelyWithoutErasingLiberty()
+        {
+            var country = state.PlayerCountry;
+            country.government.type = GovernmentType.PresidentialRepublic;
+            country.government.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            var reform = country.government.factions[1];
+            reform.disposition = 74;
+            float share = reform.share;
+            typeof(RegimeSystem).GetMethod("SucceedingCoup", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { state, country, new System.Random(47) });
+            Assert.AreEqual("THE REFORM CIRCLE", reform.name);
+            Assert.AreEqual("THE STATE APPARATUS", country.government.factions[0].name);
+            Assert.AreSame(reform, country.government.factions[1]);
+            Assert.AreEqual(OppositionTheme.Liberty, reform.theme);
+            Assert.AreEqual(74, reform.disposition);
+            Assert.AreEqual(share, reform.share);
+            Assert.AreEqual(35, GovernmentSystem.FactionDispositionTarget(reform.theme, CivicPosture.Restrictive));
+        }
+
+        [Test]
+        public void LegacyLabelsRepairOnlyOnMutationAndOnlyOnce()
+        {
+            var country = state.PlayerCountry;
+            var gov = country.government;
+            gov.type = GovernmentType.PresidentialRepublic;
+            gov.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            gov.type = GovernmentType.CentralizedRepublic;
+            string before = SaveSystem.ToJson(state);
+            GovernmentSystem.FactionsFor(state, country);
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "reading must not repair a save");
+            int records = state.chronicle.Count;
+            GovernmentSystem.EnsureFactions(state, country);
+            Assert.AreEqual("THE REFORM CIRCLE", gov.factions[1].name);
+            Assert.AreEqual(records + 1, state.chronicle.Count);
+            string repaired = SaveSystem.ToJson(state);
+            GovernmentSystem.EnsureFactions(state, country);
+            Assert.AreEqual(repaired, SaveSystem.ToJson(state));
+            gov.type = GovernmentType.PresidentialRepublic;
+            GovernmentSystem.EnsureFactions(state, country);
+            Assert.AreEqual("THE REFORM BENCH", gov.factions[1].name);
+        }
+
+        [Test]
+        public void IdentityRepairLeavesCustomNamesAndUnmatchedConcernsAlone()
+        {
+            var country = state.PlayerCountry;
+            var gov = country.government;
+            gov.type = GovernmentType.CentralizedRepublic;
+            gov.factions.Clear();
+            gov.factions.Add(new Faction { name = "THE REFORM BENCH", theme = OppositionTheme.War });
+            gov.factions.Add(new Faction { name = "A HISTORIC COALITION", theme = OppositionTheme.Liberty });
+            string before = SaveSystem.ToJson(state);
+            GovernmentSystem.RefreshFactionNames(state, country);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            gov.factions.Clear();
+            before = SaveSystem.ToJson(state);
+            GovernmentSystem.RefreshFactionNames(state, country);
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "a transition must not seed an empty ledger");
+        }
+
+        [Test]
+        public void ForeignIdentityRepairUsesTheSameNamesWithoutAnOperatorNotice()
+        {
+            var country = state.FindCountry("CHN");
+            country.government.type = GovernmentType.CentralizedRepublic;
+            country.government.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            country.government.type = GovernmentType.ParliamentaryRepublic;
+            int notices = state.notifications.Count;
+            GovernmentSystem.RefreshFactionNames(state, country);
+            Assert.AreEqual("THE OVERSIGHT BLOC", country.government.factions[1].name);
+            Assert.AreEqual(notices, state.notifications.Count);
+            Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+            foreach (var bloc in country.government.factions)
+                Assert.LessOrEqual($"COURT {bloc.name} [2 PC]".Length, 34);
+        }
+
+        [Test]
+        public void FailedConstitutionalChangeKeepsTheOldIdentity()
+        {
+            var country = state.PlayerCountry;
+            var gov = country.government;
+            gov.type = GovernmentType.PresidentialRepublic;
+            gov.factions.Clear();
+            GovernmentSystem.EnsureFactions(state, country);
+            gov.constitutionalTarget = GovernmentType.CentralizedRepublic;
+            var names = gov.factions.Select(f => f.name).ToArray();
+            typeof(GovernmentSystem).GetMethod("AbandonConstitutionalChange", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new object[] { state, country, gov, "test: insufficient support" });
+            CollectionAssert.AreEqual(names, gov.factions.Select(f => f.name));
+            Assert.AreEqual(GovernmentType.PresidentialRepublic, gov.type);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void RenamedBlocsRenderAndCourtUnderTheirPersistedIdentity(int columns)
+        {
+            WithController(() =>
+            {
+                var country = state.PlayerCountry;
+                country.government.type = GovernmentType.CentralizedRepublic;
+                country.government.factions.Clear();
+                GovernmentSystem.EnsureFactions(state, country);
+                country.government.type = GovernmentType.ParliamentaryRepublic;
+                GovernmentSystem.RefreshFactionNames(state, country);
+                var view = new GovernmentView();
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                foreach (var bloc in country.government.factions)
+                    Assert.IsTrue(view.Root.Query<Button>().ToList().Any(b => b.text == $"COURT {bloc.name} [2 PC]"));
+                foreach (var label in view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text")))
+                    foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+            });
+        }
+
         [Test]
         public void PreviewingAnUnseededLedgerIsPureAndMatchesItsEventualSeed()
         {
