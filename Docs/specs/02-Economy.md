@@ -281,13 +281,17 @@ entries are not rewritten or guessed into project records. Readout uses the
 terminal text policy and does not change state. No new field, schema version,
 pipeline, catalogue entry, RNG call or funding/effect arithmetic.
 
-**Remaining #24 work:** site-linked physical construction, bespoke projects and
-their effects, custom persistent identities/names if required, and research or
-procurement presentation. This slice is visibility for real existing industrial
-work, not completion of the entire roadmap item. Device confirmation and broader
-balance remain separate gates.
+**#24 scope reconciliation:** research presentation is implemented in spec 13,
+energy-site construction in §3b below, and procurement presentation in spec 01
+§2b. Bespoke additional types and custom persistent names are expansions, not
+automatically missing requirements. Active construction-policy measurement and
+device confirmation remain separate gates; this historical first slice is not
+by itself a completion claim.
 
 ## 3b. Energy works tied to a site (#24)
+
+Refused BUILD controls use the shared `Block` / `UNAVAILABLE` presentation so
+their existing core refusal reason is available without hovering.
 
 The first physical project reuses `IndustrialProgramme`, with an optional
 `locationId`. Empty means the existing national investment, unchanged. The new

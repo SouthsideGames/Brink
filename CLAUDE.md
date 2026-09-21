@@ -31,6 +31,34 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Visible procurement commitments (#24).** Saved programme terms explain
+  remaining funding (not reserved treasury), incremental capability and funding
+  termination. Existing lifecycle records gain identifying prefixes without
+  extra entries or changed publicity; latest-five own records are surfaced.
+  Counted equipment backlogs are explicitly already paid and incremental, with
+  no invented order ledger or fixed completion date. The receipt's old lead-time
+  claim is corrected, not its delivery arithmetic. Site BUILD refusals now use
+  the existing Block/UNAVAILABLE convention. No persistent state, cost, reward,
+  AI, pipeline, catalogue or partition change. Spec 01 §2b owns this presentation.
+  #24's bounded core is industrial/research/procurement visibility plus the
+  existing energy-site lifecycle. Further building types are expansions;
+  construction-policy measurement, independent review and device confirmation
+  remain outstanding. Older slice-specific pending lists below are historical,
+  not a cumulative checklist. Author checks do not substitute for native Unity.
+  Preliminary active construction probe (author .NET only): 5 seeds × USA/RUS/BRA
+  × Standard/Challenging × passive/one opening paid build × 180 months, 60 arms.
+  All 30 orders accepted; 25 completed at month 12, 5 RUS orders lapsed for funds.
+  Mean energy improves in all six posting/difficulty groups, but RUS mean annual
+  score falls about 0.63. No top-ups or other player action, no alternative
+  investment control; this is not certification of seven-point tuning. Probe
+  retained outside the repo for Claude's native reproduction; no tuning changed.
+  Author isolated .NET full comparison: 1927/1895/31/1 versus exact-base
+  1915/1883/31/1, twelve additions pass, zero shared outcome/message changes,
+  standard balance identical. Focused 106/106; seven mutations caught at
+  7/1/4/4/4/1/4, baseline/no-op/restored 82/82. A weak generic-refusal assertion
+  was tightened to the exact site reason. Final runs used separate TMPDIRs;
+  earlier overlapping shared-temp full runs are excluded. Native Unity pending.
+
 - **Energy-site projects (#24).** Optional programme locationId reuses the
   industrial queue; completed energyWorks stays on StrategicLocation. Twelve
   funded months at 95/month and 2 CP buy one +7 site contribution to the energy

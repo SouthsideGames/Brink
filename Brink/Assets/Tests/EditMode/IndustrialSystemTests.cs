@@ -267,6 +267,17 @@ namespace Brink.Tests
                 Assert.AreEqual(second.id, SaveSystem.Load().PlayerCountry.economy.programmes.Single().locationId,
                     "the controller saves the selected site, not merely the in-memory order");
                 Assert.IsFalse(first.energyWorks);
+                state.commandPoints.current = 100; // exclude a generic affordability refusal
+                Assert.IsFalse(IndustrialSystem.CanBeginSite(state, state.playerCountryId, second.id, out string siteReason));
+                view.Refresh();
+                var refused = view.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("BUILD ENERGY WORKS")).ToList();
+                foreach (var b in refused)
+                {
+                    Assert.IsFalse(b.enabledSelf);
+                    Assert.AreEqual(siteReason, TerminalView.BlockedReason(b));
+                }
+                string refusalText = string.Join(" ", view.Root.Query<Label>().ToList().Select(l => l.text));
+                StringAssert.Contains("UNAVAILABLE:", refusalText);
             }
             finally
             {

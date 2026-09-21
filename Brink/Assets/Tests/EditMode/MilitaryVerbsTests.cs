@@ -1,6 +1,11 @@
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Brink.UI;
+using Brink.UI.Views;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -130,6 +135,135 @@ namespace Brink.Tests
         }
 
         // ---------- procurement ----------
+
+        [TestCase(MilitarySystem.ProgramScale.Modest, 216)]
+        [TestCase(MilitarySystem.ProgramScale.Major, 816)]
+        [TestCase(MilitarySystem.ProgramScale.Transformative, 1980)]
+        public void ProcurementReadoutUsesSavedCommitments(MilitarySystem.ProgramScale scale, int total)
+        {
+            var program = MilitarySystem.BuildProgram(ForceBranch.Naval, scale);
+            state.PlayerCountry.military.programs.Add(program);
+            string before = SaveSystem.ToJson(state);
+            string text = MilitarySystem.ProcurementReadout(program);
+            StringAssert.Contains(program.label, text);
+            StringAssert.Contains($"commitment {total} at saved terms (not reserved)", text);
+            StringAssert.Contains("during funded months", text);
+            StringAssert.Contains("terminates", text);
+            StringAssert.Contains("not refunded", text);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            program.monthsRemaining = 3; program.costPerMonth = 17;
+            StringAssert.Contains("commitment 51 at saved terms", MilitarySystem.ProcurementReadout(program));
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(MilitarySystem.ProcurementReadout(program),
+                MilitarySystem.ProcurementReadout(loaded.PlayerCountry.military.programs.Last()));
+        }
+
+        [Test]
+        public void ProcurementReadoutDoesNotBackfillMissingLegacyTerms()
+        {
+            var program = new ProcurementProgram { monthsRemaining = -2, costPerMonth = -5 };
+            state.PlayerCountry.military.programs.Add(program);
+            string before = SaveSystem.ToJson(state);
+            string text = MilitarySystem.ProcurementReadout(program);
+            StringAssert.Contains("Unnamed procurement programme", text);
+            StringAssert.Contains("0 funded months remaining at 0/MO", text);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ProcurementRecordsDistinguishCompletionFromFailedFunding(bool complete)
+        {
+            state.PlayerCountry.resources.treasury = 10000;
+            int count = state.chronicle.Count;
+            Assert.IsTrue(MilitarySystem.BeginProcurement(state, turns, ForceBranch.Ground, MilitarySystem.ProgramScale.Modest));
+            Assert.AreEqual(count + 1, state.chronicle.Count);
+            StringAssert.StartsWith("PROCUREMENT AUTHORIZED:", state.chronicle.Last().text);
+            var program = state.PlayerCountry.military.programs.Single();
+            program.monthsRemaining = 1;
+            state.PlayerCountry.resources.treasury = complete ? 10000 : -10000;
+            turns.EndMonth();
+            Assert.IsEmpty(state.PlayerCountry.military.programs);
+            string record = state.chronicle.Last(e => e.countryId == state.playerCountryId && e.text.StartsWith("PROCUREMENT ")).text;
+            StringAssert.StartsWith(complete ? "PROCUREMENT COMPLETED:" : "PROCUREMENT TERMINATED:", record);
+            StringAssert.Contains(complete ? "Benefits accrued during funded months" : "lack of funds", record);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(loaded.chronicle.Any(e => e.text == record));
+        }
+
+        [Test]
+        public void ForeignProcurementKeepsItsRecordOwnership()
+        {
+            state.FindCountry("CHN").resources.treasury = 10000;
+            int count = state.chronicle.Count;
+            Assert.IsTrue(MilitarySystem.BeginProcurementBy(state, "CHN", ForceBranch.Air, MilitarySystem.ProgramScale.Major));
+            Assert.AreEqual(count + 1, state.chronicle.Count);
+            Assert.AreEqual("CHN", state.chronicle.Last().countryId);
+            StringAssert.StartsWith("PROCUREMENT AUTHORIZED:", state.chronicle.Last().text);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void ProcurementPanelShowsOnlyOwnCommitmentsAndPaidBacklog(int columns)
+        {
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                var program = MilitarySystem.BuildProgram(ForceBranch.Ground, MilitarySystem.ProgramScale.Major);
+                program.label = "A deliberately long saved procurement programme label";
+                state.PlayerCountry.military.programs.Add(program);
+                foreach (var branch in new[] { ForceBranch.Ground, ForceBranch.Air, ForceBranch.Naval })
+                    state.PlayerCountry.military.Get(branch).inventory.stocks.Clear();
+                var asset = AssetCatalog.For(AssetKind.Fighters);
+                state.PlayerCountry.military.Get(asset.branch).inventory.Ensure(asset.kind).onOrder = 12.5f;
+                for (int i = 0; i < 7; i++) state.AddChronicle(ChronicleCategory.Military, state.playerCountryId, "PROCUREMENT AUTHORIZED: marker " + i);
+                state.AddChronicle(ChronicleCategory.Military, "CHN", "PROCUREMENT AUTHORIZED: FOREIGN HIDDEN");
+                state.AddChronicle(ChronicleCategory.System, state.playerCountryId, "PROCUREMENT AUTHORIZED: WRONG CATEGORY");
+                state.AddChronicle(ChronicleCategory.Military, state.playerCountryId, "Old generic military record");
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new MilitaryView(); view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                var panels = view.Root.Query<Label>().ToList().Where(l => (l.text ?? "").Contains("RECENT PROCUREMENT RECORD")
+                    || (l.text ?? "").Contains("PAID EQUIPMENT BACKLOG")).ToList();
+                Assert.AreEqual(2, panels.Count);
+                string text = Regex.Replace(string.Join(" ", panels.Select(l => l.text)), @"\s+", " ");
+                StringAssert.Contains(program.label, text);
+                StringAssert.Contains("commitment 816", text);
+                StringAssert.Contains("marker 6", text); StringAssert.Contains("marker 2", text);
+                StringAssert.DoesNotContain("marker 1", text); StringAssert.DoesNotContain("FOREIGN HIDDEN", text);
+                StringAssert.DoesNotContain("WRONG CATEGORY", text); StringAssert.DoesNotContain("Old generic military record", text);
+                Assert.Less(text.IndexOf("marker 6"), text.IndexOf("marker 2"));
+                StringAssert.Contains(asset.displayName + ": 12.5 still to arrive", text);
+                StringAssert.Contains("Already paid: no monthly purchase instalment", text);
+                foreach (var panel in panels)
+                    foreach (var line in panel.text.Split('\n')) Assert.LessOrEqual(line.Length, columns, line);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); TerminalMetrics.ResetForTests(); }
+        }
+
+        [Test]
+        public void EquipmentReceiptReportsUpfrontPaymentAndIncrementalDelivery()
+        {
+            var player = state.PlayerCountry;
+            player.resources.treasury = 10000;
+            var profile = AssetCatalog.For(AssetKind.Fighters);
+            var stock = player.military.Get(profile.branch).inventory.Ensure(profile.kind);
+            stock.onOrder = 0;
+            Assert.IsTrue(AcquisitionSystem.OrderBy(state, player.id, profile.kind, 10));
+            Assert.AreEqual(10000 - AssetCatalog.CostOf(profile.kind, 10), player.resources.treasury);
+            string receipt = state.notifications.Last(n => n.title == "ORDER PLACED").body;
+            StringAssert.Contains("paid upfront", receipt);
+            StringAssert.Contains("deliveries arrive incrementally", receipt);
+            float treasury = player.resources.treasury;
+            AcquisitionSystem.MonthlyDeliveries(state);
+            Assert.Less(stock.onOrder, 10);
+            Assert.AreEqual(treasury, player.resources.treasury);
+        }
 
         [Test]
         public void Procurement_BuildsStrengthOverYearsAndChargesMonthly()

@@ -55,8 +55,10 @@ funding-failure entries are unchanged in count and excluded from this panel.
 
 No new persistent field, schema, RNG, grant, cost, maturity or pipeline change.
 Controller start autosave and resolved-month save behavior remain unchanged.
-Hardware remains unverified. #24 remains partial: physical sites, bespoke
-construction and procurement presentation are not part of this slice.
+Hardware remains unverified. Subsequent #24 work adds energy sites (spec 02 §3b)
+and procurement presentation (spec 01 §2b). Additional bespoke construction is an
+expansion, not an automatic completion requirement. Active construction-policy
+measurement and independent verification remain separate from this slice.
 
 ## 3. Capability catalog
 

@@ -345,7 +345,7 @@ namespace Brink.Core
                             $"{program.label} cannot be funded and has been terminated.", country.id,
                             desk: ReportingDesk.Military);
                     state.AddChronicle(ChronicleCategory.Military, country.id,
-                        $"{program.label} cancelled for lack of funds.");
+                        $"PROCUREMENT TERMINATED: {program.label} cancelled for lack of funds.");
                     continue;
                 }
 
@@ -374,7 +374,7 @@ namespace Brink.Core
                         $"{program.label} has completed. The force structure reflects it.", country.id,
                         desk: ReportingDesk.Military);
                 state.AddChronicle(ChronicleCategory.Military, country.id,
-                    $"{program.label} delivered.", Publicity.Public);
+                    $"PROCUREMENT COMPLETED: {program.label} delivered. Benefits accrued during funded months.", Publicity.Public);
             }
         }
 
@@ -470,6 +470,18 @@ namespace Brink.Core
         /// <summary>Maximum concurrent procurement programs.</summary>
         public const int MaxPrograms = 2;
 
+        /// <summary>A read of saved terms, not a reserved budget or an invented start date.</summary>
+        public static string ProcurementReadout(ProcurementProgram program)
+        {
+            int months = Math.Max(0, program.monthsRemaining);
+            float cost = Math.Max(0f, program.costPerMonth);
+            return $"{program.label ?? "Unnamed procurement programme"} — {program.branch}\n"
+                + $"{months} funded months remaining at {cost:F0}/MO; "
+                + $"remaining treasury commitment {months * (double)cost:F0} at saved terms (not reserved).\n"
+                + "Capability builds during funded months, not as a final equipment shipment. "
+                + "If a monthly payment cannot be met, the programme terminates; prior spending is not refunded.";
+        }
+
         /// <summary>
         /// Authorize a procurement program for any state.
         ///
@@ -492,7 +504,7 @@ namespace Brink.Core
             if (actor.resources.treasury < program.costPerMonth * 3f) return false;
 
             actor.military.programs.Add(program);
-            state.AddChronicle(ChronicleCategory.Military, actorId, $"{program.label} authorized.");
+            state.AddChronicle(ChronicleCategory.Military, actorId, $"PROCUREMENT AUTHORIZED: {program.label} authorized.");
             return true;
         }
 
@@ -585,7 +597,7 @@ namespace Brink.Core
             state.AddNotification(NotificationClass.Advisory, "PROGRAM AUTHORIZED",
                 $"{program.label} authorized: {program.monthsRemaining} months at " +
                 $"{program.costPerMonth:F0} per month.", player.id);
-            state.AddChronicle(ChronicleCategory.Military, player.id, $"{program.label} authorized.");
+            state.AddChronicle(ChronicleCategory.Military, player.id, $"PROCUREMENT AUTHORIZED: {program.label} authorized.");
             return true;
         }
 
