@@ -212,6 +212,12 @@ each time; `RefreshAll` calls it last, after `activeView.Refresh()`.
 
 ### Why figures are excluded
 
+PUBLIC FINANCE uses ordinary readout text, not `AddFigure`: its dotted rows
+contain variable-length values and the restructuring notice is prose. They
+therefore wrap through the shared text policy, preserving full credit standing,
+debt, reserves and notice text at narrow widths. No financial value is abbreviated
+or changed. True charts and maps retain the figure exemption below.
+
 Labels created through `TerminalView.AddFigure()` carry `terminal-figure` as
 well, and the walk skips both operations for them:
 

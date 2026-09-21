@@ -84,9 +84,8 @@ namespace Brink.UI.Views
         {
             var fiscal = player.fiscal;
 
-            // A figure, not prose: it is built to an exact grid, so the text
-            // policy's wrapper must leave it alone.
-            var text = AddFigure("terminal-text-bright");
+            // Text rows, not a figure: long values must wrap without losing information.
+            var text = AddText("terminal-text-bright");
             var sb = new StringBuilder();
             sb.AppendLine(AsciiChart.BoxHeader("PUBLIC FINANCE", W));
             sb.AppendLine(" " + AsciiChart.Row("TAX RATE", $"{fiscal.taxRate:F0}%", W - 2));

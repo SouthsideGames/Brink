@@ -31,6 +31,17 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Public-finance narrow-width repair.** The fiscal readout uses AddText rather
+  than AddFigure, so long values and restructuring prose pass through the shared
+  text policy. No truncation, financial logic or global Row formatter change.
+  FiscalTests covers all credit bands, large debt, reserves and restructuring
+  at 34/49/64/104 columns, retaining full values and pure repeated reads.
+  Spec 09; native Unity and hardware verification remain separate gates.
+  Author .NET: 1879/1847/31/1 versus the byte-identical base's 1875/1843/31/1;
+  four additions pass, zero shared outcome/message changes, standard balance
+  identical. Focused/restored 63/63; restoring AddFigure fails the 34-column
+  credit row (36 chars) and 49-column restructuring notice (58 chars).
+
 - **Visible national projects (#24, industrial first slice).** Existing industrial
   programmes gain derived names, funded progress and remaining-commitment readouts,
   with a latest-five own-country project record in ECONOMY. Chronicle lifecycle

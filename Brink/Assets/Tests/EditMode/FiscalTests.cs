@@ -1,7 +1,11 @@
 using System;
+using System.Linq;
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -42,6 +46,57 @@ namespace Brink.Tests
         }
 
         CountryState Player => state.PlayerCountry;
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void PublicFinanceWrapsLongValuesWithoutLosingTheReading(int columns)
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                Player.fiscal.creditStanding = 84f;
+                var view = new EconomyView();
+                view.Refresh();
+                var ordinary = view.Root.Query<Label>().ToList()
+                    .Single(l => (l.text ?? "").Contains("PUBLIC FINANCE"));
+                foreach (string line in ordinary.text.Split('\n'))
+                    Assert.LessOrEqual(line.Length, columns, line);
+                StringAssert.Contains("UNQUESTIONED (84)",
+                    System.Text.RegularExpressions.Regex.Replace(ordinary.text, @"\s+", " "));
+                Player.fiscal.sovereignDebt = 12345678f;
+                Player.fiscal.energyReserve = 100f;
+                Player.fiscal.materialsReserve = 99f;
+                Player.fiscal.foodReserve = 98f;
+                Player.fiscal.restructuringMemoryMonths = 120;
+                view.Refresh(); // establish existing lazy view state before measuring reads
+                foreach (float standing in new[] { 0f, 26f, 44f, 62f, 84f, 100f })
+                {
+                    Player.fiscal.creditStanding = standing;
+                    string before = SaveSystem.ToJson(state);
+                    view.Refresh();
+                    var panel = view.Root.Query<Label>().ToList()
+                        .Single(l => (l.text ?? "").Contains("PUBLIC FINANCE"));
+                    foreach (string line in panel.text.Split('\n'))
+                        Assert.LessOrEqual(line.Length, columns, line);
+                    string text = System.Text.RegularExpressions.Regex.Replace(panel.text, @"\s+", " ");
+                    StringAssert.Contains($"{FiscalSystem.CreditText(standing)} ({standing:F0})", text);
+                    StringAssert.Contains("12345678", text);
+                    StringAssert.Contains("100 / 99 / 98", text);
+                    StringAssert.Contains("remembered for 120 more months", text);
+                    Assert.AreEqual(before, SaveSystem.ToJson(state));
+                }
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                TerminalMetrics.ResetForTests();
+            }
+        }
 
         // ---------- the defaults change nothing ----------
 
