@@ -57,6 +57,140 @@ namespace Brink.Tests
 
         // ---------- the chamber ----------
 
+        [TestCase(4242)]
+        [TestCase(9090)]
+        [TestCase(8686)]
+        [TestCase(5171)]
+        [TestCase(6301)]
+        public void EachNamedButtonCourtsItsOwnBlocEvenWhenConcernsAreIdentical(int seed)
+        {
+            state = WorldFactory.CreateDebugWorld(seed: seed);
+            WithController(() =>
+            {
+                var gov = state.PlayerCountry.government;
+                gov.factions.Clear();
+                for (int i = 0; i < 3; i++)
+                    gov.factions.Add(new Faction { name = "COALITION " + i,
+                        theme = OppositionTheme.Hardship, share = i == 0 ? .7f : .15f, disposition = 50 });
+                for (int selected = 0; selected < 3; selected++)
+                {
+                    var before = gov.factions.Select(f => f.disposition).ToArray();
+                    float pc = state.politicalCapital;
+                    int initiatives = state.initiativesThisYear;
+                    float backing = gov.brokeredSupport;
+                    var view = new GovernmentView();
+                    view.Refresh();
+                    var button = view.Root.Query<Button>().ToList().Single(b => b.text == $"COURT COALITION {selected} [2 PC]");
+                    var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                    if (clickable != null)
+                        clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic)
+                            .Invoke(clickable, new object[] { null });
+                    else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Assert.AreEqual(before[i] + (i == selected ? 9 : 0), gov.factions[i].disposition);
+                        Assert.AreEqual(i == 0 ? .7f : .15f, gov.factions[i].share);
+                    }
+                    Assert.AreEqual(pc - 2, state.politicalCapital);
+                    Assert.AreEqual(initiatives + 1, state.initiativesThisYear);
+                    Assert.AreEqual(backing + 3 + System.Math.Max(0, 60 - backing) * .14f, gov.brokeredSupport, .0001f);
+                    StringAssert.Contains($"COALITION {selected} has been courted", state.notifications.Last().body);
+                    CollectionAssert.AreEqual(gov.factions.Select(f => f.disposition),
+                        SaveSystem.Load().PlayerCountry.government.factions.Select(f => f.disposition));
+                }
+            });
+        }
+
+        [TestCase(-1)]
+        [TestCase(3)]
+        [TestCase(int.MaxValue)]
+        public void InvalidLedgerTargetRefusesBeforeAuthoritySpendOrSeeding(int index)
+        {
+            WithController(() =>
+            {
+                state.PlayerCountry.government.factions.Clear();
+                state.PlayerCountry.government.type = GovernmentType.PresidentialRepublic;
+                state.authorizedPillarMask = 0;
+                string before = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.CourtFaction(index));
+                Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportForFactionBy(state, state.playerCountryId, index));
+                Assert.IsFalse(GovernmentSystem.BuildPoliticalSupportForFactionBy(state, "ABSENT", index));
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            });
+        }
+
+        [Test]
+        public void ExactCourtingKeepsAffordabilityAuthorityClampingAndLegacyThemeRules()
+        {
+            WithController(() =>
+            {
+                var gov = state.PlayerCountry.government;
+                gov.factions.Clear();
+                gov.factions.Add(new Faction { name = "MAJOR", theme = OppositionTheme.Liberty, share = .8f, disposition = 50 });
+                gov.factions.Add(new Faction { name = "MINOR", theme = OppositionTheme.Liberty, share = .2f, disposition = 96 });
+                state.politicalCapital = 1;
+                string before = SaveSystem.ToJson(state);
+                Assert.IsFalse(GameController.Instance.CourtFaction(1));
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                state.politicalCapital = 20;
+                gov.type = GovernmentType.ParliamentaryRepublic;
+                state.authorizedPillarMask = 0;
+                Assert.IsFalse(GameController.Instance.CourtFaction(1));
+                Assert.AreEqual(20, state.politicalCapital);
+                Assert.AreEqual(96, gov.factions[1].disposition);
+                gov.type = GovernmentType.PresidentialRepublic;
+                state.authorizedPillarMask = ~0;
+                Assert.IsTrue(GameController.Instance.CourtFaction(1));
+                Assert.AreEqual(100, gov.factions[1].disposition);
+                Assert.AreEqual(50, gov.factions[0].disposition);
+                Assert.IsTrue(GameController.Instance.CourtFaction(OppositionTheme.Liberty));
+                Assert.AreEqual(59, gov.factions[0].disposition, "legacy theme callers still court the largest constituency");
+                Assert.IsTrue(GovernmentSystem.BuildPoliticalSupportBy(state, state.playerCountryId));
+                Assert.AreEqual(61, gov.factions[0].disposition);
+                Assert.AreEqual(100, gov.factions[1].disposition);
+            });
+        }
+
+        [Test]
+        public void ExactActorGenericBargainChargesOnlyTheForeignActor()
+        {
+            var country = state.FindCountry("CHN");
+            var ai = state.FindAI(country.id);
+            ai.politicalCapital = 20;
+            country.government.factions.Clear();
+            country.government.factions.Add(new Faction { name = "MAJOR", theme = OppositionTheme.Liberty, share = .8f, disposition = 50 });
+            country.government.factions.Add(new Faction { name = "MINOR", theme = OppositionTheme.Liberty, share = .2f, disposition = 50 });
+            float pc = state.politicalCapital;
+            int initiatives = state.initiativesThisYear;
+            Assert.IsTrue(GovernmentSystem.BuildPoliticalSupportForFactionBy(state, country.id, 1));
+            Assert.AreEqual(18, ai.politicalCapital);
+            Assert.AreEqual(pc, state.politicalCapital);
+            Assert.AreEqual(initiatives, state.initiativesThisYear);
+            Assert.AreEqual(50, country.government.factions[0].disposition);
+            Assert.AreEqual(59, country.government.factions[1].disposition);
+        }
+
+        [Test]
+        public void ExactTargetOnAnEmptyOldSaveMatchesTheDisplayedPreview()
+        {
+            WithController(() =>
+            {
+                var country = state.PlayerCountry;
+                country.government.factions.Clear();
+                var preview = GovernmentSystem.FactionsFor(state, country);
+                Assert.AreEqual(0, country.government.factions.Count);
+                Assert.IsTrue(GameController.Instance.CourtFaction(2));
+                for (int i = 0; i < preview.Count; i++)
+                {
+                    var actual = country.government.factions[i];
+                    Assert.AreEqual(preview[i].name, actual.name);
+                    Assert.AreEqual(preview[i].theme, actual.theme);
+                    Assert.AreEqual(preview[i].share, actual.share);
+                    Assert.AreEqual(preview[i].disposition + (i == 2 ? 9 : 0), actual.disposition);
+                }
+            });
+        }
+
         [TestCase(GovernmentType.PresidentialRepublic, "THE CHAMBER MAJORITY")]
         [TestCase(GovernmentType.ParliamentaryRepublic, "THE CHAMBER MAJORITY")]
         [TestCase(GovernmentType.DominantPartyState, "THE PARTY APPARATUS")]

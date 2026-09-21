@@ -688,7 +688,19 @@ namespace Brink.Core
             if (!IsRunning || !GovernmentSystem.FactionsFor(State, State.PlayerCountry).Exists(f => f.theme == bloc))
                 return false;
             if (!MayCommand(Data.Pillar.Government)) return false;
-            bool ok = GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc);
+            return FinishFactionBargain(GovernmentSystem.BuildPoliticalSupportBy(State, State.playerCountryId, bloc));
+        }
+
+        public bool CourtFaction(int factionIndex)
+        {
+            if (!IsRunning || factionIndex < 0 || factionIndex >= GovernmentSystem.FactionsFor(State, State.PlayerCountry).Count)
+                return false;
+            if (!MayCommand(Data.Pillar.Government)) return false;
+            return FinishFactionBargain(GovernmentSystem.BuildPoliticalSupportForFactionBy(State, State.playerCountryId, factionIndex));
+        }
+
+        bool FinishFactionBargain(bool ok)
+        {
             if (ok)
             {
                 ProgressionSystem.RecordInitiative(State);

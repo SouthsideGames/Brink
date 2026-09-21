@@ -202,6 +202,7 @@ namespace Brink.UI.Views
             int factionIndex = 0;
             foreach (var faction in GovernmentSystem.FactionsFor(state, player))
             {
+                int selectedIndex = factionIndex;
                 AddText("terminal-text-bright").text = faction.name;
                 AddText().text = $" Share of {(gov.IsElective ? "chamber" : "elite")}: {faction.share:P0}. "
                     + $"Disposition: {faction.disposition:F0}/100 (50 is indifferent). Concern: {faction.theme}.";
@@ -221,7 +222,7 @@ namespace Brink.UI.Views
                 float inquiry = System.Math.Max(0f, System.Math.Min(100f, faction.disposition + GovernmentSystem.InquiryReaction(theme, gov.corruption))) - faction.disposition;
                 AddText().text = $" Disposition if ordered now: PATRONAGE {patronage:+0.##;-0.##;0}; PUBLIC INQUIRY {inquiry:+0.##;-0.##;0}.";
                 AddButton(MakeRow(), $"COURT {faction.name} [{GovernmentSystem.BuildSupportCost:F0} PC]", null,
-                    () => { GameController.Instance.CourtFaction(theme); Refresh(); });
+                    () => { GameController.Instance.CourtFaction(selectedIndex); Refresh(); });
             }
             AddText("terminal-text-dim").text = "Courting raises only the chosen bloc's disposition and also buys general backing. "
                 + "It does not settle the opposition's case or change national policy. Patronage pleases hardship blocs and angers liberty/corruption blocs. "
