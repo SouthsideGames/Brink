@@ -469,7 +469,7 @@ namespace Brink.Core
                 "Bargain with one named part of the coalition rather than with the chamber in "
                 + "general. Worth more than an undirected approach, because each bloc wants a "
                 + "different thing and only one of them wants what you are offering.",
-                verbs: new[] { nameof(GameController.CourtFaction) });
+                verbs: new[] { nameof(GameController.CourtFaction), nameof(GameController.CourtFactionAtIndex) });
 
             Add(Pillar.Government, "GOVERNMENT", "Distribute patronage", "1 PC + treasury",
                 "The same support, bought with money instead of standing — and it hollows the state.",
