@@ -740,6 +740,14 @@ applied benefits; later conditions can still erode capacity and functioning.
 This first #24 slice does not add map sites, bespoke megaprojects or research-project
 presentation. See spec 02 §3a.
 
+The first physical extension is energy works at a selected controlled energy
+region, using that same funding queue. Fighting that denies the site pauses
+payments and work; lost ownership at resolution abandons unfinished construction
+without refund. Completed infrastructure stays on the map location and benefits
+its current controller, with output suppressed while contested. Investment can
+therefore be captured rather than permanently attached to its builder. This is
+one bounded project type, not a new city-building layer (spec 02 §3b).
+
 ## 7.3 Intelligence
 
 Foreign capability is observed through estimates with margins and confidence grades. Networks collect in Military, Economic, Political and Diplomatic domains; stale information degrades.

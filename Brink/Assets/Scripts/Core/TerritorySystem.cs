@@ -56,7 +56,14 @@ namespace Brink.Core
 
         /// <summary>Energy the country's held energy regions add to (or subtract from) its position.</summary>
         public static float EnergySwing(GameState state, string countryId)
-            => Swing(state, countryId, LocationType.EnergyRegion) * 0.28f;
+        {
+            float value = Swing(state, countryId, LocationType.EnergyRegion) * 0.28f;
+            foreach (var site in state.locations)
+                if (site.type == LocationType.EnergyRegion && site.energyWorks
+                    && site.ownerId == countryId && !InsurgencySystem.Denies(state, site))
+                    value += IndustrialSystem.SiteEnergyPoints;
+            return value;
+        }
 
         /// <summary>Industrial capacity from held industrial centres.</summary>
         public static float IndustrySwing(GameState state, string countryId)

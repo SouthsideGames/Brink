@@ -262,7 +262,8 @@ namespace Brink.Core
                 + "capacity later, and the treasury has to carry it every month or the work stops.",
                 IndustrialSystem.CanBegin(state, state.playerCountryId, out string industrialBlock),
                 industrialBlock,
-                verbs: new[] { nameof(GameController.BeginIndustrialProgramme) });
+                verbs: new[] { nameof(GameController.BeginIndustrialProgramme),
+                               nameof(GameController.BeginEnergySiteProject) });
 
             // ---------- intelligence ----------
 

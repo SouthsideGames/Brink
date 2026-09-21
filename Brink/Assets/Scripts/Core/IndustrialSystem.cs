@@ -41,6 +41,9 @@ namespace Brink.Core
         /// <summary>Command capacity to start one. Player only — see `Begin`.</summary>
         public const int CpCost = 2;
 
+        /// <summary>One completed site's contribution before the national ceiling clamp.</summary>
+        public const float SiteEnergyPoints = 7f;
+
         /// <summary>
         /// Treasury cost per month of a programme, by scale. Charged monthly
         /// rather than up front so a programme is a standing commitment the
@@ -98,11 +101,68 @@ namespace Brink.Core
         // ---------- ordering ----------
 
         /// <summary>A descriptive project name, derived without new save state or RNG.</summary>
-        public static string ProjectName(IndustrialProgramme programme)
+        public static string ProjectName(IndustrialProgramme programme, GameState state = null)
         {
+            if (!string.IsNullOrEmpty(programme.locationId))
+                return "Energy Works / " + (state?.FindLocation(programme.locationId)?.displayName ?? programme.locationId);
             string started = programme.started.month >= 1 && programme.started.month <= 12
                 ? programme.started.DisplayString : "START DATE UNKNOWN";
             return $"National {Phrase.Of(programme.sector)} Works / {Phrase.Of(programme.scale)} / {started}";
+        }
+
+        public static bool CanBeginSite(GameState state, string actorId, string locationId, out string reason)
+        {
+            if (!CanBegin(state, actorId, out reason)) return false;
+            var site = state.FindLocation(locationId);
+            if (site == null || site.type != LocationType.EnergyRegion)
+            { reason = "Choose an energy region."; return false; }
+            if (site.ownerId != actorId)
+            { reason = "We do not control this site."; return false; }
+            if (site.energyWorks)
+            { reason = "Energy works already complete here."; return false; }
+            if (InsurgencySystem.Denies(state, site))
+            { reason = "Restore control before beginning work."; return false; }
+            foreach (var programme in state.FindCountry(actorId).economy.programmes)
+                if (programme.sector == EconomicSector.Energy)
+                { reason = "An Energy project already occupies the sector slot."; return false; }
+            reason = "";
+            return true;
+        }
+
+        /// <summary>Same queue, payment and rewards as national work; no AI caller yet.</summary>
+        public static bool BeginSiteBy(GameState state, string actorId, string locationId)
+        {
+            if (!CanBeginSite(state, actorId, locationId, out _)) return false;
+            return BeginBy(state, actorId, EconomicSector.Energy, IndustrialScale.Maintenance, locationId);
+        }
+
+        public static bool BeginSite(GameState state, TurnManager turns, string locationId)
+        {
+            if (!CanBeginSite(state, state.playerCountryId, locationId, out _)) return false;
+            if (!AuthoritySystem.EnsureAuthority(state, Pillar.Economy)) return false;
+            if (!turns.SpendCommandPoints(CpCost, "Energy site project")) return false;
+            if (!BeginSiteBy(state, state.playerCountryId, locationId)) return false;
+            ProgressionSystem.AwardXP(state, 14, "Industrial programme begun");
+            ProgressionSystem.RecordInitiative(state);
+            return true;
+        }
+
+        /// <summary>Own-site status only; callers must enforce the information boundary.</summary>
+        public static string SiteReadout(GameState state, StrategicLocation site)
+        {
+            bool denied = InsurgencySystem.Denies(state, site);
+            string result = $"ENERGY SITE: {site.displayName}. ";
+            if (site.energyWorks)
+                return result + (denied ? "Completed works suppressed by fighting. " : "Completed works operating. ")
+                    + $"Site contribution: {(denied ? 0f : SiteEnergyPoints):0.##} energy-ceiling points before the national cap. "
+                    + "Works stay with the site if ownership changes.";
+            var owner = state.FindCountry(site.ownerId);
+            if (owner != null)
+                foreach (var work in owner.economy.programmes)
+                    if (work.locationId == site.id)
+                        return result + (denied ? "PAUSED: contested; no payment or progress. " : "UNDER CONSTRUCTION. ")
+                            + ProjectProgress(owner, work);
+            return result + "Not developed. One build per site.";
         }
 
         /// <summary>Funded work, not elapsed calendar time. Read-only, including legacy saves.</summary>
@@ -139,6 +199,10 @@ namespace Brink.Core
         /// <summary>Actor-generic. Does not spend Command Points — see `Begin`.</summary>
         public static bool BeginBy(GameState state, string actorId,
             EconomicSector sector, IndustrialScale scale)
+            => BeginBy(state, actorId, sector, scale, null);
+
+        static bool BeginBy(GameState state, string actorId,
+            EconomicSector sector, IndustrialScale scale, string locationId)
         {
             if (!CanBegin(state, actorId, out _)) return false;
 
@@ -154,15 +218,16 @@ namespace Brink.Core
                 sector = sector,
                 scale = scale,
                 monthsRemaining = MonthsFor(scale),
-                started = state.date
+                started = state.date,
+                locationId = locationId
             };
             country.economy.programmes.Add(programme);
             state.AddChronicle(ChronicleCategory.Economic, actorId,
-                $"PROJECT BEGUN: {ProjectName(programme)}. {MonthsFor(scale)} funded months at {MonthlyCostFor(scale):F0}/MO.");
+                $"PROJECT BEGUN: {ProjectName(programme, state)}. {MonthsFor(scale)} funded months at {MonthlyCostFor(scale):F0}/MO.");
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "PROGRAMME BEGUN",
-                    $"{ProjectName(programme)}. "
+                    $"{ProjectName(programme, state)}. "
                     + $"{MonthsFor(scale)} months at {MonthlyCostFor(scale):F0} a month.",
                     actorId, desk: ReportingDesk.Economy);
 
@@ -202,7 +267,7 @@ namespace Brink.Core
                 if (country.economy.programmes[i].sector != sector) continue;
                 var programme = country.economy.programmes[i];
                 country.economy.programmes.RemoveAt(i);
-                string stopped = $"PROJECT CANCELLED: {ProjectName(programme)}. "
+                string stopped = $"PROJECT CANCELLED: {ProjectName(programme, state)}. "
                     + "Work stops without completion benefits. What has been spent is spent.";
                 state.AddChronicle(ChronicleCategory.Economic, actorId, stopped);
 
@@ -226,6 +291,23 @@ namespace Brink.Core
                 for (int i = eco.programmes.Count - 1; i >= 0; i--)
                 {
                     var programme = eco.programmes[i];
+                    if (!string.IsNullOrEmpty(programme.locationId))
+                    {
+                        var site = state.FindLocation(programme.locationId);
+                        if (site == null || site.type != LocationType.EnergyRegion || site.ownerId != country.id)
+                        {
+                            eco.programmes.RemoveAt(i);
+                            string abandoned = $"PROJECT ABANDONED: {ProjectName(programme, state)}. "
+                                + "The site is no longer available under our control. No further payment, completion benefit or refund.";
+                            state.AddChronicle(ChronicleCategory.Economic, country.id, abandoned);
+                            if (country.isPlayer)
+                                state.AddNotification(NotificationClass.Priority, "PROJECT ABANDONED", abandoned,
+                                    country.id, desk: ReportingDesk.Economy);
+                            continue;
+                        }
+                        // No instalment is due while fighting denies the site's output.
+                        if (InsurgencySystem.Denies(state, site)) continue;
+                    }
                     float cost = MonthlyCostFor(programme.scale);
 
                     // **A programme you cannot pay for stops.** Without this the
@@ -235,7 +317,7 @@ namespace Brink.Core
                     if (country.resources.treasury < cost)
                     {
                         eco.programmes.RemoveAt(i);
-                        string lapsed = $"PROJECT LAPSED: {ProjectName(programme)}. "
+                        string lapsed = $"PROJECT LAPSED: {ProjectName(programme, state)}. "
                             + "The treasury cannot carry the next instalment. No completion benefits; no refund.";
                         state.AddChronicle(ChronicleCategory.Economic, country.id, lapsed);
                         if (country.isPlayer)
@@ -266,6 +348,25 @@ namespace Brink.Core
         /// </summary>
         static void Complete(GameState state, CountryState country, IndustrialProgramme programme)
         {
+            if (!string.IsNullOrEmpty(programme.locationId))
+            {
+                var site = state.FindLocation(programme.locationId); // validated before payment
+                float before = EconomySystem.EnergyCeilingFor(state, country);
+                site.energyWorks = true;
+                float applied = EconomySystem.EnergyCeilingFor(state, country) - before;
+                string receipt = $"PROJECT COMPLETE: {ProjectName(programme, state)}. "
+                    + $"Site contribution +{SiteEnergyPoints:0.##}; applied energy-ceiling change {applied:+0.##;-0.##;0} points. "
+                    + "No instant energy refill or national sector bonus. Fighting suppresses output; ownership transfers the works.";
+                state.AddChronicle(ChronicleCategory.Economic, country.id, country.isPlayer ? receipt
+                    : $"PROJECT COMPLETE: {ProjectName(programme, state)}. Energy works completed.", Publicity.Public);
+                if (country.isPlayer)
+                {
+                    state.AddNotification(NotificationClass.Priority, "PROGRAMME COMPLETE", receipt,
+                        country.id, desk: ReportingDesk.Economy);
+                    ProgressionSystem.AwardXP(state, 30, "Industrial programme completed");
+                }
+                return;
+            }
             float yield = YieldFor(programme.scale);
             var sector = country.economy.Sector(programme.sector);
             float outputBefore = sector?.output ?? 0f;

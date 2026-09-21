@@ -31,6 +31,21 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Energy-site projects (#24).** Optional programme locationId reuses the
+  industrial queue; completed energyWorks stays on StrategicLocation. Twelve
+  funded months at 95/month and 2 CP buy one +7 site contribution to the energy
+  ceiling before its cap, not an instant refill or national sector bonus.
+  Denial pauses without payment; lost ownership at industrial resolution abandons
+  work without refund. Capture transfers completed output, denial suppresses it.
+  Old saves remain national/undeveloped by default at v7. Readouts expose only
+  our sites. No new AI caller, pipeline or partition change; initial tuning and
+  hardware are unverified, and #24 remains partial. Spec 02 §3b, 01 §3a, 10 §2.
+  Author .NET comparison: 1915/1883/31/1 versus exact-base 1890/1858/31/1;
+  25 additions pass, zero shared outcome/normalized-message changes, standard
+  balance identical (bots never build sites; not policy-balance evidence).
+  IndustrialSystemTests 55/55; eight mutations caught at 2/1/6/1/1/4/4/3,
+  baseline/no-op/restored 55/55. Native Unity remains Claude's separate gate.
+
 - **Visible research projects (#24).** Full saved labels, remaining funding at
   saved terms and latest-five own research/acquisition records use existing
   state and chronicle entries. No invented start date or funded-work total;
