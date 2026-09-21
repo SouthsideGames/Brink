@@ -730,7 +730,8 @@ state we are fighting (a war voids any détente the moment it is signed).
 
 **The concession is the regime itself.** Accepted, it is removed exactly as
 `EconomySystem.LiftSanctions` removes it — the `Sanction` record goes, and an
-embargo on our trade link with them lifts — and the **existing détente** is
+embargo on our trade link lifts unless their remaining Severe-or-above regime
+still imposes it (spec 02 §3) — and the **existing détente** is
 set: `Relationship.sanctionsTruceMonths = max(existing, DetenteTruceMonths)`
 (24), the same field `SeekSanctionsReliefBy` sets; a longer truce already
 running on the pair is kept, never shortened. Relations +6 / trust +5 and the "Negotiated
@@ -798,16 +799,15 @@ age, a mandate, a running détente. The outlook is graded by our political
 collection on them (§5h's rule); a test scans the panel for any read of their
 live resources or the true reception.
 
-**Inherited, recorded as a follow-up, not changed here.** The lift clears the
-pair's `embargoed` flag exactly as `LiftSanctions` does, even when a regime
-*they* run on us still closes the link under `Supply`. `Supply` is now priced
-truthfully, but the flag has other readers that do not consult sanctions —
-`TradeHealth` and `ImportDisplacement` (`EconomySystem`), the dependence
-target (`DiplomacySystem.MonthlyUpdate`), the map's link glyph, an event gate
-and the AI's hostility count — so those read the link as open while it
-delivers nothing. The same inconsistency follows the ordinary LIFT SANCTIONS
-verb and predates this slice; reconciling the flag with the supply rules is a
-separate piece of work on embargo handling.
+**Reciprocal-embargo follow-up corrected.** All six sanction-removal paths now
+share `EconomySystem.RemoveSanction`: a surviving Severe/Existential regime
+keeps the pair's flag set, so `TradeHealth`, import displacement, dependence,
+map/status readers and event/AI readers no longer lose that embargo when only
+one side lifts. Ending the last severe regime clears it. Commodity supply and
+its counterfactual pricing remain unchanged: any remaining sanction blocks
+supply, including sub-Severe regimes which intentionally do not impose the full
+embargo (spec 02 §3). This is not an old-save repair for flags already cleared
+by the former bug, nor a unification of the two different severity rules.
 
 **Not in this slice.** Partial lifting or severity reduction; lifting for a
 conditional or bounded clause; recognition or tariff bargaining; an AI caller.
@@ -951,7 +951,8 @@ the signed record uses (`IF CONFLICT WITH X`, `EXPIRES BEFORE MMM YYYY`).
 award plus 12 (42 created / 32 extended or renewed) under the repetition rule.
 
 **Not in this slice:** an AI caller for any exchange; the embargo-flag follow-up
-of §5i; renewal on different terms (an amendment model does not exist).
+of §5i (subsequently corrected there for reciprocal severe regimes); renewal
+on different terms (an amendment model does not exist).
 
 ## 9a. Bloc politics (GDD §24 amendment)
 

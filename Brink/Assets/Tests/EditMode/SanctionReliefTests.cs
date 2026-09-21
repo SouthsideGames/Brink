@@ -35,6 +35,122 @@ namespace Brink.Tests
         [TearDown]
         public void TearDown() { GameLog.MirrorToUnityConsole = true; GameLog.Clear(); }
 
+        TradeRelation ReciprocalEmbargo(SanctionSeverity remaining)
+        {
+            state.sanctions.Clear();
+            state.trade.Clear();
+            state.commandPoints.current = 20;
+            var link = new TradeRelation { countryA = "CHN", countryB = state.playerCountryId,
+                focus = TradeFocus.Energy, volume = 50f, tariff = 10f };
+            state.trade.Add(link);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, state.playerCountryId, "CHN", SanctionSeverity.Severe));
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "CHN", state.playerCountryId, remaining));
+            Assert.IsTrue(link.embargoed);
+            return link;
+        }
+
+        [TestCase("ordinary")]
+        [TestCase("negotiated")]
+        [TestCase("lapse")]
+        [TestCase("peace-concession")]
+        [TestCase("peace-demand")]
+        public void EndingOneRegimeCannotLiftTheOtherSidesEmbargo(string route)
+        {
+            var link = ReciprocalEmbargo(SanctionSeverity.Severe);
+            string player = state.playerCountryId;
+            string sender = route == "negotiated" || route == "lapse" || route == "peace-demand" ? "CHN" : player;
+            string target = sender == player ? "CHN" : player;
+            var ended = state.FindSanction(sender, target);
+            var remaining = state.FindSanction(target, sender);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "RUS", "IND", SanctionSeverity.Severe));
+            var unrelated = state.FindSanction("RUS", "IND");
+            float health = EconomySystem.TradeHealth(state, player);
+
+            if (route == "ordinary")
+                Assert.IsTrue(EconomySystem.LiftSanctions(state, new TurnManager(state), "CHN"));
+            else if (route == "negotiated" || route == "lapse")
+            {
+                var relation = state.FindRelationship(player, "CHN");
+                relation.relations = 100f;
+                relation.trust = 100f;
+                relation.SetThreatPerceivedBy("CHN", 0f);
+                if (route == "negotiated")
+                    Assert.IsTrue(EconomySystem.SeekSanctionsReliefBy(state, player, "CHN"));
+                else
+                {
+                    ended.monthsActive = EconomySystem.SanctionReviewMonths;
+                    EconomySystem.AgeSanctions(state);
+                }
+            }
+            else
+            {
+                var war = OpenWar(player, "CHN");
+                Assert.IsTrue(PeaceSystem.AcceptOfferedTerms(state, war, player, PeaceProposal.Of(
+                    route == "peace-concession" ? PeaceTerm.SanctionsRelief : PeaceTerm.SanctionsLifted)));
+            }
+
+            Assert.IsFalse(state.sanctions.Contains(ended), "the requested removal must actually occur");
+            Assert.IsTrue(state.sanctions.Contains(remaining));
+            Assert.IsTrue(state.sanctions.Contains(unrelated));
+            Assert.IsTrue(link.embargoed, route + " cleared someone else's embargo");
+            Assert.AreEqual(health, EconomySystem.TradeHealth(state, player), 0.0001f);
+            Assert.AreEqual(0f, EconomySystem.ImportDisplacement(state, state.PlayerCountry, EconomicSector.Energy));
+            Assert.AreEqual(0f, TradeSystem.Supply(state, player, TradeFocus.Energy));
+            var restored = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(restored.FindTrade(player, "CHN").embargoed);
+            var dependence = state.FindRelationship(player, "CHN");
+            dependence.dependenceAOnB = dependence.dependenceBOnA = 30f;
+            DiplomacySystem.MonthlyUpdate(state);
+            Assert.AreEqual(27.6f, dependence.dependenceAOnB, 0.0001f);
+            Assert.AreEqual(27.6f, dependence.dependenceBOnA, 0.0001f);
+
+            Assert.IsTrue(EconomySystem.RemoveSanction(state, remaining));
+            Assert.IsFalse(link.embargoed, "the last embargo must lift");
+            Assert.Greater(EconomySystem.TradeHealth(state, player), health);
+            Assert.Greater(EconomySystem.ImportDisplacement(state, state.PlayerCountry, EconomicSector.Energy), 0f);
+            Assert.Greater(TradeSystem.Supply(state, player, TradeFocus.Energy), 0f);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MutualPeaceReliefClearsBothRegimesInEitherTermOrder(bool reversed)
+        {
+            var link = ReciprocalEmbargo(SanctionSeverity.Severe);
+            var war = OpenWar(state.playerCountryId, "CHN");
+            var terms = reversed ? PeaceProposal.Of(PeaceTerm.SanctionsLifted, PeaceTerm.SanctionsRelief)
+                : PeaceProposal.Of(PeaceTerm.SanctionsRelief, PeaceTerm.SanctionsLifted);
+            Assert.IsTrue(PeaceSystem.AcceptOfferedTerms(state, war, state.playerCountryId, terms));
+            Assert.IsEmpty(state.sanctions);
+            Assert.IsFalse(link.embargoed);
+            Assert.Greater(TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy), 0f);
+        }
+
+        [TestCase(SanctionSeverity.Routine, false)]
+        [TestCase(SanctionSeverity.Pressure, false)]
+        [TestCase(SanctionSeverity.Coercive, false)]
+        [TestCase(SanctionSeverity.Severe, true)]
+        [TestCase(SanctionSeverity.Existential, true)]
+        public void RemainingSeverityDistinguishesFullEmbargoFromCommodityClosure(SanctionSeverity severity, bool embargo)
+        {
+            var link = ReciprocalEmbargo(severity);
+            Assert.IsTrue(EconomySystem.LiftSanctions(state, new TurnManager(state), "CHN"));
+            Assert.AreEqual(embargo, link.embargoed);
+            Assert.AreEqual(0f, TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy));
+        }
+
+        [Test]
+        public void AbsentRemovalCannotClearAnEmbargoAndNoLinkIsSafe()
+        {
+            var link = ReciprocalEmbargo(SanctionSeverity.Severe);
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(EconomySystem.RemoveSanction(state, null));
+            Assert.IsFalse(EconomySystem.RemoveSanction(state, new Sanction { senderId = state.playerCountryId, targetId = "CHN" }));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            state.trade.Clear();
+            Assert.IsTrue(EconomySystem.RemoveSanction(state, state.FindSanction(state.playerCountryId, "CHN")));
+            Assert.IsNotNull(state.FindSanction("CHN", state.playerCountryId));
+        }
+
         /// <summary>A cold pair, so the relations arm of the cause always stands.</summary>
         void MakeCold(string a, string b)
         {

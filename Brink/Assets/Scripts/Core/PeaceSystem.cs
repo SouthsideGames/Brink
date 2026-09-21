@@ -605,9 +605,7 @@ namespace Brink.Core
                         var sanction = state.FindSanction(proposerId, opponent.id);
                         if (sanction != null)
                         {
-                            state.sanctions.Remove(sanction);
-                            var link = state.FindTrade(proposerId, opponent.id);
-                            if (link != null) link.embargoed = false;
+                            EconomySystem.RemoveSanction(state, sanction);
                             summary.Add("sanctions lifted");
                         }
                         break;
@@ -621,9 +619,7 @@ namespace Brink.Core
                         var theirs = state.FindSanction(opponent.id, proposerId);
                         if (theirs != null)
                         {
-                            state.sanctions.Remove(theirs);
-                            var link = state.FindTrade(opponent.id, proposerId);
-                            if (link != null) link.embargoed = false;
+                            EconomySystem.RemoveSanction(state, theirs);
                             summary.Add($"{opponent.displayName} lifted sanctions");
                         }
                         break;

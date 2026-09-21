@@ -449,7 +449,7 @@ namespace Brink.Core
         /// <summary>
         /// Put the offer. Actor-generic and free of CP; the player wrapper on
         /// `GameController` spends. Accepted: the regime is removed exactly as
-        /// `LiftSanctions` removes it (embargo cleared), the existing 24-month
+        /// `LiftSanctions` removes it (remaining severe embargo preserved), the existing 24-month
         /// détente is set on the pair (a longer one already running is kept), and the clause is written through the
         /// shared treaty paths — together or not at all. Declined or invalid:
         /// the regime, every other regime and every clause stay as they were.
@@ -484,9 +484,7 @@ namespace Brink.Core
             }
 
             // ---- the concession: our regime ends, as LiftSanctions ends it ----
-            state.sanctions.Remove(sanction);
-            var link = state.FindTrade(actorId, targetId);
-            if (link != null) link.embargoed = false;
+            EconomySystem.RemoveSanction(state, sanction);
 
             // The existing détente, and nothing stronger: neither side may
             // impose new measures on the other while it runs; a declaration of

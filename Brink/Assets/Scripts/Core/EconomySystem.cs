@@ -1013,9 +1013,7 @@ namespace Brink.Core
             if (sanction == null) return false;
             if (!turns.SpendCommandPoints(1, "Lift sanctions")) return false;
 
-            state.sanctions.Remove(sanction);
-            var link = state.FindTrade(state.playerCountryId, targetId);
-            if (link != null) link.embargoed = false;
+            RemoveSanction(state, sanction);
 
             var target = state.FindCountry(targetId);
             state.AddNotification(NotificationClass.Advisory, "SANCTIONS LIFTED",
@@ -1029,6 +1027,31 @@ namespace Brink.Core
             // player who never lifts anything.
             ProgressionSystem.RecordInitiative(state);
             ProgressionSystem.AwardXP(state, 10, "Sanctions lifted");
+            return true;
+        }
+
+        /// <summary>
+        /// Shared removal after a caller's own cost/acceptance gates. Ending one
+        /// regime cannot lift a full embargo still imposed by the other side.
+        /// Sub-Severe regimes still block commodity supply, not general trade.
+        /// No costs, rewards, notices or other regimes are changed here.
+        /// </summary>
+        public static bool RemoveSanction(GameState state, Sanction sanction)
+        {
+            if (sanction == null || !state.sanctions.Remove(sanction)) return false;
+            var link = state.FindTrade(sanction.senderId, sanction.targetId);
+            if (link != null)
+            {
+                link.embargoed = false;
+                foreach (var remaining in state.sanctions)
+                    if (remaining.severity >= SanctionSeverity.Severe
+                        && ((remaining.senderId == sanction.senderId && remaining.targetId == sanction.targetId)
+                            || (remaining.senderId == sanction.targetId && remaining.targetId == sanction.senderId)))
+                    {
+                        link.embargoed = true;
+                        break;
+                    }
+            }
             return true;
         }
 
@@ -1363,9 +1386,7 @@ namespace Brink.Core
                 return false;
             }
 
-            state.sanctions.Remove(sanction);
-            var link = state.FindTrade(senderId, targetId);
-            if (link != null) link.embargoed = false;
+            RemoveSanction(state, sanction);
 
             relationship.sanctionsTruceMonths = DetenteTruceMonths;
             relationship.relations = Clamp(relationship.relations + 6f, 0f, 100f);
@@ -1430,9 +1451,7 @@ namespace Brink.Core
                 if (SanctionCauseStands(state, sanction.senderId, sanction.targetId)
                     && !RivalryRegimeHasOutlivedItsWar(state, sanction)) continue;
 
-                state.sanctions.RemoveAt(i);
-                var link = state.FindTrade(sanction.senderId, sanction.targetId);
-                if (link != null) link.embargoed = false;
+                RemoveSanction(state, sanction);
 
                 state.AddNotification(
                     sanction.targetId == state.playerCountryId
