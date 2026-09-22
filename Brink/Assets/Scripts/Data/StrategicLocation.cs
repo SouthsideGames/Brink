@@ -65,6 +65,12 @@ namespace Brink.Data
         /// <summary>Completed energy works stay with the ground. False in old saves.</summary>
         public bool energyWorks;
 
+        /// <summary>
+        /// Exclusive calendar month (year * 12 + month) when mine disruption ends.
+        /// Zero in old saves means clear. Stays with the site across title/control changes.
+        /// </summary>
+        public int mineHazardUntilMonth;
+
         /// <summary>Garrison strength currently holding the location, 0..100.</summary>
         public float garrison;
 

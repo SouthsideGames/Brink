@@ -5,6 +5,16 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+**Temporary mine disruption (spec 01, recoverable mines).** TradeHealth, commodity
+supply and import competition read `TradeSystem.EffectiveVolume`, while stored
+trade volume remains the agreement. Active mines on either endpoint's held ground
+subtract six once (floor zero), not once per site. Calendar expiry restores the
+unmodified agreement's throughput without a refund/write. Supply-exchange pricing
+uses the same modifier for both current and offered terms; sanctions-relief
+counterfactuals retain it. This is explicitly national disruption until routes
+exist. Dependence, nominal exposure and AI agreement-weight readers are unchanged.
+Old mining losses cannot safely be reconstructed. No other volume writer changed.
+
 Per country, updated monthly in `EconomySystem.MonthlyUpdate`. All rates are
 annualized percentages; each moves toward a computed target rather than jumping.
 

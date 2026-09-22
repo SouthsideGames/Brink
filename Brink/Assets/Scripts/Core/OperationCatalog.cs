@@ -251,8 +251,9 @@ namespace Brink.Core
             {
                 type = OperationType.MineWarfare, domain = OperationDomain.Naval,
                 displayName = "MINE WARFARE",
-                description = "Deny a port or a strait. Very cheap for what it closes, and it "
-                              + "keeps working after the ships that laid it have gone.",
+                description = "Mine a port or strait. Six months of disruption reduce its holder's "
+                              + "effective trade volume by 6 per link without changing agreements. "
+                              + "Repeat success refreshes duration; hazards do not stack. Routine clearance ends it.",
                 cpCost = 2, naval = 0.90f, air = 0.10f,
                 intensity = 0.25f, civilianFactor = 0.3f,
                 defense = DefenseModel.EnemyNavy, defenseScale = 0.45f,
@@ -264,7 +265,7 @@ namespace Brink.Core
                 type = OperationType.ConvoyEscort, domain = OperationDomain.Naval,
                 displayName = "CONVOY ESCORT",
                 description = "Protect our own shipping. The answer to a blockade or a raiding "
-                              + "campaign, and the only naval operation that defends.",
+                              + "campaign. Success also removes three months of mine disruption at the selected site, even in peacetime.",
                 cpCost = 2, naval = 0.85f, air = 0.15f,
                 intensity = 0.25f, civilianFactor = 0f,
                 targeting = OperationTargeting.OwnGround,

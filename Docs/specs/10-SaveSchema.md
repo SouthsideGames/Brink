@@ -74,6 +74,13 @@ ownership, not a separate saved timer; monthsRemaining retains funded progress.
 
 ### 2a. Parallel lists stand in for dictionaries
 
+`StrategicLocation.mineHazardUntilMonth` is an additive integer, exclusive
+calendar index (`year * 12 + month`) for routine mine clearance. Missing/zero
+means no active hazard at v7; no migration or version bump. It stays with the
+location through title/control changes. An expired timestamp is inert; reads do
+not normalize or mutate it. Saves written before this repair have no information
+with which to refund historical mining damage, so none is invented.
+
 `xpReasons` (`List<string>`) and `xpReasonCounts` (`List<int>`) are a map from an
 XP reason to the number of times it has already paid this year, held as two lists
 indexed in lockstep because **`JsonUtility` cannot serialize a dictionary** — it

@@ -114,6 +114,13 @@ namespace Brink.Core
     /// </summary>
     public static class MilitarySystem
     {
+        public const int MineHazardMonths = 6;
+        public const int MineEscortMonths = 3;
+
+        /// <summary>Calendar-based routine clearance, including after peace and without a fleet.</summary>
+        public static int MineMonthsRemaining(GameState state, StrategicLocation site)
+            => Math.Max(0, site.mineHazardUntilMonth - (state.date.year * 12 + state.date.month));
+
         /// <summary>
         /// Converts branch power (0..1 each) onto the same scale as garrison and
         /// defence value (0..100), so an army and a fortification can be compared.
@@ -1262,16 +1269,17 @@ namespace Brink.Core
                            + "doing what a blockade would do, more slowly and for less.";
 
                 case OperationType.MineWarfare:
-                    // Cheap for what it closes, and it keeps working.
+                    // A temporary hazard, not permanent damage to trade agreements.
+                    target.mineHazardUntilMonth = Math.Max(target.mineHazardUntilMonth,
+                        state.date.year * 12 + state.date.month + MineHazardMonths);
                     target.defenseValue = Clamp(target.defenseValue - 6f);
                     if (defender != null)
                     {
-                        foreach (var link in state.trade)
-                            if (link.Involves(defender.id)) link.volume = Clamp(link.volume - 6f);
                         defender.military.naval.supply = Clamp(defender.military.naval.supply - 10f);
                     }
-                    return $"{target.displayName} is mined. Nothing moves through it until "
-                           + "somebody spends months clearing it.";
+                    return $"{target.displayName} is mined: {MineMonthsRemaining(state, target)} months of disruption remain. "
+                           + "The holder's effective trade volume is reduced by 6 per link, not closed. "
+                           + "Hazards do not stack. Routine clearance ends the disruption; successful Convoy Escort here removes 3 months.";
 
                 case OperationType.ConvoyEscort:
                     // The defensive answer to a blockade or a raiding campaign.
@@ -1282,7 +1290,11 @@ namespace Brink.Core
                         attacker.economy.confidence = Clamp(attacker.economy.confidence + 3f);
                         attacker.military.naval.supply = Clamp(attacker.military.naval.supply + 4f);
                     }
-                    return "Our shipping is running under escort. The lanes are open again.";
+                    int cleared = Math.Min(MineEscortMonths, MineMonthsRemaining(state, target));
+                    if (cleared > 0) target.mineHazardUntilMonth -= cleared;
+                    return "Our shipping is running under escort. Trade and sustainment improved."
+                        + (cleared > 0 ? $" Clearance at {target.displayName} removed {cleared} months of mine disruption; "
+                            + $"{MineMonthsRemaining(state, target)} remain. Other mined sites are unaffected." : "");
 
                 // ---------------- air ----------------
 

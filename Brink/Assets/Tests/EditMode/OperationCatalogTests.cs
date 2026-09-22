@@ -1,8 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -37,6 +43,254 @@ namespace Brink.Tests
 
         static IEnumerable<OperationType> AllTypes()
             => (OperationType[])Enum.GetValues(typeof(OperationType));
+
+        sealed class MineRoll : Random
+        {
+            readonly double roll;
+            public MineRoll(double value) { roll = value; }
+            public override double NextDouble() => roll;
+        }
+
+        OperationRecord MineAction(StrategicLocation site, OperationType type, bool success = true)
+        {
+            string actor = type == OperationType.ConvoyEscort ? site.ownerId : state.playerCountryId;
+            var record = MilitarySystem.ResolveOperation(state, null, actor, site, type,
+                new OperationDirective(), new MineRoll(success ? 0 : 1));
+            Assert.AreEqual(success, record.success);
+            return record;
+        }
+
+        [Test]
+        public void MineHazardPersistsWithoutRewritingTradeAndRecoversAtTheCalendarBoundary()
+        {
+            var site = LocationIn("CHN", LocationType.Port);
+            var volumes = state.trade.Select(l => l.volume).ToArray();
+            var record = MineAction(site, OperationType.MineWarfare);
+            StringAssert.Contains("not closed", record.summary);
+            Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(state, site));
+            CollectionAssert.AreEqual(volumes, state.trade.Select(l => l.volume));
+            Assert.AreEqual(44f, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50f));
+            Assert.AreEqual(50f, TradeSystem.EffectiveVolume(state, "IND", "RUS", 50f));
+            // No clearing tick, AI purchase, active war or fleet is required.
+            var calendar = new TurnManager(state);
+            for (int i = 1; i <= 6; i++)
+            {
+                calendar.EndMonth();
+                Assert.AreEqual(6 - i, MilitarySystem.MineMonthsRemaining(state, site));
+                Assert.AreEqual(i < 6 ? 44f : 50f, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50f));
+            }
+            CollectionAssert.AreEqual(volumes, state.trade.Select(l => l.volume));
+        }
+
+        [Test]
+        public void MineHazardsRefreshWithoutStackingAcrossSitesOrEndpoints()
+        {
+            var site = LocationIn("CHN", LocationType.Port);
+            MineAction(site, OperationType.MineWarfare);
+            int until = site.mineHazardUntilMonth;
+            MineAction(site, OperationType.MineWarfare);
+            Assert.AreEqual(until, site.mineHazardUntilMonth);
+            state.date = state.date.NextMonth();
+            MineAction(site, OperationType.MineWarfare);
+            Assert.AreEqual(until + 1, site.mineHazardUntilMonth);
+            var another = LocationIn("USA", LocationType.Port);
+            another.mineHazardUntilMonth = site.mineHazardUntilMonth;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(0, TradeSystem.EffectiveVolume(state, "CHN", "USA", 4));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "USA", "CHN", 50));
+        }
+
+        [Test]
+        public void MineHazardFollowsGroundNotItsOldOwnerAndSurvivesSaveLoad()
+        {
+            var site = LocationIn("CHN", LocationType.Port);
+            MineAction(site, OperationType.MineWarfare);
+            int until = site.mineHazardUntilMonth;
+            site.ownerId = "BRA"; // Occupation changes control but not recognized title.
+            Assert.AreEqual("CHN", site.originalOwnerId);
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
+            TerritorySystem.Cede(state, site, "BRA");
+            Assert.AreEqual(until, site.mineHazardUntilMonth);
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
+            string json = SaveSystem.ToJson(state);
+            var loaded = SaveSystem.FromJson(json);
+            Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(loaded, loaded.FindLocation(site.id)));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(loaded, "BRA", "USA", 50));
+            Assert.AreEqual(json, SaveSystem.ToJson(loaded));
+            // A field absent from old v7 saves must mean clear, not newly mined.
+            string legacy = Regex.Replace(json, @"\s*\""mineHazardUntilMonth\""\s*:\s*\d+\s*,", "");
+            var old = SaveSystem.FromJson(legacy);
+            Assert.AreEqual(0, old.FindLocation(site.id).mineHazardUntilMonth);
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(old, "BRA", "USA", 50));
+            Assert.AreEqual(7, SaveSystem.CurrentSaveVersion);
+        }
+
+        [Test]
+        public void MineHazardSurvivesPeaceAndYearEndWithoutRefundingLaterTradeChanges()
+        {
+            state.date = new GameDate(1984, 12);
+            var site = LocationIn("CHN", LocationType.Port);
+            var confrontation = ConfrontationSystem.BeginBy(state, "USA", "CHN",
+                ConfrontationObjective.TerritorialConcession, site.id, PrimaryStrategy.Military);
+            Assert.IsNotNull(confrontation);
+            OperationRecord result = null;
+            for (int i = 0; i < 30 && (result == null || !result.success); i++)
+                result = ConfrontationSystem.LaunchOperationBy(state, confrontation, "USA", site.id,
+                    OperationType.MineWarfare, new OperationDirective());
+            Assert.IsTrue(result.success, "Must exercise a successful real actor-generic mine order.");
+            confrontation.resolved = true;
+            state.trade.Clear();
+            var link = new TradeRelation { countryA = "USA", countryB = "CHN", volume = 50 };
+            state.trade.Add(link);
+            state.date = new GameDate(1985, 1);
+            Assert.AreEqual(5, MilitarySystem.MineMonthsRemaining(state, site));
+            link.volume = 23; // Other damage, new terms or crises remain authoritative.
+            Assert.AreEqual(17, TradeSystem.EffectiveVolume(state, "USA", "CHN", link.volume));
+            state.date = new GameDate(1985, 6);
+            Assert.AreEqual(0, MilitarySystem.MineMonthsRemaining(state, site));
+            Assert.AreEqual(23, link.volume);
+            Assert.AreEqual(23, TradeSystem.EffectiveVolume(state, "USA", "CHN", link.volume));
+        }
+
+        [Test]
+        public void SuccessfulEscortClearsOnlyItsSiteAndFailedActionsDoNotSetOrClearMines()
+        {
+            var site = LocationIn("CHN", LocationType.Port);
+            MineAction(site, OperationType.MineWarfare, false);
+            Assert.AreEqual(0, site.mineHazardUntilMonth);
+            MineAction(site, OperationType.MineWarfare);
+            var other = state.locations.First(l => l.ownerId == "CHN" && l != site);
+            other.mineHazardUntilMonth = site.mineHazardUntilMonth;
+            MineAction(site, OperationType.ConvoyEscort, false);
+            Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(state, site));
+            MineAction(site, OperationType.ConvoyEscort);
+            Assert.AreEqual(3, MilitarySystem.MineMonthsRemaining(state, site));
+            MineAction(site, OperationType.ConvoyEscort);
+            Assert.AreEqual(0, MilitarySystem.MineMonthsRemaining(state, site));
+            Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(state, other));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
+        public void MineDeliveredSupplyAndTradeHealthUseOneTemporaryPenalty(TradeFocus focus)
+        {
+            state.trade.Clear(); state.sanctions.Clear();
+            var link = new TradeRelation { countryA = "USA", countryB = "CHN", volume = 50, tariff = 0, focus = focus };
+            state.trade.Add(link);
+            var partner = state.FindCountry("CHN");
+            partner.resources.energy = partner.resources.strategicMaterials = partner.resources.foodSecurity = 80;
+            float supply = TradeSystem.Supply(state, "USA", focus);
+            float health = EconomySystem.TradeHealth(state, "USA");
+            MineAction(LocationIn("CHN", LocationType.Port), OperationType.MineWarfare);
+            Assert.AreEqual(supply - 80 * TradeSystem.MaxSupplyShare * .06f,
+                TradeSystem.Supply(state, "USA", focus), .0001f);
+            Assert.AreEqual(health - 6 * .85f, EconomySystem.TradeHealth(state, "USA"), .0001f);
+            Assert.AreEqual(50, link.volume);
+            link.embargoed = true;
+            Assert.AreEqual(0, TradeSystem.Supply(state, "USA", focus));
+            link.embargoed = false;
+            state.sanctions.Add(new Sanction { senderId = "USA", targetId = "CHN" });
+            Assert.AreEqual(0, TradeSystem.Supply(state, "USA", focus));
+            Assert.AreEqual(supply - 80 * TradeSystem.MaxSupplyShare * .06f,
+                TradeSystem.SupplyIfLifted(state, "USA", focus, "USA", "CHN"), .0001f);
+        }
+
+        [Test]
+        public void MinePenaltyAlsoReachesImportCompetitionAndSupplyOfferPricing()
+        {
+            state.trade.Clear(); state.sanctions.Clear();
+            var link = new TradeRelation { countryA = "USA", countryB = "CHN", volume = 4, tariff = 0, focus = TradeFocus.Energy };
+            state.trade.Add(link);
+            MineAction(LocationIn("CHN", LocationType.Port), OperationType.MineWarfare);
+            Assert.AreEqual(0, EconomySystem.ImportDisplacement(state, state.PlayerCountry, EconomicSector.Energy));
+            float before = TradeSystem.Supply(state, "CHN", TradeFocus.Energy);
+            float priced = DiplomaticLeverage.LinkGain(state, "USA", "CHN", TradeFocus.Energy);
+            link.volume = DiplomaticLeverage.OfferVolume;
+            // This fixture keeps its already-better zero tariff on acceptance.
+            Assert.AreEqual(priced, TradeSystem.Supply(state, "CHN", TradeFocus.Energy) - before, .0001f);
+            Assert.Greater(priced, 0);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void MinePanelIsOwnOnlyWrappedAndReadOnly(int columns)
+        {
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                var site = LocationIn("USA", LocationType.Port);
+                site.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+                var foreign = LocationIn("CHN", LocationType.Port);
+                foreign.mineHazardUntilMonth = site.mineHazardUntilMonth;
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new MilitaryView(); view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                var labels = view.Root.Query<Label>().ToList().Where(l => (l.text ?? "").Contains("MINE DISRUPTION:")).ToList();
+                Assert.AreEqual(1, labels.Count);
+                Assert.IsTrue(labels[0].ClassListContains("sig-advice"), "Mine warnings must use the stylesheet's advice signal.");
+                string text = Regex.Replace(labels[0].text, @"\s+", " ");
+                StringAssert.Contains(site.displayName, text);
+                StringAssert.DoesNotContain(foreign.displayName, text);
+                StringAssert.Contains("6 months remain", text);
+                StringAssert.Contains("nationally, not closed", text);
+                StringAssert.Contains("removes 3 months", text);
+                foreach (var line in labels[0].text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                TerminalMetrics.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void MineClearanceIsReachableThroughPaidPeacetimeControllerAndAutosaves()
+        {
+            var gc = GameController.Instance; var previous = gc.State; var previousTurns = gc.Turns;
+            string oldDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-mine-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, new TurnManager(state));
+                state.confrontations.Clear();
+                var site = LocationIn("USA", LocationType.Port);
+                site.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+                Assert.IsFalse(ConfrontationSystem.RequiresConfrontation(OperationType.ConvoyEscort));
+                bool succeeded = false;
+                for (int i = 0; i < 20 && !succeeded; i++)
+                {
+                    int cp = state.commandPoints.current;
+                    int cost = ConfrontationSystem.OperationCostFor(state, null, OperationType.ConvoyEscort);
+                    var result = gc.LaunchDefensiveProgramme(site.id, OperationType.ConvoyEscort);
+                    Assert.IsNotNull(result);
+                    Assert.AreEqual(cp - cost, state.commandPoints.current);
+                    succeeded = result.success;
+                }
+                Assert.IsTrue(succeeded, "Fixture must reach a real successful paid order.");
+                Assert.AreEqual(3, MilitarySystem.MineMonthsRemaining(state, site));
+                var saved = SaveSystem.Load(0);
+                Assert.AreEqual(site.mineHazardUntilMonth, saved.FindLocation(site.id).mineHazardUntilMonth);
+            }
+            finally
+            {
+                SaveSystem.SaveDirectoryOverride = oldDirectory;
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                Directory.Delete(directory, true);
+            }
+        }
 
         StrategicLocation LocationIn(string countryId, LocationType type)
         {

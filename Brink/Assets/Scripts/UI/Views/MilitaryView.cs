@@ -51,6 +51,15 @@ namespace Brink.UI.Views
             BuildForceStructure(state, player);
             BuildStanding(state, player);
             BuildHomeExposure(state, player);
+            foreach (var site in state.locations)
+            {
+                int remaining = MilitarySystem.MineMonthsRemaining(state, site);
+                if (site.ownerId != player.id || remaining <= 0) continue;
+                AddText("sig-advice").text = $" MINE DISRUPTION: {site.displayName} — {remaining} months remain. "
+                    + "Effective trade volume is reduced by 6 per link nationally, not closed; hazards do not stack. "
+                    + "Routine clearance ends it without an order. Successful Convoy Escort at this site removes 3 months; "
+                    + "select it under defensive programmes. Other mined sites may still disrupt trade.";
+            }
             BuildStrategicMap(state);
 
             BuildExercises(state);
