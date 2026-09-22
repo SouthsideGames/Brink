@@ -150,7 +150,7 @@ namespace Brink.Core
             foreach (var other in state.countries)
             {
                 if (other.id == country.id) continue;
-                if (GeographySystem.DistanceBetween(country.id, other.id) > ReachableDistance) continue;
+                if (GeographySystem.DistanceBetween(state, country.id, other.id) > ReachableDistance) continue;
 
                 near++;
                 if (!other.displacement.bordersClosed) open++;
@@ -277,7 +277,7 @@ namespace Brink.Core
                     if (host.id == source.id) continue;
                     if (host.displacement.bordersClosed) continue;
 
-                    float distance = GeographySystem.DistanceBetween(source.id, host.id);
+                    float distance = GeographySystem.DistanceBetween(state, source.id, host.id);
                     if (distance > ReachableDistance) continue;
 
                     // Nearer states carry more of it. You inherit your

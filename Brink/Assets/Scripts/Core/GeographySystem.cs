@@ -23,7 +23,7 @@ namespace Brink.Core
     ///   China the long way round, and a model that measures raw column
     ///   distance gets the entire Pacific backwards.
     /// - **Ground you hold abroad is a place you can fight from.**
-    ///   `originalOwnerId` says where a location physically *is*;
+    ///   The authored site definition says where a location physically *is*;
     ///   `ownerId` says who controls it. A captured port projects from the
     ///   country it sits in, not from the capital of whoever took it — which is
     ///   what makes a forward position worth taking, and makes basing rights
@@ -89,8 +89,42 @@ namespace Brink.Core
         {
             var a = WorldFactory.FindProfile(aId);
             var b = WorldFactory.FindProfile(bId);
-            if (a == null || b == null) return 0f;
+            if (a == null || b == null) return float.PositiveInfinity;
             return Distance(a.mapX, a.mapY, b.mapX, b.mapY);
+        }
+
+        /// <summary>
+        /// Authored homes stay fixed. A successor uses its titled capital, else
+        /// its highest-value titled site (ordinal id breaks ties). Occupation does
+        /// not move that home; recognized loss of title can. Unknown is not nearby.
+        /// </summary>
+        public static CountryProfile PositionFor(GameState state, string countryId)
+        {
+            var profile = WorldFactory.FindProfile(countryId);
+            if (profile != null) return profile;
+            if (state == null || string.IsNullOrEmpty(countryId)) return null;
+            StrategicLocation best = null;
+            foreach (var site in state.locations)
+            {
+                if (site.originalOwnerId != countryId || WorldFactory.FindProfile(HostOf(site)) == null)
+                    continue;
+                bool capital = site.type == LocationType.Capital;
+                bool bestCapital = best != null && best.type == LocationType.Capital;
+                if (best == null || (capital && !bestCapital)
+                    || (capital == bestCapital && (site.strategicValue > best.strategicValue
+                        || (site.strategicValue == best.strategicValue
+                            && string.CompareOrdinal(site.id, best.id) < 0))))
+                    best = site;
+            }
+            return best == null ? null : WorldFactory.FindProfile(HostOf(best));
+        }
+
+        public static float DistanceBetween(GameState state, string aId, string bId)
+        {
+            var a = PositionFor(state, aId);
+            var b = PositionFor(state, bId);
+            return a == null || b == null ? float.PositiveInfinity
+                : Distance(a.mapX, a.mapY, b.mapX, b.mapY);
         }
 
         /// <summary>
@@ -115,14 +149,14 @@ namespace Brink.Core
             => AccessOf(countryId) != NavalAccess.Landlocked;
 
         /// <summary>
-        /// Where a location physically sits — the country that originally held
-        /// it, never whoever holds it today. Taking ground moves control, not
-        /// the ground.
+        /// Authored physical home, even in old saves whose recognized title has
+        /// changed. Unauthored/custom sites retain the legacy title/owner fallback;
+        /// their lost physical history cannot be reconstructed from those fields.
         /// </summary>
         public static string HostOf(StrategicLocation location)
-            => string.IsNullOrEmpty(location.originalOwnerId)
+            => WorldFactory.LocationHost(location.id) ?? (string.IsNullOrEmpty(location.originalOwnerId)
                 ? location.ownerId
-                : location.originalOwnerId;
+                : location.originalOwnerId);
 
         // ---------- reach ----------
 
@@ -159,7 +193,7 @@ namespace Brink.Core
         /// </summary>
         public static float EffectiveDistanceTo(GameState state, string actorId, string hostId)
         {
-            float best = DistanceBetween(actorId, hostId);
+            float best = DistanceBetween(state, actorId, hostId);
 
             foreach (var location in state.locations)
             {
@@ -171,7 +205,7 @@ namespace Brink.Core
                 // someone else's ground and worth slightly less than our own.
                 float penalty = hosted && !holds ? 2f : 0f;
 
-                float from = DistanceBetween(HostOf(location), hostId) + penalty;
+                float from = DistanceBetween(state, HostOf(location), hostId) + penalty;
                 if (from < best) best = from;
             }
 
@@ -179,7 +213,7 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Multiplier on combat power for fighting at this distance, 0.35..1.
+        /// Multiplier on combat power for fighting at this distance, 0.2..1.
         /// Full strength inside our reach, tailing off beyond it.
         /// </summary>
         public static float ReachFactorTo(GameState state, string actorId, string hostId)

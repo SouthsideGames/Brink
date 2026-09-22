@@ -802,6 +802,25 @@ namespace Brink.Data
             return null;
         }
 
+        // Reuse the full authored map, including sites absent from Regional worlds.
+        // A private RNG builds this lookup once; it never advances a game's stream.
+        static readonly Lazy<Dictionary<string, string>> LocationHosts =
+            new Lazy<Dictionary<string, string>>(() =>
+            {
+                var map = new GameState();
+                var included = new HashSet<string>();
+                foreach (var profile in Profiles) included.Add(profile.id);
+                MakeMap(new Random(0), map, included);
+                var hosts = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var site in map.locations) hosts.Add(site.id, site.originalOwnerId);
+                return hosts;
+            });
+
+        /// <summary>Physical home of an authored site, independent of saved title.</summary>
+        public static string LocationHost(string locationId)
+            => locationId != null && LocationHosts.Value.TryGetValue(locationId, out var host)
+                ? host : null;
+
         /// <summary>
         /// How much of the military score a country can put to sea.
         ///

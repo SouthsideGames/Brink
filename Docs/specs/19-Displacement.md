@@ -61,6 +61,13 @@ pair: every open state within `ReachableDistance = 34` takes a share weighted by
 `1 / max(4, distance)`. You inherit your neighbours' problems; that is what a
 neighbour is.
 
+**#25 stable geography correction.** Both arrival allocation and the open-region
+read behind `PressureAtSource` use state-aware geographic distance. A successor
+without an authored country profile is located from its titled ground (spec 01
+§3b), not assigned zero distance to every other country. Unknown positions are
+out of range. Thresholds, weights, costs and drift rates are unchanged; outcomes
+in worlds with successors can change. No new persistent state is introduced.
+
 `hosted` approaches its share at 0.12 rising, 0.06 falling.
 
 ## 5. What hosting costs, and what it is worth

@@ -281,6 +281,7 @@ There is still a ceiling. Beyond what the force can sustain a state simply canno
 A power visibly committed in one theatre is weak in another, and the world reads that as an opening. This is what makes a distant war a neighbour's opportunity, and it is the point at which the map stops being a picture.
 Borders may change through war, secession, annexation, unification and state collapse.
 Physical geography remains mostly persistent; infrastructure and routes can change strategic importance.
+Amendment, September 22, 2026 (#25 first slice): recognized title is not physical location. Cession, annexation and secession must not move authored sites. Site geography is recovered from the authored map, including in existing saves. Successor distance derives from titled ground rather than an absent country profile granting zero-distance global reach. Chokepoint and occupied-ground markers stay with the ground. This corrects existing reach/displacement inputs; it introduces no route network, province grid or new persistent field. See spec 01 §3b. Broader expressive geography and device confirmation remain pending.
 Historical map snapshots should be retained so players can compare the current world to earlier decades.
 17. World Evolution & Universal Simulation
 17.1 Persistent National Identity + Emergent History
