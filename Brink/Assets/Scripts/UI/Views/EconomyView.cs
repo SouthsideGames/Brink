@@ -385,7 +385,9 @@ namespace Brink.UI.Views
                     ? ""
                     : $"   {Phrase.Caps(link.focus)}";
                 sb.AppendLine($"  {AsciiChart.Cell(partner?.displayName.ToUpperInvariant(), AsciiChart.NameWidth(W))} VOL {link.volume,5:F1}   {status}{supplies}");
+                sb.AppendLine("    " + TradeSystem.PortDependencyReadout(state, link));
             }
+            sb.AppendLine("  Ports name dependencies, not ocean itineraries. Only the current holder can escort at a port; ownership alone does not close civilian trade. No foreign clearance or rerouting order is implied.");
 
             float energy = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy);
             float materials = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Materials);

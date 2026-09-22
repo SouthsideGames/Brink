@@ -1,6 +1,10 @@
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
+using System.Linq;
+using Brink.UI;
+using Brink.UI.Views;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -39,6 +43,166 @@ namespace Brink.Tests
             var relationship = state.FindRelationship(state.playerCountryId, partnerId);
             relationship.relations = 85f;
             relationship.trust = 80f;
+        }
+
+        [TestCase(WorldSize.Regional, 23)]
+        [TestCase(WorldSize.Standard, 34)]
+        [TestCase(WorldSize.Full, 56)]
+        public void PortDependenciesCoverOnlyPresentRosterEndpoints(WorldSize size, int count)
+        {
+            var world = WorldFactory.CreateWorld(1919, "USA", size);
+            Assert.AreEqual(count, world.trade.Count(l => TradeSystem.PortFor(world, l.countryA) != null
+                && TradeSystem.PortFor(world, l.countryB) != null));
+            Assert.IsNull(TradeSystem.PortFor(world, "KAZ"));
+            Assert.IsNull(TradeSystem.PortFor(world, "ABSENT"));
+            Assert.IsNull(TradeSystem.PortFor(null, "USA"));
+        }
+
+        [Test]
+        public void OnlyDependentPortsDisruptMappedLinksWhileFallbackRemainsNational()
+        {
+            int until = state.date.year * 12 + state.date.month + 6;
+            var unrelated = state.FindLocation("CONTESTED_LANE");
+            unrelated.mineHazardUntilMonth = until;
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "USA", "CHN", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "KAZ", "CHN", 50));
+            var port = state.FindLocation("CHN_PRT");
+            port.mineHazardUntilMonth = until;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "USA", "CHN", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "CHN", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "USA", "BRA", 50));
+            port.ownerId = "BRA"; port.originalOwnerId = "BRA";
+            Assert.AreSame(port, TradeSystem.PortFor(state, "CHN"));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "USA", "BRA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            state.FindLocation("USA_PRT").mineHazardUntilMonth = until;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "USA", "CHN", 50), "Two endpoints must not double-charge.");
+            Assert.AreEqual(0, TradeSystem.EffectiveVolume(state, "USA", "CHN", 4));
+        }
+
+        [Test]
+        public void SuccessorNeedsTitledAuthoredPortAndSelectionIgnoresOccupationAndListOrder()
+        {
+            state.countries.Add(new CountryState { id = "NEW", displayName = "Successor" });
+            Assert.IsNull(TradeSystem.PortFor(state, "NEW"));
+            var china = state.FindLocation("CHN_PRT");
+            china.ownerId = "NEW";
+            Assert.IsNull(TradeSystem.PortFor(state, "NEW"), "Occupation alone grants no endpoint.");
+            china.originalOwnerId = "NEW";
+            Assert.AreSame(china, TradeSystem.PortFor(state, "NEW"));
+            china.ownerId = "USA";
+            Assert.AreSame(china, TradeSystem.PortFor(state, "NEW"));
+            var brazil = state.FindLocation("BRA_PRT"); brazil.originalOwnerId = "NEW";
+            Assert.AreSame(brazil, TradeSystem.PortFor(state, "NEW"));
+            state.locations.Reverse();
+            Assert.AreSame(brazil, TradeSystem.PortFor(state, "NEW"));
+            china.originalOwnerId = "CHN"; brazil.originalOwnerId = "BRA";
+            state.locations.Add(new StrategicLocation { id = "CUSTOM", type = LocationType.Port,
+                ownerId = "NEW", originalOwnerId = "NEW" });
+            Assert.IsNull(TradeSystem.PortFor(state, "NEW"), "Custom ground has no authored physical endpoint.");
+        }
+
+        [Test]
+        public void OldMissingPortUsesDisclosedFallbackAndReadNeverSeedsOrRefunds()
+        {
+            var world = WorldFactory.CreateWorld(1919, "USA", WorldSize.Full);
+            world.locations.RemoveAll(l => l.id == "CAN_PRT");
+            var port = world.FindLocation("USA_PRT");
+            port.mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            var link = world.FindTrade("USA", "CAN");
+            float volume = link.volume;
+            string before = SaveSystem.ToJson(world);
+            StringAssert.Contains("ROUTE NOT MODELLED", TradeSystem.PortDependencyReadout(world, link));
+            Assert.AreEqual(volume - 6, TradeSystem.EffectiveVolume(world, "USA", "CAN", volume));
+            Assert.AreEqual(before, SaveSystem.ToJson(world));
+            var loaded = SaveSystem.FromJson(before);
+            Assert.IsNull(TradeSystem.PortFor(loaded, "CAN"));
+            Assert.AreEqual(volume - 6, TradeSystem.EffectiveVolume(loaded, "CAN", "USA", volume));
+            for (int i = 0; i < 6; i++) loaded.date = loaded.date.NextMonth();
+            Assert.AreEqual(volume, TradeSystem.EffectiveVolume(loaded, "USA", "CAN", volume));
+            Assert.AreEqual(volume, loaded.FindTrade("USA", "CAN").volume);
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
+        public void DeliveredCommodityUsesPhysicalEndpointAfterCaptureAndStillHonorsClosures(TradeFocus focus)
+        {
+            state.trade.Clear(); state.sanctions.Clear();
+            var link = new TradeRelation { countryA = "USA", countryB = "CHN", volume = 50, focus = focus };
+            state.trade.Add(link);
+            var supplier = state.FindCountry("CHN");
+            supplier.resources.energy = supplier.resources.strategicMaterials = supplier.resources.foodSecurity = 80;
+            float clear = TradeSystem.Supply(state, "USA", focus);
+            var port = state.FindLocation("CHN_PRT");
+            port.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+            port.ownerId = "BRA";
+            float disrupted = TradeSystem.Supply(state, "USA", focus);
+            Assert.AreEqual(clear * 44f / 50f, disrupted, 0.0001f);
+            Assert.AreEqual(50, link.volume);
+            link.embargoed = true;
+            Assert.AreEqual(0, TradeSystem.Supply(state, "USA", focus));
+            Assert.AreEqual(disrupted, TradeSystem.SupplyIfLifted(state, "USA", focus, "USA", "CHN"), 0.0001f);
+            state.sanctions.Add(new Sanction { senderId = "CHN", targetId = "USA" });
+            Assert.AreEqual(0, TradeSystem.SupplyIfLifted(state, "USA", focus, "USA", "CHN"));
+        }
+
+        [Test]
+        public void OwnRouteReadoutDisclosesExposureButNotForeignDeadlinesOrResources()
+        {
+            var link = state.FindTrade("USA", "CHN");
+            var port = state.FindLocation("CHN_PRT");
+            port.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+            string first = TradeSystem.PortDependencyReadout(state, link);
+            StringAssert.Contains("Port of Shanghai", first);
+            StringAssert.Contains("Mine exposure", first);
+            port.mineHazardUntilMonth += 100;
+            state.FindCountry("CHN").resources.energy = 1;
+            Assert.AreEqual(first, TradeSystem.PortDependencyReadout(state, link));
+            Assert.AreEqual("", TradeSystem.PortDependencyReadout(state, state.FindTrade("CHN", "JPN")));
+        }
+
+        [Test]
+        public void SupplyOfferPricesTheCapturedEndpointItWillActuallyUse()
+        {
+            state.trade.Clear(); state.sanctions.Clear();
+            var link = new TradeRelation { countryA = "USA", countryB = "CHN", volume = 4,
+                tariff = 0, focus = TradeFocus.Energy };
+            state.trade.Add(link);
+            state.FindCountry("USA").resources.energy = 80;
+            state.FindCountry("CHN").resources.energy = 0;
+            var port = state.FindLocation("CHN_PRT");
+            port.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+            port.ownerId = "BRA";
+            Assert.AreEqual(0, EconomySystem.ImportDisplacement(state, state.PlayerCountry, EconomicSector.Energy));
+            float before = TradeSystem.Supply(state, "CHN", TradeFocus.Energy);
+            float priced = DiplomaticLeverage.LinkGain(state, "USA", "CHN", TradeFocus.Energy);
+            link.volume = DiplomaticLeverage.OfferVolume;
+            Assert.AreEqual(TradeSystem.Supply(state, "CHN", TradeFocus.Energy) - before, priced, .0001f);
+            Assert.Greater(priced, 0);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void OwnPortDependencyPanelIsWrappedAndPure(int columns)
+        {
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new EconomyView(); view.Refresh();
+                string before = SaveSystem.ToJson(state);
+                view.Refresh();
+                var label = view.Root.Query<Label>().ToList().Single(l => (l.text ?? "").Contains("PORT DEPENDENCY:"));
+                StringAssert.Contains("Norfolk", label.text);
+                StringAssert.Contains("Shanghai", label.text);
+                foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); TerminalMetrics.ResetForTests(); }
         }
 
         // ---------- trade can actually be opened ----------

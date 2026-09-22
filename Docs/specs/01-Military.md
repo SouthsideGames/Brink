@@ -908,16 +908,19 @@ clearance. Other actions could raise volumes, but no recovery was tied to mines.
 A success stores `mineHazardUntilMonth` on the site: exclusive calendar index
 `year * 12 + month + 6`. Repetition takes the later of the current deadline and
 six months from now, never adds six to the old deadline. The hazard follows
-ground through occupation, cession, annexation and secession; its current holder
-bears it. A January success expires at July's start, without a pipeline tick,
+ground through occupation, cession, annexation and secession. A January success expires at July's start, without a pipeline tick,
 fleet, active war or payment. Routine clearance is abstract, not a modeled funded
 programme. AI orders happen late in resolution and can affect the economy first
 next month: this is a calendar duration, not six guaranteed economic ticks.
 
-If either endpoint holds a mined site, effective bilateral volume is
-`max(0, agreement volume - 6)`. Multiple sites/endpoints do not stack. This is
-**national aggregate disruption, not routing or total closure**. Unrelated pairs
-are untouched. TradeHealth, supply, import competition and supply-exchange
+Mapped bilateral links now depend on their two named physical ports (spec 02,
+port dependencies); only mines at those endpoints reduce their effective volume.
+Unmodelled links retain the earlier national-holder rule: any mined site held
+by either partner reduces volume. These are alternatives, not two charges.
+The reduction remains `max(0, agreement volume - 6)` once, never stacked, never
+total closure. Chokepoint mines affect only that national fallback until passage
+routes exist. Capturing Shanghai does not move China's mapped endpoint to Brazil
+or spread its hazard to Brazil's mapped routes. TradeHealth, supply, import competition and supply-exchange
 pricing use the shared reader; sanctions-relief pricing inherits it through
 SupplyIfLifted. Sanctions/embargoes still close links. Nominal agreement,
 dependence/exposure and AI trade-weight reads retain stored-volume semantics.
@@ -929,13 +932,14 @@ own-ground gates remain, including peacetime availability; failure clears nothin
 No new AI escort selector is added; passive expiry works for every state.
 Mining's immediate defense/naval-supply damage is unchanged.
 
-MILITARY lists our active sites, time, national effect and targeted escort remedy.
+MILITARY lists our active sites, time, mapped/fallback effect and targeted escort remedy.
 No foreign hazard list is added. Catalogue and receipts describe disruption, not
 total closure or a nonexistent manual clearance requirement. The overt shipping
 hazard is not a classified statistic. Missing old-save fields mean clear; old
 unattributable volume losses are not refunded. Six/three months and six points
-are initial tuning, not native balance certification. Routes and the other
-military trade decrements remain separate work. Tests: OperationCatalogTests.
+are initial tuning, not native balance certification. Ocean itineraries,
+third-party passage routes and the other military trade decrements remain
+separate work. Tests: OperationCatalogTests and TradeAndConquestTests.
 
 Suppression is the clearest case: it takes nothing, kills almost nobody, and
 makes every later operation against that position easier — a strategic move the

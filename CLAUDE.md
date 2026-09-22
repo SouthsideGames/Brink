@@ -31,6 +31,19 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Port trade dependencies (#25).** Existing authored countries retain their
+  present `ID_PRT` endpoint through control/title transfers; successors use the
+  ordinal-first titled authored port, not their parent's borrowed identity.
+  Missing/custom/landlocked endpoints remain unmodelled. Mapped pairs take mine
+  disruption only from those two physical ports; fallback pairs retain the
+  national-holder rule, never both charges. All existing effective-volume
+  consumers and leverage pricing share the rule. No route serialization or
+  backfill: old saves/content updates can change derived exposure. Own trade
+  shows named dependencies and observable exposure, not foreign deadlines or
+  resource stocks. Civilian ownership does not imply closure; clearance remains
+  own-ground. No ocean itinerary, alternate route, foreign clearance or
+  third-party chokepoint path. Specs 01/02; #25 remains partial.
+
 - **Full-roster ports (#25 prerequisite).** Five coastal expansion countries
   gain authored ports in new Full worlds only: CAN/ITA/EGY/ZAF/VNM. Fixed
   garrison 45 avoids advancing the shared generation RNG. Existing port rules
@@ -41,12 +54,12 @@ and not the place to start from cold.
 
 - **Recoverable mine hazards.** Successful mining persists a six-month exclusive
   calendar deadline on the site; repeats refresh, not stack. Effective trade
-  volume loses six once if either endpoint holds mined ground, without changing
+  volume loses six once under the mapped/fallback rule above, without changing
   agreements. Supply, health, import competition and leverage pricing share it.
   Successful own-site Convoy Escort removes three months in war or peace, with
   existing costs/bonuses unchanged. Expiry needs no tick, fleet or AI action;
   transfer carries the hazard with the ground. Old saves default clear at v7;
-  no speculative refund of historical losses. National abstraction, not routes.
+  no speculative refund of historical losses. No ocean transport simulation.
   No new AI escort caller; numerical balance and hardware are unverified.
   Specs 01/02/10 own the behavior. Native review remains Claude's separate gate.
 
