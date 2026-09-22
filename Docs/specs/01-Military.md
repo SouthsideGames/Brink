@@ -218,6 +218,31 @@ procurement, then per branch —
 
 ## 3. Strategic locations
 
+### Full-roster port coverage (#25 prerequisite)
+
+New Full worlds add CAN_PRT (Atlantic Gateway Terminal, defense/value 40/64),
+ITA_PRT (Ligurian Container Port, 42/68), EGY_PRT (Alexandria Port Complex,
+40/70), ZAF_PRT (Durban Freight Terminal, 36/64), and VNM_PRT (Southern
+Container Terminal, 38/66). Each starts with garrison 45 without consuming the
+shared generation RNG. These are gameplay-authored values, not balance-certified
+or statements of real-world capacity. KAZ remains landlocked without a port.
+
+These are real existing-type sites: basing, targeting, occupation costs, trade
+access swings and permanent physical-home lookup all apply normally. Initially
+held and titled value cancels in TradeAccessSwing, so this grants no initial
+trade-access bonus; loss or contest can change it. More ground may change later
+AI/war outcomes. No new naval capability or trade agreement is granted.
+
+Regional and Standard rosters exclude these countries and consume no new draws.
+Old Full saves are not backfilled, including after annexation or secession; new
+content is not permission to invent who holds missing ground. Existing saves
+therefore retain their old endpoint coverage. No schema or version change.
+New-world authored bilateral links with a port at both ends: Regional 23/23
+(812/812 volume), Standard 34/37 (1116/1184), Full 56/59 (1716/1784).
+These are eligibility counts only: routes, passage choice and route-specific
+delivery effects remain unimplemented. Future derived route tables can change
+behavior across content updates and must document that separately.
+
 Meaningful targets only (GDD §19) — never every city. Types: `Capital`, `Port`,
 `Airbase`, `IndustrialCenter`, `EnergyRegion`, `MountainPass`, `Chokepoint`.
 

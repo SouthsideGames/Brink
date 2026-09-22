@@ -31,6 +31,14 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Full-roster ports (#25 prerequisite).** Five coastal expansion countries
+  gain authored ports in new Full worlds only: CAN/ITA/EGY/ZAF/VNM. Fixed
+  garrison 45 avoids advancing the shared generation RNG. Existing port rules
+  apply; ownership/title cancel initial trade-access swing but loss, occupation
+  and basing matter. Old saves are not backfilled; no schema/version change.
+  New-world two-port coverage is 23/23 Regional, 34/37 Standard, 56/59 Full.
+  This is not route implementation or long-run balance certification. Spec 01 §3.
+
 - **Recoverable mine hazards.** Successful mining persists a six-month exclusive
   calendar deadline on the site; repeats refresh, not stack. Effective trade
   volume loses six once if either endpoint holds mined ground, without changing
