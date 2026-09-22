@@ -319,10 +319,37 @@ terminal cells are about twice as tall as they are wide, so a step in Y covers
 about twice the ground a step in X does. Weighting them equally would make
 north–south neighbours look like hemispheres apart.
 
-#### `originalOwnerId` is geography; `ownerId` is control
+#### Physical geography is independent of recognized title (#25)
 
-`HostOf(location)` returns `originalOwnerId`, falling back to `ownerId` only
-where the former is blank. It answers *where a location physically sits*, never
+The former description below was true only before recognized transfers.
+`Cede`, annexation/accession and secession intentionally rewrite
+`originalOwnerId` to end occupation and establish title. It cannot also own
+physical position. `HostOf` now resolves an authored site's id through the same
+full `WorldFactory.MakeMap` definitions used to create the world, using a private,
+lazy lookup and private RNG (no game draws or live state). This repairs already
+transferred authored sites in old saves without serialized fields or migration.
+Custom/unrecognized site ids retain the legacy title/owner fallback; their past
+physical location is not recoverable. No transfer rule or occupation charge is
+changed.
+
+Authored countries retain their authored home. For a country without a profile,
+`PositionFor` selects a titled capital, otherwise the highest-strategic-value
+titled site, breaking ties by ordinal id. Occupying that site does not move its
+home; losing recognized title can. State-aware distance is used by reach and both
+displacement distance readers. Unknown positions return positive infinity, never
+zero; reach still floors at MinimumReach and displacement treats them as out of
+range. This does not add a universal successor map label, change naval identity,
+or create transport routes. Existing country-level theatre classification is
+unchanged; location-level theatre reads benefit from the repaired HostOf.
+
+Chokepoint markers and occupied-ground signals now use physical home rather than
+the occupying country's capital. Publicity and owner labels are unchanged.
+These are simulation input corrections: world trajectories and balance may
+change. Native independent verification is required, not a parity claim.
+
+Historical rationale (superseded resolver detail):
+
+`HostOf(location)` answers *where a location physically sits*, never
 *who holds it today*.
 
 A captured port projects from the country it sits in, not from the capital of
@@ -389,7 +416,7 @@ MinimumReach = 0.2      (0.35 until the 2026-08 playtest: Kazakhstan was occupyi
 rule. A hard geographic gate would repeat the §18.1 mistake — escalation states
 used to block operations outright instead of pricing them, and the fix there was
 to charge +2 CP and self-escalate rather than refuse the order (§4). Geography
-gets the same treatment: an expedition beyond reach fights at 35% of full weight,
+gets the same treatment: at the floor an expedition fights at 20% of full weight,
 which is usually a bad idea and never an unavailable one. Tests:
 `FightingAcrossTheWorldCostsStrength`, `ReachNeverFallsBelowTheFloor`.
 

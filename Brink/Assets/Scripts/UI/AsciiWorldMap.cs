@@ -94,7 +94,7 @@ namespace Brink.UI
             foreach (var location in state.locations)
             {
                 if (location.type != LocationType.Chokepoint) continue;
-                var owner = WorldFactory.FindProfile(location.ownerId);
+                var owner = WorldFactory.FindProfile(GeographySystem.HostOf(location));
                 if (owner == null) continue;
                 Plot(grid, Scale(owner.mapX + 3, scaleX), Scale(owner.mapY + 1, scaleY), '#');
             }

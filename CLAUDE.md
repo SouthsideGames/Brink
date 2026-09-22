@@ -31,6 +31,24 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Stable geography (#25, first slice).** Physical site home comes from the
+  existing full authored map by id, not mutable recognized title. A private lazy
+  map lookup uses its own RNG and changes no save. Cession/annexation/secession
+  keep their political rules; old authored sites recover physical home on read.
+  Unauthored sites retain the legacy fallback (no invented historic coordinates).
+  Successor distance uses titled capital / greatest-value titled site / ordinal
+  id tie-break; unknown distance is infinity, never universal proximity. Reach
+  and displacement share this reading. Site markers stay on the ground. No
+  schema, migration, pipeline, catalogue or partition change; trajectories may
+  change. Native independent verification and device confirmation are separate
+  gates; no claim that #25 or a transport-network model is complete.
+  Author .NET/C#9 paired run: 1941/1909/31/1 versus 1927/1895/31/1;
+  fourteen additions pass, zero shared outcome/failure-message changes. Geography
+  27/27; eight mutations killed at 12/2/1/1/4/1/1/1 with byte restoration.
+  Standard report grades/XP unchanged, but Intelligence mean GDP 2583->2585 and
+  economy/stability/crisis components 43.8/48.3/72.5->44.6/48.4/72.8: no trajectory
+  parity or native balance certification claimed. Sequential, isolated save paths.
+
 - **Visible procurement commitments (#24).** Saved programme terms explain
   remaining funding (not reserved treasury), incremental capability and funding
   termination. Existing lifecycle records gain identifying prefixes without

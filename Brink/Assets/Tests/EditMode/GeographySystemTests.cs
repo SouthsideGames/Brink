@@ -1,5 +1,6 @@
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
 using NUnit.Framework;
 
 namespace Brink.Tests
@@ -29,6 +30,212 @@ namespace Brink.Tests
         }
 
         // ---------- the map is a cylinder ----------
+
+        [Test]
+        public void RecognizedTransfersChangeTitleNotPhysicalGround()
+        {
+            var site = state.FindLocation("CHN_PRT");
+            site.ownerId = "MEX";
+            float occupiedReach = GeographySystem.EffectiveDistanceTo(state, "MEX", "JPN");
+            TerritorySystem.Cede(state, site, "MEX");
+            Assert.AreEqual("MEX", site.originalOwnerId);
+            Assert.IsFalse(site.IsOccupied, "Do not restore occupation costs to fix geography.");
+            Assert.AreEqual("CHN", GeographySystem.HostOf(site));
+            Assert.AreEqual(occupiedReach, GeographySystem.EffectiveDistanceTo(state, "MEX", "JPN"));
+            Assert.Greater(GeographySystem.EffectiveDistanceTo(state, "USA", GeographySystem.HostOf(site)), 0f);
+            TerritorySystem.Cede(state, site, "BRA");
+            Assert.AreEqual("CHN", GeographySystem.HostOf(site));
+            Assert.AreEqual("BRA", site.originalOwnerId);
+        }
+
+        [Test]
+        public void AbsorptionPreservesEverySitesPhysicalHome()
+        {
+            ConquestSystem.Absorb(state, state.FindCountry("MEX"), state.FindCountry("CHN"));
+            foreach (var id in new[] { "CHN_CAP", "CHN_PRT", "CHN_AIR", "CONTESTED_LANE" })
+            {
+                var site = state.FindLocation(id);
+                Assert.AreEqual("MEX", site.ownerId);
+                Assert.AreEqual("MEX", site.originalOwnerId);
+                Assert.IsFalse(site.IsOccupied);
+                Assert.AreEqual("CHN", GeographySystem.HostOf(site), id);
+            }
+        }
+
+        CountryState FractureChina()
+        {
+            var parent = state.FindCountry("CHN");
+            parent.government.inCivilConflict = true;
+            parent.government.civilConflictMonthsElapsed = 12;
+            parent.government.civilConflictMonthsRemaining = 12;
+            parent.nationalUnity = 10f;
+            parent.government.militaryLoyalty = 20f;
+            var successor = SecessionSystem.Fracture(state, parent, new System.Random(7));
+            Assert.IsNotNull(successor);
+            return successor;
+        }
+
+        [Test]
+        public void SuccessorDistanceIsGroundedInInheritedSitesInBothDirections()
+        {
+            var successor = FractureChina();
+            float expected = GeographySystem.DistanceBetween("MEX", "CHN");
+            Assert.Greater(expected, 0f);
+            Assert.AreEqual(expected, GeographySystem.DistanceBetween(state, "MEX", successor.id));
+            Assert.AreEqual(expected, GeographySystem.DistanceBetween(state, successor.id, "MEX"));
+            foreach (var site in state.locations)
+                if (site.originalOwnerId == successor.id)
+                {
+                    Assert.IsFalse(site.IsOccupied);
+                    Assert.AreEqual("CHN", GeographySystem.HostOf(site));
+                }
+            // No zero-distance shortcut for a weak successor, as actor or target.
+            foreach (var country in new[] { successor, state.FindCountry("MEX") })
+            {
+                country.military.naval.strength = 0;
+                country.military.air.strength = 0;
+                country.military.logistics = 0;
+                country.technology = new TechnologyState();
+            }
+            Assert.Less(GeographySystem.ReachFactorTo(state, successor.id, "MEX"), 1f);
+            Assert.Less(GeographySystem.ReachFactorTo(state, "MEX", successor.id), 1f);
+        }
+
+        [Test]
+        public void LegacyTransferredSitesRecoverPositionWithoutMutatingTheSave()
+        {
+            // This is also the shape of v7 saves written before the repair.
+            var site = state.FindLocation("CONTESTED_LANE");
+            site.ownerId = site.originalOwnerId = "MEX";
+            var successor = FractureChina();
+            string json = SaveSystem.ToJson(state);
+            var restored = SaveSystem.FromJson(json);
+            Assert.AreEqual("CHN", GeographySystem.HostOf(restored.FindLocation(site.id)));
+            Assert.AreEqual(GeographySystem.DistanceBetween(state, successor.id, "MEX"),
+                GeographySystem.DistanceBetween(restored, successor.id, "MEX"));
+            Assert.AreEqual(json, SaveSystem.ToJson(state));
+            Assert.AreEqual(json, SaveSystem.ToJson(restored));
+        }
+
+        [Test]
+        public void UnknownGeographyIsNotGlobalProximityAndCustomSitesRetainFallback()
+        {
+            Assert.AreEqual(float.PositiveInfinity, GeographySystem.DistanceBetween("UNKNOWN", "USA"));
+            Assert.AreEqual(float.PositiveInfinity, GeographySystem.DistanceBetween(state, "USA", "UNKNOWN"));
+            Assert.AreEqual(GeographySystem.MinimumReach, GeographySystem.ReachFactorTo(state, "USA", "UNKNOWN"));
+            var custom = new StrategicLocation { id = "CUSTOM", ownerId = "MEX", originalOwnerId = "CHN" };
+            Assert.AreEqual("CHN", GeographySystem.HostOf(custom));
+            custom.originalOwnerId = null;
+            Assert.AreEqual("MEX", GeographySystem.HostOf(custom));
+        }
+
+        [Test]
+        public void SuccessorHomeSelectionIsDeterministicAndSurvivesOccupation()
+        {
+            var a = state.FindLocation("CHN_PRT");
+            var b = state.FindLocation("BRA_PRT");
+            a.originalOwnerId = b.originalOwnerId = "SUCCESSOR";
+            a.strategicValue = b.strategicValue = 80;
+            Assert.AreEqual("BRA", GeographySystem.PositionFor(state, "SUCCESSOR").id);
+            state.locations.Reverse();
+            Assert.AreEqual("BRA", GeographySystem.PositionFor(state, "SUCCESSOR").id);
+            a.strategicValue = 81;
+            Assert.AreEqual("CHN", GeographySystem.PositionFor(state, "SUCCESSOR").id);
+            var capital = state.FindLocation("MEX_CAP");
+            capital.originalOwnerId = "SUCCESSOR";
+            capital.strategicValue = 1;
+            capital.ownerId = "USA";
+            Assert.AreEqual("MEX", GeographySystem.PositionFor(state, "SUCCESSOR").id);
+        }
+
+        [Test]
+        public void ActualOperationUsesTheCededTargetsPhysicalHome()
+        {
+            var target = state.FindLocation("CHN_PRT");
+            TerritorySystem.Cede(state, target, "BRA");
+            var attacker = state.FindCountry("MEX");
+            attacker.military.naval.strength = 0;
+            attacker.military.air.strength = 0;
+            attacker.military.logistics = 0;
+            attacker.technology = new TechnologyState();
+            float expected = GeographySystem.ReachFactorTo(state, "MEX", "CHN");
+            Assert.Less(expected, 1f);
+            Assert.AreNotEqual(expected, GeographySystem.ReachFactorTo(state, "MEX", "BRA"));
+            var front = ConfrontationSystem.BeginBy(state, "MEX", "BRA",
+                ConfrontationObjective.TerritorialConcession, target.id, PrimaryStrategy.Military);
+            ConfrontationSystem.SetEscalationBy(state, front, EscalationState.LimitedConflict, "MEX");
+            var record = MilitarySystem.ResolveOperation(state, front, "MEX", target,
+                OperationType.Assault, new OperationDirective(), new System.Random(4321));
+            Assert.AreEqual(expected, record.reachFactor);
+        }
+
+        [Test]
+        public void HostedPositionsKeepTheirLocationAndPenaltyAfterCession()
+        {
+            var site = state.FindLocation("CHN_PRT");
+            TerritorySystem.Cede(state, site, "BRA");
+            site.foreignOperatorId = "MEX";
+            float expected = GeographySystem.DistanceBetween("CHN", "JPN") + 2f;
+            Assert.Less(expected, GeographySystem.DistanceBetween("MEX", "JPN"));
+            Assert.AreEqual(expected, GeographySystem.EffectiveDistanceTo(state, "MEX", "JPN"));
+            site.foreignOperatorId = "";
+            Assert.Greater(GeographySystem.EffectiveDistanceTo(state, "MEX", "JPN"), expected);
+        }
+
+        [Test]
+        public void SuccessorDisplacementUsesNearbyHostsNotMissingProfileZeroDistance()
+        {
+            var successor = FractureChina();
+            state.countries.RemoveAll(c => c.id != successor.id && c.id != "BRA" && c.id != "JPN");
+            state.confrontations.Clear();
+            state.insurgencies.Clear();
+            foreach (var c in state.countries)
+            {
+                c.warExhaustion = 0;
+                c.livingStandards = 80;
+                c.resources.foodSecurity = c.resources.foodEndowment;
+                c.displacement.displaced = c.displacement.hosted = 0;
+                c.displacement.bordersClosed = true;
+            }
+            successor.displacement.displaced = 20;
+            state.FindCountry("BRA").displacement.bordersClosed = false;
+            Assert.Greater(GeographySystem.DistanceBetween(state, successor.id, "BRA"),
+                DisplacementSystem.ReachableDistance);
+            Assert.AreEqual(6f, DisplacementSystem.PressureAtSource(state, successor), 0.001f,
+                "A distant open border cannot absorb this successor's displaced people.");
+            state.FindCountry("JPN").displacement.bordersClosed = false;
+            Assert.AreEqual(0f, DisplacementSystem.PressureAtSource(state, successor));
+            DisplacementSystem.MonthlyUpdate(state);
+            Assert.AreEqual(0f, state.FindCountry("BRA").displacement.hosted);
+            Assert.Greater(state.FindCountry("JPN").displacement.hosted, 0f);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void ChokepointMarkersDoNotMoveWhenTitleChanges(int width)
+        {
+            string before = AsciiWorldMap.Render(state, "USA", width, 21);
+            TerritorySystem.Cede(state, state.FindLocation("CONTESTED_LANE"), "MEX");
+            string json = SaveSystem.ToJson(state);
+            string after = AsciiWorldMap.Render(state, "USA", width, 21);
+            Assert.AreEqual(before, after, "Only site title changed, not national markers or physical geography.");
+            foreach (var line in after.Split('\n')) Assert.AreEqual(width, line.Length);
+            Assert.AreEqual(json, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void OccupationMarkerStaysOnTheOccupiedGroundNotTheOccupiersCapital()
+        {
+            state.confrontations.Clear();
+            var site = state.FindLocation("CHN_PRT");
+            site.ownerId = "MEX";
+            string first = AsciiMapModes.Render(state, "USA", WorldMapMode.Military, 104, 30);
+            StringAssert.Contains("O", first);
+            site.ownerId = "BRA";
+            Assert.AreEqual(first, AsciiMapModes.Render(state, "USA", WorldMapMode.Military, 104, 30));
+        }
 
         [Test]
         public void LongitudeWraps()

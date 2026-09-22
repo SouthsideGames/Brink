@@ -137,7 +137,7 @@ namespace Brink.UI
             foreach (var location in state.locations)
             {
                 if (!location.IsOccupied) continue;
-                if (!Point(location.ownerId, canvas, out int x, out int y)) continue;
+                if (!Point(GeographySystem.HostOf(location), canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, +1, 'O');
             }
         }
