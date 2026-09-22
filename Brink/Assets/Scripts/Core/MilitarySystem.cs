@@ -1278,7 +1278,7 @@ namespace Brink.Core
                         defender.military.naval.supply = Clamp(defender.military.naval.supply - 10f);
                     }
                     return $"{target.displayName} is mined: {MineMonthsRemaining(state, target)} months of disruption remain. "
-                           + "The holder's effective trade volume is reduced by 6 per link, not closed. "
+                           + "Mapped links using this port lose up to 6 effective volume; unmodelled links use the national-holder rule. Trade is not closed. "
                            + "Hazards do not stack. Routine clearance ends the disruption; successful Convoy Escort here removes 3 months.";
 
                 case OperationType.ConvoyEscort:

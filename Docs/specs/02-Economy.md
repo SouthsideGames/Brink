@@ -7,13 +7,55 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 **Temporary mine disruption (spec 01, recoverable mines).** TradeHealth, commodity
 supply and import competition read `TradeSystem.EffectiveVolume`, while stored
-trade volume remains the agreement. Active mines on either endpoint's held ground
-subtract six once (floor zero), not once per site. Calendar expiry restores the
+trade volume remains the agreement. The port-dependency rule below selects the
+applicable mine hazards; they subtract six once (floor zero), not once per site. Calendar expiry restores the
 unmodified agreement's throughput without a refund/write. Supply-exchange pricing
 uses the same modifier for both current and offered terms; sanctions-relief
-counterfactuals retain it. This is explicitly national disruption until routes
-exist. Dependence, nominal exposure and AI agreement-weight readers are unchanged.
+counterfactuals retain it. Dependence, nominal exposure and AI agreement-weight readers are unchanged.
 Old mining losses cannot safely be reconstructed. No other volume writer changed.
+
+### Named port dependencies (#25, first trade slice)
+
+`TradeSystem.PortFor` uses each existing authored country's `ID_PRT` site only
+when present, of Port type, and with that authored physical home. Occupation or
+recognized cession does not move this endpoint. A live successor with no authored
+profile uses its ordinal-first titled authored port; occupation alone cannot
+grant one. Losing title or acquiring a lexically earlier titled port can change
+that successor's derived endpoint. Custom sites, absent countries, landlocked
+states and missing old-save ports yield no endpoint, not a parent's borrowed port.
+
+When both endpoints exist, only mine hazards at those two ports affect the link.
+Mines elsewhere under either country's control do not. When either endpoint is
+missing, the existing national-holder abstraction remains: any mined site held
+by either partner affects the link. These branches are exclusive: never a port
+penalty plus a national penalty. Both apply to General and commodity agreements
+and prospective offers alike. Third-party chokepoints are not on any mapped path.
+
+This is a deliberately bounded port dependency, not a claim about what fraction
+of real-world trade uses the sea, an ocean itinerary, travel time, canal choice
+or alternative-route optimization. Only the mine modifier changes; blockade,
+raiding and escort agreement-volume effects remain national. Territory's existing
+access swing still prices ownership, not a second mine charge.
+
+ECONOMY displays only our links' named ports or ROUTE NOT MODELLED. Own-contract
+mine exposure is observable even if sanctions currently mask its delivery effect;
+no foreign remaining duration, resource stock or unrelated trade list is added.
+Mapped exposure can follow a port now held by a third state. Civilian traffic is
+not closed merely by ownership. Existing Convoy Escort is still own-ground only:
+the current holder may shorten a hazard at ordinary cost, not the former owner
+or every dependent customer. Waiting for expiry is always available; another
+supplier changes the foreign endpoint but does not bypass one's own mined port.
+No permission, alternate-route order or new AI clearance policy is introduced.
+
+No new serialized state, migration, pipeline step or world creation change.
+Derived dependencies apply to existing saves on read: active mines may affect
+different agreements after this update. Future changes to authored endpoint
+content can likewise change exposure across versions; this is not a persisted
+route choice. Missing ports are never backfilled. An absent mine field still
+means clear. Record this compatibility behavior rather than claiming saves have
+identical trajectories. Tests: TradeAndConquestTests and revised mine tests in
+OperationCatalogTests. Native balance, forced-contest policy arms and hardware
+remain separate gates; #25 is not complete.
 
 Per country, updated monthly in `EconomySystem.MonthlyUpdate`. All rates are
 annualized percentages; each moves toward a computed target rather than jumping.

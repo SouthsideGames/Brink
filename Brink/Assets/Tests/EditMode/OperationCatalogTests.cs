@@ -101,29 +101,33 @@ namespace Brink.Tests
         }
 
         [Test]
-        public void MineHazardFollowsGroundNotItsOldOwnerAndSurvivesSaveLoad()
+        public void MineHazardFollowsItsPhysicalPortDependencyAndSurvivesSaveLoad()
         {
             var site = LocationIn("CHN", LocationType.Port);
             MineAction(site, OperationType.MineWarfare);
             int until = site.mineHazardUntilMonth;
             site.ownerId = "BRA"; // Occupation changes control but not recognized title.
             Assert.AreEqual("CHN", site.originalOwnerId);
-            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
-            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
+            // Mapped endpoints stay on physical ground, not the new holder's port.
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "KAZ", 50));
             TerritorySystem.Cede(state, site, "BRA");
             Assert.AreEqual(until, site.mineHazardUntilMonth);
-            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
-            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "BRA", "USA", 50));
             string json = SaveSystem.ToJson(state);
             var loaded = SaveSystem.FromJson(json);
             Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(loaded, loaded.FindLocation(site.id)));
-            Assert.AreEqual(44, TradeSystem.EffectiveVolume(loaded, "BRA", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(loaded, "CHN", "USA", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(loaded, "BRA", "USA", 50));
             Assert.AreEqual(json, SaveSystem.ToJson(loaded));
             // A field absent from old v7 saves must mean clear, not newly mined.
             string legacy = Regex.Replace(json, @"\s*\""mineHazardUntilMonth\""\s*:\s*\d+\s*,", "");
             var old = SaveSystem.FromJson(legacy);
             Assert.AreEqual(0, old.FindLocation(site.id).mineHazardUntilMonth);
             Assert.AreEqual(50, TradeSystem.EffectiveVolume(old, "BRA", "USA", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(old, "CHN", "USA", 50));
             Assert.AreEqual(7, SaveSystem.CurrentSaveVersion);
         }
 
@@ -170,7 +174,8 @@ namespace Brink.Tests
             MineAction(site, OperationType.ConvoyEscort);
             Assert.AreEqual(0, MilitarySystem.MineMonthsRemaining(state, site));
             Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(state, other));
-            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(state, "CHN", "USA", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(state, "CHN", "KAZ", 50));
         }
 
         [TestCase(TradeFocus.Energy)]
@@ -240,7 +245,8 @@ namespace Brink.Tests
                 StringAssert.Contains(site.displayName, text);
                 StringAssert.DoesNotContain(foreign.displayName, text);
                 StringAssert.Contains("6 months remain", text);
-                StringAssert.Contains("nationally, not closed", text);
+                StringAssert.Contains("national-holder rule", text);
+                StringAssert.Contains("Trade is not closed", text);
                 StringAssert.Contains("removes 3 months", text);
                 foreach (var line in labels[0].text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
                 Assert.AreEqual(before, SaveSystem.ToJson(state));

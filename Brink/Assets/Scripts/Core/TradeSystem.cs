@@ -299,17 +299,60 @@ namespace Brink.Core
             => SupplyIfLifted(state, countryId, focus, null, null);
 
         /// <summary>
-        /// Delivered volume, not the stored agreement. Until named routes exist,
-        /// mines on either holder's ground impose one national six-point drag.
-        /// Multiple sites/endpoints never stack; expiry needs no refund or tick.
+        /// Authored countries keep their named physical port even after transfer.
+        /// Successors use their first ordinal titled authored port, never a
+        /// parent's borrowed endpoint. Missing/landlocked/custom ground is unmapped.
+        /// This is a dependency, not an ocean itinerary or permission to clear it.
+        /// </summary>
+        public static StrategicLocation PortFor(GameState state, string countryId)
+        {
+            if (state == null || state.FindCountry(countryId) == null) return null;
+            if (WorldFactory.FindProfile(countryId) != null)
+            {
+                var port = state.FindLocation(countryId + "_PRT");
+                return port != null && port.type == LocationType.Port
+                    && WorldFactory.LocationHost(port.id) == countryId ? port : null;
+            }
+            StrategicLocation first = null;
+            foreach (var port in state.locations)
+                if (port.type == LocationType.Port && port.originalOwnerId == countryId
+                    && WorldFactory.LocationHost(port.id) != null
+                    && (first == null || string.CompareOrdinal(port.id, first.id) < 0)) first = port;
+            return first;
+        }
+
+        /// <summary>
+        /// Delivered volume, not the stored agreement. Mapped pairs depend only
+        /// on their two ports; unmapped pairs retain the national-holder fallback.
+        /// These are alternatives, never two charges. Multiple hazards do not stack.
         /// </summary>
         public static float EffectiveVolume(GameState state, string aId, string bId, float volume)
         {
+            var a = PortFor(state, aId);
+            var b = PortFor(state, bId);
+            if (a != null && b != null)
+                return MilitarySystem.MineMonthsRemaining(state, a) > 0
+                    || MilitarySystem.MineMonthsRemaining(state, b) > 0
+                    ? Math.Max(0f, volume - 6f) : volume;
             foreach (var site in state.locations)
                 if ((site.ownerId == aId || site.ownerId == bId)
                     && MilitarySystem.MineMonthsRemaining(state, site) > 0)
                     return Math.Max(0f, volume - 6f);
             return volume;
+        }
+
+        /// <summary>Own contract exposure only; never reveal foreign deadlines or quantities.</summary>
+        public static string PortDependencyReadout(GameState state, TradeRelation link)
+        {
+            if (link == null || !link.Involves(state.playerCountryId)) return "";
+            var a = PortFor(state, link.countryA);
+            var b = PortFor(state, link.countryB);
+            string route = a != null && b != null
+                ? $"PORT DEPENDENCY: {a.displayName} / {b.displayName}."
+                : "ROUTE NOT MODELLED: national-holder mine rule applies.";
+            if (EffectiveVolume(state, link.countryA, link.countryB, 100f) < 100f)
+                route += " Mine exposure: effective volume reduced by up to 6, once; sanctions and embargoes can still close delivery.";
+            return route;
         }
 
         /// <summary>
