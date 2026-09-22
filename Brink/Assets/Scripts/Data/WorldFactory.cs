@@ -1316,7 +1316,7 @@ namespace Brink.Data
             float Roll(float min, float max) => (float)Math.Round(min + (max - min) * rng.NextDouble(), 1);
 
             void Add(string id, string name, LocationType type, string owner, float defense, float value,
-                     string hostedOperator = null)
+                     string hostedOperator = null, float? authoredGarrison = null)
             {
                 // Skipped entries consume no draw — see the CreateWorld comment.
                 if (!included.Contains(owner)) return;
@@ -1331,7 +1331,7 @@ namespace Brink.Data
                     foreignOperatorId = hostedOperator ?? string.Empty,
                     defenseValue = defense,
                     strategicValue = value,
-                    garrison = Roll(30, 60)
+                    garrison = authoredGarrison ?? Roll(30, 60)
                 });
             }
 
@@ -1485,6 +1485,15 @@ namespace Brink.Data
 
             Add("VNM_CAP", "Hanoi", LocationType.Capital, "VNM", 56, 86);
             Add("VNM_IND", "Red River Manufacturing Belt", LocationType.IndustrialCenter, "VNM", 38, 70);
+
+            // Full-roster port coverage. Fixed garrisons deliberately consume no
+            // shared RNG: adding ground must not reroll existing economies or AI.
+            // New worlds only; loading an old save never invents missing ground.
+            Add("CAN_PRT", "Atlantic Gateway Terminal", LocationType.Port, "CAN", 40, 64, authoredGarrison: 45f);
+            Add("ITA_PRT", "Ligurian Container Port", LocationType.Port, "ITA", 42, 68, authoredGarrison: 45f);
+            Add("EGY_PRT", "Alexandria Port Complex", LocationType.Port, "EGY", 40, 70, authoredGarrison: 45f);
+            Add("ZAF_PRT", "Durban Freight Terminal", LocationType.Port, "ZAF", 36, 64, authoredGarrison: 45f);
+            Add("VNM_PRT", "Southern Container Terminal", LocationType.Port, "VNM", 38, 66, authoredGarrison: 45f);
         }
 
         static float Clamp(float v) => v < 0f ? 0f : (v > 100f ? 100f : v);

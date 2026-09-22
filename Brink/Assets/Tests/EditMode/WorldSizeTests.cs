@@ -259,6 +259,73 @@ namespace Brink.Tests
 
         // ---------- the expansion world holds together over time ----------
 
+        [TestCase("CAN", "Atlantic Gateway Terminal", 40f, 64f)]
+        [TestCase("ITA", "Ligurian Container Port", 42f, 68f)]
+        [TestCase("EGY", "Alexandria Port Complex", 40f, 70f)]
+        [TestCase("ZAF", "Durban Freight Terminal", 36f, 64f)]
+        [TestCase("VNM", "Southern Container Terminal", 38f, 66f)]
+        public void CoastalExpansionPortIsRealGroundWithStableHome(string owner, string name, float defense, float value)
+        {
+            var state = WorldFactory.CreateWorld(4747, "USA", WorldSize.Full);
+            var ports = state.locations.FindAll(l => l.originalOwnerId == owner && l.type == LocationType.Port);
+            Assert.AreEqual(1, ports.Count);
+            var port = ports[0];
+            Assert.AreEqual(owner + "_PRT", port.id);
+            Assert.AreEqual(name, port.displayName);
+            Assert.AreEqual(owner, port.ownerId);
+            Assert.AreEqual(defense, port.defenseValue);
+            Assert.AreEqual(value, port.strategicValue);
+            Assert.AreEqual(45f, port.garrison);
+            Assert.IsTrue(port.SupportsBasing);
+            Assert.IsFalse(port.energyWorks);
+            Assert.AreEqual(0, port.mineHazardUntilMonth);
+            float own = TerritorySystem.TradeAccessSwing(state, owner);
+            float foreign = TerritorySystem.TradeAccessSwing(state, "USA");
+            port.ownerId = "USA";
+            Assert.AreEqual(owner, GeographySystem.HostOf(port));
+            Assert.AreEqual(own - value * 0.20f, TerritorySystem.TradeAccessSwing(state, owner), 0.001f);
+            Assert.AreEqual(foreign + value * 0.20f, TerritorySystem.TradeAccessSwing(state, "USA"), 0.001f);
+            port.originalOwnerId = "USA";
+            Assert.AreEqual(owner, GeographySystem.HostOf(port), "Recognized cession must not move physical ground.");
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            var saved = loaded.locations.Find(l => l.id == port.id);
+            Assert.AreEqual("USA", saved.ownerId);
+            Assert.AreEqual("USA", saved.originalOwnerId);
+            Assert.AreEqual(owner, GeographySystem.HostOf(saved));
+        }
+
+        [TestCase(WorldSize.Regional, 23, 812f)]
+        [TestCase(WorldSize.Standard, 34, 1116f)]
+        [TestCase(WorldSize.Full, 56, 1716f)]
+        public void PortCoverageCountsActualRosterLinksWithoutInventingRoutes(WorldSize size, int expected, float volume)
+        {
+            var state = WorldFactory.CreateWorld(4747, "USA", size);
+            var ports = new HashSet<string>();
+            foreach (var site in state.locations)
+                if (site.type == LocationType.Port) Assert.IsTrue(ports.Add(site.ownerId), "One authored port per country.");
+            foreach (var country in state.countries)
+                Assert.AreEqual(GeographySystem.AccessOf(country.id) != NavalAccess.Landlocked, ports.Contains(country.id), country.id);
+            int count = 0; float covered = 0f;
+            foreach (var link in state.trade)
+                if (ports.Contains(link.countryA) && ports.Contains(link.countryB)) { count++; covered += link.volume; }
+            Assert.AreEqual(expected, count);
+            Assert.AreEqual(volume, covered);
+            Assert.IsFalse(ports.Contains("KAZ"));
+        }
+
+        [Test]
+        public void LoadingAnOlderFullWorldDoesNotBackfillPorts()
+        {
+            var state = WorldFactory.CreateWorld(4747, "USA", WorldSize.Full);
+            var added = new HashSet<string> { "CAN_PRT", "ITA_PRT", "EGY_PRT", "ZAF_PRT", "VNM_PRT" };
+            Assert.AreEqual(5, state.locations.RemoveAll(l => added.Contains(l.id)));
+            string json = SaveSystem.ToJson(state);
+            var loaded = SaveSystem.FromJson(json);
+            Assert.IsFalse(loaded.locations.Exists(l => added.Contains(l.id)));
+            Assert.AreEqual(json, SaveSystem.ToJson(loaded));
+            Assert.AreEqual(7, loaded.saveVersion);
+        }
+
         [Test]
         public void TheFullWorldStaysCoherentOverADecade()
         {
