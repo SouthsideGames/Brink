@@ -83,8 +83,8 @@ namespace Brink.Core
 
             if (actor.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "ORDER PLACED",
-                    $"{AssetCatalog.Format(count)} {profile.label} ordered. First deliveries in " +
-                    $"roughly {profile.leadMonths} months.", actorId, desk: ReportingDesk.Military);
+                    $"{AssetCatalog.Format(count)} {profile.label} ordered and paid upfront. " +
+                    "Added to the equipment backlog; deliveries arrive incrementally at the prevailing tempo.", actorId, desk: ReportingDesk.Military);
 
             return true;
         }

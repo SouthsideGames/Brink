@@ -763,13 +763,25 @@ namespace Brink.UI.Views
 
             float order = chosen.orderIncrement;
             float cost = AssetCatalog.CostOf(selectedAsset, order);
-            float rate = AcquisitionSystem.DeliveryRateFor(player, selectedAsset);
-            float months = rate > 0.001f ? 1f / rate : chosen.leadMonths;
-
             AddText("terminal-text-dim").text =
                 $"   {chosen.displayName} — {AssetCatalog.Format(order)} per order, "
-                + $"{cost:F0} treasury, roughly {months:F0} months to deliver."
+                + $"{cost:F0} treasury paid upfront. Deliveries arrive incrementally, not on a fixed completion date."
                 + (player.resources.treasury < cost ? "   TREASURY CANNOT COVER IT" : "");
+
+            var backlog = new StringBuilder(" PAID EQUIPMENT BACKLOG\n");
+            bool pending = false;
+            foreach (var asset in AssetCatalog.All)
+            {
+                var stock = player.military.Get(asset.branch).inventory.Get(asset.kind);
+                if (stock == null || stock.onOrder <= 0.01f) continue;
+                pending = true;
+                backlog.AppendLine($"{asset.displayName}: {stock.onOrder:0.##} still to arrive.");
+            }
+            if (!pending) backlog.AppendLine("No equipment awaiting delivery.");
+            backlog.AppendLine("Orders of the same equipment share a backlog. Already paid: no monthly purchase instalment. "
+                + "Industry and war footing change delivery tempo; this is not a dated order ledger. "
+                + "Equipment upkeep and war-footing costs are separate.");
+            AddText("terminal-text-dim").text = backlog.ToString();
 
             var orderRow = MakeRow();
             var place = new Button(() =>
@@ -847,10 +859,22 @@ namespace Brink.UI.Views
             var psb = new StringBuilder();
             psb.AppendLine($" PROCUREMENT — {mil.programs.Count}/{MilitarySystem.MaxPrograms} programs running");
             foreach (var program in mil.programs)
-                psb.AppendLine($"   {program.label.ToUpperInvariant()}: {program.monthsRemaining} MO REMAINING " +
-                               $"AT {program.costPerMonth:F0}/MO");
+                psb.AppendLine(MilitarySystem.ProcurementReadout(program));
             if (mil.programs.Count == 0)
                 psb.AppendLine("   Force structure is built over years, and paid for every month.");
+            psb.AppendLine(" RECENT PROCUREMENT RECORD (LATEST 5)");
+            int shown = 0;
+            for (int i = state.chronicle.Count - 1; i >= 0 && shown < 5; i--)
+            {
+                var entry = state.chronicle[i];
+                if (entry.countryId != player.id || entry.category != ChronicleCategory.Military || entry.text == null) continue;
+                if (!entry.text.StartsWith("PROCUREMENT AUTHORIZED:", System.StringComparison.Ordinal)
+                    && !entry.text.StartsWith("PROCUREMENT TERMINATED:", System.StringComparison.Ordinal)
+                    && !entry.text.StartsWith("PROCUREMENT COMPLETED:", System.StringComparison.Ordinal)) continue;
+                psb.AppendLine($"{entry.date.DisplayString}: {entry.text}");
+                shown++;
+            }
+            if (shown == 0) psb.AppendLine("No identified procurement records yet. Older general entries remain in the Chronicle.");
             procurement.text = psb.ToString();
 
             // Scale is the operator's choice, not a hardcoded Major. Transformative

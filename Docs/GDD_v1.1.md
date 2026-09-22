@@ -720,6 +720,12 @@ Military play is not an individual-unit wargame. Countries maintain Ground, Air 
 
 The operator can manage readiness posture, procurement, logistics, doctrine, strategic locations, operations, confrontation objectives and settlement strategy. Geography, distance, basing, logistics and commitments in other theatres affect usable power.
 
+Procurement presentation distinguishes monthly capability programmes from
+already-paid equipment backlogs. Full saved programme labels, remaining funding
+commitments and recent own lifecycle records explain obligations without
+inventing start dates or reserved funds. Equipment arrives incrementally from
+aggregate orders, not on a promised completion date (spec 01 §2b).
+
 Territory has systemic value: energy regions, industrial centers, ports, airbases and chokepoints feed other systems. Occupation also carries persistent fiscal, readiness, political and insurgency costs.
 
 Multiple wars are possible. Existing commitments reduce effectiveness elsewhere rather than functioning as a simple one-war rule.

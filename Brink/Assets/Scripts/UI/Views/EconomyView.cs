@@ -364,9 +364,8 @@ namespace Brink.UI.Views
                 var button = new Button(() => { GameController.Instance.BeginEnergySiteProject(id); Refresh(); })
                     { text = $"BUILD ENERGY WORKS [{IndustrialSystem.CpCost} CP]" };
                 button.AddToClassList("cmd-button");
-                button.SetEnabled(allowed);
+                if (!allowed) Block(button, reason);
                 row.Add(button);
-                if (!allowed) AddText("terminal-text-dim").text = reason;
             }
             if (!found) AddText("terminal-text-dim").text = "No energy region under our control.";
         }

@@ -113,6 +113,36 @@ army decayed monotonically: a player could permanently disarm a rival by fightin
 them once, and intelligence estimates (which read the *pillar*, not the force)
 kept reporting paper armies as strong.
 
+#### Visible procurement commitments (#24)
+
+MILITARY shows each procurement programme's full saved label, branch, remaining
+funded months, saved monthly cost and their product as remaining treasury
+commitment. This is future spending at current terms, not reserved money.
+Negative legacy duration/cost is displayed as zero without modifying the save;
+no start date, original duration or previously spent total is reconstructed.
+Capability accrues during funded months. Failure to fund terminates the programme,
+does not pause it, and refunds no prior spending. Completion is not a final
+counted-equipment shipment.
+
+Existing authorization, funding-failure and completion chronicle entries gain
+distinct `PROCUREMENT AUTHORIZED:`, `PROCUREMENT TERMINATED:` and
+`PROCUREMENT COMPLETED:` prefixes. Both authorization paths use the same prefix.
+Their count, country ownership and publicity are unchanged. The panel shows the
+latest five own Military entries bearing these prefixes, newest first. Old
+generic entries remain in the Chronicle rather than being reclassified by guess.
+
+Counted equipment orders are different: treasury is paid upfront, then the
+aggregate backlog for each asset class delivers incrementally. The panel shows
+our outstanding quantities without claiming separate orders, original prices or
+a fixed completion date. Industry and war footing alter delivery tempo. There
+is no monthly purchase instalment; ordinary upkeep and war-footing costs remain
+separate. The order receipt now describes this actual delivery rule rather than
+claiming first deliveries wait for the catalogue lead time.
+
+This is presentation only: no funding, delivery, force-growth, CP, XP, AI, schema,
+save-version or pipeline change. Wrapped prose uses the existing text policy.
+Native Unity verification and hardware remain separate from author harness checks.
+
 ### 2c. Logistics
 
 1 CP + 70 treasury for `Growth.Apply(logistics, 9)`. The treasury is checked
