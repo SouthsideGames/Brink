@@ -259,6 +259,35 @@ namespace Brink.Tests
 
         // ---------- the expansion world holds together over time ----------
 
+        sealed class MapRandom : System.Random
+        {
+            public int Draws;
+            public MapRandom(int seed) : base(seed) { }
+            public override double NextDouble() { Draws++; return base.NextDouble(); }
+        }
+
+        [Test]
+        public void AuthoredPortGarrisonsDoNotAdvanceTheSharedMapRandomStream()
+        {
+            var makeMap = typeof(WorldFactory).GetMethod("MakeMap",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(makeMap);
+            foreach (WorldSize size in System.Enum.GetValues(typeof(WorldSize)))
+            {
+                var rng = new MapRandom(4747);
+                var map = new GameState();
+                makeMap.Invoke(null, new object[] { rng, map, new HashSet<string>(WorldFactory.RosterFor(size)) });
+                // Pre-port map draw counts. New fixed garrisons must not even
+                // draw and discard: economies and AI consume this stream next.
+                int expected = size == WorldSize.Regional ? 39 : size == WorldSize.Standard ? 60 : 77;
+                Assert.AreEqual(expected, rng.Draws, size + " displaced the shared generation stream.");
+                Assert.AreEqual(expected + (size == WorldSize.Full ? 5 : 0), map.locations.Count);
+                var control = new System.Random(4747);
+                for (int i = 0; i < expected; i++) control.NextDouble();
+                Assert.AreEqual(control.NextDouble(), rng.NextDouble(), size + " changed the next consumer's RNG state.");
+            }
+        }
+
         [TestCase("CAN", "Atlantic Gateway Terminal", 40f, 64f)]
         [TestCase("ITA", "Ligurian Container Port", 42f, 68f)]
         [TestCase("EGY", "Alexandria Port Complex", 40f, 70f)]
