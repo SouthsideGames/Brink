@@ -152,7 +152,7 @@ namespace Brink.Core
 
             var link = state.FindTrade(actorId, targetId);
             float current = link == null || link.focus != focus || link.embargoed
-                ? 0f : Throughput(link.volume, link.tariff);
+                ? 0f : Throughput(TradeSystem.EffectiveVolume(state, actorId, targetId, link.volume), link.tariff);
 
             // The resulting link keeps the better of the existing terms and the
             // offered ones — for a same-commodity link *and* for a `General` link
@@ -160,7 +160,7 @@ namespace Brink.Core
             // acceptance would actually leave behind.
             bool keepsTerms = link != null && (link.focus == focus || link.focus == TradeFocus.General);
             float offered = Throughput(
-                Math.Max(keepsTerms ? link.volume : 0f, OfferVolume),
+                TradeSystem.EffectiveVolume(state, actorId, targetId, Math.Max(keepsTerms ? link.volume : 0f, OfferVolume)),
                 Math.Min(keepsTerms ? link.tariff : 100f, OfferTariff));
 
             // Exactly `TradeSystem.Supply`'s arithmetic for one link: what they

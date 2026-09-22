@@ -299,6 +299,20 @@ namespace Brink.Core
             => SupplyIfLifted(state, countryId, focus, null, null);
 
         /// <summary>
+        /// Delivered volume, not the stored agreement. Until named routes exist,
+        /// mines on either holder's ground impose one national six-point drag.
+        /// Multiple sites/endpoints never stack; expiry needs no refund or tick.
+        /// </summary>
+        public static float EffectiveVolume(GameState state, string aId, string bId, float volume)
+        {
+            foreach (var site in state.locations)
+                if ((site.ownerId == aId || site.ownerId == bId)
+                    && MilitarySystem.MineMonthsRemaining(state, site) > 0)
+                    return Math.Max(0f, volume - 6f);
+            return volume;
+        }
+
+        /// <summary>
         /// `Supply` as it would read if `liftSenderId`'s regime on
         /// `liftTargetId` were lifted the way `LiftSanctions` lifts it: that one
         /// record gone and the pair's link no longer embargoed. Every other
@@ -338,7 +352,8 @@ namespace Brink.Core
                     default: theirs = partner.resources.strategicMaterials; break;
                 }
 
-                float throughput = link.volume / 100f * (1f - link.tariff / 150f);
+                float throughput = EffectiveVolume(state, link.countryA, link.countryB, link.volume)
+                    / 100f * (1f - link.tariff / 150f);
                 supplied += theirs * MaxSupplyShare * throughput;
             }
 

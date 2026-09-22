@@ -31,6 +31,17 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Recoverable mine hazards.** Successful mining persists a six-month exclusive
+  calendar deadline on the site; repeats refresh, not stack. Effective trade
+  volume loses six once if either endpoint holds mined ground, without changing
+  agreements. Supply, health, import competition and leverage pricing share it.
+  Successful own-site Convoy Escort removes three months in war or peace, with
+  existing costs/bonuses unchanged. Expiry needs no tick, fleet or AI action;
+  transfer carries the hazard with the ground. Old saves default clear at v7;
+  no speculative refund of historical losses. National abstraction, not routes.
+  No new AI escort caller; numerical balance and hardware are unverified.
+  Specs 01/02/10 own the behavior. Native review remains Claude's separate gate.
+
 - **Stable geography (#25, first slice).** Physical site home comes from the
   existing full authored map by id, not mutable recognized title. A private lazy
   map lookup uses its own RNG and changes no save. Cession/annexation/secession

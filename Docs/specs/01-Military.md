@@ -862,8 +862,8 @@ Each of these leaves the map unchanged and the *situation* different.
 | `CounterInsurgency` | `pacification` +12; our stability +0.8 |
 | `SeaControl` | their naval strength −7, naval readiness −9 |
 | `CommerceRaiding` | their trade −4/link, treasury −70, confidence −2.5 |
-| `MineWarfare` | their trade −6/link, naval supply −10; `defenseValue` −6 |
-| `ConvoyEscort` | **our** trade +5/link, confidence +3, naval supply +4 |
+| `MineWarfare` | six-calendar-month site hazard (below), naval supply −10; `defenseValue` −6; no agreement-volume write |
+| `ConvoyEscort` | **our** trade +5/link, confidence +3, naval supply +4; success removes up to three months of mines at the selected site |
 | `CounterAirCampaign` | their air strength −8, air readiness −10 |
 | `NoFlyZone` | their air readiness −16, air supply −10, stability −1 |
 | `AirInterdiction` | garrison −6; their ground supply −11, naval supply −4 |
@@ -873,6 +873,44 @@ Each of these leaves the map unchanged and the *situation* different.
 | `CyberOperation` | their readiness −5 on all three branches, confidence −3 |
 | `MissileDefense` | **our** `missileDefense` +10 |
 | `NoncombatantEvacuation` | our stability +1.5, warSupport +3 |
+
+#### Recoverable mine disruption (September 2026 repair)
+
+Previously mining permanently removed six points from every defender trade
+agreement, while its receipt claimed a local closure lasting until months of
+clearance. Other actions could raise volumes, but no recovery was tied to mines.
+
+A success stores `mineHazardUntilMonth` on the site: exclusive calendar index
+`year * 12 + month + 6`. Repetition takes the later of the current deadline and
+six months from now, never adds six to the old deadline. The hazard follows
+ground through occupation, cession, annexation and secession; its current holder
+bears it. A January success expires at July's start, without a pipeline tick,
+fleet, active war or payment. Routine clearance is abstract, not a modeled funded
+programme. AI orders happen late in resolution and can affect the economy first
+next month: this is a calendar duration, not six guaranteed economic ticks.
+
+If either endpoint holds a mined site, effective bilateral volume is
+`max(0, agreement volume - 6)`. Multiple sites/endpoints do not stack. This is
+**national aggregate disruption, not routing or total closure**. Unrelated pairs
+are untouched. TradeHealth, supply, import competition and supply-exchange
+pricing use the shared reader; sanctions-relief pricing inherits it through
+SupplyIfLifted. Sanctions/embargoes still close links. Nominal agreement,
+dependence/exposure and AI trade-weight reads retain stored-volume semantics.
+
+Expiry removes only the modifier, never refunds volume or stock. Successful
+Convoy Escort at that site removes up to three remaining months, in addition to
+its existing bonuses. Other sites remain mined. Ordinary cost/odds/authority and
+own-ground gates remain, including peacetime availability; failure clears nothing.
+No new AI escort selector is added; passive expiry works for every state.
+Mining's immediate defense/naval-supply damage is unchanged.
+
+MILITARY lists our active sites, time, national effect and targeted escort remedy.
+No foreign hazard list is added. Catalogue and receipts describe disruption, not
+total closure or a nonexistent manual clearance requirement. The overt shipping
+hazard is not a classified statistic. Missing old-save fields mean clear; old
+unattributable volume losses are not refunded. Six/three months and six points
+are initial tuning, not native balance certification. Routes and the other
+military trade decrements remain separate work. Tests: OperationCatalogTests.
 
 Suppression is the clearest case: it takes nothing, kills almost nobody, and
 makes every later operation against that position easier — a strategic move the

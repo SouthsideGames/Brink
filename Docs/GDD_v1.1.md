@@ -316,6 +316,7 @@ Failure is valid and produces consequences rather than automatic rescue.
 18.3 How Confrontations Begin
 Confrontations may be player-initiated, AI-initiated, or emerge from crises such as border incidents, alliance obligations, trade disputes, coups or other systemic events.
 19. Military Pillar
+Amendment, September 2026: mine warfare leaves a temporary hazard on the selected ground, not a permanent decrement to trade agreements. Routine clearance gives every state a recovery path, including after peace; successful convoy escort can shorten the hazard locally. Until named routes exist, its trade effect remains an explicitly national, nonstacking reduction in effective throughput, not a claim that a particular passage is completely closed. Initial duration and clearance values require native balance measurement. See spec 01's recoverable mine disruption rule.
 Deep optional national-campaign simulation; non-specialists may delegate to the military leader.
 Strategic locations include capitals, ports, airbases, industrial centers, energy regions, passes and other meaningful targets rather than every city.
 Force structure uses branches/sub-branches and enablers rather than individual vehicle counts.

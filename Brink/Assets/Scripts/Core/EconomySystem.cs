@@ -371,7 +371,8 @@ namespace Brink.Core
                 // which is the historical bargain: a shielded industry survives and
                 // everyone pays more for what it makes.
                 float shielded = 1f - Math.Min(0.8f, link.tariff / 32f);
-                pressure += link.volume * 0.006f * shielded;
+                pressure += TradeSystem.EffectiveVolume(state, link.countryA, link.countryB, link.volume)
+                    * 0.006f * shielded;
             }
 
             return pressure;
@@ -1218,7 +1219,8 @@ namespace Brink.Core
                 if (!link.Involves(countryId)) continue;
                 links++;
                 if (link.embargoed) continue;
-                total += link.volume * (1f - link.tariff / 150f);
+                total += TradeSystem.EffectiveVolume(state, link.countryA, link.countryB, link.volume)
+                    * (1f - link.tariff / 150f);
             }
 
             if (links == 0) return 0f;
