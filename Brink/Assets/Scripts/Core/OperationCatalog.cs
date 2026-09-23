@@ -441,7 +441,8 @@ namespace Brink.Core
         // ---------- availability ----------
 
         /// <summary>
-        /// Whether this order can be given at all, and if not, why.
+        /// Capability/control check without a front. Execution and front-bound
+        /// planning must use the overload taking an explicit confrontation.
         ///
         /// The reason matters as much as the answer. A greyed-out button with no
         /// explanation reads as a bug; "WE HAVE NO FLEET" reads as the
@@ -531,7 +532,38 @@ namespace Brink.Core
             return true;
         }
 
-        /// <summary>Convenience overload where the reason is not needed.</summary>
+        /// <summary>
+        /// Complete target eligibility on the supplied front, not any war the
+        /// actor happens to be fighting. Read-only; call before costs or draws.
+        /// Coalition support does not make its provider a principal on this front.
+        /// </summary>
+        public static bool CanOrder(GameState state, string actorId, StrategicLocation target,
+            OperationType type, Confrontation confrontation, out string reason)
+        {
+            if (!CanOrder(state, actorId, target, type, out reason)) return false;
+            if (confrontation != null && confrontation.resolved) confrontation = null;
+            if (ConfrontationSystem.RequiresConfrontation(type) && confrontation == null)
+            {
+                reason = "NO ACTIVE CONFRONTATION";
+                return false;
+            }
+            if (confrontation != null && !confrontation.Involves(actorId))
+            {
+                reason = "WE ARE NOT A PARTY TO THIS FRONT";
+                return false;
+            }
+            var targeting = For(type).targeting;
+            if (targeting != OperationTargeting.OwnGround
+                && target.ownerId != confrontation.OpponentOf(actorId)
+                && !(targeting == OperationTargeting.Either && target.ownerId == actorId))
+            {
+                reason = "TARGET IS NOT ON THIS FRONT";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Capability/control convenience overload; not execution authorization.</summary>
         public static bool CanOrder(GameState state, string actorId, StrategicLocation target,
             OperationType type) => CanOrder(state, actorId, target, type, out _);
 
@@ -542,6 +574,16 @@ namespace Brink.Core
             var result = new List<OperationType>();
             foreach (var profile in profiles)
                 if (CanOrder(state, actorId, target, profile.type)) result.Add(profile.type);
+            return result;
+        }
+
+        /// <summary>Orderable choices for this front, including peacetime own-ground work.</summary>
+        public static List<OperationType> AvailableAgainst(GameState state, string actorId,
+            StrategicLocation target, Confrontation confrontation)
+        {
+            var result = new List<OperationType>();
+            foreach (var profile in profiles)
+                if (CanOrder(state, actorId, target, profile.type, confrontation, out _)) result.Add(profile.type);
             return result;
         }
     }

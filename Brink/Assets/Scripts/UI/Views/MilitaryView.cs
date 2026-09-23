@@ -481,7 +481,7 @@ namespace Brink.UI.Views
 
                 var captured = profile.type;
                 bool possible = OperationCatalog.CanOrder(
-                    state, state.playerCountryId, site, captured, out string blocked);
+                    state, state.playerCountryId, site, captured, state.ActiveConfrontation, out string blocked);
 
                 int cost = ConfrontationSystem.OperationCostFor(state, null, captured);
 
@@ -1525,7 +1525,7 @@ namespace Brink.UI.Views
                 // drift. Named apart from the `blocked` further down this method,
                 // which is the *selected* order's refusal rather than this one's.
                 bool possible = OperationCatalog.CanOrder(
-                    state, state.playerCountryId, selectedTarget, captured, out string whyNot);
+                    state, state.playerCountryId, selectedTarget, captured, confrontation, out string whyNot);
 
                 // The price belongs on the choice, not only on the confirmation —
                 // sequencing suppression before an assault is only a decision if
@@ -1569,7 +1569,7 @@ namespace Brink.UI.Views
             // procurement decision, which is what it is. A greyed button with no
             // explanation reads as a bug.
             bool orderable = OperationCatalog.CanOrder(
-                state, state.playerCountryId, selectedTarget, selectedOperation, out string blocked);
+                state, state.playerCountryId, selectedTarget, selectedOperation, confrontation, out string blocked);
             if (!orderable)
                 AddText("sig-hostile").text = $"   UNAVAILABLE: {blocked}.";
 

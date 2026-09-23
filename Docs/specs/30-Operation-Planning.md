@@ -42,6 +42,14 @@ After the next month's Command Points refresh, `ExecuteStandingOrder` attempts a
 
 Plans are considered in creation order; the first executable standing order wins the month's single execution slot. A blocked earlier plan does not prevent a later executable plan from running. The panel reports the current reason when an authorization is waiting, and an ended confrontation clears its obsolete authorization.
 
+Target checks use the explicit plan confrontation in the shared operation gate
+(spec 01 §4-0), both when adding a step and before execution. A target that passes
+to a neutral or another front is not silently reassigned: the standing order
+waits with `TARGET IS NOT ON THIS FRONT`. No CP, action-sequence allocation or
+operation record is produced by the refused order. A rejected new step likewise
+allocates no sequence. The intended step and authorization remain available for
+the player to revise; no automatic rerouting or replacement target is invented.
+
 Because execution uses the ordinary command path, it also awards the ordinary XP and initiative credit. Those rewards belong to the operator's earlier act of preauthorization; standing orders do not create a cheaper or anonymous execution path.
 
 Planning remains inert. The separate standing-order toggle is the act that delegates execution; turning it off returns the plan to staff intent without deleting a step.

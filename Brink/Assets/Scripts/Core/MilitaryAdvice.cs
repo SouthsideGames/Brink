@@ -128,7 +128,7 @@ namespace Brink.Core
                 if (!theirs && !ours) continue;
 
                 foreach (var type in OperationCatalog.AvailableAgainst(
-                             state, state.playerCountryId, location))
+                             state, state.playerCountryId, location, confrontation))
                 {
                     if (type == OperationType.Withdraw) continue;
 

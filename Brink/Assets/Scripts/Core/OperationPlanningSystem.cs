@@ -91,7 +91,7 @@ namespace Brink.Core
             if (!Enum.TryParse(step.operationType, true, out OperationType type)) return "The next operation is no longer recognized.";
             var location = state.FindLocation(step.locationId);
             if (location == null) return "The next target no longer exists.";
-            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, out blocked)) return blocked;
+            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, confrontation, out blocked)) return blocked;
             if (!ConfrontationSystem.WithinEscalationLimit(confrontation, type, DirectiveFor(state, confrontationId)))
                 return "The next operation exceeds the plan's escalation ceiling.";
             int cost = ConfrontationSystem.OperationCostFor(state, confrontation, type);
@@ -106,7 +106,7 @@ namespace Brink.Core
             var confrontation = state.FindConfrontation(confrontationId);
             var location = state.FindLocation(locationId);
             if (confrontation == null || confrontation.resolved || location == null) return false;
-            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, out _)) return false;
+            if (!OperationCatalog.CanOrder(state, state.playerCountryId, location, type, confrontation, out _)) return false;
 
             plan.steps.Add(new PlannedOperation
             {

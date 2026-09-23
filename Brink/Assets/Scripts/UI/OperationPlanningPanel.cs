@@ -121,7 +121,7 @@ namespace Brink.UI
             foreach (var profile in OperationCatalog.InDomain(selectedDomain))
             {
                 var captured = profile.type; bool current = selectedOperation == captured;
-                bool possible = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, captured, out string blocked);
+                bool possible = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, captured, confrontation, out string blocked);
                 var b = new Button(() => { selectedOperation = captured; refresh?.Invoke(); }) { text = (current ? "► " : "") + profile.displayName };
                 b.AddToClassList("cmd-button"); if (current) b.AddToClassList("primary");
                 if (!possible)
@@ -133,7 +133,7 @@ namespace Brink.UI
                 opRow.Add(b);
             }
 
-            bool canAdd = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, selectedOperation, out string whyNot);
+            bool canAdd = OperationCatalog.CanOrder(state, state.playerCountryId, selectedLocation, selectedOperation, confrontation, out string whyNot);
             var addRow = Row();
             var add = new Button(() => { OperationPlanningSystem.AddStep(state, confrontation.id, selectedLocationId, selectedOperation); refresh?.Invoke(); }) { text = "ADD TO PLAN [NO CP]" };
             add.AddToClassList("cmd-button"); add.AddToClassList("primary");

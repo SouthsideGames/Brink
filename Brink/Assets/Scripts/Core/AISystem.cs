@@ -1589,7 +1589,7 @@ namespace Brink.Core
             // be expressed inside what is actually possible, or a maritime
             // doctrine spends every month proposing blockades of a landlocked
             // neighbour and achieving nothing.
-            var possible = OperationCatalog.AvailableAgainst(state, country.id, target);
+            var possible = OperationCatalog.AvailableAgainst(state, country.id, target, confrontation);
             if (possible.Count == 0) return OperationType.Assault;
 
             bool Can(OperationType type) => possible.Contains(type);
