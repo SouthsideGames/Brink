@@ -187,6 +187,17 @@ compact old chronicle entries rather than discarding them.
   Additional slots are available for manual saves.
 - Location: `Application.persistentDataPath/saves`, overridable via
   `SaveSystem.SaveDirectoryOverride` (used by tests).
+- **EditMode safety:** a global-namespace NUnit `TestSaveIsolation` setup
+  fixture installs a unique temporary override before any fixture and restores
+  the previous override at run end, deleting only its own directory. It is
+  non-parallel because the override is static. Filtered/partitioned runs use the
+  same boundary. Inner fixtures may use their own directory but must restore the
+  enclosing override rather than null it. Regression tests cover installation
+  before fixture setup, real controller autosaving, inner fixture restoration,
+  global scope and lifecycle cleanup. This changes no runtime save behavior.
+  Separate project copies still share Unity's persistentDataPath; before testing
+  removal of this boundary, use independent OS/filesystem isolation. Crashed
+  processes may leave their uniquely named temporary directory, not a live save.
 - Suspend/resume is immediate because the whole state is one object; a validation
   test proves a mid-decade save resumes bit-identically to an uninterrupted run.
 

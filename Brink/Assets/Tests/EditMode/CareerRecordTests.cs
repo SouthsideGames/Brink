@@ -12,19 +12,21 @@ namespace Brink.Tests
     public class CareerRecordTests
     {
         string directory;
+        string previousDirectory;
 
         [SetUp]
         public void SetUp()
         {
             GameLog.MirrorToUnityConsole = false;
             directory = Path.Combine(Path.GetTempPath(), "brink-career-" + System.Guid.NewGuid().ToString("N"));
+            previousDirectory = SaveSystem.SaveDirectoryOverride;
             SaveSystem.SaveDirectoryOverride = directory;
         }
 
         [TearDown]
         public void TearDown()
         {
-            SaveSystem.SaveDirectoryOverride = null;
+            SaveSystem.SaveDirectoryOverride = previousDirectory;
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
             GameLog.MirrorToUnityConsole = true;
             GameLog.Clear();

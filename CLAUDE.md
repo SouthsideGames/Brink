@@ -31,6 +31,21 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **EditMode save isolation is an assembly boundary.** Global-namespace
+  `TestSaveIsolation` (NUnit SetUpFixture, non-parallel) redirects SaveSystem to
+  a unique temporary directory before fixtures, including filtered runs, and
+  restores the caller's override at completion. Fixtures with their own save
+  directories must preserve/restore the previous override, never reset it to
+  null. SaveSystemTests and CareerRecordTests now follow that rule. Production
+  save behavior is unchanged. A separate Unity project is NOT save isolation:
+  company/product identity shares persistentDataPath. A prior native suite
+  overwrote the real autosave through unisolated controller calls; no local
+  recovery source was found by the reviewer. Do not run an unfixed base or
+  isolation-removal mutation natively without an external disposable OS account
+  or verified filesystem protection for the real save path. TMPDIR alone is
+  insufficient for Unity. A killed run may leave its unique test directory;
+  never clean a broad temp or persistent-data root to remove it. Spec 10 §3.
+
 - **Front-bound operation validation.** Use the explicit-confrontation CanOrder
   overload for orders, planning and advice; the old no-front overload is only a
   capability/control query. Offensive actors and targets must be opposite
