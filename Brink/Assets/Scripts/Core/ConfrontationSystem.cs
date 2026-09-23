@@ -456,6 +456,12 @@ namespace Brink.Core
 
             var target = state.FindLocation(targetLocationId);
             if (target == null) return null;
+            if (!OperationCatalog.CanOrder(state, state.playerCountryId, target, operationType,
+                    confrontation, out string blocked))
+            {
+                GameLog.Warn("CONFRONT", $"Operation refused: {blocked}.");
+                return null;
+            }
             if (!WithinEscalationLimit(confrontation, operationType, directive))
             {
                 GameLog.Warn("CONFRONT", "The order's escalation limit forbids the conflict this would open.");
@@ -509,7 +515,7 @@ namespace Brink.Core
             // even reachable by sea. One gate, shared with the order screen, so
             // what the operator is offered and what the simulation accepts can
             // never disagree.
-            if (!OperationCatalog.CanOrder(state, attackerId, target, operationType, out string blocked))
+            if (!OperationCatalog.CanOrder(state, attackerId, target, operationType, confrontation, out string blocked))
             {
                 if (attackerId == state.playerCountryId)
                     GameLog.Warn("CONFRONT", $"Operation refused: {blocked}.");

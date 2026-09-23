@@ -659,8 +659,10 @@ standing execution use the same rule.
 
 ### 4-0. Availability — `OperationCatalog.CanOrder`
 
-One gate, shared by the order screen and `LaunchOperationBy`, so what the
-operator is offered and what the simulation accepts can never disagree. It
+Front-bound eligibility is shared by the order screen, advice, campaign planning,
+AI choices and both launch entry points through `CanOrder(..., confrontation,
+out reason)`. The older no-front overload is only a capability/control query,
+not execution authorization. The shared gate
 returns a *reason*, and the reason matters as much as the refusal: `WE HAVE NO
 FLEET` reads as the consequence of a procurement decision made three years ago,
 which is what it is, while a greyed-out button with no explanation reads as a bug.
@@ -673,6 +675,33 @@ with (`needsEnemyAir` / `needsEnemyNavy`).
 
 It is a *possibility* check only. Affordability is handled separately, and
 ordering something unwise remains the player's right.
+
+**Front identity (September 2026 repair).** Offensive orders require a live
+supplied confrontation, an actor who is one of its two principals, and ground
+currently held by that front's opponent. A war with the holder elsewhere is
+insufficient: the operation must not be filed in another war's diary. Coalition
+members contribute weight, not permission to act as a principal on their leader's
+front; their own obligation fronts remain separate. `Withdraw` still permits
+either principal's ground. Own-ground programmes remain valid without a live
+front (including a resolved supplied front, treated as null); when supplied a
+live front, their actor must participate in it. Title does not override control.
+
+The player wrapper validates before spending CP, and the actor-generic path
+validates again before escalation, operation RNG/sequence, effects or records.
+Invalid targeting leaves the full serialized state unchanged and does not
+autosave. Previously the UI and AI's normal target enumeration filtered opponents,
+but the execution API could mine a neutral and file it on an unrelated front.
+A retained AI objective, selected UI target or saved plan can also become invalid
+after transfer; all are rechecked against current control. Planning refuses a new
+invalid step before its action-sequence allocation; a stale standing order waits
+with its reason, without consuming capacity or completing its step.
+
+No new neutral-attack permission, automatic confrontation, command-cost change,
+combat tuning, route rule, persistent field or migration is introduced. The low-
+level `MilitarySystem.ResolveOperation` remains a resolution primitive rather than
+an order entry point. No claim of unchanged world trajectories: stale previously
+accepted orders may now be refused. Tests: OperationCatalogTests, including full
+JSON refusal checks and stale selection at all four supported widths.
 
 **Sea access is authored world data** (`CountryProfile.navalAccess`, three levels:
 `Landlocked` / `Coastal` / `Maritime`), following the same rule as map

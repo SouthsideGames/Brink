@@ -44,6 +44,268 @@ namespace Brink.Tests
         static IEnumerable<OperationType> AllTypes()
             => (OperationType[])Enum.GetValues(typeof(OperationType));
 
+        Confrontation OpenFront(string actor = "USA", string opponent = "CHN")
+        {
+            var front = ConfrontationSystem.BeginBy(state, actor, opponent,
+                ConfrontationObjective.PolicyReversal, null, PrimaryStrategy.Military);
+            Assert.IsNotNull(front, "Fixture must open a real front.");
+            return front;
+        }
+
+        void AssertRefusalIsPure(Action refuse)
+        {
+            string before = SaveSystem.ToJson(state);
+            int sequence = state.actionSequence;
+            int cp = state.commandPoints.current;
+            refuse();
+            Assert.AreEqual(sequence, state.actionSequence, "Refusal consumed the action sequence.");
+            Assert.AreEqual(cp, state.commandPoints.current, "Refusal spent command capacity.");
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "Refusal changed the world or its records.");
+        }
+
+        void WithIsolatedController(Action<GameController> check)
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State; var previousTurns = gc.Turns;
+            string oldDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-front-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, new TurnManager(state));
+                check(gc);
+            }
+            finally
+            {
+                SaveSystem.SaveDirectoryOverride = oldDirectory;
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [TestCase("neutral")]
+        [TestCase("other-front")]
+        [TestCase("captured")]
+        [TestCase("our-ground")]
+        [TestCase("withdraw-neutral")]
+        [TestCase("no-fleet")]
+        public void FrontBoundRefusalPrecedesCostsDrawsAndAllWorldWrites(string scenario)
+        {
+            var front = OpenFront();
+            var target = state.FindLocation("CHN_PRT");
+            var type = OperationType.MineWarfare;
+            string reason = "TARGET IS NOT ON THIS FRONT";
+            if (scenario == "neutral" || scenario == "withdraw-neutral") target = state.FindLocation("IDN_CHK");
+            if (scenario == "other-front")
+            {
+                OpenFront("USA", "RUS");
+                target = state.FindLocation("RUS_PRT");
+            }
+            if (scenario == "captured")
+            {
+                Assert.IsTrue(OperationCatalog.CanOrder(state, "USA", target, type, front, out _));
+                TerritorySystem.Cede(state, target, "IDN");
+            }
+            if (scenario == "our-ground")
+            {
+                target = state.FindLocation("USA_PRT");
+                reason = "WE ALREADY HOLD THIS";
+            }
+            if (scenario == "withdraw-neutral") type = OperationType.Withdraw;
+            if (scenario == "no-fleet")
+            {
+                state.PlayerCountry.military.naval.SetStrength(0);
+                reason = "WE HAVE NO FLEET";
+            }
+            state.commandingConfrontationId = front.id;
+            Assert.AreSame(front, state.ActiveConfrontation);
+            AssertRefusalIsPure(() =>
+            {
+                Assert.IsFalse(OperationCatalog.CanOrder(state, "USA", target, type, front, out string blocked));
+                Assert.AreEqual(reason, blocked);
+                Assert.IsFalse(OperationCatalog.AvailableAgainst(state, "USA", target, front).Contains(type));
+            });
+            AssertRefusalIsPure(() => Assert.IsNull(ConfrontationSystem.LaunchOperationBy(
+                state, front, "USA", target.id, type, new OperationDirective())));
+            WithIsolatedController(gc =>
+            {
+                AssertRefusalIsPure(() => Assert.IsNull(gc.LaunchOperation(target.id, type, new OperationDirective())));
+                Assert.AreEqual(0, Directory.GetFiles(SaveSystem.SaveDirectoryOverride).Length,
+                    "Rejected command must not autosave.");
+            });
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OffensiveOrdersNeedALiveFrontEvenWithAValidEnemyTarget(bool resolved)
+        {
+            var front = OpenFront();
+            if (resolved) front.resolved = true;
+            else { state.confrontations.Clear(); front = null; }
+            var target = state.FindLocation("CHN_PRT");
+            AssertRefusalIsPure(() =>
+            {
+                Assert.IsFalse(OperationCatalog.CanOrder(state, "USA", target, OperationType.MineWarfare, front, out string why));
+                Assert.AreEqual("NO ACTIVE CONFRONTATION", why);
+                Assert.IsNull(ConfrontationSystem.LaunchOperationBy(state, front, "USA", target.id,
+                    OperationType.MineWarfare, new OperationDirective()));
+                Assert.IsNull(ConfrontationSystem.LaunchOperation(state, new TurnManager(state), front, target.id,
+                    OperationType.MineWarfare, new OperationDirective()));
+            });
+        }
+
+        [TestCase(OperationType.MineWarfare, "CHN_PRT")]
+        [TestCase(OperationType.ConvoyEscort, "IDN_PRT")]
+        public void CoalitionMemberIsNotAPrincipalOnSomebodyElsesFront(OperationType type, string siteId)
+        {
+            var front = OpenFront();
+            state.coalitions.Add(new Coalition { id = "FRONT_TEST", leaderId = "USA",
+                confrontationId = front.id, targetId = "CHN", memberIds = new List<string> { "USA", "IDN" } });
+            Assert.Greater(DiplomacySystem.CoalitionStrength(state, front, "USA", OperationType.MineWarfare), 0);
+            var target = state.FindLocation(siteId);
+            AssertRefusalIsPure(() =>
+            {
+                Assert.IsFalse(OperationCatalog.CanOrder(state, "IDN", target, type, front, out string why));
+                Assert.AreEqual("WE ARE NOT A PARTY TO THIS FRONT", why);
+                Assert.IsNull(ConfrontationSystem.LaunchOperationBy(state, front, "IDN", siteId, type, new OperationDirective()));
+            });
+            // Supporting weight still reaches its leader's normal order.
+            var result = ConfrontationSystem.LaunchOperationBy(state, front, "USA", "CHN_PRT",
+                OperationType.MineWarfare, new OperationDirective());
+            Assert.IsNotNull(result);
+            Assert.AreSame(result, front.operations.Single());
+            Assert.AreEqual("USA", result.attackerId);
+        }
+
+        [TestCase("USA", "CHN_PRT")]
+        [TestCase("CHN", "USA_PRT")]
+        public void EitherPrincipalCanOrderAgainstItsActualOpponent(string actor, string siteId)
+        {
+            var front = OpenFront();
+            Assert.IsTrue(OperationCatalog.CanOrder(state, actor, state.FindLocation(siteId),
+                OperationType.MineWarfare, front, out string why), why);
+            var result = ConfrontationSystem.LaunchOperationBy(state, front, actor, siteId,
+                OperationType.MineWarfare, new OperationDirective());
+            Assert.IsNotNull(result);
+            Assert.AreEqual(actor, result.attackerId);
+            Assert.AreEqual(siteId, result.locationId);
+            Assert.AreSame(result, front.operations.Single());
+        }
+
+        [Test]
+        public void CorrectFrontSelectionStillChargesOnceAndFilesOnThatFront()
+        {
+            var china = OpenFront();
+            var russia = OpenFront("USA", "RUS");
+            state.commandingConfrontationId = russia.id;
+            WithIsolatedController(gc =>
+            {
+                int cp = state.commandPoints.current;
+                int cost = ConfrontationSystem.OperationCostFor(state, russia, OperationType.MineWarfare);
+                var result = gc.LaunchOperation("RUS_PRT", OperationType.MineWarfare, new OperationDirective());
+                Assert.IsNotNull(result);
+                Assert.AreEqual(cp - cost, state.commandPoints.current);
+                Assert.AreEqual(0, china.operations.Count);
+                Assert.AreSame(result, russia.operations.Single());
+                Assert.AreEqual(1, SaveSystem.Load(0).FindConfrontation(russia.id).operations.Count);
+            });
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OwnGroundWorkStillRunsWithoutALiveFrontAndAdvancesItsSequence(bool resolved)
+        {
+            var front = resolved ? OpenFront() : null;
+            if (front != null) front.resolved = true;
+            int sequence = state.actionSequence;
+            Assert.IsTrue(OperationCatalog.CanOrder(state, "USA", state.FindLocation("USA_PRT"),
+                OperationType.ConvoyEscort, front, out string why), why);
+            var result = ConfrontationSystem.LaunchOperationBy(state, front, "USA", "USA_PRT",
+                OperationType.ConvoyEscort, new OperationDirective());
+            Assert.IsNotNull(result);
+            Assert.AreEqual(sequence + 1, state.actionSequence);
+            if (front != null) Assert.AreEqual(0, front.operations.Count);
+        }
+
+        [TestCase("USA_PRT")]
+        [TestCase("CHN_PRT")]
+        public void WithdrawalStillAcceptsEitherPrincipalsGround(string siteId)
+        {
+            var front = OpenFront();
+            Assert.IsTrue(OperationCatalog.CanOrder(state, "USA", state.FindLocation(siteId),
+                OperationType.Withdraw, front, out _));
+            Assert.IsNotNull(ConfrontationSystem.LaunchOperationBy(state, front, "USA", siteId,
+                OperationType.Withdraw, new OperationDirective()));
+        }
+
+        [Test]
+        public void PlannedTargetCapturedByANeutralWaitsWithoutLaunchingOrTakingADraw()
+        {
+            var front = OpenFront();
+            var plan = OperationPlanningSystem.Create(state, front.id, "Front-bound plan");
+            Assert.IsNotNull(plan);
+            AssertRefusalIsPure(() => Assert.IsFalse(OperationPlanningSystem.AddStep(
+                state, front.id, "IDN_CHK", OperationType.MineWarfare)));
+            Assert.IsTrue(OperationPlanningSystem.AddStep(state, front.id, "CHN_PRT", OperationType.MineWarfare));
+            Assert.IsTrue(OperationPlanningSystem.SetStandingOrder(state, front.id, true));
+            TerritorySystem.Cede(state, state.FindLocation("CHN_PRT"), "IDN");
+            AssertRefusalIsPure(() =>
+            {
+                Assert.AreEqual("TARGET IS NOT ON THIS FRONT", OperationPlanningSystem.StandingOrderPendingReason(state, front.id));
+                Assert.IsNull(OperationPlanningSystem.ExecuteStandingOrder(state, new TurnManager(state)));
+            });
+            Assert.IsTrue(plan.standingOrder);
+            Assert.IsFalse(plan.steps.Single().completed);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void StaleSelectedTargetIsExplainedAndCannotExecuteOrEnterAPlan(int columns)
+        {
+            var front = OpenFront();
+            front.escalation = EscalationState.LimitedConflict;
+            var target = state.FindLocation("CHN_PRT");
+            OperationPlanningSystem.Create(state, front.id, "Display test");
+            target.ownerId = "IDN";
+            const System.Reflection.BindingFlags fields = System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance;
+            WithIsolatedController(gc =>
+            {
+                try
+                {
+                    TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                    var view = new MilitaryView();
+                    typeof(MilitaryView).GetField("selectedLocationId", fields).SetValue(view, target.id);
+                    typeof(MilitaryView).GetField("selectedOperation", fields).SetValue(view, OperationType.MineWarfare);
+                    typeof(MilitaryView).GetField("selectedDomain", fields).SetValue(view, OperationDomain.Naval);
+                    typeof(MilitaryView).GetMethod("BuildOperationControls", fields).Invoke(view, new object[] { state, front });
+                    TerminalShellController.ApplyTextPolicy(view.Root, 1f, columns);
+                    Assert.IsFalse(view.Root.Query<Button>().ToList().Any(b => b.text.StartsWith("EXECUTE ")));
+                    string militaryText = string.Join(" ", view.Root.Query<Label>().ToList().Select(l => l.text));
+                    StringAssert.Contains("TARGET IS NOT ON THIS FRONT", Regex.Replace(militaryText, @"\s+", " "));
+
+                    var panel = new OperationPlanningPanel(null);
+                    typeof(OperationPlanningPanel).GetField("selectedLocationId", fields).SetValue(panel, target.id);
+                    typeof(OperationPlanningPanel).GetField("selectedOperation", fields).SetValue(panel, OperationType.MineWarfare);
+                    typeof(OperationPlanningPanel).GetField("selectedDomain", fields).SetValue(panel, OperationDomain.Naval);
+                    panel.Build(state, front);
+                    TerminalShellController.ApplyTextPolicy(panel.Root, 1f, columns);
+                    var add = panel.Root.Query<Button>().ToList().Single(b => b.text == "ADD TO PLAN [NO CP]");
+                    Assert.IsFalse(add.enabledSelf);
+                    Assert.AreEqual("TARGET IS NOT ON THIS FRONT", add.tooltip);
+                    foreach (var label in view.Root.Query<Label>().ToList().Concat(panel.Root.Query<Label>().ToList()))
+                        if (label.ClassListContains("terminal-text") && !label.ClassListContains("terminal-figure"))
+                            foreach (var line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                }
+                finally { TerminalMetrics.ResetForTests(); }
+            });
+        }
+
         sealed class MineRoll : Random
         {
             readonly double roll;

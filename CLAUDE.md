@@ -31,6 +31,18 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Front-bound operation validation.** Use the explicit-confrontation CanOrder
+  overload for orders, planning and advice; the old no-front overload is only a
+  capability/control query. Offensive actors and targets must be opposite
+  principals on the supplied live front, not merely at war somewhere. Coalition
+  support is not principal status. Player validation precedes CP; actor-generic
+  validation precedes escalation, draws and effects. Refusal is full-JSON pure.
+  Own-ground peacetime work and either-side withdrawal remain available. Stale
+  targets/plans are rechecked after capture; invalid standing orders wait. No
+  neutral-attack permission or automatic war. Specs 01/30. This is separate from
+  the proposed passage table; no trajectory-parity claim or native certification
+  follows from author harness checks.
+
 - **Port trade dependencies (#25).** Existing authored countries retain their
   present `ID_PRT` endpoint through control/title transfers; successors use the
   ordinal-first titled authored port, not their parent's borrowed identity.
