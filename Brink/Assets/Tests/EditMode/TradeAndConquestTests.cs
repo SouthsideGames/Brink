@@ -45,6 +45,237 @@ namespace Brink.Tests
             relationship.trust = 80f;
         }
 
+        GameState RoutingWorld()
+        {
+            var world = WorldFactory.CreateWorld(1919, "IND", WorldSize.Full);
+            world.commandPoints.current = 40;
+            world.PlayerCountry.resources.treasury = 1000;
+            return world;
+        }
+
+        [Test]
+        public void DetourTradesPassageExposureForPersistentFreightCostButCannotAvoidPorts()
+        {
+            var world = RoutingWorld(); var t = new TurnManager(world);
+            var link = world.FindTrade("IND", "CHN"); link.volume = 50;
+            int end = world.date.year * 12 + world.date.month + 6;
+            world.FindLocation("IDN_CHK").mineHazardUntilMonth = end;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            Assert.IsTrue(TradeSystem.SetDetour(world, t, "CHN", true));
+            Assert.AreEqual(39, world.commandPoints.current);
+            Assert.AreEqual(47, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            Assert.AreEqual(47, TradeSystem.EffectiveVolume(world, "CHN", "IND", 50));
+            world.FindLocation("IDN_CHK2").mineHazardUntilMonth = end;
+            Assert.AreEqual(41, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            world.FindLocation("IND_PRT").mineHazardUntilMonth = end;
+            Assert.AreEqual(41, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            Assert.AreEqual(0, TradeSystem.EffectiveVolume(world, "IND", "CHN", 2));
+            foreach (var site in world.locations) site.mineHazardUntilMonth = 0;
+            Assert.AreEqual(47, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50), "Detour cost continues after recovery until cancelled.");
+            Assert.IsTrue(TradeSystem.SetDetour(world, t, "CHN", false));
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            Assert.AreEqual(50, link.volume, "The agreement was not damaged or refunded.");
+        }
+
+        [Test]
+        public void DetourRequiresCompleteGeographyAndCanAlwaysBeCancelledAfterSiteLoss()
+        {
+            var world = RoutingWorld(); var t = new TurnManager(world);
+            Assert.IsTrue(TradeSystem.SetDetour(world, t, "CHN", true));
+            world.locations.RemoveAll(l => l.id == "IDN_CHK2");
+            Assert.IsFalse(TradeSystem.CanDetour(world, "IND", "CHN"));
+            world.FindLocation("IDN_CHK").mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "IND", "CHN", 50));
+            Assert.IsTrue(TradeSystem.SetDetour(world, t, "CHN", false));
+            string before = SaveSystem.ToJson(world);
+            Assert.IsFalse(TradeSystem.SetDetour(world, t, "CHN", true));
+            Assert.AreEqual(before, SaveSystem.ToJson(world));
+        }
+
+        [TestCase("SAU", "CHN", "SAU_CHK", 41)]
+        [TestCase("SAU", "CHN", "IDN_CHK", 47)]
+        [TestCase("SAU", "CHN", "IDN_CHK2", 41)]
+        [TestCase("EGY", "SAU", "SAU_CHK", 41)]
+        [TestCase("EGY", "SAU", "EGY_CHK", 47)]
+        [TestCase("SAU", "IND", "EGY_CHK", 41)]
+        [TestCase("FRA", "CHN", "SAU_CHK", 47)]
+        public void DetoursPreserveTheirOwnPhysicalEntranceAndExitDependencies(string a, string b, string mined, int expected)
+        {
+            var world = WorldFactory.CreateWorld(1919, a, WorldSize.Full);
+            world.trade.Clear(); world.trade.Add(new TradeRelation { countryA = a, countryB = b, volume = 50, avoidPassages = true });
+            world.FindLocation(mined).mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            Assert.AreEqual(expected, TradeSystem.EffectiveVolume(world, a, b, 50));
+            Assert.AreEqual(expected, TradeSystem.EffectiveVolume(world, b, a, 50));
+            Assert.IsFalse(TradeSystem.CanDetour(world, "DEU", "POL"), "No invented ocean bypass into the Baltic.");
+        }
+
+        [Test]
+        public void DetourRoundTripsAndRetainsEmbargoAndSanctionClosures()
+        {
+            var world = RoutingWorld(); var t = new TurnManager(world);
+            var link = world.FindTrade("IND", "CHN"); link.focus = TradeFocus.Energy;
+            Assert.IsTrue(TradeSystem.SetDetour(world, t, "CHN", true));
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(world));
+            Assert.IsTrue(loaded.FindTrade("IND", "CHN").avoidPassages);
+            loaded.trade.RemoveAll(l => !l.Involves("CHN") || !l.Involves("IND"));
+            loaded.sanctions.Clear();
+            var saved = loaded.FindTrade("IND", "CHN"); saved.embargoed = true;
+            Assert.AreEqual(0, TradeSystem.Supply(loaded, "IND", TradeFocus.Energy));
+            saved.embargoed = false;
+            loaded.sanctions.Add(new Sanction { senderId = "CHN", targetId = "IND" });
+            Assert.AreEqual(0, TradeSystem.Supply(loaded, "IND", TradeFocus.Energy));
+        }
+
+        [Test]
+        public void HolderClearanceChargesTheRequestAndFeeWithoutGrantingOperatingRights()
+        {
+            var world = RoutingWorld(); var t = new TurnManager(world);
+            var site = world.FindLocation("IDN_CHK");
+            site.mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            var relation = world.FindRelationship("IND", "IDN"); relation.relations = 100; relation.trust = 100;
+            relation.SetThreatPerceivedBy("IDN", 0);
+            float holderCash = world.FindCountry("IDN").resources.treasury;
+            Assert.IsTrue(DiplomacySystem.RequestClearance(world, t, site.id));
+            Assert.AreEqual(38, world.commandPoints.current);
+            Assert.AreEqual(960, world.PlayerCountry.resources.treasury);
+            Assert.AreEqual(holderCash + 40, world.FindCountry("IDN").resources.treasury);
+            Assert.AreEqual(3, MilitarySystem.MineMonthsRemaining(world, site));
+            Assert.AreEqual("IDN", site.ownerId);
+            Assert.IsFalse(OperationCatalog.CanOrder(world, "IND", site, OperationType.ConvoyEscort, out _));
+            Assert.IsNull(world.FindTreaty("IND", "IDN"));
+        }
+
+        [Test]
+        public void ClearanceRefusalSpendsOnlyTheNegotiationAndInvalidRequestsSpendNothing()
+        {
+            var world = RoutingWorld(); var t = new TurnManager(world);
+            var site = world.FindLocation("IDN_CHK");
+            site.mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            var relation = world.FindRelationship("IND", "IDN"); relation.relations = 0; relation.trust = 0;
+            float treasury = world.PlayerCountry.resources.treasury;
+            Assert.IsFalse(DiplomacySystem.RequestClearance(world, t, site.id));
+            Assert.AreEqual(38, world.commandPoints.current);
+            Assert.AreEqual(treasury, world.PlayerCountry.resources.treasury);
+            Assert.AreEqual(6, MilitarySystem.MineMonthsRemaining(world, site));
+            world.sanctions.Add(new Sanction { senderId = "IND", targetId = "IDN" });
+            string before = SaveSystem.ToJson(world);
+            Assert.IsFalse(DiplomacySystem.RequestClearance(world, t, site.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(world));
+        }
+
+        [Test]
+        public void RoutingAndClearancePreviewsArePureAndDoNotRevealForeignDeadlines()
+        {
+            var world = RoutingWorld(); var site = world.FindLocation("IDN_CHK");
+            string before = SaveSystem.ToJson(world);
+            for (int i = 0; i < 10; i++)
+            {
+                TradeSystem.CanDetour(world, "IND", "CHN");
+                TradeSystem.RoutedVolume(world, "IND", "CHN", 50, true);
+                DiplomacySystem.ClearanceOutlook(world, "IND", site.id);
+            }
+            Assert.AreEqual(before, SaveSystem.ToJson(world));
+            var outlook = DiplomacySystem.ClearanceOutlook(world, "IND", site.id);
+            site.mineHazardUntilMonth = world.date.year * 12 + world.date.month + 99;
+            Assert.AreEqual(outlook, DiplomacySystem.ClearanceOutlook(world, "IND", site.id));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void GeographyControlsAreVisibleWrappedAndReadOnly(int columns)
+        {
+            var world = RoutingWorld(); var gc = GameController.Instance; var old = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, world);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var economy = new EconomyView(); var diplomacy = new DiplomacyView(); var military = new MilitaryView();
+                economy.Refresh(); diplomacy.Refresh(); military.Refresh(); // Existing chamber view may initialize its own seats once.
+                string before = SaveSystem.ToJson(world);
+                economy.Refresh(); diplomacy.Refresh(); military.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(world));
+                var buttons = economy.Root.Query<Button>().ToList();
+                Assert.IsTrue(buttons.Any(b => b.text == "TAKE DETOUR [1 CP]"));
+                Assert.IsTrue(buttons.Any(b => b.text == "REPAIR 60 TREASURY [1 CP]"));
+                Assert.IsTrue(diplomacy.Root.Query<Button>().ToList().Any(b => b.text == "REQUEST CLEARANCE [2 CP]"));
+                Assert.IsTrue(military.Root.Query<Label>().ToList().Any(l => (l.text ?? "").Contains("HELD")));
+                foreach (var view in new TerminalView[] { economy, diplomacy, military })
+                    foreach (var label in view.Root.Query<Label>().ToList().Where(l => l.ClassListContains("terminal-text-dim")))
+                        foreach (var line in (label.text ?? "").Split('\n')) Assert.LessOrEqual(line.Length, columns, line);
+                foreach (var button in buttons.Where(b => b.text.StartsWith("TAKE DETOUR") || b.text.StartsWith("REPAIR")))
+                    Assert.LessOrEqual(button.text.Length, columns);
+                foreach (var site in world.locations.Where(s => s.ownerId == world.playerCountryId)) StrategicConnections.Disrupt(world, site);
+                world.commandPoints.current = 0;
+                economy.Refresh();
+                foreach (var button in economy.Root.Query<Button>().ToList().Where(b => b.text.StartsWith("REPAIR")))
+                {
+                    Assert.IsFalse(button.enabledSelf, "Repair follows the shared CP gate.");
+                    StringAssert.Contains("CP", button.tooltip);
+                }
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, old); TerminalMetrics.ResetForTests(); }
+        }
+
+        [TestCase("routing")]
+        [TestCase("repair")]
+        [TestCase("clearance")]
+        public void GeographyCommandsRespectBudgetAndPersistTheirActualEffect(string command)
+        {
+            Assert.IsNotNull(SaveSystem.SaveDirectoryOverride, "The assembly must isolate saving controller commands.");
+            var world = RoutingWorld();
+            world.PlayerCountry.government.type = GovernmentType.CentralizedRepublic;
+            var site = world.FindLocation(command == "repair" ? "IND_AIR" : "IDN_CHK");
+            StrategicConnections.Disrupt(world, world.FindLocation("IND_AIR"));
+            site.mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            var relation = world.FindRelationship("IND", "IDN"); relation.relations = 100; relation.trust = 100;
+            relation.SetThreatPerceivedBy("IDN", 0);
+            var gc = new GameController();
+            typeof(GameController).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .Invoke(gc, new object[] { world });
+            System.Func<bool> act = () => command == "routing" ? gc.SetFreightDetour("CHN", true)
+                : command == "repair" ? gc.RepairConnectionEndpoint(site.id) : gc.RequestPassageClearance(site.id);
+            world.commandPoints.current = 0;
+            string before = SaveSystem.ToJson(world);
+            Assert.IsFalse(act()); Assert.AreEqual(before, SaveSystem.ToJson(world));
+            world.commandPoints.current = 10;
+            if (command != "clearance")
+            {
+                world.PlayerCountry.government.type = GovernmentType.ParliamentaryRepublic;
+                before = SaveSystem.ToJson(world);
+                Assert.IsFalse(act(), "Economic commands require constitutional authority.");
+                Assert.AreEqual(before, SaveSystem.ToJson(world));
+                world.PlayerCountry.government.type = GovernmentType.CentralizedRepublic;
+            }
+            Assert.IsTrue(act());
+            Assert.AreEqual(command == "clearance" ? 8 : 9, world.commandPoints.current);
+            var saved = SaveSystem.Load(GameController.AutosaveSlot);
+            Assert.AreEqual(SaveSystem.ToJson(world), SaveSystem.ToJson(saved));
+            if (command == "routing") Assert.IsTrue(saved.FindTrade("IND", "CHN").avoidPassages);
+            else if (command == "repair") Assert.AreEqual(3, StrategicConnections.OutageRemaining(saved, saved.FindLocation(site.id)));
+            else Assert.AreEqual(3, MilitarySystem.MineMonthsRemaining(saved, saved.FindLocation(site.id)));
+        }
+
+        [Test]
+        public void OldSavesDefaultToStandardRoutingAndAvailableConnectionsWithoutBackfill()
+        {
+            var world = RoutingWorld();
+            world.FindTrade("IND", "CHN").avoidPassages = true;
+            StrategicConnections.Disrupt(world, world.FindLocation("IND_AIR"));
+            world.locations.RemoveAll(l => l.id == "IDN_CHK2");
+            string json = SaveSystem.ToJson(world);
+            json = System.Text.RegularExpressions.Regex.Replace(json, @",\s*""avoidPassages""\s*:\s*(true|false)", "");
+            json = System.Text.RegularExpressions.Regex.Replace(json, @",\s*""infrastructureOutageUntilMonth""\s*:\s*\d+", "");
+            StringAssert.DoesNotContain("avoidPassages", json);
+            StringAssert.DoesNotContain("infrastructureOutageUntilMonth", json);
+            var loaded = SaveSystem.FromJson(json);
+            Assert.IsFalse(loaded.FindTrade("IND", "CHN").avoidPassages);
+            Assert.AreEqual(0, StrategicConnections.OutageRemaining(loaded, loaded.FindLocation("IND_AIR")));
+            Assert.IsNull(loaded.FindLocation("IDN_CHK2"));
+            Assert.IsFalse(TradeSystem.CanDetour(loaded, "IND", "CHN"));
+        }
+
         [TestCase(WorldSize.Regional, 23)]
         [TestCase(WorldSize.Standard, 34)]
         [TestCase(WorldSize.Full, 56)]
@@ -215,6 +446,12 @@ namespace Brink.Tests
         [TestCase("FRA", "IND", "EGY_CHK,SAU_CHK")]
         [TestCase("FRA", "CHN", "EGY_CHK,SAU_CHK,IDN_CHK")]
         [TestCase("EGY", "SAU", "EGY_CHK")]
+        [TestCase("DEU", "POL", "DEU_CHK")]
+        [TestCase("FRA", "MEX", "MEX_CHK")]
+        [TestCase("GBR", "MEX", "MEX_CHK")]
+        [TestCase("JPN", "RUS", "JPN_CHK")]
+        [TestCase("CHN", "VNM", "CONTESTED_LANE")]
+        [TestCase("CHN", "IDN", "CONTESTED_LANE")]
         public void NamedPassagesAreExactPhysicalUnorderedDependencies(string a, string b, string ids)
         {
             var world = WorldFactory.CreateWorld(1919, a, WorldSize.Full);
@@ -283,8 +520,8 @@ namespace Brink.Tests
         }
 
         [TestCase(WorldSize.Regional, 3, 96)]
-        [TestCase(WorldSize.Standard, 4, 136)]
-        [TestCase(WorldSize.Full, 5, 158)]
+        [TestCase(WorldSize.Standard, 6, 220)]
+        [TestCase(WorldSize.Full, 8, 278)]
         public void OpeningPassageCoverageIsBoundedAndIncludesSaudiIndianFood(WorldSize size, int count, int volume)
         {
             var world = WorldFactory.CreateWorld(1919, "IND", size);

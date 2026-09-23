@@ -1185,13 +1185,15 @@ namespace Brink.Core
 
                 case OperationType.AirStrike:
                     target.garrison = Clamp(target.garrison - 14f);
+                    StrategicConnections.Disrupt(state, target);
                     if (defender != null)
                     {
                         defender.resources.industrialCapacity =
                             Clamp(defender.resources.industrialCapacity - target.strategicValue * 0.03f);
                         defender.stability = Clamp(defender.stability - 1.5f);
                     }
-                    return $"Strikes on {target.displayName} landed. Garrison and works damaged.";
+                    return $"Strikes on {target.displayName} landed. Garrison and works damaged."
+                        + (StrategicConnections.IsEndpoint(target.id) ? " Modelled connections at this endpoint are disrupted for at least 6 months; the holder can repair them." : "");
 
                 case OperationType.NavalBlockade:
                     if (defender != null)
@@ -1377,6 +1379,7 @@ namespace Brink.Core
                     return $"The landing at {target.displayName} went in and the beachhead held.";
 
                 case OperationType.CyberOperation:
+                    StrategicConnections.Disrupt(state, target);
                     if (defender != null)
                     {
                         // Command and coordination, not steel.
@@ -1386,7 +1389,8 @@ namespace Brink.Core
                         defender.economy.confidence = Clamp(defender.economy.confidence - 3f);
                     }
                     return "Their networks are degraded. Nothing is broken that anyone can "
-                           + "photograph, and nothing they do this month will go smoothly.";
+                           + "photograph, and nothing they do this month will go smoothly."
+                           + (StrategicConnections.IsEndpoint(target.id) ? " Modelled connections at this endpoint are disrupted for at least 6 months; the holder can repair them." : "");
 
                 case OperationType.MissileDefense:
                     if (attacker != null)

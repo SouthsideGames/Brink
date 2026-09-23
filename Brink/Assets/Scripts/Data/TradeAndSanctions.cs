@@ -46,6 +46,9 @@ namespace Brink.Data
         /// </summary>
         public string initiatedBy = "";
 
+        /// <summary>Either partner can commission the costed freight detour. False in old saves.</summary>
+        public bool avoidPassages;
+
         public bool Involves(string id) => countryA == id || countryB == id;
         public string PartnerOf(string id) => id == countryA ? countryB : countryA;
     }

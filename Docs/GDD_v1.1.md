@@ -420,6 +420,19 @@ Cross-pillar prerequisites unlock hybrid strategies.
 Officials can compensate for weak player specialization when delegated.
 Costs rise at higher levels so specialization remains meaningful over long saves.
 All Strategist progression is erased by a full Settings reset.
+Amendment, September 2026 (roadmap #25 completion batch): named maritime dependencies
+now support an explicit costed freight detour; the player may instead commission
+a foreign holder's clearance service without acquiring operational authority.
+Pipelines, resource/industrial corridors, communications cables and allocated
+air corridors connect existing authored ground to delivery, collection and reach.
+Endpoint attacks disrupt those connections temporarily; waiting or paid holder
+repair restores service, subject to access and other endpoints. These are bounded
+gameplay abstractions, not real-world route shares or a transport graph. Missing
+geography stays absent. The Bosphorus has no fabricated shipping dependency in a
+roster with no Black Sea port endpoint. Specs 01–04 define costs and consumers.
+Implementation, independent verification, balance calibration and device testing
+are tracked separately; the latter two do not turn built scope into partial work.
+
 26. Peace Negotiation & Settlement
 Peace is a negotiated settlement system based on objectives, leverage and exhaustion rather than a single Surrender button.
 Possible terms include territory, withdrawal, reparations, sanctions removal, demilitarization, resource access, recognition, prisoner exchange, guarantees, political concessions and treaty changes.

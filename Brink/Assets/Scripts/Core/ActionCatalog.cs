@@ -222,6 +222,28 @@ namespace Brink.Core
 
             // ---------- fiscal statecraft ----------
 
+            bool routeAvailable = false, repairAvailable = false, clearanceAvailable = false;
+            foreach (var link in state.trade)
+                if (link.Involves(state.playerCountryId) && TradeSystem.CanSetDetour(state, state.playerCountryId,
+                    link.PartnerOf(state.playerCountryId), !link.avoidPassages, out _)) routeAvailable = true;
+            foreach (var site in state.locations)
+            {
+                if (StrategicConnections.CanRepair(state, state.playerCountryId, site.id, out _)) repairAvailable = true;
+                if (DiplomacySystem.CanRequestClearance(state, state.playerCountryId, site.id, out _)) clearanceAvailable = true;
+            }
+            Add(Pillar.Economy, "ECONOMY", "Choose freight routing", "1 CP",
+                "Select an authored detour at 3 effective volume per delivery, or restore the standard route. Ports and sanctions still apply.",
+                routeAvailable, "No current agreement has a complete alternative or a saved detour to cancel.",
+                verbs: new[] { nameof(GameController.SetFreightDetour) });
+            Add(Pillar.Economy, "ECONOMY", "Repair connection endpoint", "1 CP + 60 treasury",
+                "The holder shortens a temporary connection outage by up to 3 months. Other endpoints, access and closures still matter.",
+                repairAvailable, "No damaged connection endpoint we hold can be repaired with our treasury.",
+                verbs: new[] { nameof(GameController.RepairConnectionEndpoint) });
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Request holder clearance", "2 CP; 40 treasury if accepted",
+                "Ask a foreign controller to survey and clear a trade dependency by up to 3 months. No foreign operating rights; clear ground still incurs a survey fee.",
+                clearanceAvailable, "No eligible foreign dependency, peaceful unsanctioned holder or affordable service.",
+                verbs: new[] { nameof(GameController.RequestPassageClearance) });
+
             Add(Pillar.Economy, "ECONOMY", "Set the tax rate", "2 PC",
                 "What share of the economy the state takes. More revenue now against growth, "
                 + "approval and what people can afford.",

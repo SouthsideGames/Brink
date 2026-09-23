@@ -54,6 +54,33 @@ namespace Brink.UI.Views
             BuildCoalitionControls(state);
             BuildBlocControls(state);
             BuildCouncilControls(state);
+            BuildClearanceControls(state);
+        }
+
+        void BuildClearanceControls(GameState state)
+        {
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("HOLDER CLEARANCE", W);
+            AddText("terminal-text-dim").text = "Ask the current holder to survey and clear a dependency: 2 CP per negotiation, "
+                + "40 treasury only if accepted, up to 3 months removed locally. Clear ground still incurs the survey fee. "
+                + "Other hazards remain. This grants no foreign operating rights and reveals no deadline.";
+            foreach (var site in state.locations)
+            {
+                if (site.ownerId == state.playerCountryId) continue;
+                bool relevant = false;
+                foreach (var link in state.trade)
+                    if (link.Involves(state.playerCountryId) && TradeSystem.DependsOn(state, link.countryA, link.countryB, site.id)) relevant = true;
+                if (!relevant) continue;
+                string id = site.id;
+                AddText("terminal-text-dim").text = site.displayName + " — holder: "
+                    + state.FindCountry(site.ownerId)?.displayName + "; outlook: "
+                    + DiplomacySystem.ClearanceOutlook(state, state.playerCountryId, id).ToString().ToUpperInvariant();
+                var row = MakeRow();
+                var button = new Button(() => { GameController.Instance.RequestPassageClearance(id); Refresh(); })
+                    { text = "REQUEST CLEARANCE [2 CP]" };
+                button.AddToClassList("cmd-button");
+                if (!DiplomacySystem.CanRequestClearance(state, state.playerCountryId, id, out string reason)) Block(button, reason);
+                row.Add(button);
+            }
         }
 
         /// <summary>

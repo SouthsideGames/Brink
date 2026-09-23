@@ -1261,6 +1261,66 @@ namespace Brink.Core
 
         // ---------- basing ----------
 
+        public const int ClearanceRequestCost = 2;
+        public const float ClearanceServiceFee = 40f;
+
+        /// <summary>Ask the controller to do the work; never grants foreign operational authority.</summary>
+        public static bool CanRequestClearance(GameState state, string actorId, string siteId, out string reason)
+        {
+            reason = null;
+            var actor = state?.FindCountry(actorId); var site = state?.FindLocation(siteId);
+            if (actor == null || site == null || state.FindCountry(site.ownerId) == null)
+                reason = "NO ACTING STATE OR CURRENT HOLDER";
+            else if (site.ownerId == actorId) reason = "OUR GROUND: USE CONVOY ESCORT";
+            else if (site.type != LocationType.Port && site.type != LocationType.Chokepoint)
+                reason = "NOT A MARITIME DEPENDENCY";
+            else
+            {
+                bool dependent = false;
+                foreach (var link in state.trade)
+                    if (link.Involves(actorId) && TradeSystem.DependsOn(state, link.countryA, link.countryB, siteId)) dependent = true;
+                if (!dependent) reason = "NO CURRENT TRADE DEPENDS ON THIS SITE";
+                foreach (var war in state.confrontations)
+                    if (!war.resolved && war.Involves(actorId) && war.Involves(site.ownerId)) reason = "AT WAR WITH THE HOLDER";
+                if (state.FindSanction(actorId, site.ownerId) != null || state.FindSanction(site.ownerId, actorId) != null)
+                    reason = "SANCTIONS BLOCK COOPERATION";
+                if (reason == null && actor.resources.treasury < ClearanceServiceFee) reason = "REQUIRES 40 TREASURY FOR ACCEPTED SERVICE";
+            }
+            return reason == null;
+        }
+
+        static TradeDeal ClearanceTerms(string holderId)
+            => new TradeDeal { partnerId = holderId, volume = 100, tariff = 30 };
+
+        public static TradeOutlook ClearanceOutlook(GameState state, string actorId, string siteId)
+        {
+            if (!CanRequestClearance(state, actorId, siteId, out _)) return TradeOutlook.NoTerms;
+            return TradeSystem.Assess(state, actorId, ClearanceTerms(state.FindLocation(siteId).ownerId));
+        }
+
+        public static bool RequestClearance(GameState state, TurnManager turns, string siteId)
+        {
+            string actorId = state.playerCountryId;
+            if (!CanRequestClearance(state, actorId, siteId, out _)) return false;
+            var site = state.FindLocation(siteId);
+            if (!turns.SpendCommandPoints(ClearanceRequestCost, "Request holder clearance")) return false;
+            bool accepted = TradeSystem.WouldAccept(state, actorId, ClearanceTerms(site.ownerId));
+            if (accepted)
+            {
+                state.FindCountry(actorId).resources.treasury -= ClearanceServiceFee;
+                state.FindCountry(site.ownerId).resources.treasury += ClearanceServiceFee;
+                int cleared = Math.Min(MilitarySystem.MineEscortMonths, MilitarySystem.MineMonthsRemaining(state, site));
+                site.mineHazardUntilMonth -= cleared;
+            }
+            string outcome = accepted
+                ? "The current holder accepted 40 treasury for a survey and clearance service, removing up to 3 months at this site. Clear ground still incurs the survey fee. Other hazards may remain; no foreign operating rights were granted."
+                : "The holder declined. The 2 CP negotiating effort was spent; no service fee, clearance or rights changed.";
+            state.AddNotification(NotificationClass.Advisory, accepted ? "CLEARANCE SERVICE AGREED" : "CLEARANCE REQUEST DECLINED",
+                site.displayName + ": " + outcome, site.ownerId, desk: ReportingDesk.Diplomacy);
+            state.AddChronicle(ChronicleCategory.Diplomatic, actorId, site.displayName + ": " + outcome);
+            return accepted;
+        }
+
         /// <summary>
         /// Grant and revoke foreign basing (GDD §16, §19).
         ///

@@ -46,6 +46,7 @@ namespace Brink.UI.Views
             BuildMarketIndex(state, player);
             BuildSectors(player);
             BuildTrade(state);
+            BuildConnections(state);
             BuildEconomicWarfare(state);
         }
 
@@ -387,7 +388,7 @@ namespace Brink.UI.Views
                 sb.AppendLine($"  {AsciiChart.Cell(partner?.displayName.ToUpperInvariant(), AsciiChart.NameWidth(W))} VOL {link.volume,5:F1}   {status}{supplies}");
                 sb.AppendLine("    " + TradeSystem.PortDependencyReadout(state, link));
             }
-            sb.AppendLine("  Ports name dependencies, not ocean itineraries. Only the current holder can escort at a port; ownership alone does not close civilian trade. No foreign clearance or rerouting order is implied.");
+            sb.AppendLine("  Ports name dependencies, not ocean itineraries. Detours cost 3 effective volume while selected, even after hazards expire. They do not bypass ports, sanctions or embargoes. Either trading partner may arrange freight routing. Foreign clearance is a diplomatic request for the holder's service, not an operating right.");
 
             float energy = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy);
             float materials = TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Materials);
@@ -402,7 +403,53 @@ namespace Brink.UI.Views
             }
 
             text.text = sb.ToString();
+            BuildRouting(state);
             BuildTradeNegotiation(state);
+        }
+
+        void BuildRouting(GameState state)
+        {
+            foreach (var link in state.trade)
+            {
+                if (!link.Involves(state.playerCountryId)) continue;
+                string partner = link.PartnerOf(state.playerCountryId);
+                bool detour = !link.avoidPassages;
+                AddText("terminal-text-dim").text = $"FREIGHT: {state.FindCountry(partner)?.displayName}. "
+                    + $"Current effective volume {TradeSystem.EffectiveVolume(state, link.countryA, link.countryB, link.volume):F1}; "
+                    + $"alternative {TradeSystem.RoutedVolume(state, link.countryA, link.countryB, link.volume, detour):F1}. "
+                    + "Delivery can still be closed by sanctions or embargoes. Missing geography cannot grant a free detour.";
+                var row = MakeRow();
+                var button = new Button(() => { GameController.Instance.SetFreightDetour(partner, detour); Refresh(); })
+                    { text = detour ? "TAKE DETOUR [1 CP]" : "RESTORE ROUTE [1 CP]" };
+                button.AddToClassList("cmd-button");
+                if (!TradeSystem.CanSetDetour(state, state.playerCountryId, partner, detour, out string reason)) Block(button, reason);
+                row.Add(button);
+            }
+        }
+
+        void BuildConnections(GameState state)
+        {
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("STRATEGIC CONNECTIONS", W);
+            AddText("terminal-text-dim").text = "Authored gameplay corridors, not real-world route shares. "
+                + "Successful strikes or cyber operations at modelled endpoints cause a 6-month outage; waiting restores service. "
+                + "The holder may pay 1 CP and 60 treasury to remove up to 3 months. Captured endpoints require access or restored control. "
+                + "Pipelines affect Energy, resource and industrial corridors affect Materials; cables support existing collection, and air corridors support allocated bases.";
+            foreach (var connection in StrategicConnections.All)
+            {
+                string reading = StrategicConnections.Readout(state, connection);
+                if (reading.Length > 0) AddText("terminal-text-dim").text = reading;
+            }
+            foreach (var site in state.locations)
+            {
+                if (site.ownerId != state.playerCountryId || !StrategicConnections.IsEndpoint(site.id)) continue;
+                string id = site.id;
+                AddText("terminal-text-dim").text = site.displayName + ": " + StrategicConnections.OutageRemaining(state, site) + " months of connection outage.";
+                var row = MakeRow();
+                var button = new Button(() => { GameController.Instance.RepairConnectionEndpoint(id); Refresh(); }) { text = "REPAIR 60 TREASURY [1 CP]" };
+                button.AddToClassList("cmd-button");
+                if (!StrategicConnections.CanRepair(state, state.playerCountryId, id, out string reason)) Block(button, reason);
+                row.Add(button);
+            }
         }
 
         /// <summary>

@@ -3,6 +3,23 @@
 Source: `Core/DiplomacySystem.cs`, `Core/AllianceSystem.cs`, `Data/Diplomacy.cs`,
 `Data/StrategicLocation.cs`. GDD §15, §16, §19.
 
+**Roadmap 25 negotiated clearance.** DIPLOMACY offers current foreign holders of
+our active trade dependencies a survey/clearance request. The player pays 2 CP
+per eligible attempt, with 40 treasury transferred to the holder only on acceptance.
+Acceptance reads the existing trade willingness against 35; the preview uses the
+existing collection-confidence outlook, not the hidden true answer. A successful
+service removes at most three months from this site's mine deadline only. Clear
+ground still incurs the disclosed survey fee; there is no exact foreign timer in
+eligibility or the receipt. Refusal changes no hazard, right or treasury.
+
+Unknown/self/nonmaritime/unrelated sites, an active war with the current holder,
+sanctions either way, or insufficient treasury refuse before CP. All checks are
+repeated by the command, so a capture or reroute cannot use a stale grant. This is
+the holder doing the work, not player access: ownership, military targeting,
+Transit clauses, basing and treaty lists are unchanged. Other mined dependencies
+can still reduce delivery. The attempt is autosaved, including spent CP on refusal.
+No permanent permission, automatic renewal or AI request policy is implied.
+
 ## 1. The relationship model
 
 One `Relationship` per unordered country pair, created at world generation by

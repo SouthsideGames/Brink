@@ -18,6 +18,29 @@ and not the place to start from cold.
 
 ## Repository layout
 
+**Roadmap 25 implementation complete (independent verification pending).** Freight
+detours are saved choices with a persistent three-volume cost, unavoidable ports,
+and no closure bypass. Diplomacy can commission the current holder's local mine
+clearance (2 CP attempt, 40 treasury accepted), without foreign operating rights.
+All six deferred passages have explicit dispositions; Bosphorus remains excluded
+from shipping because no current port endpoint is in the Black Sea. Twelve named
+pipeline/resource/industrial/cable/air connections have real supply, collection
+and reach consumers; successful endpoint strikes/cyber attacks cause six-month
+outages with expiry and paid holder repair. Two additive saved fields default
+false/zero at version 7. Specs 01–04 own the contracts. No intermediate Claude
+handoff: author implementation/checks cover the whole batch first. Balance and
+hardware are deferred separately and do not determine implementation completion.
+Older #25 slice limits below are historical; this completion section supersedes
+their pending-feature lists. #26 (Historical identity) is next, not started here.
+Author checks on the completed batch: .NET 2076/2069/7 versus the exact base's
+2030/2023/7, 46 net additional passing cases, no shared result/message changes.
+Two coverage cases have updated parameters for the explicitly expanded table;
+no test was disabled. Ten mutations were caught, clean/restored fixtures 126/126.
+All 307 runtime/test sources compile with Unity's installed compiler, API and
+custom NUnit references (compile-only, no shim). Actual editor execution remains
+blocked by its missing ILPP socket; no native run or independent pass is claimed.
+124 fixtures remain registered once. Save, pipeline and AI planning are unchanged.
+
 - `Brink/` — the Unity project (open this folder in Unity).
 - `Docs/` — design documents.
 - Runtime code: `Brink/Assets/Scripts/` (asmdef `Brink.Runtime`, root namespace `Brink`).

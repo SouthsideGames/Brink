@@ -13,6 +13,25 @@ is specified in **spec 14**, not here.
 
 ## 1. Force structure
 
+**Roadmap 25 connection completion.** Existing ground/basing reach is retained.
+A temporarily disabled connection endpoint cannot act as a launch position.
+Three named air corridors connect DEU_AIR–TUR_AIR, TUR_AIR–IND_AIR and
+IND_AIR–AUS_AIR. When a corridor is open and both ends actually host or are
+held by the actor, its hosted launch-position penalty falls from 2 to 0.5 map
+distance units. A Transit treaty alone does not allocate a base. Endpoint
+outage, missing endpoint, loss of host access, war or sanctions suspend the
+connection. Ordinary basing elsewhere remains available and distance retains
+its existing nonzero reach floor. Mountain approaches already contribute
+defence, territorial control and launch position; the Eastern Frontier Corridor
+also anchors the Central European industrial connection.
+
+Successful AirStrike and CyberOperation against a modelled connection endpoint
+add a recoverable six-month infrastructure outage, described in their receipt.
+Existing front/target/capability/cost checks still run before an attack; no neutral
+attack right is added. The holder may repair at the ECONOMY panel (spec 02).
+Negotiated foreign mine clearance (spec 04) commissions the holder's service;
+it does not expand ConvoyEscort targeting or create basing/transit rights.
+
 Three branches per country — Ground, Air, Naval — each with three values in
 `0..100`:
 

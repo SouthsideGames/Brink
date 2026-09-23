@@ -245,6 +245,33 @@ namespace Brink.Core
             return ok;
         }
 
+        public bool SetFreightDetour(string partnerId, bool active)
+        {
+            if (!IsRunning || !TradeSystem.CanSetDetour(State, State.playerCountryId, partnerId, active, out _)) return false;
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            bool ok = TradeSystem.SetDetour(State, Turns, partnerId, active);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool RepairConnectionEndpoint(string siteId)
+        {
+            if (!IsRunning || !StrategicConnections.CanRepair(State, State.playerCountryId, siteId, out _)) return false;
+            if (!MayCommand(Data.Pillar.Economy)) return false;
+            bool ok = StrategicConnections.Repair(State, Turns, siteId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool RequestPassageClearance(string siteId)
+        {
+            if (!IsRunning || !DiplomacySystem.CanRequestClearance(State, State.playerCountryId, siteId, out _)) return false;
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool ok = DiplomacySystem.RequestClearance(State, Turns, siteId);
+            SaveSystem.Save(State, AutosaveSlot); // A refused negotiation can spend CP.
+            return ok;
+        }
+
         public bool SetTariff(string partnerId, float tariff)
         {
             if (!MayCommand(Data.Pillar.Economy)) return false;

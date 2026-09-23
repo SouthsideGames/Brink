@@ -61,6 +61,7 @@ namespace Brink.UI.Views
                     + "select it under defensive programmes. Other mined sites may still disrupt trade.";
             }
             BuildStrategicMap(state);
+            BuildBasingNetwork(state);
 
             BuildExercises(state);
 
@@ -592,6 +593,23 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text = "   " + record.summary;
             if (!string.IsNullOrEmpty(record.explanation))
                 AddText("terminal-text-dim").text = record.explanation;
+        }
+
+        void BuildBasingNetwork(GameState state)
+        {
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("BASING & AIR CORRIDORS", W);
+            AddText("terminal-text-dim").text = "Held ground and allocated foreign bases shorten reach. "
+                + "Transit enables hosting but does not reserve every base for us. An available air corridor needs two allocated endpoints; "
+                + "outages remove the affected launch position until expiry or holder repair. Geography prices distance; it does not forbid distant action.";
+            foreach (var site in state.locations)
+            {
+                if (!site.SupportsBasing || site.ownerId != state.playerCountryId && site.foreignOperatorId != state.playerCountryId) continue;
+                bool down = StrategicConnections.OutageRemaining(state, site) > 0;
+                AddText("terminal-text-dim").text = site.displayName + " — "
+                    + (site.ownerId == state.playerCountryId ? "HELD" : "HOSTED") + ", "
+                    + (down ? "LAUNCH POSITION UNAVAILABLE" : "LAUNCH POSITION AVAILABLE")
+                    + (StrategicConnections.AirCorridorFor(state, state.playerCountryId, site) ? "; CONNECTED AIR CORRIDOR" : "");
+            }
         }
 
         void BuildForceStructure(GameState state, CountryState player)

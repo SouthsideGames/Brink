@@ -327,20 +327,26 @@ namespace Brink.Core
         /// These are alternatives, never two charges. Multiple hazards do not stack.
         /// </summary>
         public static float EffectiveVolume(GameState state, string aId, string bId, float volume)
+            => RoutedVolume(state, aId, bId, volume, state.FindTrade(aId, bId)?.avoidPassages == true);
+
+        /// <summary>Pure current/alternative read shared by delivery and the order panel.</summary>
+        public static float RoutedVolume(GameState state, string aId, string bId, float volume, bool detour)
         {
             var a = PortFor(state, aId);
             var b = PortFor(state, bId);
             if (a != null && b != null)
             {
+                // A route choice is dormant if content no longer supplies a valid alternative.
+                detour = detour && CanDetour(state, aId, bId);
                 bool exposed = MilitarySystem.MineMonthsRemaining(state, a) > 0
                     || MilitarySystem.MineMonthsRemaining(state, b) > 0;
-                foreach (string id in PassagesFor(a.id, b.id))
+                foreach (string id in detour ? DetourPassagesFor(a.id, b.id) : PassagesFor(a.id, b.id))
                 {
                     var passage = state.FindLocation(id);
                     if (passage != null && passage.type == LocationType.Chokepoint
                         && MilitarySystem.MineMonthsRemaining(state, passage) > 0) exposed = true;
                 }
-                return exposed ? Math.Max(0f, volume - 6f) : volume;
+                return Math.Max(0f, volume - (detour ? DetourVolumeCost : 0f) - (exposed ? 6f : 0f));
             }
             foreach (var site in state.locations)
                 if ((site.ownerId == aId || site.ownerId == bId)
@@ -351,7 +357,9 @@ namespace Brink.Core
 
         // Authored gameplay dependencies, not real-world itineraries or route shares.
         // Physical IDs (not current holders or country IDs) also serve successors.
-        // ponytail: ten fixed pairs; no route graph or automatic alternate routing.
+        // ponytail: fixed authored alternatives, not a pathfinding graph.
+        public const float DetourVolumeCost = 3f;
+        public const int RouteChangeCost = 1;
         static readonly string[] NoPassages = Array.Empty<string>();
         static readonly string[] Malacca = { "IDN_CHK" };
         static readonly string[] RedSea = { "SAU_CHK" };
@@ -359,6 +367,81 @@ namespace Brink.Core
         static readonly string[] RedSeaMalacca = { "SAU_CHK", "IDN_CHK" };
         static readonly string[] SuezRedSea = { "EGY_CHK", "SAU_CHK" };
         static readonly string[] SuezRedSeaMalacca = { "EGY_CHK", "SAU_CHK", "IDN_CHK" };
+        static readonly string[] EasternArchipelago = { "IDN_CHK2" };
+        static readonly string[] RedSeaEasternArchipelago = { "SAU_CHK", "IDN_CHK2" };
+        static readonly string[] Baltic = { "DEU_CHK" };
+        static readonly string[] Isthmus = { "MEX_CHK" };
+        static readonly string[] Northern = { "JPN_CHK" };
+        static readonly string[] Contested = { "CONTESTED_LANE" };
+
+        static string[] DetourPassagesFor(string a, string b)
+        {
+            if (string.CompareOrdinal(a, b) > 0) { string swap = a; a = b; b = swap; }
+            switch (a + ":" + b)
+            {
+                case "CHN_PRT:IND_PRT":
+                case "IND_PRT:JPN_PRT":
+                case "IND_PRT:KOR_PRT": return EasternArchipelago;
+                // Our Saudi endpoint is inside the Red Sea: an eastern detour
+                // cannot wish away the passage needed to leave it.
+                case "CHN_PRT:SAU_PRT":
+                case "JPN_PRT:SAU_PRT":
+                case "KOR_PRT:SAU_PRT": return RedSeaEasternArchipelago;
+                case "CHN_PRT:FRA_PRT": return EasternArchipelago; // around southern Africa
+                case "FRA_PRT:IND_PRT":
+                case "FRA_PRT:MEX_PRT":
+                case "GBR_PRT:MEX_PRT": return NoPassages; // costed long ocean circuit
+                case "IND_PRT:SAU_PRT": return Suez; // northern exit, then around Africa
+                case "EGY_PRT:SAU_PRT": return RedSea; // around Africa, southern entrance
+                default: return null; // No invented escape from a Baltic/strait endpoint.
+            }
+        }
+
+        public static bool CanDetour(GameState state, string aId, string bId)
+        {
+            var a = PortFor(state, aId); var b = PortFor(state, bId);
+            if (a == null || b == null || PassagesFor(a.id, b.id).Length == 0) return false;
+            var alternative = DetourPassagesFor(a.id, b.id);
+            if (alternative == null) return false;
+            foreach (string id in PassagesFor(a.id, b.id))
+                if (state.FindLocation(id)?.type != LocationType.Chokepoint) return false;
+            foreach (string id in alternative)
+                if (state.FindLocation(id)?.type != LocationType.Chokepoint) return false;
+            return true;
+        }
+
+        public static bool CanSetDetour(GameState state, string actorId, string partnerId, bool active, out string reason)
+        {
+            reason = null;
+            var link = state?.FindTrade(actorId, partnerId);
+            if (state?.FindCountry(actorId) == null || state.FindCountry(partnerId) == null || actorId == partnerId || link == null)
+                reason = "NO TRADE AGREEMENT";
+            else if (link.avoidPassages == active) reason = "ROUTE ALREADY SELECTED";
+            else if (active && !CanDetour(state, actorId, partnerId)) reason = "NO COMPLETE AUTHORED ALTERNATIVE IN THIS SAVE";
+            return reason == null;
+        }
+
+        public static bool SetDetour(GameState state, TurnManager turns, string partnerId, bool active)
+        {
+            if (!CanSetDetour(state, state.playerCountryId, partnerId, active, out _)) return false;
+            if (!turns.SpendCommandPoints(RouteChangeCost, "Change freight routing")) return false;
+            state.FindTrade(state.playerCountryId, partnerId).avoidPassages = active;
+            state.AddChronicle(ChronicleCategory.Economic, state.playerCountryId,
+                $"Freight with {state.FindCountry(partnerId).displayName}: " + (active ? "costed detour selected." : "standard route restored."));
+            return true;
+        }
+
+        /// <summary>Public dependency identity, not foreign hazard duration.</summary>
+        public static bool DependsOn(GameState state, string aId, string bId, string siteId)
+        {
+            var a = PortFor(state, aId); var b = PortFor(state, bId);
+            if (a == null || b == null) return false;
+            if (a.id == siteId || b.id == siteId) return true;
+            bool detour = state.FindTrade(aId, bId)?.avoidPassages == true && CanDetour(state, aId, bId);
+            foreach (string id in detour ? DetourPassagesFor(a.id, b.id) : PassagesFor(a.id, b.id))
+                if (id == siteId && state.FindLocation(id)?.type == LocationType.Chokepoint) return true;
+            return false;
+        }
 
         static string[] PassagesFor(string a, string b)
         {
@@ -375,6 +458,12 @@ namespace Brink.Core
                 case "FRA_PRT:IND_PRT": return SuezRedSea;
                 case "CHN_PRT:FRA_PRT": return SuezRedSeaMalacca;
                 case "EGY_PRT:SAU_PRT": return Suez;
+                case "DEU_PRT:POL_PRT": return Baltic;
+                case "FRA_PRT:MEX_PRT":
+                case "GBR_PRT:MEX_PRT": return Isthmus;
+                case "JPN_PRT:RUS_PRT": return Northern;
+                case "CHN_PRT:VNM_PRT":
+                case "CHN_PRT:IDN_PRT": return Contested;
                 default: return NoPassages;
             }
         }
@@ -390,13 +479,22 @@ namespace Brink.Core
                 : "ROUTE NOT MODELLED: national-holder mine rule applies.";
             if (a != null && b != null)
             {
-                var passages = PassagesFor(a.id, b.id);
+                bool detour = link.avoidPassages && CanDetour(state, link.countryA, link.countryB);
+                route += detour ? " DETOUR: 3 effective volume paid on every delivery; ports still apply."
+                    : " STANDARD ROUTE.";
+                if (link.avoidPassages && !detour) route += " Saved detour unavailable: standard dependencies apply until geography is restored or the order is cancelled.";
+                var passages = detour ? DetourPassagesFor(a.id, b.id) : PassagesFor(a.id, b.id);
                 if (passages.Length == 0) route += " No additional passage modelled.";
                 foreach (string id in passages)
                 {
                     var passage = state.FindLocation(id);
                     // Public authored names remain meaningful even in an older/smaller save.
                     string name = id == "IDN_CHK" ? "Malacca Approaches"
+                        : id == "IDN_CHK2" ? "Eastern Archipelago Passage"
+                        : id == "DEU_CHK" ? "Baltic Approaches"
+                        : id == "MEX_CHK" ? "Isthmus Transit"
+                        : id == "JPN_CHK" ? "Northern Straits"
+                        : id == "CONTESTED_LANE" ? "Contested Sea Lane"
                         : id == "SAU_CHK" ? "Southern Red Sea Narrows" : "Suez Transit";
                     route += " Passage dependency: " + name
                         + (passage == null || passage.type != LocationType.Chokepoint
@@ -405,7 +503,8 @@ namespace Brink.Core
                 route += " A mined dependency can reduce effective volume by up to 6 once. "
                     + "Only the current holder can order clearance there; clearing one site may leave another exposed.";
             }
-            if (EffectiveVolume(state, link.countryA, link.countryB, 100f) < 100f)
+            float routeCost = link.avoidPassages && CanDetour(state, link.countryA, link.countryB) ? DetourVolumeCost : 0f;
+            if (EffectiveVolume(state, link.countryA, link.countryB, 100f) < 100f - routeCost)
                 route += " Mine exposure: effective volume reduced by up to 6, once; sanctions and embargoes can still close delivery.";
             return route;
         }
@@ -452,7 +551,8 @@ namespace Brink.Core
 
                 float throughput = EffectiveVolume(state, link.countryA, link.countryB, link.volume)
                     / 100f * (1f - link.tariff / 150f);
-                supplied += theirs * MaxSupplyShare * throughput;
+                supplied += theirs * MaxSupplyShare * throughput
+                    * StrategicConnections.CommodityFactor(state, link.countryA, link.countryB, focus, liftSenderId, liftTargetId);
             }
 
             return supplied;

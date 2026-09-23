@@ -517,7 +517,8 @@ namespace Brink.Tests
             Impose(SanctionSeverity.Coercive);
             SetEndowment(tgt, TradeFocus.Energy, 20f);
             float others = TradeSystem.Supply(state, target, TradeFocus.Energy);
-            Assert.AreEqual(OneLink(80f, 60f, 10f), others, 0.001f, "fixture: the third state's open link supplies them now");
+            Assert.AreEqual(OneLink(80f, 60f, 10f) * 1.1f, others, 0.001f,
+                "fixture: RUS-CHN's open link uses the active Siberian energy connection; existing supply must still not be repriced");
             Assert.Greater(others, 5f);
             float resumed = OneLink();
 
