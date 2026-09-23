@@ -251,7 +251,7 @@ namespace Brink.Core
             {
                 type = OperationType.MineWarfare, domain = OperationDomain.Naval,
                 displayName = "MINE WARFARE",
-                description = "Mine a port or strait. Six months of disruption reduce mapped port-dependent links "
+                description = "Mine a port or strait. Six months of disruption reduce links dependent on this port or named passage "
                               + "by up to 6 effective volume; unmodelled links use the national-holder rule. Agreements are unchanged. "
                               + "Repeat success refreshes duration; hazards do not stack. Routine clearance ends it.",
                 cpCost = 2, naval = 0.90f, air = 0.10f,

@@ -322,8 +322,8 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Delivered volume, not the stored agreement. Mapped pairs depend only
-        /// on their two ports; unmapped pairs retain the national-holder fallback.
+        /// Delivered volume, not the stored agreement. Mapped pairs depend on
+        /// their ports and authored passages; unmapped pairs retain the national fallback.
         /// These are alternatives, never two charges. Multiple hazards do not stack.
         /// </summary>
         public static float EffectiveVolume(GameState state, string aId, string bId, float volume)
@@ -331,14 +331,52 @@ namespace Brink.Core
             var a = PortFor(state, aId);
             var b = PortFor(state, bId);
             if (a != null && b != null)
-                return MilitarySystem.MineMonthsRemaining(state, a) > 0
-                    || MilitarySystem.MineMonthsRemaining(state, b) > 0
-                    ? Math.Max(0f, volume - 6f) : volume;
+            {
+                bool exposed = MilitarySystem.MineMonthsRemaining(state, a) > 0
+                    || MilitarySystem.MineMonthsRemaining(state, b) > 0;
+                foreach (string id in PassagesFor(a.id, b.id))
+                {
+                    var passage = state.FindLocation(id);
+                    if (passage != null && passage.type == LocationType.Chokepoint
+                        && MilitarySystem.MineMonthsRemaining(state, passage) > 0) exposed = true;
+                }
+                return exposed ? Math.Max(0f, volume - 6f) : volume;
+            }
             foreach (var site in state.locations)
                 if ((site.ownerId == aId || site.ownerId == bId)
                     && MilitarySystem.MineMonthsRemaining(state, site) > 0)
                     return Math.Max(0f, volume - 6f);
             return volume;
+        }
+
+        // Authored gameplay dependencies, not real-world itineraries or route shares.
+        // Physical IDs (not current holders or country IDs) also serve successors.
+        // ponytail: ten fixed pairs; no route graph or automatic alternate routing.
+        static readonly string[] NoPassages = Array.Empty<string>();
+        static readonly string[] Malacca = { "IDN_CHK" };
+        static readonly string[] RedSea = { "SAU_CHK" };
+        static readonly string[] Suez = { "EGY_CHK" };
+        static readonly string[] RedSeaMalacca = { "SAU_CHK", "IDN_CHK" };
+        static readonly string[] SuezRedSea = { "EGY_CHK", "SAU_CHK" };
+        static readonly string[] SuezRedSeaMalacca = { "EGY_CHK", "SAU_CHK", "IDN_CHK" };
+
+        static string[] PassagesFor(string a, string b)
+        {
+            if (string.CompareOrdinal(a, b) > 0) { string swap = a; a = b; b = swap; }
+            switch (a + ":" + b)
+            {
+                case "CHN_PRT:IND_PRT":
+                case "IND_PRT:JPN_PRT":
+                case "IND_PRT:KOR_PRT": return Malacca;
+                case "CHN_PRT:SAU_PRT":
+                case "JPN_PRT:SAU_PRT":
+                case "KOR_PRT:SAU_PRT": return RedSeaMalacca;
+                case "IND_PRT:SAU_PRT": return RedSea;
+                case "FRA_PRT:IND_PRT": return SuezRedSea;
+                case "CHN_PRT:FRA_PRT": return SuezRedSeaMalacca;
+                case "EGY_PRT:SAU_PRT": return Suez;
+                default: return NoPassages;
+            }
         }
 
         /// <summary>Own contract exposure only; never reveal foreign deadlines or quantities.</summary>
@@ -350,6 +388,23 @@ namespace Brink.Core
             string route = a != null && b != null
                 ? $"PORT DEPENDENCY: {a.displayName} / {b.displayName}."
                 : "ROUTE NOT MODELLED: national-holder mine rule applies.";
+            if (a != null && b != null)
+            {
+                var passages = PassagesFor(a.id, b.id);
+                if (passages.Length == 0) route += " No additional passage modelled.";
+                foreach (string id in passages)
+                {
+                    var passage = state.FindLocation(id);
+                    // Public authored names remain meaningful even in an older/smaller save.
+                    string name = id == "IDN_CHK" ? "Malacca Approaches"
+                        : id == "SAU_CHK" ? "Southern Red Sea Narrows" : "Suez Transit";
+                    route += " Passage dependency: " + name
+                        + (passage == null || passage.type != LocationType.Chokepoint
+                            ? " (not represented in this save)." : ".");
+                }
+                route += " A mined dependency can reduce effective volume by up to 6 once. "
+                    + "Only the current holder can order clearance there; clearing one site may leave another exposed.";
+            }
             if (EffectiveVolume(state, link.countryA, link.countryB, 100f) < 100f)
                 route += " Mine exposure: effective volume reduced by up to 6, once; sanctions and embargoes can still close delivery.";
             return route;

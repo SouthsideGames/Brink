@@ -942,13 +942,13 @@ fleet, active war or payment. Routine clearance is abstract, not a modeled funde
 programme. AI orders happen late in resolution and can affect the economy first
 next month: this is a calendar duration, not six guaranteed economic ticks.
 
-Mapped bilateral links now depend on their two named physical ports (spec 02,
-port dependencies); only mines at those endpoints reduce their effective volume.
+Mapped bilateral links depend on their two named physical ports and any present
+authored passage dependencies (spec 02); only mines at those sites reduce their effective volume.
 Unmodelled links retain the earlier national-holder rule: any mined site held
 by either partner reduces volume. These are alternatives, not two charges.
 The reduction remains `max(0, agreement volume - 6)` once, never stacked, never
-total closure. Chokepoint mines affect only that national fallback until passage
-routes exist. Capturing Shanghai does not move China's mapped endpoint to Brazil
+total closure. Only the ten port-pair rows in spec 02 add passage dependencies;
+an unrelated chokepoint does not affect a mapped link. Capturing Shanghai does not move China's mapped endpoint to Brazil
 or spread its hazard to Brazil's mapped routes. TradeHealth, supply, import competition and supply-exchange
 pricing use the shared reader; sanctions-relief pricing inherits it through
 SupplyIfLifted. Sanctions/embargoes still close links. Nominal agreement,
@@ -967,7 +967,7 @@ total closure or a nonexistent manual clearance requirement. The overt shipping
 hazard is not a classified statistic. Missing old-save fields mean clear; old
 unattributable volume losses are not refunded. Six/three months and six points
 are initial tuning, not native balance certification. Ocean itineraries,
-third-party passage routes and the other military trade decrements remain
+alternate passage routing and the other military trade decrements remain
 separate work. Tests: OperationCatalogTests and TradeAndConquestTests.
 
 Suppression is the clearest case: it takes nothing, kills almost nobody, and

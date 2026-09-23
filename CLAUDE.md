@@ -31,6 +31,18 @@ and not the place to start from cold.
 
 ## Architecture rules
 
+- **Named chokepoint dependencies (#25).** TradeSystem's ten private physical
+  port-pair rows extend the existing EffectiveVolume reader, not a new network.
+  Ports plus present correctly typed passages share one six-point maximum loss;
+  missing passages do not invoke national fallback. Successors use PortFor's
+  titled physical endpoint. Readouts disclose missing sites, not foreign timers.
+  No Data, save version, pipeline, permission, AI or partition change. Old saves
+  derive the current table, so active mine exposure can change on content update.
+  Spec 02 records all ten rows and six deferred passages. Alternate routing,
+  foreign clearance and hardware remain outside this slice; #25 stays partial.
+  Native compilation, functional evidence and long-run policy sampling must be
+  reported separately; source coverage is not balance certification.
+
 - **EditMode save isolation is an assembly boundary.** Global-namespace
   `TestSaveIsolation` (NUnit SetUpFixture, non-parallel) redirects SaveSystem to
   a unique temporary directory before fixtures, including filtered runs, and

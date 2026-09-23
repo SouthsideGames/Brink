@@ -56,7 +56,7 @@ namespace Brink.UI.Views
                 int remaining = MilitarySystem.MineMonthsRemaining(state, site);
                 if (site.ownerId != player.id || remaining <= 0) continue;
                 AddText("sig-advice").text = $" MINE DISRUPTION: {site.displayName} — {remaining} months remain. "
-                    + "Mapped links using this port lose up to 6 effective volume; unmodelled links use the national-holder rule. Trade is not closed; hazards do not stack. "
+                    + "Mapped links dependent on this port or named passage lose up to 6 effective volume; unmodelled links use the national-holder rule. Trade is not closed; hazards do not stack. "
                     + "Routine clearance ends it without an order. Successful Convoy Escort at this site removes 3 months; "
                     + "select it under defensive programmes. Other mined sites may still disrupt trade.";
             }

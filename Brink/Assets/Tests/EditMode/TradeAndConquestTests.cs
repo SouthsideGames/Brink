@@ -205,6 +205,183 @@ namespace Brink.Tests
             finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); TerminalMetrics.ResetForTests(); }
         }
 
+        [TestCase("IND", "CHN", "IDN_CHK")]
+        [TestCase("IND", "JPN", "IDN_CHK")]
+        [TestCase("IND", "KOR", "IDN_CHK")]
+        [TestCase("SAU", "CHN", "SAU_CHK,IDN_CHK")]
+        [TestCase("SAU", "JPN", "SAU_CHK,IDN_CHK")]
+        [TestCase("SAU", "KOR", "SAU_CHK,IDN_CHK")]
+        [TestCase("SAU", "IND", "SAU_CHK")]
+        [TestCase("FRA", "IND", "EGY_CHK,SAU_CHK")]
+        [TestCase("FRA", "CHN", "EGY_CHK,SAU_CHK,IDN_CHK")]
+        [TestCase("EGY", "SAU", "EGY_CHK")]
+        public void NamedPassagesAreExactPhysicalUnorderedDependencies(string a, string b, string ids)
+        {
+            var world = WorldFactory.CreateWorld(1919, a, WorldSize.Full);
+            int until = world.date.year * 12 + world.date.month + 6;
+            foreach (var site in world.locations)
+            {
+                site.mineHazardUntilMonth = until;
+                bool dependent = site.id == a + "_PRT" || site.id == b + "_PRT"
+                    || ids.Split(',').Contains(site.id);
+                Assert.AreEqual(dependent ? 44 : 50, TradeSystem.EffectiveVolume(world, a, b, 50), site.id);
+                Assert.AreEqual(dependent ? 44 : 50, TradeSystem.EffectiveVolume(world, b, a, 50), site.id);
+                site.mineHazardUntilMonth = 0;
+            }
+            foreach (var site in world.locations) site.mineHazardUntilMonth = until;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, a, b, 50), "Never stack hazards.");
+            Assert.AreEqual(0, TradeSystem.EffectiveVolume(world, a, b, 4));
+        }
+
+        [Test]
+        public void PassageIdentitySurvivesHostRemovalAndSuccessorEndpointChanges()
+        {
+            var world = WorldFactory.CreateWorld(1919, "FRA", WorldSize.Full);
+            world.FindLocation("IDN_CHK").mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            world.FindLocation("IDN_CHK").ownerId = "BRA";
+            world.FindLocation("IDN_CHK").originalOwnerId = "BRA";
+            world.countries.RemoveAll(c => c.id == "IDN");
+            world.countries.Add(new CountryState { id = "NEW" });
+            world.FindLocation("CHN_PRT").ownerId = "NEW";
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "FRA", "NEW", 50), "Occupation is not title.");
+            world.FindLocation("CHN_PRT").originalOwnerId = "NEW";
+            world.locations.Reverse();
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "NEW", 50));
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50), "Parent keeps physical endpoint.");
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "NEW", "CHN", 50), "Same endpoint has no table row.");
+            world.FindLocation("BRA_PRT").originalOwnerId = "NEW";
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "FRA", "NEW", 50), "New ordinal endpoint changes dependencies.");
+        }
+
+        [Test]
+        public void MissingPassagesDoNotErasePresentDependenciesOrInvokeNationalFallback()
+        {
+            var world = WorldFactory.CreateWorld(1919, "FRA", WorldSize.Full);
+            int until = world.date.year * 12 + world.date.month + 6;
+            world.locations.RemoveAll(l => l.id == "EGY_CHK");
+            world.FindLocation("IDN_CHK").type = LocationType.Port;
+            world.FindLocation("IDN_CHK").mineHazardUntilMonth = until;
+            var redSea = world.FindLocation("SAU_CHK"); redSea.mineHazardUntilMonth = until;
+            var link = new TradeRelation { countryA = "FRA", countryB = "CHN", volume = 50 };
+            string json = SaveSystem.ToJson(world);
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50));
+            StringAssert.Contains("Suez Transit (not represented in this save).", TradeSystem.PortDependencyReadout(world, link));
+            StringAssert.Contains("Malacca Approaches (not represented in this save).", TradeSystem.PortDependencyReadout(world, link));
+            Assert.AreEqual(json, SaveSystem.ToJson(world));
+            world = SaveSystem.FromJson(json);
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth = 0;
+            world.FindLocation("CONTESTED_LANE").ownerId = "FRA";
+            world.FindLocation("CONTESTED_LANE").mineHazardUntilMonth = until;
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50), "No national union or wrong-type passage.");
+            world.FindLocation("FRA_PRT").mineHazardUntilMonth = until;
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50), "Endpoint still counts.");
+            world.locations.RemoveAll(l => l.id == "FRA_PRT");
+            Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50), "Missing endpoint switches to national rule.");
+            world.FindLocation("CONTESTED_LANE").mineHazardUntilMonth = 0;
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth = until;
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50), "Fallback never adds passage exposure.");
+        }
+
+        [TestCase(WorldSize.Regional, 3, 96)]
+        [TestCase(WorldSize.Standard, 4, 136)]
+        [TestCase(WorldSize.Full, 5, 158)]
+        public void OpeningPassageCoverageIsBoundedAndIncludesSaudiIndianFood(WorldSize size, int count, int volume)
+        {
+            var world = WorldFactory.CreateWorld(1919, "IND", size);
+            int until = world.date.year * 12 + world.date.month + 6;
+            foreach (var site in world.locations.Where(l => l.type == LocationType.Chokepoint)) site.mineHazardUntilMonth = until;
+            var affected = world.trade.Where(l => TradeSystem.PortFor(world, l.countryA) != null
+                && TradeSystem.PortFor(world, l.countryB) != null
+                && TradeSystem.EffectiveVolume(world, l.countryA, l.countryB, l.volume) < l.volume).ToList();
+            Assert.AreEqual(count, affected.Count); Assert.AreEqual(volume, affected.Sum(l => l.volume));
+            var food = world.FindTrade("SAU", "IND");
+            Assert.AreEqual(TradeFocus.Food, food.focus); Assert.AreEqual(34, food.volume);
+            Assert.Contains(food, affected); Assert.IsFalse(affected.Any(l => l.Involves("USA")));
+        }
+
+        [TestCase(TradeFocus.Energy)]
+        [TestCase(TradeFocus.Materials)]
+        [TestCase(TradeFocus.Food)]
+        public void ThirdPartyPassagePricingMatchesDeliveredSupplyAndClosures(TradeFocus focus)
+        {
+            var world = WorldFactory.CreateWorld(1919, "SAU", WorldSize.Full);
+            world.trade.Clear(); world.sanctions.Clear();
+            var link = new TradeRelation { countryA = "SAU", countryB = "IND", volume = 50, focus = focus };
+            world.trade.Add(link);
+            var supplier = world.FindCountry("SAU"); var recipient = world.FindCountry("IND");
+            supplier.resources.energy = supplier.resources.strategicMaterials = supplier.resources.foodSecurity = 80;
+            recipient.resources.energy = recipient.resources.strategicMaterials = recipient.resources.foodSecurity = 0;
+            world.FindLocation("SAU_CHK").ownerId = "BRA";
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            float supplied = 80 * TradeSystem.MaxSupplyShare * .44f;
+            Assert.AreEqual(supplied, TradeSystem.Supply(world, "IND", focus), .0001f);
+            Assert.AreEqual(0, TradeSystem.Supply(world, "IND", TradeFocus.General));
+            link.volume = 4;
+            float priced = DiplomaticLeverage.LinkGain(world, "SAU", "IND", focus);
+            link.volume = DiplomaticLeverage.OfferVolume;
+            Assert.AreEqual(TradeSystem.Supply(world, "IND", focus), priced, .0001f);
+            world.sanctions.Add(new Sanction { senderId = "SAU", targetId = "IND" }); link.embargoed = true;
+            Assert.AreEqual(0, TradeSystem.Supply(world, "IND", focus));
+            float relief = DiplomaticLeverage.SupplyReliefGain(world, "SAU", "IND");
+            Assert.Greater(relief, 0);
+            Assert.AreEqual(TradeSystem.SupplyIfLifted(world, "IND", focus, "SAU", "IND"), relief, .0001f);
+            world.sanctions.Add(new Sanction { senderId = "IND", targetId = "SAU" });
+            Assert.AreEqual(0, DiplomaticLeverage.SupplyReliefGain(world, "SAU", "IND"));
+        }
+
+        [Test]
+        public void PassageRecoveryRequiresLastHazardToExpireWithoutChangingAgreement()
+        {
+            var world = WorldFactory.CreateWorld(1919, "FRA", WorldSize.Full);
+            var link = new TradeRelation { countryA = "FRA", countryB = "CHN", volume = 50 };
+            world.trade.Add(link);
+            int now = world.date.year * 12 + world.date.month;
+            world.FindLocation("EGY_CHK").mineHazardUntilMonth = now + 3;
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth = now + 6;
+            world.FindLocation("IDN_CHK").mineHazardUntilMonth = now + 6;
+            for (int i = 0; i < 6; i++)
+            {
+                Assert.AreEqual(44, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50));
+                if (i == 3) world.FindLocation("SAU_CHK").mineHazardUntilMonth = 0;
+                world.date = world.date.NextMonth();
+            }
+            Assert.AreEqual(50, TradeSystem.EffectiveVolume(world, "FRA", "CHN", 50));
+            Assert.AreEqual(50, link.volume);
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void PassagePanelExplainsAbsenceAndAuthorityWithoutForeignTimers(int columns)
+        {
+            var world = WorldFactory.CreateWorld(1919, "FRA", WorldSize.Full);
+            world.trade.Clear();
+            var link = new TradeRelation { countryA = "FRA", countryB = "CHN", volume = 50 };
+            world.trade.Add(link); world.locations.RemoveAll(l => l.id == "EGY_CHK");
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth = world.date.year * 12 + world.date.month + 6;
+            string first = TradeSystem.PortDependencyReadout(world, link);
+            world.FindLocation("SAU_CHK").mineHazardUntilMonth += 100;
+            Assert.AreEqual(first, TradeSystem.PortDependencyReadout(world, link));
+            var gc = GameController.Instance; var previous = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, world);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new EconomyView(); view.Refresh();
+                string json = SaveSystem.ToJson(world); view.Refresh();
+                var label = view.Root.Query<Label>().ToList().Single(l => (l.text ?? "").Contains("PORT DEPENDENCY:"));
+                foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                string joined = System.Text.RegularExpressions.Regex.Replace(label.text, @"\s+", " ");
+                StringAssert.Contains("Suez Transit (not represented in this save).", joined);
+                StringAssert.Contains("Southern Red Sea Narrows", joined); StringAssert.Contains("Malacca Approaches", joined);
+                StringAssert.Contains("Only the current holder can order clearance there", joined);
+                StringAssert.Contains("Mine exposure", joined);
+                Assert.AreEqual(json, SaveSystem.ToJson(world));
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, previous); TerminalMetrics.ResetForTests(); }
+        }
+
         // ---------- trade can actually be opened ----------
 
         [Test]
