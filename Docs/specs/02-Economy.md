@@ -24,12 +24,52 @@ grant one. Losing title or acquiring a lexically earlier titled port can change
 that successor's derived endpoint. Custom sites, absent countries, landlocked
 states and missing old-save ports yield no endpoint, not a parent's borrowed port.
 
-When both endpoints exist, only mine hazards at those two ports affect the link.
-Mines elsewhere under either country's control do not. When either endpoint is
+When both endpoints exist, mine hazards at those ports and the named passages
+below affect the link. Other mines under either country's control do not. When either endpoint is
 missing, the existing national-holder abstraction remains: any mined site held
 by either partner affects the link. These branches are exclusive: never a port
 penalty plus a national penalty. Both apply to General and commodity agreements
-and prospective offers alike. Third-party chokepoints are not on any mapped path.
+and prospective offers alike.
+
+#### Named passage dependencies (#25)
+
+Ten unordered **physical port ID** pairs carry these authored gameplay dependency
+sets, not real-world route shares or ordered itineraries. Each country abbreviation
+in this table means its exact `ID_PRT` endpoint returned by `PortFor`.
+
+| Port pair | Additional dependencies |
+|---|---|
+| IND–CHN, IND–JPN, IND–KOR | IDN_CHK (Malacca Approaches) |
+| SAU–CHN, SAU–JPN, SAU–KOR | SAU_CHK (Southern Red Sea Narrows), IDN_CHK |
+| SAU–IND | SAU_CHK |
+| FRA–IND | EGY_CHK (Suez Transit), SAU_CHK |
+| FRA–CHN | EGY_CHK, SAU_CHK, IDN_CHK |
+| EGY–SAU | EGY_CHK |
+
+A listed passage counts only when that exact site exists with Chokepoint type.
+Missing/wrong-type sites are **not represented in this save**, not clear; they
+do not erase ports or other present passages, invoke the national fallback, or
+spawn/backfill content. No host-country existence check: surviving physical
+sites still count after annexation. Control and title do not change passage
+identity. Parent and successor can share exposure through a shared physical
+port; two identical endpoints match no row. An unmatched mapped pair is port-only,
+with no additional passage modelled, not a guarantee of a chokepoint-free route.
+
+The six-point loss applies once across all dependencies. Clearing one hazard
+does not restore throughput while another remains. Existing sanctions, embargo,
+tariff, headroom and resource rules remain authoritative, including supply and
+sanctions-relief offer pricing. No new clearance right follows from being a
+customer, ally, titleholder or military Transit partner: only the controller
+can order the existing own-ground escort. Mining still requires the correct
+opponent/front; this table grants no permission to attack a neutral passage.
+
+The nine authored chokepoints are accounted for: three above are used;
+IDN_CHK2, TUR_CHK, DEU_CHK, MEX_CHK, JPN_CHK and CONTESTED_LANE are deferred,
+not automatic alternatives. Starting mapped exposure when all passages are
+mined: Regional 3 links / 96 nominal volume, Standard 4 / 136, Full 5 / 158.
+SAU–IND's opening Food agreement (34) is affected even in Regional; missing
+Malacca there does not erase the Saudi passage. Default USA opening has no row.
+These are content coverage counts, not balance measurements.
 
 This is a deliberately bounded port dependency, not a claim about what fraction
 of real-world trade uses the sea, an ocean itinerary, travel time, canal choice
@@ -37,7 +77,8 @@ or alternative-route optimization. Only the mine modifier changes; blockade,
 raiding and escort agreement-volume effects remain national. Territory's existing
 access swing still prices ownership, not a second mine charge.
 
-ECONOMY displays only our links' named ports or ROUTE NOT MODELLED. Own-contract
+ECONOMY displays only our links' named ports, passage dependencies (including
+full missing-site explanations), or ROUTE NOT MODELLED. Own-contract
 mine exposure is observable even if sanctions currently mask its delivery effect;
 no foreign remaining duration, resource stock or unrelated trade list is added.
 Mapped exposure can follow a port now held by a third state. Civilian traffic is
@@ -50,7 +91,9 @@ No permission, alternate-route order or new AI clearance policy is introduced.
 No new serialized state, migration, pipeline step or world creation change.
 Derived dependencies apply to existing saves on read: active mines may affect
 different agreements after this update. Future changes to authored endpoint
-content can likewise change exposure across versions; this is not a persisted
+content or the passage table can likewise change exposure across versions;
+an old save with an active mine can affect additional agreements immediately
+under a new table. This is not a persisted
 route choice. Missing ports are never backfilled. An absent mine field still
 means clear. Record this compatibility behavior rather than claiming saves have
 identical trajectories. Tests: TradeAndConquestTests and revised mine tests in
