@@ -200,10 +200,12 @@ namespace Brink.Core
                 bool holds = location.ownerId == actorId;
                 bool hosted = location.foreignOperatorId == actorId;
                 if (!holds && !hosted) continue;
+                if (StrategicConnections.OutageRemaining(state, location) > 0) continue;
 
                 // A partner's base is reach we did not have to conquer, but it is
                 // someone else's ground and worth slightly less than our own.
                 float penalty = hosted && !holds ? 2f : 0f;
+                if (hosted && !holds && StrategicConnections.AirCorridorFor(state, actorId, location)) penalty = 0.5f;
 
                 float from = DistanceBetween(state, HostOf(location), hostId) + penalty;
                 if (from < best) best = from;

@@ -3,6 +3,16 @@
 Source: `Core/IntelligenceSystem.cs`, `Data/Intelligence.cs`, `UI/IntelReadout.cs`.
 GDD §14.
 
+**Roadmap 25 cables.** Named North Atlantic (USA_PRT–GBR_PRT), North Pacific
+(USA_PRT–JPN_PRT) and Indian Ocean (IND_PRT–EGY_PRT) connections multiply an
+existing uncompromised network's monthly penetration growth by 1.10 when both
+endpoints and access are available (spec 02). No network, estimate or confidence
+grade is created by a cable. Disruption, missing endpoints or lost access returns
+the growth factor to 1; it does not erase accumulated knowledge. Compromised
+networks keep their existing recovery path. The same rule applies to AI networks.
+This is a bounded communications advantage, not a wiretap-right or guaranteed
+intelligence. Endpoint attack/repair/expiry follow the shared connection rules.
+
 ## 1. The central rule
 
 **Nobody reads true foreign state — not the player, not the AI.** Observers hold

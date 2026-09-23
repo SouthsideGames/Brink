@@ -52,6 +52,15 @@ An `OperationPlan` carries the additive boolean `standingOrder`. Missing is
 must never invent permission to execute one. No migration or version bump is
 required.
 
+Strategic geography adds `TradeRelation.avoidPassages` (default false: standard
+routing) and `StrategicLocation.infrastructureOutageUntilMonth` (default zero:
+no connection outage). Both round-trip in version 7 without a migration. Outages
+are exclusive calendar deadlines and follow the physical site across transfers;
+they expire by read, not by an added pipeline tick. Connections and alternatives
+derive from the current authored table: missing endpoints are not backfilled,
+and a saved detour with missing geography becomes dormant until restored or
+cancelled. Content updates can therefore change dependencies in existing saves.
+
 `TreatyClause.trigger`, `triggerCountryId`, `durationMonths` and `effectiveDate`
 are additive. The trigger and duration zero/empty defaults mean unconditional
 and permanent, exactly matching every treaty written before conditional

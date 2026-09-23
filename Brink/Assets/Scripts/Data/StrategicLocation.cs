@@ -71,6 +71,9 @@ namespace Brink.Data
         /// </summary>
         public int mineHazardUntilMonth;
 
+        /// <summary>Temporary connection outage; zero in old saves. Follows the physical site.</summary>
+        public int infrastructureOutageUntilMonth;
+
         /// <summary>Garrison strength currently holding the location, 0..100.</summary>
         public float garrison;
 

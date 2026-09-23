@@ -162,6 +162,7 @@ namespace Brink.Core
                     if (owner != null)
                         growth += TechnologySystem.Effectiveness(owner, "CAP_SIGINT") * 1.4f;
 
+                    growth *= StrategicConnections.CollectionFactor(state, network.ownerId, network.targetId);
                     network.penetration = Clamp(network.penetration + growth);
                 }
 

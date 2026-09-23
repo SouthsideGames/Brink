@@ -5,6 +5,81 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+### Roadmap 25 completion batch — routing and infrastructure
+
+This section supersedes the earlier slice's statements that there is no route
+choice or foreign cooperation. Implementation is complete; independent
+review follows the entire batch. Balance calibration and device testing are
+separate from implementation completion.
+
+`TradeRelation.avoidPassages` defaults false in old saves. Either partner's freight
+order chooses the authored alternative for the whole bilateral link, at 1 CP per
+change. A selected detour subtracts **3 effective-volume points continuously**,
+including after hazards expire, until the player switches back. Standard route
+has no freight surcharge. Endpoint ports remain unavoidable. All mines on the
+selected route still subtract at most six once, separately from the three-point
+freight cost, floor zero. Agreement volume is never rewritten. Sanctions,
+embargoes, tariff and supply headroom remain authoritative.
+
+IND–East Asia uses `IDN_CHK2` instead of Malacca. SAU–East Asia retains SAU_CHK
+as well: its port is inside the Red Sea, so an eastern alternative cannot erase
+its exit. FRA–CHN uses IDN_CHK2 via a southern-African detour; FRA–IND and
+FRA/GBR–MEX have a costed long ocean alternative with no additional modelled
+passage. SAU–IND can instead exit north through Suez and circle Africa;
+EGY–SAU can circle Africa and enter through SAU_CHK. Baltic, Northern Straits
+and Contested Sea Lane pairs have no authored alternative: no fabricated
+open-ocean escape from an enclosed endpoint. These are gameplay corridor
+choices, not real-world itineraries or measured freight prices.
+Every standard and alternative passage must exist with the correct type before
+a detour can be selected. If content disappears after selection, the saved choice
+is dormant and standard dependencies apply, disclosed in the panel. Cancellation
+remains possible. Missing geography never grants a free bypass.
+
+Six additional standard physical pairs extend the original ten rows:
+DEU–POL uses DEU_CHK; FRA–MEX and GBR–MEX use MEX_CHK; JPN–RUS uses JPN_CHK;
+CHN–VNM and CHN–IDN use CONTESTED_LANE. IDN_CHK2 is used by alternatives.
+TUR_CHK was assessed and deliberately receives **no fabricated dependency**:
+the current named Turkish port is in the eastern Mediterranean and the Russian
+port is the Northern Fleet Anchorage, not a Black Sea endpoint. A Bosphorus
+shipping row needs an authored Black Sea endpoint before it can be honest.
+The site remains a military objective with the existing territory effects.
+Opening mined-passage coverage is now Regional 3/96, Standard 6/220, Full 8/278
+(links/nominal volume); all nine passage sites have an explicit disposition.
+
+`StrategicConnections` names twelve bounded connections over existing sites:
+two pipelines, two resource corridors, two industrial corridors, three cables,
+and three air corridors. No sites are created or backfilled. Its catalogue is
+an authored gameplay abstraction, not a claim about present-day infrastructure.
+Pipelines multiply otherwise-delivered Energy supply by 1.10; resource and
+industrial corridors multiply Materials supply by 1.10, once. They create no
+stock or agreement, and do not bypass maritime losses or trade closures.
+Both ordinary delivery and leverage/relief pricing read the same factor,
+including the lifted-sanction counterfactual.
+
+Both physical endpoints must exist with the correct type and be accessible to
+their authored home countries. Occupation interrupts that access unless the
+controller carries an active Transit obligation to the home. War between homes,
+sanctions or an outage also suspends the connection. Title changes never move
+the endpoint. Missing home countries cannot gain invented access.
+
+`StrategicLocation.infrastructureOutageUntilMonth` is an exclusive calendar
+deadline, zero in old saves. A successful AirStrike or CyberOperation on a
+modelled endpoint extends it to at least six months. This is separate from mines.
+At expiry the service returns without a tick or refund. The current holder can
+pay 1 CP and 60 treasury to remove up to three months locally; clear, foreign or
+unaffordable orders refuse before spending. Another endpoint may still block
+service. No permanent infrastructure ratchet or restoration to invented stock.
+
+ECONOMY exposes own freight choices and relevant named connections, status,
+effects and holder-only repairs, using wrapped prose and explained disabled
+controls. No exact foreign outage/mine duration is printed. The own endpoint
+repair readout may show its own remaining duration. Cables and air corridors'
+consumers are specified in 03 and 01 respectively; foreign clearance is in 04.
+Two additive saved fields retain save version 7 with safe false/zero defaults;
+no migration, pipeline step or test partition change. New derived connections
+can change old-save trajectories immediately, even though missing sites stay
+absent. Constants are initial gameplay values, not balance certification.
+
 **Temporary mine disruption (spec 01, recoverable mines).** TradeHealth, commodity
 supply and import competition read `TradeSystem.EffectiveVolume`, while stored
 trade volume remains the agreement. The port-dependency rule below selects the

@@ -165,7 +165,8 @@ namespace Brink.Core
 
             // Exactly `TradeSystem.Supply`'s arithmetic for one link: what they
             // can draw is bounded by what we actually have.
-            float gain = OwnStock(actor, focus) * TradeSystem.MaxSupplyShare * (offered - current);
+            float gain = OwnStock(actor, focus) * TradeSystem.MaxSupplyShare * (offered - current)
+                * StrategicConnections.CommodityFactor(state, actorId, targetId, focus);
             return Math.Max(0f, gain);
         }
 

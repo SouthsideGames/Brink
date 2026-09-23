@@ -2,6 +2,7 @@ using Brink.Core;
 using Brink.Data;
 using Brink.UI;
 using NUnit.Framework;
+using System.Linq;
 
 namespace Brink.Tests
 {
@@ -30,6 +31,179 @@ namespace Brink.Tests
         }
 
         // ---------- the map is a cylinder ----------
+
+        [Test]
+        public void ConnectionCatalogueNamesOnlyPresentTypedAuthoredEndpointsInFullWorld()
+        {
+            var full = WorldFactory.CreateWorld(8080, "USA", WorldSize.Full);
+            var rows = StrategicConnections.All.ToArray();
+            Assert.AreEqual(12, rows.Length);
+            Assert.AreEqual(12, rows.Select(c => c.name).Distinct().Count());
+            foreach (var c in rows)
+            {
+                Assert.AreEqual(c.aType, full.FindLocation(c.a).type, c.name);
+                Assert.AreEqual(c.bType, full.FindLocation(c.b).type, c.name);
+                Assert.IsNotNull(WorldFactory.LocationHost(c.a));
+                Assert.IsNotNull(WorldFactory.LocationHost(c.b));
+            }
+        }
+
+        [TestCase(StrategicConnections.Kind.Pipeline)]
+        [TestCase(StrategicConnections.Kind.ResourceCorridor)]
+        [TestCase(StrategicConnections.Kind.IndustrialCorridor)]
+        [TestCase(StrategicConnections.Kind.Cable)]
+        [TestCase(StrategicConnections.Kind.AirCorridor)]
+        public void EveryConnectionHasAnOutageRecoveryAndCaptureDependency(StrategicConnections.Kind kind)
+        {
+            var world = WorldFactory.CreateWorld(8080, "USA", WorldSize.Full);
+            world.sanctions.Clear(); world.confrontations.Clear();
+            var row = StrategicConnections.All.First(c => c.kind == kind);
+            var site = world.FindLocation(row.a);
+            Assert.IsTrue(StrategicConnections.Open(world, row));
+            string before = SaveSystem.ToJson(world);
+            StrategicConnections.Open(world, row); StrategicConnections.Readout(world, row);
+            Assert.AreEqual(before, SaveSystem.ToJson(world));
+            StrategicConnections.Disrupt(world, site);
+            Assert.AreEqual(6, StrategicConnections.OutageRemaining(world, site));
+            Assert.IsFalse(StrategicConnections.Open(world, row));
+            world = SaveSystem.FromJson(SaveSystem.ToJson(world)); site = world.FindLocation(row.a);
+            for (int i = 0; i < 5; i++) world.date = world.date.NextMonth();
+            Assert.IsFalse(StrategicConnections.Open(world, row));
+            world.date = world.date.NextMonth(); Assert.IsTrue(StrategicConnections.Open(world, row));
+            site.ownerId = "BRA";
+            Assert.IsFalse(StrategicConnections.Open(world, row), "Capture cannot provide free infrastructure access.");
+            world.locations.RemoveAll(l => l.id == row.a);
+            Assert.IsFalse(StrategicConnections.Open(world, row), "Missing geography is not available.");
+        }
+
+        [Test]
+        public void PipelineAndSanctionsReliefUseTheSameDeliveredSupply()
+        {
+            state.sanctions.Clear(); state.confrontations.Clear(); state.trade.Clear();
+            state.trade.Add(new TradeRelation { countryA = "RUS", countryB = "CHN", volume = 50, focus = TradeFocus.Energy });
+            var source = state.FindCountry("RUS"); source.resources.energy = 80;
+            float connected = TradeSystem.Supply(state, "CHN", TradeFocus.Energy);
+            Assert.AreEqual(80 * TradeSystem.MaxSupplyShare * .5f * 1.1f, connected, .0001f);
+            StrategicConnections.Disrupt(state, state.FindLocation("RUS_ENR"));
+            Assert.AreEqual(connected / 1.1f, TradeSystem.Supply(state, "CHN", TradeFocus.Energy), .0001f);
+            state.FindLocation("RUS_ENR").infrastructureOutageUntilMonth = 0;
+            var regime = new Sanction { senderId = "RUS", targetId = "CHN" }; state.sanctions.Add(regime);
+            Assert.AreEqual(0, TradeSystem.Supply(state, "CHN", TradeFocus.Energy));
+            float preview = TradeSystem.SupplyIfLifted(state, "CHN", TradeFocus.Energy, "RUS", "CHN");
+            state.sanctions.Remove(regime);
+            Assert.AreEqual(connected, preview);
+            Assert.AreEqual(TradeSystem.Supply(state, "CHN", TradeFocus.Energy), preview);
+            state.trade.Clear(); Assert.AreEqual(0, TradeSystem.Supply(state, "CHN", TradeFocus.Energy));
+        }
+
+        [Test]
+        public void CablesEnhanceExistingCollectionWithoutInventingNetworks()
+        {
+            state.sanctions.Clear(); state.confrontations.Clear();
+            int count = state.networks.Count;
+            Assert.AreEqual(1.1f, StrategicConnections.CollectionFactor(state, "USA", "JPN"));
+            Assert.AreEqual(1f, StrategicConnections.CollectionFactor(state, "USA", "CHN"));
+            StrategicConnections.Disrupt(state, state.FindLocation("JPN_PRT"));
+            Assert.AreEqual(1f, StrategicConnections.CollectionFactor(state, "USA", "JPN"));
+            Assert.AreEqual(count, state.networks.Count);
+        }
+
+        [TestCase("RUS", "CHN", "RUS_ENR", TradeFocus.Energy)]
+        [TestCase("USA", "MEX", "USA_ENR", TradeFocus.Energy)]
+        [TestCase("KAZ", "CHN", "KAZ_MAT", TradeFocus.Materials)]
+        [TestCase("BRA", "NGA", "BRA_MAT", TradeFocus.Materials)]
+        [TestCase("DEU", "POL", "DEU_IND", TradeFocus.Materials)]
+        [TestCase("MEX", "USA", "MEX_IND", TradeFocus.Materials)]
+        public void EachCommodityConnectionReachesTheRealDeliveryConsumer(string source, string target, string endpoint, TradeFocus focus)
+        {
+            var world = WorldFactory.CreateWorld(8080, "USA", WorldSize.Full);
+            world.sanctions.Clear(); world.confrontations.Clear(); world.trade.Clear();
+            world.trade.Add(new TradeRelation { countryA = source, countryB = target, volume = 50, focus = focus });
+            var country = world.FindCountry(source); country.resources.energy = 80; country.resources.strategicMaterials = 80;
+            float connected = TradeSystem.Supply(world, target, focus);
+            Assert.AreEqual(80 * TradeSystem.MaxSupplyShare * .5f * 1.1f, connected, .0001f);
+            Assert.AreEqual(1.1f, StrategicConnections.CommodityFactor(world, target, source, focus));
+            Assert.AreEqual(1f, StrategicConnections.CommodityFactor(world, target, source, TradeFocus.Food));
+            StrategicConnections.Disrupt(world, world.FindLocation(endpoint));
+            Assert.AreEqual(connected / 1.1f, TradeSystem.Supply(world, target, focus), .0001f);
+            world.FindLocation(endpoint).infrastructureOutageUntilMonth = 0;
+            var link = world.FindTrade(source, target); link.volume = 10; link.tariff = 30;
+            float before = TradeSystem.Supply(world, target, focus);
+            float priced = DiplomaticLeverage.LinkGain(world, source, target, focus);
+            link.volume = DiplomaticLeverage.OfferVolume; link.tariff = DiplomaticLeverage.OfferTariff;
+            Assert.AreEqual(TradeSystem.Supply(world, target, focus) - before, priced, .0001f,
+                "Supply bargaining prices the same connection benefit that delivery actually grants.");
+        }
+
+        [Test]
+        public void MonthlyCollectionConsumesTheCableFactorAndRestoresItAfterOutage()
+        {
+            state.sanctions.Clear(); state.confrontations.Clear(); state.networks.Clear();
+            state.FindCountry("JPN").counterIntel.counterIntelligence = 0;
+            state.networks.Add(new IntelNetwork { ownerId = "USA", targetId = "JPN", penetration = 5, focus = IntelDomain.Military });
+            var control = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            StrategicConnections.Disrupt(control, control.FindLocation("JPN_PRT"));
+            IntelligenceSystem.MonthlyCollection(state); IntelligenceSystem.MonthlyCollection(control);
+            Assert.IsFalse(state.networks[0].compromised); Assert.IsFalse(control.networks[0].compromised);
+            Assert.AreEqual((control.networks[0].penetration - 5) * 1.1f,
+                state.networks[0].penetration - 5, .0001f);
+            for (int i = 0; i < 6; i++) control.date = control.date.NextMonth();
+            var recovered = SaveSystem.FromJson(SaveSystem.ToJson(control));
+            StrategicConnections.Disrupt(control, control.FindLocation("JPN_PRT"));
+            float start = control.networks[0].penetration;
+            IntelligenceSystem.MonthlyCollection(control); IntelligenceSystem.MonthlyCollection(recovered);
+            Assert.AreEqual((control.networks[0].penetration - start) * 1.1f,
+                recovered.networks[0].penetration - start, .0001f);
+        }
+
+        [Test]
+        public void AirCorridorRequiresBothAllocatedBasesAndAnOutageRemovesItsReach()
+        {
+            state.sanctions.Clear(); state.confrontations.Clear();
+            var germany = state.FindLocation("DEU_AIR"); var turkey = state.FindLocation("TUR_AIR");
+            germany.foreignOperatorId = "USA"; turkey.foreignOperatorId = "USA";
+            Assert.IsTrue(StrategicConnections.AirCorridorFor(state, "USA", turkey));
+            Assert.AreEqual(.5f, GeographySystem.EffectiveDistanceTo(state, "USA", "TUR"), .0001f);
+            germany.foreignOperatorId = "";
+            Assert.IsFalse(StrategicConnections.AirCorridorFor(state, "USA", turkey));
+            Assert.AreEqual(2f, GeographySystem.EffectiveDistanceTo(state, "USA", "TUR"), .0001f);
+            StrategicConnections.Disrupt(state, turkey);
+            Assert.Greater(GeographySystem.EffectiveDistanceTo(state, "USA", "TUR"), 2f);
+        }
+
+        [Test]
+        public void EndpointRepairIsHolderOnlyPaidLocalAndCannotRatchetBeyondClear()
+        {
+            var site = state.FindLocation("USA_PRT"); StrategicConnections.Disrupt(state, site);
+            var other = state.FindLocation("JPN_PRT"); StrategicConnections.Disrupt(state, other);
+            state.commandPoints.current = 10; state.PlayerCountry.resources.treasury = 500;
+            var turns = new TurnManager(state);
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(StrategicConnections.Repair(state, turns, other.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.IsTrue(StrategicConnections.Repair(state, turns, site.id));
+            Assert.AreEqual(3, StrategicConnections.OutageRemaining(state, site));
+            Assert.AreEqual(6, StrategicConnections.OutageRemaining(state, other));
+            Assert.AreEqual(440, state.PlayerCountry.resources.treasury); Assert.AreEqual(9, state.commandPoints.current);
+            Assert.IsTrue(StrategicConnections.Repair(state, turns, site.id));
+            before = SaveSystem.ToJson(state);
+            Assert.IsFalse(StrategicConnections.Repair(state, turns, site.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(OperationType.AirStrike)]
+        [TestCase(OperationType.CyberOperation)]
+        public void SuccessfulEndpointAttackActuallyWritesTheRecoverableOutage(OperationType operation)
+        {
+            var method = typeof(MilitarySystem).GetMethod("ApplyNonCapturingSuccess",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var target = state.FindLocation("JPN_PRT");
+            string receipt = (string)method.Invoke(null, new object[] { state, state.PlayerCountry,
+                state.FindCountry("JPN"), target, operation });
+            Assert.AreEqual(6, StrategicConnections.OutageRemaining(state, target));
+            StringAssert.Contains("6 months", receipt);
+            Assert.AreEqual(0, StrategicConnections.OutageRemaining(state, state.FindLocation("USA_PRT")));
+        }
 
         [Test]
         public void RecognizedTransfersChangeTitleNotPhysicalGround()
