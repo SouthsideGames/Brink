@@ -45,6 +45,11 @@ and not the place to start from cold.
   or verified filesystem protection for the real save path. TMPDIR alone is
   insufficient for Unity. A killed run may leave its unique test directory;
   never clean a broad temp or persistent-data root to remove it. Spec 10 §3.
+  Unity's resolved `com.unity.ext.nunit` 2.0.5 lacks NonParallelizableAttribute;
+  use `Parallelizable(ParallelScope.None)` and assert its stored scope. NuGet
+  NUnit compilation does not establish Unity test-assembly compatibility. A
+  long macOS TMPDIR can also break Bee's Unix socket before C# compilation;
+  distinguish that runner failure from actual `error CS` diagnostics.
 
 - **Front-bound operation validation.** Use the explicit-confrontation CanOrder
   overload for orders, planning and advice; the old no-front overload is only a

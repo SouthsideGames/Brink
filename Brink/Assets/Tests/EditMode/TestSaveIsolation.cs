@@ -7,7 +7,8 @@ using NUnit.Framework;
 // this assembly, including filtered runs and fixtures in future namespaces.
 // This is a lifecycle boundary, not a fixture to add to a partition filter.
 [SetUpFixture]
-[NonParallelizable]
+// Unity's custom NUnit 3.5 lacks NonParallelizableAttribute.
+[Parallelizable(ParallelScope.None)]
 public sealed class TestSaveIsolation
 {
     string previousDirectory;

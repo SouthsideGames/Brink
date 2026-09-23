@@ -113,7 +113,10 @@ namespace Brink.Tests
             var type = typeof(TestSaveIsolation);
             Assert.IsNull(type.Namespace, "A namespace-scoped boundary misses sibling namespaces.");
             Assert.IsTrue(System.Attribute.IsDefined(type, typeof(SetUpFixtureAttribute)));
-            Assert.IsTrue(System.Attribute.IsDefined(type, typeof(NonParallelizableAttribute)),
+            var scheduling = (ParallelizableAttribute)System.Attribute.GetCustomAttribute(
+                type, typeof(ParallelizableAttribute));
+            Assert.IsNotNull(scheduling);
+            Assert.AreEqual(ParallelScope.None, scheduling.Properties.Get("ParallelScope"),
                 "SaveDirectoryOverride is process-global, not thread-local.");
         }
 
