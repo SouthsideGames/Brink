@@ -211,6 +211,9 @@ namespace Brink.Data
         Public
     }
 
+    // Append only. None means an unclassified legacy entry, not an inferred act.
+    public enum HistoricalEvent { None, SanctionsImposed, TurningPoint }
+
     /// <summary>One archived historical event. Long saves become an alternate-history chronicle.</summary>
     [Serializable]
     public class ChronicleEntry
@@ -222,6 +225,8 @@ namespace Brink.Data
 
         /// <summary>Whether the world saw this happen. See <see cref="Publicity"/>.</summary>
         public Publicity publicity;
+        public HistoricalEvent historicalEvent;
+        public string counterpartyId;
     }
 
     /// <summary>

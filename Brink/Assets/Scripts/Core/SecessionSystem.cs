@@ -149,7 +149,8 @@ namespace Brink.Core
                 country.id, desk: ReportingDesk.Government);
 
             state.AddChronicle(ChronicleCategory.Political, country.id,
-                $"{successor.displayName} secedes from {country.displayName}.", Publicity.Public);
+                $"{successor.displayName} secedes from {country.displayName}.", Publicity.Public,
+                HistoricalEvent.TurningPoint, successor.id);
 
             return successor;
         }
@@ -395,7 +396,8 @@ namespace Brink.Core
                 "split them is over; the memory of it is not.",
                 parent.id, desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, parent.id,
-                $"{breakaway.displayName} rejoins {parent.displayName}.", Publicity.Public);
+                $"{breakaway.displayName} rejoins {parent.displayName}.", Publicity.Public,
+                HistoricalEvent.TurningPoint, breakaway.id);
             return true;
         }
 

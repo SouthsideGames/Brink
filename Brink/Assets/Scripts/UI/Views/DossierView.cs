@@ -72,6 +72,7 @@ namespace Brink.UI.Views
             BuildCondition(state, subject);
             BuildBetweenUs(state, player, subject);
             BuildRecord(state, subject);
+            AddText().text = HistoricalIdentitySystem.Render(state, subject.id);
         }
 
         void BuildSelector(GameState state)

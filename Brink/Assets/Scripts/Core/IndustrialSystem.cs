@@ -358,7 +358,8 @@ namespace Brink.Core
                     + $"Site contribution +{SiteEnergyPoints:0.##}; applied energy-ceiling change {applied:+0.##;-0.##;0} points. "
                     + "No instant energy refill or national sector bonus. Fighting suppresses output; ownership transfers the works.";
                 state.AddChronicle(ChronicleCategory.Economic, country.id, country.isPlayer ? receipt
-                    : $"PROJECT COMPLETE: {ProjectName(programme, state)}. Energy works completed.", Publicity.Public);
+                    : $"PROJECT COMPLETE: {ProjectName(programme, state)}. Energy works completed.", Publicity.Public,
+                    HistoricalEvent.TurningPoint);
                 if (country.isPlayer)
                 {
                     state.AddNotification(NotificationClass.Priority, "PROGRAMME COMPLETE", receipt,
@@ -412,7 +413,7 @@ namespace Brink.Core
             state.AddChronicle(ChronicleCategory.Economic, country.id,
                 country.isPlayer ? completed : $"PROJECT COMPLETE: {ProjectName(programme)}. "
                     + $"{country.displayName} completes its {Phrase.Of(programme.sector).ToLowerInvariant()} project.",
-                Publicity.Public);
+                Publicity.Public, HistoricalEvent.TurningPoint);
 
             if (country.isPlayer)
             {
