@@ -33,6 +33,123 @@ namespace Brink.Tests
         }
 
         [Test]
+        public void StaffCompetenceChangesJudgmentWithoutChangingItsKnownCost()
+        {
+            var official = state.PlayerCountry.FindOfficial(Pillar.Economy);
+            Assert.IsNotNull(official);
+            var proposed = new Sanction { targetId = "CHN", severity = SanctionSeverity.Pressure };
+            float cost = EconomySystem.SanctionBlowbackTerm(state, state.playerCountryId, proposed);
+            bool different = false;
+            for (int i = 0; i < 100 && !different; i++)
+            {
+                official.id = "forecast-fixture-" + i; official.competence = 100;
+                string competent = StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200);
+                official.competence = 0;
+                string before = SaveSystem.ToJson(state);
+                string poor = StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                Assert.AreEqual(cost, EconomySystem.SanctionBlowbackTerm(state, state.playerCountryId, proposed));
+                different = competent != poor;
+            }
+            Assert.IsTrue(different, "Staff bands must not ignore the official's competence.");
+        }
+
+        [Test]
+        public void SanctionsAssessmentDistinguishesExistingClosuresAndGeneralTrade()
+        {
+            var link = state.FindTrade(state.playerCountryId, "CHN");
+            Assert.IsNotNull(link); link.focus = TradeFocus.Energy; link.embargoed = false;
+            state.sanctions.Clear();
+            StringAssert.Contains("closes in both", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Routine, 200));
+            state.sanctions.Add(new Sanction { senderId = "CHN", targetId = state.playerCountryId });
+            StringAssert.Contains("already closed", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Routine, 200));
+            state.sanctions.Clear(); link.embargoed = true;
+            StringAssert.Contains("already closed", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Routine, 200));
+            link.focus = TradeFocus.General;
+            StringAssert.Contains("no commodity supply", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Routine, 200));
+            state.trade.Remove(link);
+            StringAssert.Contains("no bilateral link", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Routine, 200));
+        }
+
+        [Test]
+        public void AssessmentUsesDatedCollectedReportsAndKeepsRefusalsExplicit()
+        {
+            state.estimates.Clear();
+            var estimate = new IntelEstimate { observerId = state.playerCountryId, targetId = "CHN",
+                domain = IntelDomain.Military, reportedValue = 70, margin = 10,
+                confidence = ConfidenceGrade.High, asOf = state.date, everCollected = false };
+            state.estimates.Add(estimate);
+            StringAssert.Contains("no collected military", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200));
+            estimate.everCollected = true;
+            string text = StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200);
+            StringAssert.Contains(estimate.RangeText, text);
+            StringAssert.Contains(estimate.asOf.DisplayString, text);
+            StringAssert.Contains("not a probability", text);
+            state.FindRelationship(state.playerCountryId, "CHN").sanctionsTruceMonths = 12;
+            StringAssert.Contains("DÉTENTE", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200));
+            state.sanctions.Add(new Sanction { senderId = state.playerCountryId, targetId = "CHN" });
+            StringAssert.Contains("not replaced or stacked", StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Pressure, 200));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void EconomicDecisionPanelShowsSelectedAssessmentWithoutSaving(int columns)
+        {
+            TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+            try
+            {
+                var view = new EconomyView();
+                typeof(EconomyView).GetField("selectedTargetId", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, "CHN");
+                typeof(EconomyView).GetField("selectedSeverity", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, SanctionSeverity.Severe);
+                string before = SaveSystem.ToJson(state);
+                typeof(EconomyView).GetMethod("BuildEconomicWarfare", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(view, new object[] { state });
+                Label assessment = null;
+                view.Root.Query<Label>().ForEach(label => { if ((label.text ?? "").Contains("CABINET ASSESSMENT")) assessment = label; });
+                Assert.IsNotNull(assessment);
+                StringAssert.Contains("SEVERE", assessment.text);
+                foreach (var line in assessment.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { TerminalMetrics.Update(840f, 8f, 500f, Breakpoints.FromColumns(104)); }
+        }
+
+        [Test]
+        public void ForecastsDoNotCreateMissingPlansOrReadHiddenForeignCapacity()
+        {
+            state.mandate.strategy = null;
+            state.estimates.Clear();
+            string before = SaveSystem.ToJson(state);
+            StrategicForecastSystem.Render(state, StrategicDoctrine.Balanced, 12, 64);
+            string first = StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Severe, 64);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            StringAssert.Contains("NO ASSESSMENT", first);
+            var target = state.FindCountry("CHN");
+            target.pillars.economy = 1; target.pillars.military = 99;
+            target.resources.treasury = -10000;
+            Assert.AreEqual(first, StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Severe, 64));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void SanctionsAssessmentIsWrappedAndItsDomesticTermMatchesTheRealOrder(int width)
+        {
+            var proposed = new Sanction { senderId = state.playerCountryId, targetId = "CHN", severity = SanctionSeverity.Severe };
+            float priced = EconomySystem.SanctionBlowbackTerm(state, state.playerCountryId, proposed);
+            float beforeCost = EconomySystem.SanctionBlowbackFor(state, state.playerCountryId);
+            string before = SaveSystem.ToJson(state);
+            string text = StrategicForecastSystem.SanctionsAssessment(state, "CHN", proposed.severity, width);
+            foreach (string line in text.Split('\n')) Assert.LessOrEqual(line.Length, width);
+            Assert.AreEqual(text, StrategicForecastSystem.SanctionsAssessment(state, "CHN", proposed.severity, width));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, state.playerCountryId, "CHN", proposed.severity));
+            Assert.AreEqual(priced, EconomySystem.SanctionBlowbackFor(state, state.playerCountryId) - beforeCost, 0.0001f);
+        }
+
+        [Test]
         public void ProgrammeEditsPauseAndLiveTargetConflictsCannotSpend()
         {
             state.authorizedPillarMask = 31; state.commandPoints.current = 20;

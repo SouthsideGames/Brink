@@ -606,6 +606,7 @@ namespace Brink.UI.Views
             actionRow.AddToClassList("button-row");
             Root.Add(actionRow);
 
+            AddText("sig-advice").text = StrategicForecastSystem.SanctionsAssessment(state, selectedTargetId, selectedSeverity, W);
             var existing = state.FindSanction(state.playerCountryId, selectedTargetId);
             if (existing == null)
             {

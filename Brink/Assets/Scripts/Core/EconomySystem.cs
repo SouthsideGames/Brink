@@ -1173,6 +1173,14 @@ namespace Brink.Core
                 if (sanction.senderId == countryId)
                 {
                     if (operatorOrderedOnly && !IsOperatorOrdered(sanction)) continue;
+                    total += SanctionBlowbackTerm(state, countryId, sanction);
+                }
+            return total;
+        }
+
+        /// <summary>One regime's current domestic cost, shared by resolution and pre-order assessment.</summary>
+        public static float SanctionBlowbackTerm(GameState state, string countryId, Sanction sanction)
+        {
                     var link = state.FindTrade(countryId, sanction.targetId);
                     // Sanctioning a major trade partner hurts far more.
                     float exposure = link != null ? 0.5f + link.volume / 100f : 0.4f;
@@ -1193,9 +1201,7 @@ namespace Brink.Core
                     if (CouncilSystem.SanctionsMandated(state, sanction.targetId))
                         mitigation *= 0.55f;
 
-                    total += sanction.Blowback * exposure * mitigation;
-                }
-            return total;
+            return sanction.Blowback * exposure * mitigation;
         }
 
         /// <summary>Effective trade health for a country: volume net of tariffs and embargoes.</summary>

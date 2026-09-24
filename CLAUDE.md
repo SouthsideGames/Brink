@@ -1,5 +1,20 @@
 # Brink ("Unknown Game")
 
+## Remaining core — sanctions assessments (awaiting independent review)
+
+Spec29: selected sanctions now have a pre-order staff assessment, separating
+public pressure/shared own blowback from fallible bands and dated collected
+reports. No hidden foreign capacity/AI profile, no simulated reactions. General
+trade and already-closed commodity links must not promise another supply loss.
+Mandate is known support, not a forecast of allied participation. Own competence
+changes staff judgment only. Forecast rendering never creates a missing plan.
+No persistence or tuning change; author harness evidence is not native execution.
+
+Author .NET2288/2280/7/1 versus retained2276/2268/7/1: twelve additions,
+zero removals/shared outcome/failure-message changes. Focused114/114; five
+mutation kills1/1/1/1/1, restored95/95. Unity-reference compile only. Shared
+blowback extraction still needs native arithmetic verification; no balance claim.
+
 ## Remaining core — staged programmes (awaiting independent review)
 
 Spec30 describes OPERATOR's ordered cross-pillar programme: collection, assessment,

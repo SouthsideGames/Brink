@@ -91,5 +91,37 @@ Preview controls spend nothing and do not alter the adopted doctrine.
 - forecast text uses the real runtime doctrine mapping (`PREPARE FOR WAR` under Deterrence);
 - plan title/horizon survive mandate reissue.
 
-## Deferred
+## Action-specific sanctions assessment
+
+The ECONOMY sanctions selector now shows a read-only assessment of the selected
+target and severity before IMPOSE. It separates current-rule facts from staff
+judgment: initial pressure weight, the shared domestic blowback term (including
+own precision/financial capability and chamber mandate), existing commodity
+closure, public mandate and current confrontation exposure. These are not a GDP
+forecast or a treasury bill. General trade has no commodity supply to close;
+reciprocal sanctions or embargo mean no second closure. An existing own regime
+is explicitly not replaced/stacked. Détente is explicitly refused even though
+the existing UI availability predicate does not include it.
+
+Economic capacity and military reporting use only actually collected estimates,
+with their bands, confidence and dates. No hidden capacity, AI aggression or
+analyst correctness is read. LOW/MODERATE/HIGH labels are staff concern bands,
+not calibrated probabilities: stable official/target misreading decreases with
+the relevant own official's competence. Economic pressure and domestic concern
+use the Economy official; retaliation concern uses Intelligence and the dated
+military report plus public bilateral hostility. No military collection means
+retaliation is UNCERTAIN. Vacant desks give no invented judgment.
+
+Allied participation is not forecast from hidden willingness: a current chamber
+mandate is identified, otherwise support is explicitly uncertain. Alliances do
+not automatically join an imposed regime. A matching active confrontation gains
+pressure, but no next escalation level is promised; imposition does not itself
+create a front. No reaction is simulated and no new RNG, persistence or effect
+is introduced. This is the bounded sanctions decision surface, not a universal
+what-if simulator. Existing military and treaty outlooks remain separate.
+
+The older doctrine forecast no longer calls StrategySystem.Ensure while rendering;
+reading a missing strategy must not create one. Both forecast reads are pure.
+
+## Further simulation work
 This is deliberately not a Monte Carlo future simulator. A later feature may provide scenario seeds or deeper staff estimates, but it must not reveal foreign truth the player's government does not possess and must remain observational unless the player explicitly commits to an action.
