@@ -62,6 +62,7 @@ namespace Brink.Core
             turns.ResolveMonth += MandateSystem.MonthlyUpdate;
             turns.ResolveMonth += StandingDirectiveSystem.MonthlyUpdate;
             turns.ResolveMonth += StrategySystem.MonthlyUpdate;
+            turns.ResolveMonth += StagedProgrammeSystem.Observe;
             turns.ResolveMonth += Telemetry.RecordMonth;
 
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
@@ -72,6 +73,8 @@ namespace Brink.Core
             turns.MonthStarted += _ => OperationPlanningSystem.ExecuteStandingOrder(state, turns);
             // One paid foreign-policy action after campaign orders; both draw the same CP budget.
             turns.MonthStarted += _ => ForeignPolicySystem.Execute(state, turns);
+            // Last in the shared CP queue; no new command capacity or singleton state.
+            turns.MonthStarted += _ => StagedProgrammeSystem.Execute(state, turns);
         }
     }
 }

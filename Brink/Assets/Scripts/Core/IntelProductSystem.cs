@@ -42,6 +42,22 @@ namespace Brink.Core
 
         // ---------- commissioning ----------
 
+        /// <summary>The ordinary paid player path, shared by direct and delegated orders.</summary>
+        public static IntelProduct Commission(GameState state, TurnManager turns, string targetId, EstimateQuestion question)
+        {
+            if (state?.PlayerCountry == null || turns == null || !ReferenceEquals(turns.State, state)
+                || !CanCommission(state, state.playerCountryId, targetId, question, out _)
+                || !AuthoritySystem.EnsureAuthority(state, Pillar.Intelligence)) return null;
+            if (!turns.SpendCommandPoints(CommissionCost, $"Commission {question} assessment")) return null;
+            var product = CommissionBy(state, state.playerCountryId, targetId, question);
+            if (product != null)
+            {
+                ProgressionSystem.RecordInitiative(state);
+                ProgressionSystem.AwardXP(state, 10, "Assessment commissioned");
+            }
+            return product;
+        }
+
         /// <summary>
         /// Whether this service can be set this question, and why not. One gate,
         /// shared by the order screen and the verb (the `OperationCatalog.CanOrder`

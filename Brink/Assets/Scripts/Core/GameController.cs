@@ -282,6 +282,43 @@ namespace Brink.Core
 
         // ---------- intelligence commands ----------
 
+        public bool AddProgrammeStage(Data.ProgrammeAction action, string targetId, float threshold, int earliest, int deadline,
+            Data.ProgrammeCondition condition = Data.ProgrammeCondition.Always)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Add(State, action, targetId, threshold, earliest, deadline, condition)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool AuthorizeStagedProgramme(bool enabled, int totalBudget)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Authorize(State, enabled, totalBudget)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool RemoveProgrammeStage(int index)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Remove(State, index)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool MoveProgrammeStageEarlier(int index)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.MoveEarlier(State, index)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool AbandonStagedProgramme()
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Abandon(State)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool NewStagedProgramme()
+        {
+            if (!IsRunning || !StagedProgrammeSystem.StartNew(State)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
         public bool EstablishNetwork(string targetId, Data.IntelDomain focus)
         {
             if (!MayCommand(Data.Pillar.Intelligence)) return false;
@@ -612,16 +649,8 @@ namespace Brink.Core
                 GameLog.Warn("INTEL", reason);
                 return false;
             }
-            if (!Turns.SpendCommandPoints(IntelProductSystem.CommissionCost,
-                    $"Commission {question} assessment")) return false;
-
-            var product = IntelProductSystem.CommissionBy(
-                State, State.playerCountryId, targetId, question);
-            if (product != null)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Assessment commissioned");
-            }
+            var product = IntelProductSystem.Commission(State, Turns, targetId, question);
+            if (product == null) return false;
             SaveSystem.Save(State, AutosaveSlot);
             return product != null;
         }

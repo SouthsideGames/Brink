@@ -81,6 +81,12 @@ namespace Brink.Core
             if (state?.PlayerCountry == null) return entries;
 
             var player = state.PlayerCountry;
+            Add(Pillar.Government, "OPERATOR", "Plan and authorize a staged programme",
+                "Planning free; ordinary CP and treasury costs at execution",
+                "Up to six ordered collection, assessment, outreach, logistics and energy-work stages, with explicit spending conditions. Separate authorization, live authority and Autonomous desks required. A hard CP cap does not cap ongoing treasury costs. Pause or abandon freely.",
+                true, "", verbs: new[] { nameof(GameController.AddProgrammeStage), nameof(GameController.AuthorizeStagedProgramme),
+                    nameof(GameController.RemoveProgrammeStage), nameof(GameController.MoveProgrammeStageEarlier),
+                    nameof(GameController.AbandonStagedProgramme), nameof(GameController.NewStagedProgramme) });
             Add(Pillar.Diplomacy, "DIPLOMACY", "Set foreign-country intent and delegation",
                 "Free first intent; 1 INF revision; ordinary CP on execution",
                 "Separate policy for each foreign state. Explicit delegation allows one paid action per month across policies, after campaign orders. Autonomous desk and current authority required; cancel freely.",

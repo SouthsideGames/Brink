@@ -1,5 +1,23 @@
 # Brink ("Unknown Game")
 
+## Remaining core — staged programmes (awaiting independent review)
+
+Spec30 describes OPERATOR's ordered cross-pillar programme: collection, assessment,
+outreach, logistics and energy works, optional treasury/peace spending gates,
+explicit authorization, Autonomous desks and ordinary paid commands. One monthly
+attempt from shared CP after campaign/foreign orders; cumulative CP cap is not a
+treasury cap. Observe actual delivery/attainment, not an order or hidden accuracy.
+Deadlines are advisory; pause/abandon never refunds or cancels existing projects.
+Optional saved record/history, no old-save delegation, version7. No AI authoring
+or generic scripting. Author .NET evidence and Unity-reference compilation are
+not native execution or independent review. Preserve save isolation in all tests.
+
+Author .NET full2276/2268/7/1 against retained2259/2251/7/1:17 additions,
+zero removals/shared outcome/failure-message changes. Focused124/124, seven
+mutations killed1/1/1/1/1/1/2 and byte-restored. Initial authorization mutant
+survived until a paused-but-otherwise-ready case removed masking by other gates.
+Unity-reference compile passed; native execution remains outstanding.
+
 ## Remaining core — sponsorship findings (awaiting independent review)
 
 Spec03§10: dated evidence from actual sponsorship, forensic capability and an
