@@ -1,5 +1,16 @@
 # Brink ("Unknown Game")
 
+## Remaining core — material intelligence revisions (awaiting review)
+
+Collection now retains a Priority report and Secret Chronicle entry when two
+consecutive collected estimates move materially: both Moderate+, disjoint bands,
+at least10 points and30% midpoint movement. Both dated ranges remain visible.
+This is a change of belief, never proof of deception or a claim about true foreign
+state. Only our collection reports; no new RNG draw, reward or saved field.
+StrategicSurpriseSystem.RevisionText is pure; existing collection calls it once
+on replacement. Views do not generate events. Spec03 owns the reporting gates.
+This closes the estimate-revision event, not the wider secret-response lifecycle.
+
 ## Remaining core — foreign-target policies (implementation, awaiting review)
 
 The master #2 means policy **toward each foreign state**, not only our national

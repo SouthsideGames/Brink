@@ -82,6 +82,22 @@ margin     = noiseScale
 
 Margin never reaches zero: no estimate is ever certain.
 
+### Material revisions to the collected picture (remaining core #19)
+
+After a player's network produces a new estimate, a Priority Intelligence report
+and a Secret own-country Chronicle entry retain a material revision. Both the
+previous and current estimates must have been collected at Moderate or better
+in consecutive months. The midpoint must move at least ten points and 30% of
+its prior magnitude, and the old/new uncertainty bands must not overlap or touch.
+Reports show both dated bands and grades, not true foreign values, and explicitly
+do not identify a hidden cause. First collection, overhead-only reporting, stale
+gaps, foreign services and repeated collection in the same month produce no
+revision. Views remain read-only. No new RNG draw, reward, AI effect, saved field
+or pipeline hook is added; normal collection, deception and estimates are intact.
+This is a belief-change event, not proof of a secret or a replacement for a
+discoverable-finding response lifecycle. The numerical reporting threshold is
+an initial notification policy, not a balance certification.
+
 ### Roll-up — **depth is a footprint, not a shield**
 
 Each month, before collection, a network may be rolled up:

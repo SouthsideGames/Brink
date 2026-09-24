@@ -243,6 +243,18 @@ namespace Brink.Core
                 state.estimates.Add(estimate);
             }
 
+            // Keep only the previous reported picture, never its hidden cause.
+            // Re-reading a view cannot produce a revision; only collection can.
+            IntelEstimate previous = null;
+            if (network.ownerId == state.playerCountryId && estimate.everCollected)
+                previous = new IntelEstimate
+                {
+                    observerId = estimate.observerId, targetId = estimate.targetId,
+                    domain = estimate.domain, reportedValue = estimate.reportedValue,
+                    margin = estimate.margin, confidence = estimate.confidence,
+                    asOf = estimate.asOf, everCollected = true
+                };
+
             // Effective access: penetration net of counterintelligence, and of
             // whatever hardening the target has fielded (GDD §11).
             float hardening = 1f + TechnologySystem.Effectiveness(target, "CAP_SECCOMMS") * 0.5f;
@@ -287,6 +299,16 @@ namespace Brink.Core
             estimate.asOf = state.date;
             estimate.everCollected = true;
             estimate.deceived = deceived;
+
+            string revision = StrategicSurpriseSystem.RevisionText(previous, estimate);
+            if (revision.Length > 0)
+            {
+                string report = target.displayName + ": " + revision;
+                state.AddNotification(NotificationClass.Priority, "ASSESSMENT REVISED", report,
+                    target.id, desk: ReportingDesk.Intelligence);
+                state.AddChronicle(ChronicleCategory.Intelligence, network.ownerId,
+                    report, Publicity.Secret, counterpartyId: target.id);
+            }
         }
 
         /// <summary>Estimates age: confidence decays when collection stops.</summary>
