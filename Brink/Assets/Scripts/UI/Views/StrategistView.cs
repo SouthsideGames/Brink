@@ -60,7 +60,7 @@ namespace Brink.UI.Views
             var recovery = RecoveryHistorySystem.Read(state);
             if (recovery != null)
                 AddText(recovery.deterioratingRecentMetrics > recovery.improvingRecentMetrics ? "sig-hostile" : "terminal-text-dim").text =
-                    $" RECOVERY FILE — {recovery.status}\n  WARS WON/LOST {recovery.warsWon}/{recovery.warsLost}   ADMINISTRATIONS {recovery.administrationsServed}\n  RECENT IMPROVING/DETERIORATING {recovery.improvingRecentMetrics}/{recovery.deterioratingRecentMetrics} [12-MONTH CAUSAL WINDOW]";
+                    RecoveryHistorySystem.Render(state);
 
             var memories = CredibilityMemorySystem.Build(state);
             if (memories.Count > 0)
