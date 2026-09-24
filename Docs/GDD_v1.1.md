@@ -928,6 +928,16 @@ Audio responds to strategic context—peace, tension, crisis and war—and to im
 
 # 14. Persistence and History
 
+Roadmap #26 — Historical identity. A country's historical portrait distinguishes
+recorded conduct from inherited capacity and mere archive volume. Dated wars of
+pressure, agreements, economic projects and political ruptures remain readable
+after their immediate consequences end. Quiet decades may be described only as
+qualified absences in the saved record, not invented virtue. Public sanction acts
+inform AI coercion expectations for a finite ten-year window after lifting;
+the narrative archive persists longer. No permanent national class, invented
+historical title or hidden-statistic disclosure follows. Spec33 owns the evidence
+contract; procedural doctrine/era naming belongs to roadmap #27.
+
 `GameState` is the authoritative serialized world. The game autosaves after resolved months and important forced decisions so consequences stick.
 
 The Chronicle preserves world history independently from what the operator was successfully told at the time. Historical records therefore matter both as flavor and as a way to discover information a weak institution failed to surface when it happened.

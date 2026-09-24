@@ -18,6 +18,16 @@ and not the place to start from cold.
 
 ## Repository layout
 
+**Roadmap26 historical identity implementation.** Shared country portraits in
+STRATEGIST, CHRONICLE and DOSSIER separate concrete conduct from archive emphasis.
+Existing Chronicle entries gain optional typed history/counterpart metadata for
+sanctions and turning points; no duplicate event or grant. AI coercion reads
+distinct live-or-publicly-recorded targets within120 months, expires lifted acts
+at121, and saves a dated citation. This changes post-lifting behavior deliberately;
+not a presentation-only change. Readers are pure/fog-safe, missing legacy metadata
+is not invented, version7 remains. Specs33/06/10. #27 not begun. Author checks and
+independent native verification are separate; balance/device work stays deferred.
+
 **Roadmap 25 implementation complete (independent verification pending).** Freight
 detours are saved choices with a persistent three-volume cost, unavoidable ports,
 and no closure bypass. Diplomacy can commission the current holder's local mine

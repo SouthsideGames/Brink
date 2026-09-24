@@ -124,6 +124,8 @@ namespace Brink.Data
 
         /// <summary>Months of observation behind this model.</summary>
         public int observations;
+        /// <summary>Dated public evidence behind the coercion reading; empty on older saves.</summary>
+        public string coercionPrecedent;
     }
 
     /// <summary>

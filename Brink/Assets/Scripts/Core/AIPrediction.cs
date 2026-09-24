@@ -71,6 +71,7 @@ namespace Brink.Core
                     ObservedAggression(state, ai.countryId, other.id));
                 model.economicCoercion = Ease(model.economicCoercion,
                     ObservedCoercion(state, other.id));
+                model.coercionPrecedent = HistoricalIdentitySystem.CoercionPrecedent(state, other.id);
                 model.covertActivity = Ease(model.covertActivity,
                     ObservedSubversion(state, ai.countryId, other.id));
                 model.diplomaticActivity = Ease(model.diplomaticActivity,
@@ -210,9 +211,9 @@ namespace Brink.Core
         /// <summary>Sanctions are announced. Tariffs are published.</summary>
         static float ObservedCoercion(GameState state, string subjectId)
         {
-            int acts = 0;
-            foreach (var sanction in state.sanctions)
-                if (sanction.senderId == subjectId) acts++;
+            // Public dated acts survive the removal of the live regime. Each
+            // target counts once, including any regime still active, not twice.
+            int acts = HistoricalIdentitySystem.CoercionTargets(state, subjectId).Count;
             foreach (var link in state.trade)
                 if (link.Involves(subjectId) && (link.embargoed || link.tariff > 40f)) acts++;
             return Math.Min(100f, acts * 18f);

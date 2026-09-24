@@ -35,6 +35,7 @@ namespace Brink.UI.Views
 
             BuildHeader(state, entries.Count);
             BuildFilters(state);
+            AddText().text = HistoricalIdentitySystem.Render(state, countryFilter ?? state.playerCountryId);
             BuildEntries(state, entries);
             BuildPager(entries.Count);
         }

@@ -1003,7 +1003,8 @@ namespace Brink.Core
             ConfrontationSystem.AddPressure(state, senderId, targetId, 6f);
 
             state.AddChronicle(ChronicleCategory.Economic, senderId,
-                $"{Phrase.Of(severity)} sanctions imposed on {target.displayName}.", Publicity.Public);
+                $"{Phrase.Of(severity)} sanctions imposed on {target.displayName}.", Publicity.Public,
+                HistoricalEvent.SanctionsImposed, targetId);
             GameLog.Info("ECONOMY", $"{senderId}: {severity} sanctions imposed on {targetId}.");
             return true;
         }

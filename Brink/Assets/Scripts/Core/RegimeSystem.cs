@@ -369,7 +369,7 @@ namespace Brink.Core
 
             state.AddChronicle(ChronicleCategory.Political, country.id,
                 $"COUP: {gov.leader.name} seizes power. Constitutional order suspended.",
-                Publicity.Public);
+                Publicity.Public, HistoricalEvent.TurningPoint);
             GameLog.Warn("REGIME", $"Successful coup in {country.id}.");
         }
 
@@ -439,7 +439,7 @@ namespace Brink.Core
                 "The state is intact, and much poorer for it.", country.id,
                 desk: ReportingDesk.Government);
             state.AddChronicle(ChronicleCategory.Political, country.id,
-                "Civil conflict ends. State authority restored at heavy cost.", Publicity.Public);
+                "Civil conflict ends. State authority restored at heavy cost.", Publicity.Public, HistoricalEvent.TurningPoint);
         }
 
         // ---------- player action ----------

@@ -1497,7 +1497,8 @@ namespace Brink.Core
                 playerInvolved ? NotificationClass.Priority : NotificationClass.Wire,
                 objectiveAchieved ? "CONFRONTATION SETTLED" : "CONFRONTATION CONCEDED",
                 summary, proposerId, desk: ReportingDesk.Military);
-            state.AddChronicle(ChronicleCategory.Diplomatic, proposerId, summary, Publicity.Public);
+            state.AddChronicle(ChronicleCategory.Diplomatic, proposerId, summary, Publicity.Public,
+                HistoricalEvent.TurningPoint, confrontation.OpponentOf(proposerId));
             GameLog.Info("CONFRONT", summary);
         }
 

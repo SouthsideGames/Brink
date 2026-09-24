@@ -4,6 +4,14 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Roadmap #26 adds optional ChronicleEntry.historicalEvent (None=0,
+SanctionsImposed=1, TurningPoint=2), counterpartyId, and
+OpponentModel.coercionPrecedent. Missing values are untyped/no counterpart/no
+citation, never reconstructed by parsing legacy text. Existing chronology,
+treaties and confrontations remain the evidence ledger. Version remains7;
+no migration or new monthly pipeline stage. Dated sanctions enter the existing
+AI observation path; spec33 defines its finite120-month window.
+
 **One object is the save.** `GameState` is the complete, authoritative world
 state; everything the simulation needs to resume must live on it or be derivable
 from it. Systems are static and stateless — they take `GameState` and mutate it.

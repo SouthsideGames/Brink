@@ -580,7 +580,8 @@ namespace Brink.Data
         }
 
         public void AddChronicle(ChronicleCategory category, string countryId, string text,
-            Publicity publicity = Publicity.Secret)
+            Publicity publicity = Publicity.Secret, HistoricalEvent historicalEvent = HistoricalEvent.None,
+            string counterpartyId = null)
         {
             chronicle.Add(new ChronicleEntry
             {
@@ -588,7 +589,9 @@ namespace Brink.Data
                 category = category,
                 countryId = countryId ?? string.Empty,
                 text = text,
-                publicity = publicity
+                publicity = publicity,
+                historicalEvent = historicalEvent,
+                counterpartyId = counterpartyId
             });
         }
     }
