@@ -438,11 +438,29 @@ namespace Brink.Tests
             ExhaustEveryResponse(state, "IND", "RUS");
             var ai = Observer(state, "IND");
 
+            // The old zero-treasury fixture passed only because empty capability
+            // attempts counted as actions. Supply real rebuilding, not a deterrent.
+            var ind = state.FindCountry("IND");
+            ind.government.leader.priority = NationalPriority.Security;
+            ind.resources.treasury = MilitarySystem.LogisticsTreasuryCost;
+            ind.military.logistics = 20f;
+            ind.military.warFooting = true;
+            ind.military.programs.Clear();
+            foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+            {
+                ind.military.Get(branch).strength = 60f;
+                ind.military.Get(branch).replacementSuspended = false;
+            }
+            Assert.IsFalse(AISystem.PreemptionResponseRemains(state, ai, ind, "RUS"));
+
             AISystem.MonthlyThink(state);
 
             Assert.AreNotEqual(AIObjectiveType.PreemptProgramme, OnlyObjective(ai));
             Assert.GreaterOrEqual(ai.actionsThisMonth, 1,
                 "the freed slot produced no action at all, which is starvation by another name");
+            Assert.IsTrue(ind.military.logistics > 20f || ind.military.programs.Count > 0
+                || ind.resources.treasury < MilitarySystem.LogisticsTreasuryCost,
+                "the counted replacement must deliver rebuilding, not just increment activity");
         }
 
         [Test]
@@ -641,11 +659,174 @@ namespace Brink.Tests
         /// eligibility check exists for.
         /// </summary>
         static void Dispatch(GameState state, AIState ai, CountryState country, int seed)
+            => Dispatch(state, ai, country, new System.Random(seed));
+
+        static void Dispatch(GameState state, AIState ai, CountryState country, System.Random rng)
         {
             var method = typeof(AISystem).GetMethod("Act",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
             Assert.IsNotNull(method, "AISystem.Act was renamed without updating this guard");
-            method.Invoke(null, new object[] { state, ai, country, new System.Random(seed) });
+            method.Invoke(null, new object[] { state, ai, country, rng });
+        }
+
+        sealed class CapabilityRoll : System.Random
+        {
+            readonly double value;
+            public int draws;
+            public CapabilityRoll(double value) { this.value = value; }
+            public override double NextDouble() { draws++; return value; }
+        }
+
+        CountryState CapabilityPlan(out AIState ai)
+        {
+            var country = state.FindCountry("IND");
+            ai = Observer(state, "IND");
+            state.difficulty = Difficulty.Standard;
+            ai.objectives.Clear();
+            ai.objectives.Add(new AIObjective { type = AIObjectiveType.BuildCapability });
+            country.government.leader.priority = NationalPriority.Security;
+            country.military.warFooting = true; // isolate rebuilding from mobilization
+            country.military.logistics = 60f;
+            country.military.programs.Clear();
+            country.resources.treasury = 10000f;
+            return country;
+        }
+
+        [TestCase(NationalPriority.Prosperity)]
+        [TestCase(NationalPriority.Influence)]
+        [TestCase(NationalPriority.Cohesion)]
+        public void NonSecurityCapabilityDoesNotCountOrConsumeRandomness(NationalPriority priority)
+        {
+            var country = CapabilityPlan(out var ai);
+            country.government.leader.priority = priority;
+            var rng = new CapabilityRoll(0);
+            string before = UnityEngine.JsonUtility.ToJson(country);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(0, ai.actionsThisMonth);
+            Assert.AreEqual(0, rng.draws);
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(country));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void CapabilityLogisticsCountsOnlyWhenThePurchaseSucceeds(bool affordable)
+        {
+            var country = CapabilityPlan(out var ai);
+            country.military.logistics = 20f;
+            country.resources.treasury = affordable ? 10000f : 0f;
+            float treasury = country.resources.treasury;
+            var rng = new CapabilityRoll(0);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(affordable ? 1 : 0, ai.actionsThisMonth);
+            Assert.AreEqual(1, rng.draws, "a refused logistics attempt must not retry another branch");
+            Assert.AreEqual(treasury - (affordable ? MilitarySystem.LogisticsTreasuryCost : 0f), country.resources.treasury);
+            if (affordable) Assert.Greater(country.military.logistics, 20f);
+            else Assert.AreEqual(20f, country.military.logistics);
+            Assert.AreEqual(0, country.military.programs.Count);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void CapabilityProcurementCountsOnlyAnAuthorizedProgramme(bool affordable)
+        {
+            var country = CapabilityPlan(out var ai);
+            foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+            {
+                country.military.Get(branch).strength = 80f;
+                country.military.Get(branch).replacementSuspended = false;
+            }
+            country.military.ground.strength = 30f;
+            country.resources.treasury = affordable ? 10000f : 0f;
+            var rng = new CapabilityRoll(0.99); // preserve appetite: no direct asset order
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(affordable ? 1 : 0, ai.actionsThisMonth);
+            Assert.AreEqual(affordable ? 1 : 0, country.military.programs.Count);
+            Assert.AreEqual(1, rng.draws);
+            Assert.AreEqual(30f, country.military.ground.strength, "authorization is not instant equipment");
+        }
+
+        [TestCase("healthy")]
+        [TestCase("suspended")]
+        [TestCase("full")]
+        public void CapabilityWithNoRebuildingToAuthorizeDoesNotCount(string reason)
+        {
+            var country = CapabilityPlan(out var ai);
+            foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+            {
+                country.military.Get(branch).strength = reason == "healthy" ? 90f : 30f;
+                country.military.Get(branch).replacementSuspended = reason == "suspended";
+            }
+            if (reason == "full")
+                for (int i = 0; i < MilitarySystem.MaxPrograms; i++)
+                    country.military.programs.Add(new ProcurementProgram());
+            string before = UnityEngine.JsonUtility.ToJson(country);
+            var rng = new CapabilityRoll(0.99);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(0, ai.actionsThisMonth);
+            Assert.AreEqual(1, rng.draws);
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(country));
+        }
+
+        [Test]
+        public void CapabilityWarFootingCountsItsRealPoliticalPurchase()
+        {
+            var country = CapabilityPlan(out var ai);
+            country.military.warFooting = false;
+            country.government.legislativeSupport = country.government.eliteCohesion = 100f;
+            ai.politicalCapital = 20f;
+            ConfrontationSystem.BeginBy(state, country.id, "CHN",
+                ConfrontationObjective.Deterrence, null, PrimaryStrategy.Military);
+            ConfrontationSystem.SetEscalationBy(state, state.ActiveConfrontationFor(country.id),
+                EscalationState.LimitedConflict, country.id);
+            Assert.IsTrue(AcquisitionSystem.CanDeclareWarFooting(state, country.id, out _));
+            float pc = ai.politicalCapital;
+            var rng = new CapabilityRoll(0);
+            Dispatch(state, ai, country, rng);
+            Assert.IsTrue(country.military.warFooting);
+            Assert.AreEqual(pc - AcquisitionSystem.WarFootingCost, ai.politicalCapital);
+            Assert.AreEqual(1, ai.actionsThisMonth);
+            Assert.AreEqual(1, rng.draws);
+        }
+
+        [Test]
+        public void CapabilityAssetOrderCountsThePaidBacklogNotInstantStrength()
+        {
+            var country = CapabilityPlan(out var ai);
+            country.pillars.military = 80f;
+            foreach (var asset in AssetCatalog.All)
+            {
+                var stock = country.military.Get(asset.branch).inventory.Ensure(asset.kind);
+                stock.count = stock.onOrder = 0f;
+            }
+            var worst = AcquisitionSystem.WorstShortfall(country, out float ratio);
+            Assert.IsNotNull(worst); Assert.LessOrEqual(ratio, 0.82f);
+            float count = worst.orderIncrement * 2f;
+            float treasury = country.resources.treasury;
+            var rng = new CapabilityRoll(0);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(1, ai.actionsThisMonth);
+            Assert.AreEqual(2, rng.draws);
+            Assert.AreEqual(treasury - AssetCatalog.CostOf(worst.kind, count), country.resources.treasury);
+            Assert.AreEqual(count, country.military.Get(worst.branch).inventory.OnOrderOf(worst.kind));
+            Assert.AreEqual(0f, country.military.Get(worst.branch).inventory.CountOf(worst.kind));
+            Assert.AreEqual(0, country.military.programs.Count);
+        }
+
+        [Test]
+        public void EmptyCapabilityLeavesBudgetForTheNextExistingObjective()
+        {
+            var country = CapabilityPlan(out var ai);
+            country.government.leader.priority = NationalPriority.Prosperity;
+            country.counterIntel.counterIntelligence = 20f;
+            ai.politicalCapital = 10f;
+            ai.objectives.Add(new AIObjective { type = AIObjectiveType.HardenSecurity });
+            float treasury = country.resources.treasury;
+            Dispatch(state, ai, country, new CapabilityRoll(0));
+            Assert.AreEqual(1, ai.actionsThisMonth, "ordinary Standard budget, not an extra action");
+            Assert.AreEqual(23.5f, country.counterIntel.counterIntelligence);
+            Assert.AreEqual(treasury - 90f, country.resources.treasury);
+            Assert.AreEqual(9.2f, ai.politicalCapital, 0.0001f);
+            Assert.AreEqual(2, ai.objectives.Count, "dispatch does not replan or retarget");
         }
 
         /// <summary>
