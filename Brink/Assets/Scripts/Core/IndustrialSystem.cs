@@ -282,6 +282,28 @@ namespace Brink.Core
 
         // ---------- the monthly tick ----------
 
+        /// <summary>Lose at most two completed work-months; replacement work uses normal funding.</summary>
+        public static int DamageWork(GameState state, string ownerId, EconomicSector sector, string locationId = null)
+        {
+            var owner = state.FindCountry(ownerId);
+            if (owner == null) return 0;
+            foreach (var work in owner.economy.programmes)
+            {
+                if (work.sector != sector || (work.locationId ?? "") != (locationId ?? "") || work.monthsRemaining <= 0) continue;
+                int lost = Math.Min(2, Math.Max(0, MonthsFor(work.scale) - work.monthsRemaining));
+                if (lost == 0) return 0;
+                work.monthsRemaining += lost;
+                string report = $"PROJECT SET BACK: {ProjectName(work, state)}. {lost} work-month(s) lost. "
+                    + "Replacement work requires ordinary monthly funding; prior spending is not refunded.";
+                // The attacker does not learn the private queue or its exact progress.
+                state.AddChronicle(ChronicleCategory.Economic, ownerId, report, Publicity.Secret);
+                if (owner.isPlayer) state.AddNotification(NotificationClass.Priority, "PROJECT SET BACK", report,
+                    ownerId, desk: ReportingDesk.Economy);
+                return lost;
+            }
+            return 0;
+        }
+
         public static void MonthlyUpdate(GameState state)
         {
             foreach (var country in state.countries)

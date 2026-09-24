@@ -1,5 +1,15 @@
 # Brink ("Unknown Game")
 
+## Remaining core — construction setbacks (awaiting review)
+
+Spec02: successful Sabotage affects national Industry work; AirStrike affects
+Energy work at its exact target site. At most two completed work-months are lost,
+never beyond original duration; ordinary payment/lapse/pause/completion follows.
+Private owner-only receipt, no attacker queue leak, refund, new fields or RNG.
+This changes simulation outcomes and is not trajectory/balance certified. Foreign
+funding/trade acceleration remain separate work. Author harness/reference compile
+is not native execution or independent review.
+
 ## Remaining core — opt-in crisis animation (awaiting review)
 
 Spec28: PLAY ART / PAUSE ART defaults off on each Show. Thirteen bounded frames

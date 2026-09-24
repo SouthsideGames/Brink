@@ -5,6 +5,25 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+### Construction setbacks
+
+Successful covert Sabotage now sets back the target's national Industry project;
+a successful AirStrike sets back Energy construction at that exact held site.
+These reuse the existing success paths and their costs, not a free damage verb or
+an extra random roll. They undo at most two completed work-months, never taking
+remaining work above its original duration or resurrecting a completed queue.
+An untouched project loses nothing. Other sectors/sites are unaffected.
+
+Replacement work uses ordinary monthly payment and completion, including funding
+lapse and contested-site pause. No refund, instant charge or extra completion
+reward is created. The owner's secret Chronicle/notice identifies the project
+and work lost; the attacker gets no private queue/progress information. Existing
+sector/garrison/infrastructure effects still apply to their distinct quantities.
+Completed energy works are not destroyed by this construction rule. No new save
+fields; existing monthsRemaining persists the setback. This is bounded targeting
+through existing sabotage/strike commands, not a new project browser. Foreign
+funding and trade acceleration are separate remaining interactions.
+
 ### Roadmap 25 completion batch — routing and infrastructure
 
 This section supersedes the earlier slice's statements that there is no route

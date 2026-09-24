@@ -598,6 +598,7 @@ namespace Brink.Core
                         if (industry != null) industry.health = Clamp(industry.health - 14f);
                         target.resources.industrialCapacity = Clamp(target.resources.industrialCapacity - 7f);
                         target.economy.confidence = Clamp(target.economy.confidence - 5f);
+                        IndustrialSystem.DamageWork(state, targetId, EconomicSector.Industry);
                         break;
                     }
                     case CovertOperation.PoliticalInfluence:

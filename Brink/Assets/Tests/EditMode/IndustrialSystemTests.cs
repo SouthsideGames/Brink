@@ -46,6 +46,68 @@ namespace Brink.Tests
 
         // ---------- it is a real sink ----------
 
+        [TestCase(12, 0)] [TestCase(11, 1)] [TestCase(5, 2)] [TestCase(0, 0)]
+        public void DamageLosesOnlyCompletedWorkAndReplacementIsStillPaid(int remaining, int lost)
+        {
+            var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear();
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            var work = owner.economy.programmes.Single(); work.monthsRemaining = remaining;
+            work.locationId = ""; // old serializers may normalize a missing national location
+            float cash = owner.resources.treasury;
+            Assert.AreEqual(lost, IndustrialSystem.DamageWork(state, owner.id, EconomicSector.Industry));
+            Assert.AreEqual(remaining + lost, work.monthsRemaining);
+            Assert.AreEqual(cash, owner.resources.treasury, "No instant refund or charge.");
+            if (lost > 0)
+            {
+                Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+                StringAssert.Contains("Replacement work", state.chronicle.Last().text);
+                IndustrialSystem.MonthlyUpdate(state);
+                Assert.AreEqual(cash - 95f, owner.resources.treasury);
+                Assert.AreEqual(remaining + lost - 1, work.monthsRemaining);
+            }
+        }
+
+        [Test]
+        public void SuccessfulSabotageSetsBackIndustryWorkWithoutRevealingTheForeignQueue()
+        {
+            var target = state.FindCountry("CHN"); target.economy.programmes.Clear();
+            IndustrialSystem.BeginBy(state, target.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            IndustrialSystem.BeginBy(state, target.id, EconomicSector.Energy, IndustrialScale.Maintenance);
+            var industry = target.economy.programmes.Single(p => p.sector == EconomicSector.Industry);
+            var energy = target.economy.programmes.Single(p => p.sector == EconomicSector.Energy);
+            industry.monthsRemaining = energy.monthsRemaining = 5;
+            IntelligenceSystem.EstablishNetwork(state, turns, target.id, IntelDomain.Military);
+            state.FindNetwork(state.playerCountryId, target.id).penetration = 100f;
+            target.counterIntel.counterIntelligence = 0f;
+            Assert.IsTrue(IntelligenceSystem.RunCovertOperation(state, turns, target.id, CovertOperation.Sabotage));
+            Assert.AreEqual(7, industry.monthsRemaining); Assert.AreEqual(5, energy.monthsRemaining);
+            var record = state.chronicle.Single(e => e.text.StartsWith("PROJECT SET BACK:"));
+            Assert.AreEqual(target.id, record.countryId); Assert.AreEqual(Publicity.Secret, record.publicity);
+            Assert.IsFalse(WorldWire.CanShow(state, record));
+        }
+
+        [Test]
+        public void SiteStrikeDamagesOnlyWorkAtItsTargetAndCannotCreateOrCompleteAProject()
+        {
+            var site = EnergySite(); var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear();
+            IndustrialSystem.BeginSiteBy(state, owner.id, site.id);
+            var work = owner.economy.programmes.Single(); work.monthsRemaining = 5;
+            var other = EnergySite("OTHER");
+            var apply = typeof(MilitarySystem).GetMethod("ApplyNonCapturingSuccess", BindingFlags.Static | BindingFlags.NonPublic);
+            apply.Invoke(null, new object[] { state, state.FindCountry("CHN"), owner, other, OperationType.AirStrike });
+            Assert.AreEqual(5, work.monthsRemaining);
+            apply.Invoke(null, new object[] { state, state.FindCountry("CHN"), owner, site, OperationType.AirStrike });
+            Assert.AreEqual(7, work.monthsRemaining);
+            for (int i = 0; i < 20; i++) IndustrialSystem.DamageWork(state, owner.id, EconomicSector.Energy, site.id);
+            Assert.AreEqual(12, work.monthsRemaining);
+            Assert.IsFalse(site.energyWorks); Assert.AreEqual(1, owner.economy.programmes.Count);
+            owner.resources.treasury = 0;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(0, owner.economy.programmes.Count); Assert.IsFalse(site.energyWorks);
+        }
+
         StrategicLocation EnergySite(string id = "TEST_ENERGY")
         {
             var site = new StrategicLocation { id = id, displayName = "Test Energy Region " + id,
