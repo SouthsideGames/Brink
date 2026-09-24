@@ -122,7 +122,10 @@ namespace Brink.Tests
             state.estimates.Clear();
             string before = SaveSystem.ToJson(state);
             StrategicForecastSystem.Render(state, StrategicDoctrine.Balanced, 12, 64);
+            // Unity JSON can serialize null records as default objects; also check live state.
+            Assert.IsNull(state.mandate.strategy, "Rendering a forecast must not create a plan.");
             string first = StrategicForecastSystem.SanctionsAssessment(state, "CHN", SanctionSeverity.Severe, 64);
+            Assert.IsNull(state.mandate.strategy, "Assessing sanctions must not create a plan.");
             Assert.AreEqual(before, SaveSystem.ToJson(state));
             StringAssert.Contains("NO ASSESSMENT", first);
             var target = state.FindCountry("CHN");
