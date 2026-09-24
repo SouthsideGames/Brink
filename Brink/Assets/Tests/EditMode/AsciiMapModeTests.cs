@@ -1,8 +1,14 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Reflection;
+using Brink.Core;
+using Brink.UI.Views;
 using Brink.Data;
 using Brink.UI;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -14,6 +20,189 @@ namespace Brink.Tests
         public void SetUp()
         {
             state = WorldFactory.CreateDebugWorld(seed: 6120);
+        }
+
+        string PrepareDisplacement()
+        {
+            foreach (var country in state.countries)
+            {
+                country.displacement.displaced = country.displacement.hosted = 0f;
+                country.displacement.bordersClosed = true;
+            }
+            var nearby = state.countries.Find(c => c.id != state.playerCountryId
+                && GeographySystem.DistanceBetween(state, c.id, state.playerCountryId) <= DisplacementSystem.ReachableDistance);
+            Assert.NotNull(nearby, "This fixture requires a real reachable host.");
+            nearby.displacement.bordersClosed = false;
+            state.PlayerCountry.displacement.displaced = 20f;
+            return nearby.id;
+        }
+
+        [Test]
+        public void DisplacementLinksFollowDirectionAndBorderPolicyWithoutErasingHostedPeople()
+        {
+            string host = PrepareDisplacement();
+            var links = AsciiMapModes.DisplacementLinks(state);
+            Assert.AreEqual(1, links.Count);
+            Assert.AreEqual((state.playerCountryId, host), links[0]);
+            string open = AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23);
+            state.FindCountry(host).displacement.bordersClosed = true;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            Assert.AreNotEqual(open, AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23));
+            state.PlayerCountry.displacement.displaced = 0f;
+            state.PlayerCountry.displacement.bordersClosed = false;
+            state.FindCountry(host).displacement.displaced = 20f;
+            Assert.AreEqual((host, state.playerCountryId), AsciiMapModes.DisplacementLinks(state)[0]);
+            state.PlayerCountry.displacement.hosted = 9f;
+            state.PlayerCountry.displacement.bordersClosed = true;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            StringAssert.Contains("HOSTED 9.0", AsciiMapModes.Summary(state, WorldMapMode.Displacement));
+            StringAssert.Contains("not people already hosted", AsciiMapModes.DisplacementReadout(state));
+        }
+
+        [Test]
+        public void DisplacementDoesNotRevealThirdPartyConnectionsOrForeignAmounts()
+        {
+            string host = PrepareDisplacement();
+            string before = AsciiMapModes.DisplacementReadout(state);
+            string map = AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23);
+            foreach (var country in state.countries)
+                if (country.id != state.playerCountryId)
+                {
+                    country.displacement.displaced = 87f;
+                    country.displacement.hosted = 93f;
+                }
+            Assert.AreEqual(before, AsciiMapModes.DisplacementReadout(state));
+            Assert.AreEqual(map, AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23));
+            Assert.AreEqual(1, AsciiMapModes.DisplacementLinks(state).Count);
+        }
+
+        [Test]
+        public void DisplacementZeroAndUnknownPositionsDoNotInventConnections()
+        {
+            PrepareDisplacement();
+            state.PlayerCountry.displacement.displaced = 0.99f;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            var unknown = new CountryState { id = "UNMAPPED", displayName = "Unmapped state" };
+            state.countries.Add(unknown);
+            unknown.displacement.displaced = 40f;
+            state.PlayerCountry.displacement.bordersClosed = false;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            Assert.IsEmpty(DisplacementSystem.ReceivingWeights(state, unknown, out float total));
+            Assert.AreEqual(0f, total);
+        }
+
+        [Test]
+        public void TitledSuccessorRemainsListedWithoutInventingAMapCoordinate()
+        {
+            string host = PrepareDisplacement();
+            state.FindCountry(host).displacement.bordersClosed = true;
+            var successor = new CountryState { id = "NEW_HOST", displayName = "New receiving government" };
+            state.countries.Add(successor);
+            var ground = state.locations.Find(l => l.originalOwnerId == host);
+            Assert.NotNull(ground);
+            ground.originalOwnerId = successor.id;
+            ground.ownerId = successor.id;
+            Assert.IsNull(WorldFactory.FindProfile(successor.id));
+            Assert.NotNull(GeographySystem.PositionFor(state, successor.id));
+            var links = AsciiMapModes.DisplacementLinks(state);
+            Assert.AreEqual(1, links.Count);
+            Assert.AreEqual((state.playerCountryId, successor.id), links[0]);
+            StringAssert.Contains(successor.displayName, AsciiMapModes.DisplacementReadout(state));
+            StringAssert.Contains("Unmapped endpoints remain listed", AsciiMapModes.DisplacementReadout(state));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void DisplacementOverlayIsLiveBoundedPureAndPreservesCountryLabels(int columns)
+        {
+            PrepareDisplacement();
+            string before = JsonUtility.ToJson(state);
+            foreach (int rows in RealMapHeights)
+            {
+                var baseRows = AsciiWorldMap.Render(state, state.playerCountryId, columns, rows).Split('\n');
+                string map = AsciiMapModes.Render(state, state.playerCountryId, WorldMapMode.Displacement, columns, rows);
+                var lines = map.Split('\n');
+                Assert.AreEqual(rows, lines.Length);
+                Assert.AreNotEqual(string.Join("\n", baseRows), map, "The displacement overlay drew nothing.");
+                for (int y = 0; y < rows; y++)
+                {
+                    Assert.AreEqual(columns, lines[y].Length);
+                    for (int x = 0; x < columns; x++)
+                        if (IsCountryLabel(baseRows[y][x])) Assert.AreEqual(baseRows[y][x], lines[y][x]);
+                }
+            }
+            foreach (string text in new[] { AsciiMapModes.DisplacementReadout(state),
+                AsciiMapModes.Legend(WorldMapMode.Displacement), AsciiMapModes.Summary(state, WorldMapMode.Displacement) })
+                foreach (string line in AsciiChart.WrapBlock(text, columns).Split('\n'))
+                    Assert.LessOrEqual(line.Length, columns);
+            Assert.AreEqual(before, JsonUtility.ToJson(state));
+        }
+
+        [Test]
+        public void SharedDisplacementWeightsMatchTheOriginalAllocationInOrder()
+        {
+            foreach (int seed in new[] { 4747, 6120, 982 })
+            {
+                var world = WorldFactory.CreateDebugWorld(seed);
+                for (int closed = 0; closed < world.countries.Count; closed++)
+                {
+                    world.countries[closed].displacement.bordersClosed = true;
+                    foreach (var source in world.countries)
+                    {
+                        source.displacement.displaced = 20f;
+                        var expected = new Dictionary<string, float>();
+                        float expectedTotal = 0f;
+                        foreach (var host in world.countries)
+                        {
+                            if (host.id == source.id || host.displacement.bordersClosed) continue;
+                            float distance = GeographySystem.DistanceBetween(world, source.id, host.id);
+                            if (distance > DisplacementSystem.ReachableDistance) continue;
+                            float weight = 1f / Math.Max(4f, distance);
+                            expected[host.id] = weight;
+                            expectedTotal += weight;
+                        }
+                        var actual = DisplacementSystem.ReceivingWeights(world, source, out float total);
+                        CollectionAssert.AreEqual(expected, actual);
+                        Assert.AreEqual(expectedTotal, total);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void MapOffersDisplacementModeAndTheActualButtonDisplaysItsReadout()
+        {
+            PrepareDisplacement();
+            var gc = GameController.Instance;
+            var previous = gc.State;
+            string oldSave = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-displacement-map-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                var view = new WorldMapView();
+                typeof(WorldMapView).GetMethod("Build", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(view, null);
+                Button button = null;
+                view.Root.Query<Button>().ForEach(b => { if (b.text == "DISPLACEMENT") button = b; });
+                Assert.NotNull(button);
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                bool found = false;
+                view.Root.Query<Label>().ForEach(l => { if ((l.text ?? "").Contains("CURRENT HOSTING CONNECTIONS")) found = true; });
+                Assert.IsTrue(found, "Selecting the mode must show its real readout, not only change a label.");
+                Assert.IsEmpty(Directory.GetFiles(directory), "A map interaction must not save.");
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                SaveSystem.SaveDirectoryOverride = oldSave;
+                Directory.Delete(directory, true);
+            }
         }
 
         [Test]

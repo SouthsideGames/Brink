@@ -19,7 +19,7 @@ ASCII is Brink's visual medium, not decoration around a text interface. Presenta
 It owns clipping and layering rules so maps, scenes and future pillar art do not each reimplement them.
 
 ## World map modes
-The MAP world layer now exposes six modes:
+The MAP world layer now exposes seven modes:
 
 1. **Political** — the existing public standing map.
 2. **Military** — live confrontation routes, Total War emphasis and occupied-ground signals.
@@ -29,6 +29,16 @@ The MAP world layer now exposes six modes:
 6. **Activity** — countries with one or multiple public events on last month's
    World Wire, so the map shows where the simulation just moved rather than only
    standing structures.
+7. **Displacement** — current hosting connections involving our country, with
+   source/host markers and a directional text list. The shared displacement
+   allocator supplies the connections. These are contributions to hosting
+   targets, not tracked journeys, exact headcounts or travel corridors. Borders
+   and geographic reach apply live; closed borders do not erase people hosted.
+   Only our aggregate displaced/hosted indices are printed. Foreign-to-foreign
+   connections and foreign quantities are not revealed. Successors without
+   authored map labels remain in the list when their titled ground gives them
+   a reachable position; unknown geography grants no connection. Lines are
+   schematic. The ordinary mode button reaches the overlay and list.
 
 Modes are views over the authoritative save. They add no persistent state and do not alter simulation resolution.
 
@@ -42,6 +52,9 @@ Map modes follow the same information contract as the rest of Brink:
 - Bloc membership is treated as public diplomatic structure.
 - Activity delegates visibility to `WorldWire` and never reads secret or
   Intelligence-category chronicle entries directly.
+- Displacement describes our incoming/outgoing hosting connections, not a global
+  population census. Its pure reader shares the real allocation eligibility;
+  it creates no route state or new simulation effect.
 
 A presentation layer must never become a shortcut around `IntelligenceSystem`.
 

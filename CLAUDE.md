@@ -1,5 +1,15 @@
 # Brink ("Unknown Game")
 
+## Remaining core — displacement map (awaiting review)
+
+MAP adds a seventh mode for current hosting connections involving our country.
+It shares DisplacementSystem.ReceivingWeights with monthly allocation, retaining
+the original accumulation expression rather than adding a rounded intermediate.
+Only own aggregate indices and connection direction are shown; foreign-to-foreign
+connections and foreign quantities stay hidden. Schematic lines are not tracked
+journeys. Borders change target allocation, not the existing hosted population.
+No saved state, new tick or changed thresholds. Specs19/28 own the contract.
+
 ## Remaining core — material intelligence revisions (awaiting review)
 
 Collection now retains a Priority report and Secret Chronicle entry when two

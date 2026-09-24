@@ -12,7 +12,8 @@ namespace Brink.UI
         Trade,
         Intelligence,
         Blocs,
-        Activity
+        Activity,
+        Displacement
     }
 
     /// <summary>
@@ -36,6 +37,7 @@ namespace Brink.UI
                 case WorldMapMode.Intelligence: DrawIntelligence(state, canvas); break;
                 case WorldMapMode.Blocs: DrawBlocs(state, canvas); break;
                 case WorldMapMode.Activity: DrawActivity(state, canvas); break;
+                case WorldMapMode.Displacement: DrawDisplacement(state, canvas); break;
             }
             return canvas.ToString();
         }
@@ -68,6 +70,8 @@ namespace Brink.UI
                     return "  = standing bloc connection   uppercase code = state";
                 case WorldMapMode.Activity:
                     return "  • one public event last month   * multiple public events";
+                case WorldMapMode.Displacement:
+                    return "  : hosting connection involving us; } source, { host. Current model, not tracked journeys.";
                 default:
                     return AsciiWorldMap.Legend;
             }
@@ -77,6 +81,10 @@ namespace Brink.UI
         {
             switch (mode)
             {
+                case WorldMapMode.Displacement:
+                    var own = state.PlayerCountry.displacement;
+                    return $"OUR DISPLACED {own.displaced:F1}   HOSTED {own.hosted:F1} (share indices, not headcounts)   "
+                        + (own.bordersClosed ? "BORDERS CLOSED" : "BORDERS OPEN");
                 case WorldMapMode.Military:
                 {
                     int fronts = 0, total = 0;
@@ -139,6 +147,45 @@ namespace Brink.UI
                 if (!location.IsOccupied) continue;
                 if (!Point(GeographySystem.HostOf(location), canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, +1, 'O');
+            }
+        }
+
+        // Only connections involving our country: no third-party flow census
+        // and no foreign population quantities disguised as map information.
+        public static List<(string source, string host)> DisplacementLinks(GameState state)
+        {
+            var links = new List<(string source, string host)>();
+            foreach (var source in state.countries)
+                foreach (var host in DisplacementSystem.ReceivingWeights(state, source, out _))
+                    if (host.Value > 0f && (source.id == state.playerCountryId || host.Key == state.playerCountryId))
+                        links.Add((source.id, host.Key));
+            return links;
+        }
+
+        public static string DisplacementReadout(GameState state)
+        {
+            var text = new System.Text.StringBuilder("CURRENT HOSTING CONNECTIONS — OUR COUNTRY ONLY\n");
+            var links = DisplacementLinks(state);
+            if (links.Count == 0) text.AppendLine("No current connections involving us.");
+            foreach (var link in links)
+                text.AppendLine($"{state.FindCountry(link.source)?.displayName} -> {state.FindCountry(link.host)?.displayName}");
+            text.Append("Connections contribute to hosting targets, not a count of trips this month. "
+                + "Closing a border stops new hosting pressure, not people already hosted. "
+                + "Unmapped endpoints remain listed; lines are schematic, not travel routes.");
+            return text.ToString();
+        }
+
+        static void DrawDisplacement(GameState state, AsciiCanvas canvas)
+        {
+            var claimed = new HashSet<int>();
+            var marked = new HashSet<string>();
+            foreach (var link in DisplacementLinks(state))
+            {
+                if (!Point(link.source, canvas, out int ax, out int ay)
+                    || !Point(link.host, canvas, out int bx, out int by)) continue;
+                canvas.Line(ax, ay, bx, by, ':', overwrite: false);
+                if (marked.Add("s:" + link.source)) PlotSignal(canvas, claimed, ax, ay, -1, '}');
+                if (marked.Add("h:" + link.host)) PlotSignal(canvas, claimed, bx, by, +1, '{');
             }
         }
 
