@@ -1,5 +1,27 @@
 # Brink ("Unknown Game")
 
+## Roadmap #27 — earned doctrines and eras
+
+StrategicEraSystem now separates selected/declared course from a durable own-office
+conduct reading. MonthResolved records five held-policy booleans once per month;
+each60-month window names up to two patterns held for36 months or more, archives
+the counts and dates, and cites earlier earned names after continuity or reversal.
+No invented past on old saves, no foreign secret disclosure, no resource/AI/score
+effects. Optional CountryState.strategicConduct; appended ConductReview event;
+version7. Actual production hook lives in SimulationPipeline. See spec33 and
+StrategicEraTests. Author checks are not native independent certification;
+balance and hardware validation remain separate deferred work.
+
+Native review of #27 found two test-layer issues, not production defects.
+JsonUtility writes null serializable conduct records as default objects: the
+legacy fixture now renames the JSON key to an unknown key to exercise missing
+known-field loading, and separately round-trips an explicit default record.
+Both must begin at the first observed month with no invented history. The two
+240-month paired-world cases retain their assertions with Timeout(900000),
+matching existing long-run tests; the reviewer measured about 12–15 seconds
+isolated but one exceeded the native partition's default 180 seconds. The
+original native suite was 2123/2120/2/1; a corrected native run is still needed.
+
 Persistent geopolitical strategy simulation presented as a retro classified
 government command terminal. Landscape mobile (iOS/Android), Unity 6
 (6000.3.9f1), UI Toolkit / UI Builder. Single-player, offline-first.

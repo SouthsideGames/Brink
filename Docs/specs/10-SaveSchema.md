@@ -4,6 +4,14 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Roadmap #27 adds optional CountryState.strategicConduct: a bounded own-posting
+monthly accumulator (since, lastObserved, months, heldMonths[5], lastEarnedName,
+lastEarnedDate). Missing records start on first observation, not from invented
+legacy history. Completed reviews live in the existing Chronicle, tagged with
+the appended HistoricalEvent.ConductReview=3. Secret own-office visibility;
+no foreign-model backfill. Version7 remains correct for these additive fields.
+Spec33 defines duplicate-date, gap and five-year-window semantics.
+
 Roadmap #26 adds optional ChronicleEntry.historicalEvent (None=0,
 SanctionsImposed=1, TurningPoint=2), counterpartyId, and
 OpponentModel.coercionPrecedent. Missing values are untyped/no counterpart/no

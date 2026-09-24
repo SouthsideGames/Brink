@@ -77,6 +77,7 @@ namespace Brink.Core
             foreach (var point in points) sb.Append("  ").Append(point.date.DisplayString).Append(" — ").AppendLine(point.text);
             sb.AppendLine("PUBLIC MEMORY — WHAT OTHER GOVERNMENTS CAN CITE");
             sb.AppendLine(CoercionPrecedent(state, countryId));
+            if (countryId == state.playerCountryId) sb.AppendLine(StrategicEraSystem.RenderEarned(state, countryId));
             sb.Append("Labels grant no power. AI coercion assessment remembers distinct sanctioned partners for 120 months; the archive lasts. Missing old-save evidence is not reconstructed.");
             return sb.ToString();
         }
