@@ -59,6 +59,26 @@ namespace Brink.UI.Views
             BuildBlocControls(state);
             BuildCouncilControls(state);
             BuildClearanceControls(state);
+            BuildProjectFunding(state);
+        }
+
+        void BuildProjectFunding(GameState state)
+        {
+            if (state.PlayerCountry.economy.programmes.Count == 0 || state.FindCountry(selectedTargetId) == null) return;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("PROJECT SUPPORT", W);
+            AddText().text = "Ask the selected trade-preference partner for one instalment [2 CP]. "
+                + "Relations of at least 60 and trust of at least 50 are needed; the partner may still decline. "
+                + "Funding is ring-fenced, not treasury or instant progress. Unused grants are forfeited on cancellation or abandonment.";
+            foreach (var work in state.PlayerCountry.economy.programmes)
+            {
+                var sector = work.sector;
+                AddText().text = IndustrialSystem.ProjectName(work, state) + $" — requested grant {IndustrialSystem.MonthlyCostFor(work.scale):F0}.";
+                var button = AddButton(MakeRow(), "REQUEST " + sector.ToString().ToUpperInvariant() + " [2 CP]", null,
+                    () => { GameController.Instance.RequestProjectFunding(selectedTargetId, sector); Refresh(); });
+                if (!IndustrialSystem.CanRequestFunding(state, state.playerCountryId, selectedTargetId, sector, out string reason))
+                    Block(button, reason);
+                else if (state.commandPoints.current < 2) Block(button, "Needs 2 CP for the request, accepted or declined.");
+            }
         }
 
         void BuildForeignPolicyControls(GameState state)

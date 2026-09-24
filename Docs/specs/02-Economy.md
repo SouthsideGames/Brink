@@ -5,6 +5,37 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+### Foreign project support
+
+DIPLOMACY requests one instalment for an existing own industrial/site project
+from the selected partner. It costs2 CP accepted or declined; invalid, already
+funded, unaffordable-CP or unauthorized requests do not charge. Eligibility uses
+an active TradePreference **received from** that partner, no bilateral sanctions
+or confrontation, and a still-controlled project site. This is a request enabled
+by an economic relationship, not a claim that trade preference obliges payment.
+
+The partner accepts when relations>=60, trust>=50 and its actual treasury covers
+the instalment. Its treasury is debited; the programme's optional externalFunding
+field receives the exact cost. The public eligibility/readout never tests foreign
+treasury; a paid request can be declined without revealing the reason. A generic
+caller cannot authorize a donation from the player. No AI request caller exists.
+
+Funding is ring-fenced, never cash or instant progress. Ordinary monthly work
+spends it first, including the materials-enabled second instalment when own funds
+cover the rest. Negative own treasury does not eat the grant. Site pauses retain
+it; cancellation/abandonment forfeits the unused balance with no donor/recipient
+refund. New requests are refused until the current grant is used. Later broken
+relations do not claw back delivered funding. Each party gets its own secret
+receipt; no foreign project browser or private queue disclosure is introduced.
+Accepted player requests count one initiative, no new XP bucket. Controller
+requests autosave even on decline. Older saves default externalFunding to0;
+CurrentSaveVersion remains7. No SaveSystem/migration/pipeline changes.
+
+This completes the bounded funding interaction for industrial and energy-site
+projects; it does not add loans, ownership stakes, research/procurement funding,
+automatic aid policy or a general multilateral project-finance system. Conditions
+and thresholds are implementation rules, not balance certification.
+
 ### Delivered-material construction throughput
 
 At least10 Materials supply points from the existing TradeSystem.Supply reader

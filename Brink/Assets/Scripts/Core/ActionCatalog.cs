@@ -309,6 +309,10 @@ namespace Brink.Core
 
             // ---------- intelligence ----------
 
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Request project funding", "2 CP",
+                "Ask a trade-preference partner for one ring-fenced instalment. They can decline; unused grants are forfeited on cancellation or abandonment.",
+                verbs: new[] { nameof(GameController.RequestProjectFunding) });
+
             Add(Pillar.Intelligence, "INTELLIGENCE", "Establish a network", "2 CP",
                 "Collection against one state in one domain. Everything else here needs it first.",
                 verbs: new[] { nameof(GameController.EstablishNetwork) });

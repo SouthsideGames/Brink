@@ -39,6 +39,8 @@ namespace Brink.Data
         public GameDate started;
         /// <summary>Empty for legacy/national work; otherwise an energy-region project.</summary>
         public string locationId;
+        /// <summary>Ring-fenced foreign grant, consumed by paid work; zero in older saves.</summary>
+        public float externalFunding;
     }
 
     /// <summary>One sector's condition. Output is capacity; health is current functioning.</summary>

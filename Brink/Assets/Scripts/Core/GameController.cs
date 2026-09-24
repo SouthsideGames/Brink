@@ -476,6 +476,15 @@ namespace Brink.Core
             return ok;
         }
 
+        public bool RequestProjectFunding(string partnerId, Data.EconomicSector sector)
+        {
+            if (!IsRunning || !IndustrialSystem.CanRequestFunding(State, State.playerCountryId, partnerId, sector, out _)) return false;
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool accepted = IndustrialSystem.RequestFunding(State, Turns, partnerId, sector);
+            SaveSystem.Save(State, AutosaveSlot); // a declined request can still spend CP
+            return accepted;
+        }
+
         // ---------- fiscal statecraft (spec 02 §9, spec 25 Tranche A) ----------
         //
         // Each of these spends the operator's resource, delegates to the

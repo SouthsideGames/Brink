@@ -1,5 +1,17 @@
 # Brink ("Unknown Game")
 
+## Remaining core — foreign project support (awaiting review)
+
+Spec02: DIPLOMACY requests one ring-fenced instalment for own industrial/site work
+from an active received TradePreference partner.2 CP accepted/declined; actual
+decision uses relations60/trust50 and donor cash, never previewed hidden treasury.
+Debit donor, optional programme.externalFunding (legacy0), consume in ordinary
+work before own cash; no instant progress/treasury grant. Pause retains funding,
+cancel/abandon forfeits it, no stacking. Player donations cannot be auto-authorized
+by the actor-generic path; no AI caller. Real controller autosaves and is indexed.
+Version7 unchanged, but this IS a Data change. Author harness/reference compile
+is not native/independent review. No balance or trajectory claim.
+
 ## Remaining core — construction imports (awaiting review)
 
 Spec02: delivered Materials supply>=10 permits two paid industrial work-months

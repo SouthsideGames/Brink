@@ -50,6 +50,62 @@ namespace Brink.Core
         public static bool HasConstructionImports(GameState state, string countryId)
             => TradeSystem.Supply(state, countryId, TradeFocus.Materials) >= AcceleratedWorkSupply;
 
+        public static bool CanRequestFunding(GameState state, string ownerId, string partnerId,
+            EconomicSector sector, out string reason)
+        {
+            var owner = state.FindCountry(ownerId);
+            var partner = state.FindCountry(partnerId);
+            var work = owner?.economy.programmes.Find(p => p.sector == sector && p.monthsRemaining > 0);
+            if (work == null || partner == null || ownerId == partnerId)
+            { reason = "Choose our active project and a foreign partner."; return false; }
+            if (work.externalFunding > 0f)
+            { reason = "Use the existing ring-fenced grant first."; return false; }
+            if (!string.IsNullOrEmpty(work.locationId) && state.FindLocation(work.locationId)?.ownerId != ownerId)
+            { reason = "The project site is no longer under our control."; return false; }
+            var treaty = state.FindTreaty(ownerId, partnerId);
+            if (treaty == null || !treaty.Receives(state, ownerId, TreatyCommitment.TradePreference))
+            { reason = "An active trade preference from the partner is required."; return false; }
+            if (state.FindSanction(ownerId, partnerId) != null || state.FindSanction(partnerId, ownerId) != null
+                || ConfrontationSystem.ExistingBetween(state, ownerId, partnerId) != null)
+            { reason = "Resolve bilateral confrontation and sanctions first."; return false; }
+            reason = ""; return true;
+        }
+
+        /// <summary>Actual partner decision; never used for a preview of foreign treasury.</summary>
+        public static bool RequestFundingBy(GameState state, string ownerId, string partnerId, EconomicSector sector)
+        {
+            if (!CanRequestFunding(state, ownerId, partnerId, sector, out _)) return false;
+            var owner = state.FindCountry(ownerId); var partner = state.FindCountry(partnerId);
+            var work = owner.economy.programmes.Find(p => p.sector == sector);
+            var relation = state.FindRelationship(ownerId, partnerId);
+            float cost = MonthlyCostFor(work.scale);
+            if (partner.isPlayer || relation == null || relation.relations < 60f || relation.trust < 50f || partner.resources.treasury < cost)
+            {
+                if (owner.isPlayer) state.AddNotification(NotificationClass.Advisory, "PROJECT SUPPORT DECLINED",
+                    "The partner declined this funding request. No grant or project progress was delivered.", ownerId, desk: ReportingDesk.Diplomacy);
+                return false;
+            }
+            partner.resources.treasury -= cost;
+            work.externalFunding = cost;
+            string receipt = $"PROJECT SUPPORT: {partner.displayName} funded one instalment of {ProjectName(work, state)} ({cost:F0}). "
+                + "Ring-fenced for ordinary work, not treasury or instant progress. Cancellation or abandonment forfeits unused funding.";
+            state.AddChronicle(ChronicleCategory.Diplomatic, ownerId, receipt, Publicity.Secret);
+            state.AddChronicle(ChronicleCategory.Diplomatic, partnerId, receipt, Publicity.Secret);
+            if (owner.isPlayer) state.AddNotification(NotificationClass.Advisory, "PROJECT SUPPORT AGREED", receipt,
+                ownerId, desk: ReportingDesk.Diplomacy);
+            return true;
+        }
+
+        public static bool RequestFunding(GameState state, TurnManager turns, string partnerId, EconomicSector sector)
+        {
+            if (!CanRequestFunding(state, state.playerCountryId, partnerId, sector, out _)) return false;
+            if (!AuthoritySystem.EnsureAuthority(state, Pillar.Diplomacy)) return false;
+            if (!turns.SpendCommandPoints(2, "Request project support")) return false;
+            bool accepted = RequestFundingBy(state, state.playerCountryId, partnerId, sector);
+            if (accepted) ProgressionSystem.RecordInitiative(state);
+            return accepted;
+        }
+
         /// <summary>
         /// Treasury cost per month of a programme, by scale. Charged monthly
         /// rather than up front so a programme is a standing commitment the
@@ -179,8 +235,9 @@ namespace Brink.Core
             float cost = MonthlyCostFor(programme.scale);
             return $"FUNDED WORK: {duration - remaining}/{duration} MONTHS. "
                 + $"REMAINING: {remaining} MONTHS AT {cost:F0}/WORK-MO ({remaining * cost:F0} AT CURRENT TERMS).\n"
-                + (country.resources.treasury >= cost
-                    ? "Treasury now covers the next instalment."
+                + $" Ring-fenced foreign funding: {programme.externalFunding:F0}. "
+                + (Math.Max(0f, country.resources.treasury) + Math.Max(0f, programme.externalFunding) >= cost
+                    ? (programme.externalFunding > 0f ? "Project funds now cover the next instalment." : "Treasury now covers the next instalment.")
                     : "Treasury now falls short of the next instalment.")
                 + " Funding is checked when work resolves; income and other commitments can change this. "
                 + "If funding fails, the project lapses without completion benefits or a refund."
@@ -345,7 +402,8 @@ namespace Brink.Core
                     // treasury would go negative and the build would continue,
                     // which would make the cost decorative — the same trap that
                     // made war footing meaningless until it could lapse.
-                    if (country.resources.treasury < cost)
+                    float grant = Math.Max(0f, programme.externalFunding);
+                    if (Math.Max(0f, country.resources.treasury) + grant < cost)
                     {
                         eco.programmes.RemoveAt(i);
                         string lapsed = $"PROJECT LAPSED: {ProjectName(programme, state)}. "
@@ -359,8 +417,10 @@ namespace Brink.Core
                     }
 
                     int workMonths = programme.monthsRemaining > 1 && HasConstructionImports(state, country.id)
-                        && country.resources.treasury >= cost * 2f ? 2 : 1;
-                    country.resources.treasury -= cost * workMonths;
+                        && Math.Max(0f, country.resources.treasury) + grant >= cost * 2f ? 2 : 1;
+                    float grantSpent = Math.Min(grant, cost * workMonths);
+                    programme.externalFunding = grant - grantSpent;
+                    country.resources.treasury -= cost * workMonths - grantSpent;
                     programme.monthsRemaining -= workMonths;
 
                     if (programme.monthsRemaining > 0) continue;
