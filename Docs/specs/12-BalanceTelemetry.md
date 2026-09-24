@@ -6,7 +6,49 @@ Source: `Tests/EditMode/VerticalSliceValidationTests.cs`,
 `Tests/EditMode/AIDomesticTests.cs`, `Tests/EditMode/ForeignCabinetTests.cs`,
 `Docs/VerticalSliceValidation.md`. GDD §34 Phase 12, §36.
 
-The EditMode suite is **607 tests**, all passing.
+Historical counts below belong to their recorded runs, not the current tree.
+The independently verified #29 baseline is 2168/2167/0/1; this documentation-only
+#30 clarification does not constitute a new test run.
+
+## 0. Consequence contract — roadmap #30
+
+Balance work tests whether useful instruments, legible trade-offs and meaningful
+counterplay exist. It does not owe equal grades, successful outcomes or a viable
+version of every destructive policy sequence. Preserve broad pillar usefulness
+without insulating a chosen strategy from the costs it actually creates.
+
+Audit at `81c49799be888957b3e65a9b1dfb84ee809265a3`:
+
+| Master example | Existing owner and consequence | Existing regression evidence |
+|---|---|---|
+| Spend wildly | FiscalSystem financing and debt service; deficits become debt, credit constrains further borrowing. Acquisition and programmes charge real treasury. | FiscalTests: `ADeficitBecomesDebtRatherThanANegativeNumberNobodyFeels`, `DebtCannotBeStackedForever`, `DebtIsServicedEveryMonthAndTheRateFollowsStanding`. |
+| Antagonize neighbors | EconomySystem sanctions feed confrontation pressure; diplomacy and war alter relationships/memory; coercion can hurt its sender. Responses depend on circumstances, not a guaranteed retaliation script. | DiplomacySystemTests: `War_ErodesRelationsAndLeavesHistoricalMemory`; EconomySystemTests: `Sanctions_BackfireOnTheSender`, `Blowback_ScalesWithTradeExposure`. This is not a measured all-neighbor campaign. |
+| Hollow out institutions | GovernmentSystem.DistributePatronageBy spends money/PC, buys support but lowers government capacity and raises corruption; bloc reactions differ. | GovernmentVerbTests: `PatronageBuysSupportWithMoneyAndCostsTheState`, `PatronageAndInquiryPullAgainstEachOther`; FactionTests policy-reaction cases. |
+| Purge competent officials | DismissOfficial spends PC, resets tenure/directive/control and replaces competence with a bounded draw; elective goodwill falls. Cabinet performance and reporting read competence. No promise every dismissal is harmful or every replacement worse. | GovernmentSystemTests: `DismissOfficial_ReplacesThemAndCostsLegislativeGoodwill`; CabinetSystem/ReportingSystem consumer trace. That test does not itself assert every competence/performance consequence. |
+| Start three wars | ConfrontationSystem permits multiple fronts subject to current capacity; TheatreSystem.FocusFactor reduces power elsewhere and IsOverstretched is consumed by AI. No guarantee three additional fronts are always admissible. | WorldStructureTests: `ASecondFrontIsPossible`, `AWarInOnePlaceDragsOperationsInAnother`, `BeingTiedDownIsVisibleToTheWorld`. These do not certify three-war balance. |
+| Close the border | DisplacementSystem's real border policy stops new hosting but harms standing with burdened states and leaves pressure at source. It is a displacement policy, not a blanket closure of trade, transit and every border activity. | DisplacementTests: `ShuttingTheBorderCostsStandingWithEveryoneCarryingIt`, `AShutBorderDoesNotMakeThePressureGoAway`. |
+| Break alliances | DiplomacySystem.BreakTreatyBy breaks commitments, reduces bilateral and third-party trust and records memories; bloc exit is a separate instrument. | DiplomacySystemTests: `BreakingTreaty_DamagesTrustWithEveryone`; StrategicFreedomTests treaty/trade-exit case. |
+| Max out taxes | FiscalSystem raises revenue while TaxGrowthDrag and TaxApprovalDrag feed EconomySystem and GovernmentSystem. Actual magnitudes depend on the world, not a promised score ordering. | FiscalTests: `RaisingTaxBuysRevenueAndCostsGrowthAndStanding`. |
+
+Action and inaction are not synonymous with good and bad. HoldTests guards
+forgone capacity and no invented initiative/XP, while CrisisEffectTests.
+`DriftingHasConsequencesBeyondOurOwnStanding` guards a real lapse effect. Normal
+delegation is legitimate; elapsed real-world time does not simulate neglect.
+RecoveryHistoryTests and the existing fiscal/government recovery fixtures cover
+continued play and ordinary recovery paths, not guaranteed restoration.
+
+The table is a source-and-existing-test audit, not new runtime measurement or
+exhaustive causal/balance certification. There is no new production mechanism,
+penalty, rescue, equalization formula or removed constraint in this closure.
+
+For subsequent tuning: name the affected player-visible cost/benefit and its
+actual consumer, compare matched state or paired policy arms where applicable,
+separate forced-state coverage from live frequency, and keep uncertainty visible.
+Do not infer that a harmful policy must be buffed because it loses, or that an
+unexplained ratchet/starvation bug is acceptable because failure is allowed.
+Reachable recovery from recurring pressure remains required; irreversible losses
+and historical responsibility need not be refunded. Balance/device validation
+is deferred separately and is not a prerequisite for marking built scope complete.
 
 ## 1. The harness is the balance tool
 

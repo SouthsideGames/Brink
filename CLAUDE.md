@@ -1,5 +1,18 @@
 # Brink ("Unknown Game")
 
+## Roadmap #30 — consequences, not equal viability
+
+This is a design-policy closure, not another penalty system. Broad pillar
+usefulness does not mean every decision/sequence/posting must succeed or score
+equally. Preserve actual fiscal, institutional, capacity and consent gates; do
+not invent a "wrong strategy" lock, generic punishment or automatic rescue.
+Inaction can be legitimate delegation or costly crisis neglect; do not punish
+every quiet month. Recovery uses ordinary instruments and preserves real loss.
+GDD §3.1 and spec12 §0 map all eight master examples to existing owners/tests and
+state their coverage limits. No runtime/test/asset change. Do not treat this rule
+as permission to ignore bugs, accidental one-way ratchets or AI starvation.
+Balance/device validation remains separate; equal outcomes are not the target.
+
 ## Roadmap29 — strategic freedom
 
 Do not add national strategy locks or promise every radical course will succeed.
