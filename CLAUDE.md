@@ -1,5 +1,14 @@
 # Brink ("Unknown Game")
 
+## Chronicle visibility repair (awaiting review)
+
+ChronicleView header totals/categories now share WorldWire.CanShow with entries.
+Country/category filters narrow SHOWING/paging, not the visible archive total.
+Four-width regression requires the entire readout unchanged after hidden foreign
+events, while preserving own-secret/public counts and pure rendering. No state
+or simulation change. Focused/mutation evidence is author .NET, not native review;
+do not relabel the previous full-suite measurement as a run on this repair.
+
 ## Remaining core — bilateral treaty conditions (awaiting review)
 
 Spec04: RelationsAtLeast60 and NoMutualOccupation append two live clause triggers.

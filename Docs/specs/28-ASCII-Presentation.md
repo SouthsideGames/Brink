@@ -58,6 +58,11 @@ Map modes follow the same information contract as the rest of Brink:
 
 A presentation layer must never become a shortcut around `IntelligenceSystem`.
 
+CHRONICLE's total-entry and category counts use `WorldWire.CanShow`, just like
+its entries. They count all visible records before the operator's country or
+category filter; SHOWING and paging count that filtered subset. Hidden foreign
+events cannot change the header, and our own secret records remain visible.
+
 ## Responsive contract
 Every mode renders into the exact grid requested by the terminal. The authored world remains 80×21 conceptually, while country coordinates and route geometry scale into the current device grid. Overlay lines do not overwrite country labels or the underlying landmass unless an explicit signal must win the cell.
 

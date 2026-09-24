@@ -257,6 +257,46 @@ namespace Brink.Tests
             }
             finally {typeof(GameController).GetProperty("State").SetValue(gc,prior);TerminalMetrics.ResetForTests();}
         }
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void HiddenChronicleEventsCannotChangeCountsCategoriesOrPaging(int columns)
+        {
+            var s = EmptyRecord();
+            s.AddChronicle(ChronicleCategory.Diplomatic, "CHN", "PUBLIC AGREEMENT", Publicity.Public);
+            var gc = GameController.Instance; var prior = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, s);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                string Render(ChronicleView view)
+                {
+                    view.Refresh();
+                    return string.Join("\n", view.Root.Query<Label>().ToList().Select(l => l.text))
+                        + string.Join("|", view.Root.Query<Button>().ToList().Select(b => b.text));
+                }
+                var view = new ChronicleView();
+                string before = Render(view);
+                for (int i = 0; i < 30; i++)
+                    s.AddChronicle(ChronicleCategory.Military, "CHN", "HIDDEN SECRET", Publicity.Secret);
+                s.AddChronicle(ChronicleCategory.Intelligence, "CHN", "HIDDEN CATEGORY", Publicity.Public);
+                string save = SaveSystem.ToJson(s);
+                Assert.AreEqual(before, Render(view), "Hidden records must not affect even totals, categories or page controls.");
+                Assert.AreEqual(save, SaveSystem.ToJson(s), "Rendering must remain pure.");
+                s.AddChronicle(ChronicleCategory.Intelligence, s.playerCountryId, "OUR PRIVATE RECORD", Publicity.Secret);
+                s.AddChronicle(ChronicleCategory.Economic, "IND", "PUBLIC ECONOMIC RECORD", Publicity.Public);
+                string shown = System.Text.RegularExpressions.Regex.Replace(Render(view), @"\s+", " ");
+                StringAssert.Contains("3 ENTRIES", shown);
+                StringAssert.Contains("INTELLIGENCE 1", shown);
+                StringAssert.Contains("OUR PRIVATE RECORD", shown);
+                typeof(ChronicleView).GetField("countryFilter", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(view, "CHN");
+                shown = System.Text.RegularExpressions.Regex.Replace(Render(view), @"\s+", " ");
+                StringAssert.Contains("3 ENTRIES", shown);
+                StringAssert.Contains("SHOWING: 1", shown);
+                StringAssert.DoesNotContain("HIDDEN SECRET", shown);
+                StringAssert.DoesNotContain("OUR PRIVATE RECORD", shown);
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, prior); TerminalMetrics.ResetForTests(); }
+        }
+
         [Test]
         public void RepeatedPublicRecordCreatesIdentityWithoutChangingState()
         {
