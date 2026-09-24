@@ -1,5 +1,25 @@
 # Brink ("Unknown Game")
 
+## Remaining core — ministry inheritance (awaiting independent review)
+
+CountryState.institutionalMemory survives minister replacement. Existing notable
+Cabinet outcomes add capped, dated risk experience (+2 success/-3 setback,
+[-12,12], 0.99 monthly retention). Effective risk drives only existing delegated
+variance and initiative probability, equally for AI; no extra draw or reward,
+competence bonus, new tick or legacy backfill. Direct Control writes no outcome;
+elapsed time still fades the imprint. CABINET meeting/dossier show counts and
+effective risk separately from minister tenure. Optional additive fields retain
+save version7. Specs32/10 define this real behavior change; do not claim unchanged
+world trajectories or balance from a compile/focused check.
+
+Author .NET full2232:2224 passed,7 failed,1 inconclusive (TRX NotExecuted).
+Nine new tests pass; no new failing names. The war failure changed assertion:
+paired five-seed diagnostics measure base5/5 open,112.0 confrontation-months
+versus feature3/5,112.6. Base already exceeds the110 duration bound; its earlier
+endpoint assertion hid that. Four-seed instrument test now inconclusive rather
+than passing. Do not call these unchanged results, harmless noise, native
+measurements or certified balance. Focused79/79; six mutation kills1/2/1/2/3/3.
+
 ## Remaining core — displacement map (awaiting review)
 
 MAP adds a seventh mode for current hosting connections involving our country.

@@ -13,7 +13,7 @@ Cabinet officials should become people the operator learns to govern with rather
 - Personality is derived from existing authoritative state. It creates no new currency or hidden bonus.
 - The player-facing personality layer may profile only the player's own seated officials. It must not bypass intelligence/fog to characterize foreign ministers.
 - Each official exposes a stable institutional identity, temperament, relationship posture, strategic instinct, and resistance level.
-- **Institutional continuity evolves without a second meter.** The seated
+- **Minister tenure is separate from ministry inheritance.** The seated
   official's existing `monthsInOffice` reads as newly appointed (under one
   year), settled (one to four years), established (four to eight years), or
   entrenched (eight years onward). CABINET shows that reading in both the
@@ -48,7 +48,32 @@ Cabinet officials should become people the operator learns to govern with rather
   `CabinetConsultationTests` asserts that, save JSON included.
 - Strategic surprise is represented as exposure to uncertainty rather than a hidden-truth oracle. It can say that collection is weak, fiscal room is deteriorating, domestic consent is brittle, or foreign reaction remains contingent; it cannot reveal what an unseen foreign actor will actually do.
 - Surprise and choice readings are observational. They do not alter action resolution, probabilities, official traits, resources, or the simulation pipeline.
-- The system is read-only. Rendering a meeting, profile, alignment, intervention reading, choice reading, or surprise assessment cannot spend CP/Influence, advance time, consume RNG, or mutate the save.
+- All presentation queries are read-only. Rendering a meeting, profile, alignment, intervention reading, choice reading, or surprise assessment cannot spend CP/Influence, advance time, consume RNG, or mutate the save.
+
+## Ministry inheritance (remaining core #16)
+
+CountryState owns one optional InstitutionalMemory per office, independent of
+the seated minister: successes, setbacks, signed risk imprint and last outcome
+date. Existing significant Cabinet outcomes add +2 after success or -3 after
+failure, capped to [-12,12]. Ordinary routine work creates no invented success.
+The old imprint decays by 0.99 per elapsed month before a new outcome is added;
+pure reads use the same dated decay, including vacancies and Direct Control.
+Counts remain history, not an indefinitely stacking bonus.
+
+CabinetSystem uses clamp(minister risk + dated imprint, 0,100) in its existing
+monthly performance variance and significant-outcome chance. More appetite
+means more variance and more opportunities for both success and failure, not
+more competence. There is no extra RNG draw, action, reward or pipeline hook.
+The current month's outcome changes future readings, not that month's draw.
+The rule is identical for foreign ministries; foreign profiles remain blocked.
+Direct Control neither executes these delegated effects nor writes an outcome.
+
+Replacement resets minister tenure but preserves the country's ministry record.
+The meeting and dossier show both readings, recorded counts and effective risk.
+Missing/null/default legacy history is neutral; no past is inferred from prose.
+This is a bounded experience-based institutional character, not invented
+procurement, coordination or political-influence statistics. The +2/-3, cap and
+decay are implementation tuning, not balance-certified values.
 
 ## Design intent
 The desired player thought is: “I know what this minister is likely to argue, I know who will line up with them, I know what bypassing that office again is likely to do, and I know where my government's assumptions are fragile.” The system should add institutional texture without turning Brink into a relationship-management game or converting uncertainty into omniscience.

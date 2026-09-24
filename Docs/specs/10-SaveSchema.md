@@ -4,6 +4,13 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Remaining-core #16 adds CountryState.institutionalMemory, keyed by Pillar with
+successes, setbacks, riskImprint and lastOutcome. Missing/null/empty records are
+neutral; default records with no outcomes confer no imprint. Written only by
+notable Cabinet outcomes, owned by the country rather than a replaceable Official.
+No legacy reconstruction, migration or version change (7). Spec32 owns dated
+decay and the two execution consumers; counts persist while influence fades.
+
 Remaining-core #2 adds `StrategicPlan.foreignPolicies` (targetId, persisted intent,
 delegated flag) and `lastForeignPolicyAction` (date). Missing/null lists are neutral,
 and the default date is not a historical action. Intent ordinals append only.

@@ -36,6 +36,9 @@ namespace Brink.Data
         /// </summary>
         public List<Official> cabinet = new List<Official>();
 
+        // Missing legacy history is neutral; populated only by actual outcomes.
+        public List<InstitutionalMemory> institutionalMemory = new List<InstitutionalMemory>();
+
         public Official FindOfficial(Pillar office)
         {
             for (int i = 0; i < cabinet.Count; i++)

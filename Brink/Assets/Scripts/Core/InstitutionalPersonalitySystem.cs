@@ -6,12 +6,67 @@ namespace Brink.Core
 {
     /// <summary>
     /// Phase F: turns existing cabinet traits and relationship state into stable,
-    /// legible institutional voices. This layer is read-only: it interprets facts
-    /// already owned by the player's government and never creates a second resource
-    /// economy or reaches through fog into foreign cabinets.
+    /// legible institutional voices. Reads are pure; notable Cabinet outcomes
+    /// also leave a bounded, fading ministry memory, independent of its minister.
+    /// Player-facing profiles never reach through fog into foreign cabinets.
     /// </summary>
     public static class InstitutionalPersonalitySystem
     {
+        public const float MaximumImprint = 12f;
+        public const float MonthlyRetention = 0.99f;
+
+        static InstitutionalMemory Memory(CountryState country, Pillar office)
+            => country?.institutionalMemory?.Find(m => m != null && m.office == office);
+
+        /// <summary>Pure dated decay: vacancies and Direct Control cannot freeze history.</summary>
+        public static float RiskImprint(GameState state, CountryState country, Pillar office)
+        {
+            var memory = Memory(country, office);
+            if (state == null || memory == null || memory.successes + (long)memory.setbacks <= 0) return 0f;
+            int age = state.date.MonthsSince(memory.lastOutcome);
+            if (age < 0 || memory.lastOutcome.month < 1 || memory.lastOutcome.month > 12) return 0f;
+            return Math.Max(-MaximumImprint, Math.Min(MaximumImprint, memory.riskImprint))
+                * (float)Math.Pow(MonthlyRetention, age);
+        }
+
+        public static float EffectiveRisk(GameState state, CountryState country, Official official)
+            => Math.Max(0f, Math.Min(100f, official.riskTolerance + RiskImprint(state, country, official.office)));
+
+        /// <summary>Called only after an existing notable Cabinet outcome; no extra draw or reward.</summary>
+        public static bool RecordOutcome(GameState state, CountryState country, Official official, bool success)
+        {
+            if (state == null || country == null || official == null
+                || state.FindCountry(country.id) != country || country.FindOfficial(official.office) != official
+                || !Enum.IsDefined(typeof(Pillar), official.office)) return false;
+            float imprint = RiskImprint(state, country, official.office);
+            if (country.institutionalMemory == null) country.institutionalMemory = new List<InstitutionalMemory>();
+            var memory = Memory(country, official.office);
+            if (memory == null)
+            {
+                memory = new InstitutionalMemory { office = official.office };
+                country.institutionalMemory.Add(memory);
+            }
+            if (success) { if (memory.successes < int.MaxValue) memory.successes++; }
+            else { if (memory.setbacks < int.MaxValue) memory.setbacks++; }
+            memory.riskImprint = Math.Max(-MaximumImprint, Math.Min(MaximumImprint, imprint + (success ? 2f : -3f)));
+            memory.lastOutcome = state.date;
+            return true;
+        }
+
+        static string Inheritance(GameState state, Official official)
+        {
+            var country = state.PlayerCountry;
+            var memory = Memory(country, official.office);
+            if (memory == null || memory.successes + (long)memory.setbacks <= 0)
+                return "ministry has no recorded outcome history";
+            float imprint = RiskImprint(state, country, official.office);
+            string character = imprint >= 2f ? "emboldened by experience"
+                : imprint <= -2f ? "cautioned by experience" : "past experience has little current sway";
+            return $"ministry {character}; recorded successes {memory.successes}, setbacks {memory.setbacks}. "
+                + $"Effective risk appetite {EffectiveRisk(state, country, official):F1} "
+                + $"(minister {official.riskTolerance:F1}); affects delegated variance and initiative frequency, not competence";
+        }
+
         public sealed class Profile
         {
             public Pillar pillar;
@@ -43,7 +98,7 @@ namespace Brink.Core
                 temperament = Temperament(official),
                 relationship = Relationship(official),
                 instinct = Instinct(state, official),
-                continuity = ContinuityFor(official),
+                continuity = ContinuityFor(official) + "; " + Inheritance(state, official),
                 resistance = Resistance(official)
             };
         }

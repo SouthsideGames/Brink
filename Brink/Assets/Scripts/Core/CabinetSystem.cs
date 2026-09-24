@@ -319,7 +319,8 @@ namespace Brink.Core
                 var rng = new Random(unchecked(state.rngSeed * 92821 + monthIndex * 31
                                                + (int)official.office + Hash.Of(country.id) * 7));
 
-                double variance = (rng.NextDouble() * 2.0 - 1.0) * (official.riskTolerance / 100.0) * 0.3;
+                float effectiveRisk = InstitutionalPersonalitySystem.EffectiveRisk(state, country, official);
+                double variance = (rng.NextDouble() * 2.0 - 1.0) * (effectiveRisk / 100.0) * 0.3;
                 double performance = Math.Max(0.0, Math.Min(1.2, official.competence / 100.0 + variance));
                 float amount = (float)(0.05 + performance * 0.25);
 
@@ -392,10 +393,11 @@ namespace Brink.Core
                 // performance news — the opposite of diagnosable.
 
                 // Occasional significant outcomes; appetite scales with risk tolerance.
-                double eventChance = 0.04 + official.riskTolerance / 100.0 * 0.06;
+                double eventChance = 0.04 + effectiveRisk / 100.0 * 0.06;
                 if (rng.NextDouble() < eventChance)
                 {
                     bool success = rng.NextDouble() < performance * 0.7 + 0.15;
+                    InstitutionalPersonalitySystem.RecordOutcome(state, country, official, success);
                     if (success)
                     {
                         ApplyPillarEffect(state, country, official.office, official.directiveId, amount * 3f);
