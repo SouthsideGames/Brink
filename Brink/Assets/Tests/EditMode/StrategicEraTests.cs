@@ -116,10 +116,21 @@ namespace Brink.Tests
         public void LegacyAndSuccessorRecordsStartNowNotAtTheParentEpoch()
         {
             var s = Blank(); s.date = new GameDate(2024, 1); Pattern(s, 2);
-            string json = System.Text.RegularExpressions.Regex.Replace(SaveSystem.ToJson(s), @",?\s*""strategicConduct""\s*:\s*null", "");
-            Assert.IsFalse(json.Contains("strategicConduct"));
-            var loaded = SaveSystem.FromJson(json); Months(loaded, 1);
-            Assert.AreEqual(1, loaded.PlayerCountry.strategicConduct.months); Assert.IsEmpty(loaded.chronicle);
+            // Unity writes a null serializable class as a default object, unlike
+            // the author harness. Rename the key so the reader sees no known
+            // field, without depending on either serializer's value spelling.
+            string json = SaveSystem.ToJson(s).Replace("\"strategicConduct\"", "\"ignoredLegacyConduct\"");
+            Assert.IsFalse(json.Contains("\"strategicConduct\""));
+            s.PlayerCountry.strategicConduct = new StrategicConductRecord();
+            foreach (string legacy in new[] { json, SaveSystem.ToJson(s) })
+            {
+                var loaded = SaveSystem.FromJson(legacy); Months(loaded, 1);
+                var record = loaded.PlayerCountry.strategicConduct;
+                Assert.AreEqual(1, record.months); Assert.IsEmpty(loaded.chronicle);
+                Assert.AreEqual(new GameDate(2024, 1), record.since);
+                CollectionAssert.AreEqual(new[] { 0, 0, 1, 0, 0 }, record.heldMonths);
+                Assert.IsTrue(string.IsNullOrEmpty(record.lastEarnedName));
+            }
             s.countries.Add(new CountryState { id = "NEW", displayName = "Successor", foundedDate = s.date });
             s.playerCountryId = "NEW"; Months(s, 1);
             Assert.AreEqual(1, s.PlayerCountry.strategicConduct.months);
@@ -203,7 +214,9 @@ namespace Brink.Tests
             Assert.AreEqual(0, a.PlayerCountry.strategicConduct.months);
         }
 
-        [TestCase(982)] [TestCase(4747)]
+        // Late in a native partition these paired worlds exceed the default
+        // 180 seconds; retain the full 240-month comparison on both seeds.
+        [TestCase(982)] [TestCase(4747)] [Timeout(900000)]
         public void TwoDecadesOfObservationDoNotChangeTheUnderlyingWorld(int seed)
         {
             var observed = WorldFactory.CreateDebugWorld(seed);
