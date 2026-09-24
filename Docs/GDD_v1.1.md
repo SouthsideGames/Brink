@@ -74,6 +74,11 @@ without refunds or erasing past use. These exits complement gradual Cabinet
 drawdown; they do not end wars, release obligations or manufacture rehabilitation.
 The AI plays the same strategic simulation under imperfect information and may make understandable mistakes.
 Every pillar must be viable as a primary playstyle and capable of contributing to victory.
+Roadmap #30 qualifies viability: a pillar offers useful strategic instruments;
+it does not guarantee that every policy, sequence or posting can succeed with it.
+Reckless spending, antagonism, institutional erosion, dismissals, simultaneous
+wars, border closure, broken alliances and extreme taxation may leave the state
+worse off. Do not compensate those choices merely to equalize outcomes.
 Progression primarily expands strategic knowledge, control, options and specialization rather than granting magical national power.
 The world does not wait for the player. Countries pursue their own interests and create history independently.
 Depth is optional. Players can deeply command the pillar they enjoy and delegate the others.
@@ -665,6 +670,35 @@ The shipped simulation is substantially beyond the original four-country MVP. Th
 10. **Systems must connect.** War affects politics, economics, territory, displacement and alliances; sanctions affect markets and escalation; domestic conditions can create opposition, insurgency or regime failure; diplomacy changes who appears when a war starts.
 11. **A recurring negative must have a reachable recovery path.** The simulation should produce bad decades, not irreversible numerical ratchets by accident.
 12. **Skills grant operator capability, never magical national power.** National capabilities come from the state; strategist skills change what the operator can see, afford or personally do.
+
+## 3.1 Freedom has consequences, not equal outcomes — roadmap #30
+
+Freedom permits attempts through the ordinary instruments, not immunity from
+their costs. Broad pillar viability is not a promise that every choice is good,
+that every state can sustain every strategy, or that all strategies earn equal
+grades. Bad decades and severe self-inflicted losses are valid play states.
+
+Keep physical, fiscal, institutional and counterpart-consent constraints. Do not
+replace them with an arbitrary "wrong strategy" refusal, but do not remove real
+limits to make every wish executable. Multiple fronts consume finite capacity;
+counterparts may refuse; a depleted treasury cannot pay an unfunded programme.
+
+Consequences belong to the systems that produce them. Do not add a second generic
+recklessness penalty or a compensating rescue dividend. Existing debt, upkeep,
+scarcity, institutional capacity, diplomatic memory, commitment and domestic
+pressure must continue to matter, with truthful explanations under information
+limits. Immediate costs, delayed effects and historical scars are distinct.
+
+Inaction is contextual: ignoring a live crisis may let its lapse consequence
+land, while legitimate delegation or waiting for a temporary hazard to expire
+can be sensible. Do not punish every quiet month merely for lacking a click.
+No real-world absence penalty is introduced. Recovery remains continued play
+through ordinary priced instruments, not guaranteed restoration or erased history.
+
+This closes the design-policy item using existing mechanisms, not new tuning.
+Spec 12 maps the master examples to their owning code and existing regression
+coverage. Balance breadth, tuning and device validation remain separate work;
+neither equal scores nor an automatic comeback is an acceptance criterion.
 
 ---
 
