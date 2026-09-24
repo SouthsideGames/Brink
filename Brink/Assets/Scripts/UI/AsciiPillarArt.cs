@@ -43,12 +43,14 @@ namespace Brink.UI
             return c.ToString();
         }
 
-        public static string Crisis(int width)
+        public static string Crisis(int width, int frame = 0)
         {
             var c = new AsciiCanvas(Math.Max(1, width), 5);
             int mid = c.Width / 2;
             c.Text(1, 0, "DECISION PENDING");
             c.Stamp(mid - 9, 1, "       [ ? ]", "         |", "   +-----+-----+", "   v     v     v");
+            // A travelling signal, not a countdown or an option recommendation.
+            if (frame != 0) c.Plot(mid - 6 + ((frame - 1) % 13 + 13) % 13, 3, 'o');
             return c.ToString();
         }
 

@@ -1,5 +1,13 @@
 # Brink ("Unknown Game")
 
+## Remaining core — opt-in crisis animation (awaiting review)
+
+Spec28: PLAY ART / PAUSE ART defaults off on each Show. Thirteen bounded frames
+use the existing scene scheduler at700ms; pause freezes, Hide/decision stops,
+Show resets. No countdown, recommendation, simulation clock/RNG or saved setting.
+Direct callback/button tests do not measure native scheduler timing/attachment;
+Unity-reference compile is not native execution. Archive scenes remain static.
+
 ## Remaining core — archive and crisis art (awaiting review)
 
 Spec28: transparent clipped sprite stamps extend the existing canvas. CHRONICLE

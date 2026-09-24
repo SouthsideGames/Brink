@@ -32,8 +32,14 @@ The crisis modal places a generic decision illustration inside its existing
 scroll reader, alongside the body and choices. It neither selects an option nor
 changes its cost, callback or availability. Both surfaces are deterministic,
 clipped to their supplied column width, and leave saves and simulation RNG alone.
-This checkpoint supplies static scenes and sprite composition, not animation or
-an exhaustive scene catalogue. Native layout/device verification remains separate.
+Archive scenes remain static. Crisis art offers PLAY ART / PAUSE ART, defaults
+off each time the modal is shown, and advances a thirteen-frame travelling signal
+every 700ms using the existing UI Toolkit scheduler. This is neither a countdown
+nor an option recommendation. Pausing freezes the current frame; hiding or choosing
+stops it, and a new Show returns to static art. No saved preference, simulation
+tick or RNG is involved. Native scheduler attachment and actual layout/device
+verification remain separate from direct lifecycle-callback tests. This bounded
+composition/animation surface is not an exhaustive historical scene catalogue.
 
 ## World map modes
 The MAP world layer now exposes eight modes:
