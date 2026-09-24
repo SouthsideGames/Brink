@@ -36,6 +36,9 @@ namespace Brink.UI.Views
             BuildHeader(state, entries.Count);
             BuildFilters(state);
             AddText().text = HistoricalIdentitySystem.Render(state, countryFilter ?? state.playerCountryId);
+            int sceneIndex = entries.Count - 1 - page * PageSize;
+            if (sceneIndex >= 0 && sceneIndex < entries.Count)
+                AddFigure("terminal-text-dim").text = AsciiPillarArt.Record(state, entries[sceneIndex], W);
             BuildEntries(state, entries);
             BuildPager(entries.Count);
         }

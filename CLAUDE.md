@@ -1,5 +1,15 @@
 # Brink ("Unknown Game")
 
+## Remaining core — archive and crisis art (awaiting review)
+
+Spec28: transparent clipped sprite stamps extend the existing canvas. CHRONICLE
+illustrates the newest visible record on the current page, with category/typed
+metadata only, never prose classification or live-status claims. The renderer
+also enforces WorldWire.CanShow. Crisis art stays inside the scroll reader and
+does not select or alter choices. Static, deterministic, no saved fields or RNG.
+This is not animation or an exhaustive event catalogue. Author .NET checks and
+actual Unity-reference compilation are not native runtime or independent review.
+
 ## Remaining core — map connections (awaiting review)
 
 Spec28: Diplomatic mode draws only our treaties with a live commitment and lists

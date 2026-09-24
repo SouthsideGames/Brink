@@ -69,6 +69,15 @@ namespace Brink.UI
             }
         }
 
+        /// <summary>Layer a reusable sprite; spaces are transparent and Plot owns clipping.</summary>
+        public void Stamp(int x, int y, params string[] rows)
+        {
+            if (rows == null) return;
+            for (int row = 0; row < rows.Length; row++)
+                for (int col = 0; col < (rows[row]?.Length ?? 0); col++)
+                    if (rows[row][col] != ' ') Plot(x + col, y + row, rows[row][col]);
+        }
+
         public void Box(int x, int y, int width, int height)
         {
             if (width < 2 || height < 2) return;

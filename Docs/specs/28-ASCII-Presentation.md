@@ -14,9 +14,26 @@ ASCII is Brink's visual medium, not decoration around a text interface. Presenta
 - Bresenham line drawing;
 - box drawing;
 - import from an existing text figure;
+- clipped sprite stamping with transparent spaces (later non-space cells layer over earlier ones);
 - exact-width/exact-height rendering.
 
 It owns clipping and layering rules so maps, scenes and future pillar art do not each reimplement them.
+
+## Archive and crisis scenes
+
+CHRONICLE illustrates the newest visible record on the selected page. Six
+category compositions reuse canvas sprites; typed sanctions and conduct records
+can label the scene more specifically. Prose never classifies an election, coup
+or battle, and the renderer independently applies WorldWire.CanShow. Archive art
+is historical illustration, not current status, a reconstructed location or a
+claim about the outcome. Filtering and paging precede scene selection.
+
+The crisis modal places a generic decision illustration inside its existing
+scroll reader, alongside the body and choices. It neither selects an option nor
+changes its cost, callback or availability. Both surfaces are deterministic,
+clipped to their supplied column width, and leave saves and simulation RNG alone.
+This checkpoint supplies static scenes and sprite composition, not animation or
+an exhaustive scene catalogue. Native layout/device verification remains separate.
 
 ## World map modes
 The MAP world layer now exposes eight modes:

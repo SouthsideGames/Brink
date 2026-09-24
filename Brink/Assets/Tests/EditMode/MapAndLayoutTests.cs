@@ -26,6 +26,29 @@ namespace Brink.Tests
 
         // ---------- the crisis modal reaches its own bottom ----------
 
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void CrisisSceneLivesInTheScrollerWithoutDecidingOrChangingOptions(int columns)
+        {
+            try
+            {
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var crisis = new ActiveCrisis { title = "DECIDE", body = "A known situation" };
+                crisis.options.Add(new CrisisOption { label = "WAIT", description = "A consequence" });
+                int decision = -1;
+                var panel = new CrisisPanel(); panel.Show(crisis, i => decision = i);
+                var reader = panel.Root.Q<ScrollView>();
+                Label scene = null;
+                reader.Query<Label>().ForEach(l => { if (l.ClassListContains("terminal-figure")) scene = l; });
+                Assert.NotNull(scene);
+                Assert.AreEqual(AsciiPillarArt.Crisis(TerminalMetrics.OverlayColumns), scene.text);
+                foreach (string line in scene.text.Split('\n')) Assert.LessOrEqual(line.Length, TerminalMetrics.OverlayColumns);
+                int count = 0; reader.Query<Button>().ForEach(b => { count++; StringAssert.Contains("WAIT", b.text); });
+                Assert.AreEqual(1, count); Assert.AreEqual(-1, decision);
+                Assert.AreEqual("A known situation", crisis.body);
+            }
+            finally { TerminalMetrics.ResetForTests(); }
+        }
+
         [Test]
         public void CrisisModal_EveryOptionIsReachableOnAShortScreen()
         {

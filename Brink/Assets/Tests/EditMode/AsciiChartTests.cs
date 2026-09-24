@@ -6,6 +6,18 @@ namespace Brink.Tests
     public class AsciiChartTests
     {
         [Test]
+        public void SpritesClipAndLayerWithoutErasingTransparentCells()
+        {
+            var c = new AsciiCanvas(4, 3, '.');
+            c.Stamp(-1, -1, "ignored", "A BCD", " E F", null);
+            Assert.AreEqual(".BCD\nE.F.\n....", c.ToString());
+            c.Stamp(3, 2, "XY", "ZZ");
+            Assert.AreEqual('X', c.At(3, 2));
+            c.Stamp(0, 0, (string[])null);
+            Assert.AreEqual(4, c.Width); Assert.AreEqual(3, c.Height);
+        }
+
+        [Test]
         public void Bar_FillsProportionally()
         {
             Assert.AreEqual("█████░░░░░", AsciiChart.Bar(50, 100, 10));

@@ -29,6 +29,7 @@ namespace Brink.UI
 
         readonly Label title;
         readonly Label body;
+        readonly Label scene;
         readonly VisualElement options;
         readonly ScrollView reader;
 
@@ -57,6 +58,11 @@ namespace Brink.UI
             body.AddToClassList("crisis-body");
             reader.Add(body);
 
+            scene = new Label();
+            scene.AddToClassList("terminal-figure");
+            scene.AddToClassList("terminal-text-dim");
+            reader.Add(scene);
+
             options = new VisualElement();
             options.AddToClassList("crisis-options");
             reader.Add(options);
@@ -70,6 +76,7 @@ namespace Brink.UI
         {
             title.text = crisis.title;
             body.text = crisis.body;
+            scene.text = AsciiPillarArt.Crisis(TerminalMetrics.OverlayColumns);
 
             options.Clear();
             for (int i = 0; i < crisis.options.Count; i++)
