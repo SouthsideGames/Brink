@@ -928,6 +928,15 @@ Audio responds to strategic context—peace, tension, crisis and war—and to im
 
 # 14. Persistence and History
 
+Roadmap #27 — Earned names are separate from selected doctrine. The operator's
+office observes its government's held policies over real resolved months and
+files a dated, classified five-year interpretation naming the sustained patterns.
+Later reviews cite earlier named doctrines and eras even after a reversal; names
+grant no power and cannot erase what happened. Sparse or missing history earns
+no invented title. This is an account of national conduct, including delegation
+and inherited commitments, not automatic personal credit or a public revelation
+of foreign secrets. Spec33 defines the bounded evidence and naming vocabulary.
+
 Roadmap #26 — Historical identity. A country's historical portrait distinguishes
 recorded conduct from inherited capacity and mere archive volume. Dated wars of
 pressure, agreements, economic projects and political ruptures remain readable

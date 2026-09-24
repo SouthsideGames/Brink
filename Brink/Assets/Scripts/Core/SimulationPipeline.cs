@@ -66,6 +66,9 @@ namespace Brink.Core
 
             turns.YearEnded += year => ProgressionSystem.EvaluateYear(state, year);
             turns.MonthResolved += Causal.CloseMonth;
+            // Observe the whole resolved month, including December's year-end.
+            // This writes history only: no action, score, RNG or national modifier.
+            turns.MonthResolved += StrategicEraSystem.RecordMonth;
             turns.MonthStarted += _ => OperationPlanningSystem.ExecuteStandingOrder(state, turns);
         }
     }

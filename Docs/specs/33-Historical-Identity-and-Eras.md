@@ -4,7 +4,59 @@
 Roadmap #26 implements evidence-backed country identity, dated turning points
 and an AI public-history consumer. Author checks and independent native review
 are separate; balance and hardware are deferred, not completion gates. Existing
-Phase G era/reversal systems below do not constitute completion of #27.
+Roadmap #27 adds earned, durable own-posting doctrine/era names to the older
+declared-course labels. Author verification is not independent certification.
+
+## #27 earned doctrines and eras
+
+The selected doctrine still produces a **declared** strategic era. That is intent,
+not a historical achievement. Separately, a classified own-office conduct record
+samples each resolved month after all resolution and year-end handlers. Choosing
+a doctrine, visiting a screen or repeatedly invoking the recorder in one month
+cannot earn a name. No RNG, resource, XP, action budget, AI modifier or score changes.
+
+Five concrete patterns are sampled, once per month regardless of multiplicity:
+
+| Name component | True at the end of the resolved month |
+| --- | --- |
+| Defence Partnership | At least one active mutual-defence commitment involving us |
+| Economic Pressure | At least one sanction regime sent by us remains in force |
+| Forward Presence | Our military posture is Forward |
+| Collection Network | At least one own uncompromised foreign station has positive penetration |
+| Commercial Partnership | At least one active trade-preference commitment involves us |
+
+Treaty conditions, expiry and breakage use `HasActive`, not the historical `Has`.
+These are held-policy observations, not numbers of clicks or claims about money
+spent, regionality, naval deployments, sanction-before-war sequencing, annexation
+restraint or uninterrupted duration. Inherited agreements and delegation count
+as national conduct; the text explicitly does not award personal authorship.
+
+Each complete non-overlapping 60-month window receives a dated System-category
+Chronicle review. Patterns observed in at least36 months qualify; the two longest
+qualifying durations supply a deterministic composite name, with table order
+breaking ties. The review names both the doctrine and era, prints all five counts,
+the observed interval and the naming rule. With none qualifying it says no settled
+doctrine was earned, rather than forcing a flattering title. The thresholds are
+narrative classification rules, not tuned mechanical rewards.
+
+Every later review cites the last earned name and its original review date,
+whether the new window sustains it, changes course or has no settled pattern.
+Earlier records never change. The latest review appears in our historical
+portrait (STRATEGIST, CHRONICLE and our DOSSIER); all reviews remain in the
+Chronicle. This is classified posting history, not a free revelation of foreign
+collection or intent. Foreign portraits do not derive or show these records.
+
+`CountryState.strategicConduct` is optional: dates, observed month count, five
+integer durations and the last earned name/date. Missing legacy records start at
+the first actually observed month; a gap resets the unfinished window without
+filling it from today's policies. Duplicate/backward calls do nothing. A successor
+has its own empty record, not the parent's years. Save version7 is unchanged.
+Completed reviews use appended `HistoricalEvent.ConductReview` (3), no second
+list of historical eras or parsing of old prose. A fresh reset starts fresh.
+
+Scope: names and definitions earned by the operator's government from bounded
+observations. No new player-naming UI, AI history powers, foreign secret classifier
+or general-purpose natural-language historian. Balance and hardware remain separate.
 
 ## #26 evidence and memory
 
@@ -112,7 +164,12 @@ dates, old-save defaults, dated/detached turning points, narrow real UI surfaces
 pure reads and a24-month pipeline save/resume determinism comparison. Mutation
 results are author evidence until reproduced independently in native Unity.
 
-`StrategicEraTests` covers doctrine-to-era naming and pressure qualifiers without changing the standing doctrine or action sequence.
+`StrategicEraTests` retains declared-course coverage and adds five real pattern
+predicates,59/60-month and35/36-held boundaries, stable composite ranking, gaps,
+duplicate calls, legacy/successor defaults, expiry, private evidence, repeated
+historical references, real pipeline/save-resume, two240-month observed/control
+world comparisons and four-width real UI tests. Author mutation results must be
+reproduced independently before being called native certification.
 
 `PrecedentTests` covers player-country military precedent, the foreign-history boundary, and non-mutation.
 

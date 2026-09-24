@@ -22,6 +22,10 @@ namespace Brink.Data
         /// </summary>
         public GameDate foundedDate;
 
+        // Optional own-posting record. Missing old-save history starts when observed,
+        // not at the world's epoch. No foreign intelligence is exposed through it.
+        public StrategicConductRecord strategicConduct;
+
         /// <summary>
         /// This government's five officials, one per pillar (GDD §8).
         ///
@@ -212,7 +216,19 @@ namespace Brink.Data
     }
 
     // Append only. None means an unclassified legacy entry, not an inferred act.
-    public enum HistoricalEvent { None, SanctionsImposed, TurningPoint }
+    public enum HistoricalEvent { None, SanctionsImposed, TurningPoint, ConductReview }
+
+    [Serializable]
+    public class StrategicConductRecord
+    {
+        public GameDate since;
+        public GameDate lastObserved;
+        public int months;
+        // Defence agreement, sanctions, forward posture, collection, trade agreement.
+        public int[] heldMonths = new int[5];
+        public string lastEarnedName;
+        public GameDate lastEarnedDate;
+    }
 
     /// <summary>One archived historical event. Long saves become an alternate-history chronicle.</summary>
     [Serializable]

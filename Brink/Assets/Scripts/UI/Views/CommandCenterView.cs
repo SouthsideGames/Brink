@@ -75,10 +75,10 @@ namespace Brink.UI.Views
                 var strategy = new StringBuilder();
                 strategy.AppendLine(AsciiChart.BoxHeader("STANDING COURSE", w));
                 var era = StrategicEraSystem.Current(state);
-                if (era == null) strategy.AppendLine(" NO NAMED STRATEGIC ERA YET — SET OR REVISE THE COURSE FROM OPERATOR.");
+                if (era == null) strategy.AppendLine(" NO DECLARED STRATEGIC ERA YET — SET OR REVISE THE COURSE FROM OPERATOR.");
                 else
                 {
-                    strategy.AppendLine($" ERA: {era.name.ToUpperInvariant()}");
+                    strategy.AppendLine($" DECLARED ERA: {era.name.ToUpperInvariant()}");
                     if (!string.IsNullOrEmpty(era.character)) strategy.AppendLine(" " + era.character);
                 }
                 course.text = strategy.ToString();
