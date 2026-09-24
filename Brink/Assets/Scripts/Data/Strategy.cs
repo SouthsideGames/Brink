@@ -47,12 +47,25 @@ namespace Brink.Data
     }
 
     [Serializable]
+    public class ForeignPolicy
+    {
+        public string targetId;
+        public ForeignPolicyIntent intent;
+        public bool delegated;
+    }
+
+    // Append only: these values are persisted. Intent is not a new national bonus.
+    public enum ForeignPolicyIntent { Unset, Cooperate, Contain, Isolate, Reconcile, Observe, Ignore }
+
+    [Serializable]
     public class StrategicPlan
     {
         public StrategicDoctrine doctrine = StrategicDoctrine.Balanced;
         public bool doctrineChosen;
         public GameDate doctrineAdopted;
         public List<StrategicPolicyChoice> policies = new List<StrategicPolicyChoice>();
+        public List<ForeignPolicy> foreignPolicies = new List<ForeignPolicy>();
+        public GameDate lastForeignPolicyAction;
         public List<PlayerObjective> objectives = new List<PlayerObjective>();
         public int revisionCount;
 

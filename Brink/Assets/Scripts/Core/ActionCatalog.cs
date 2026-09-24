@@ -81,6 +81,10 @@ namespace Brink.Core
             if (state?.PlayerCountry == null) return entries;
 
             var player = state.PlayerCountry;
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Set foreign-country intent and delegation",
+                "Free first intent; 1 INF revision; ordinary CP on execution",
+                "Separate policy for each foreign state. Explicit delegation allows one paid action per month across policies, after campaign orders. Autonomous desk and current authority required; cancel freely.",
+                true, "", verbs: new[] { nameof(GameController.SetForeignPolicy), nameof(GameController.DelegateForeignPolicy) });
             var confrontation = state.ActiveConfrontation;
             bool atWar = confrontation != null && !confrontation.resolved
                          && confrontation.escalation >= EscalationState.LimitedConflict;

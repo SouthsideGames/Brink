@@ -70,6 +70,8 @@ namespace Brink.Core
             // This writes history only: no action, score, RNG or national modifier.
             turns.MonthResolved += StrategicEraSystem.RecordMonth;
             turns.MonthStarted += _ => OperationPlanningSystem.ExecuteStandingOrder(state, turns);
+            // One paid foreign-policy action after campaign orders; both draw the same CP budget.
+            turns.MonthStarted += _ => ForeignPolicySystem.Execute(state, turns);
         }
     }
 }

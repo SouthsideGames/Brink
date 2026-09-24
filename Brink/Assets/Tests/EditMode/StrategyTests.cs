@@ -1,8 +1,12 @@
 using System;
 using System.IO;
+using System.Reflection;
 using Brink.Core;
 using Brink.Data;
+using Brink.UI;
+using Brink.UI.Views;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -17,6 +21,291 @@ namespace Brink.Tests
             state = WorldFactory.CreateDebugWorld(seed: 712);
             MandateSystem.Assign(state);
             state.influence = GameState.InfluenceCap;
+        }
+
+        void ReadyForeignPolicy(string target, ForeignPolicyIntent intent)
+        {
+            state.authorizedPillarMask = 31;
+            state.commandPoints.current = 20;
+            foreach (var official in state.PlayerCountry.cabinet) official.mode = ControlMode.Autonomous;
+            Assert.IsTrue(ForeignPolicySystem.Set(state, target, intent));
+            Assert.IsTrue(ForeignPolicySystem.SetDelegated(state, target, true));
+        }
+
+        [Test]
+        public void ForeignIntentIsPerTargetNotAnotherNationalPolicy()
+        {
+            int initiative = state.initiativesThisYear, influence = state.influence;
+            float relations = state.FindRelationship("USA", "CHN").relations;
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Contain));
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "IND", ForeignPolicyIntent.Cooperate));
+            Assert.AreEqual(ForeignPolicyIntent.Contain, ForeignPolicySystem.IntentFor(state, "CHN"));
+            Assert.AreEqual(ForeignPolicyIntent.Cooperate, ForeignPolicySystem.IntentFor(state, "IND"));
+            Assert.AreEqual(ForeignPolicyIntent.Unset, ForeignPolicySystem.IntentFor(state, "RUS"));
+            Assert.IsFalse(ForeignPolicySystem.IsDelegated(state, "CHN"));
+            Assert.AreEqual(initiative, state.initiativesThisYear);
+            Assert.AreEqual(influence, state.influence);
+            Assert.AreEqual(relations, state.FindRelationship("USA", "CHN").relations);
+        }
+
+        [Test]
+        public void ForeignRevisionCostsOnceAndRevokesOldAuthorization()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Observe);
+            int before = state.influence;
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Ignore));
+            Assert.AreEqual(before - 1, state.influence);
+            Assert.IsFalse(ForeignPolicySystem.IsDelegated(state, "CHN"));
+            Assert.IsFalse(ForeignPolicySystem.SetDelegated(state, "CHN", true));
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Ignore));
+            Assert.AreEqual(before - 1, state.influence);
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Unset));
+            Assert.AreEqual(1, state.mandate.strategy.foreignPolicies.Count, "Clearing must not reset the first-adoption price.");
+        }
+
+        [Test]
+        public void InvalidAndUnaffordableForeignIntentAreByteInert()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Observe);
+            state.influence = 0;
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Set(state, "USA", ForeignPolicyIntent.Ignore));
+            Assert.IsFalse(ForeignPolicySystem.Set(state, "ABSENT", ForeignPolicyIntent.Ignore));
+            Assert.IsFalse(ForeignPolicySystem.Set(state, "CHN", (ForeignPolicyIntent)999));
+            Assert.IsFalse(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Isolate));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [Test]
+        public void ForeignPolicyPaysTheOrdinaryOutreachAndOnlyOncePerMonth()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Cooperate);
+            var control = UnityEngine.JsonUtility.FromJson<GameState>(UnityEngine.JsonUtility.ToJson(state));
+            Assert.IsTrue(DiplomacySystem.Outreach(control, new TurnManager(control), "CHN"));
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(control.commandPoints.current, state.commandPoints.current);
+            Assert.AreEqual(control.FindRelationship("USA", "CHN").relations, state.FindRelationship("USA", "CHN").relations);
+            Assert.AreEqual(control.FindRelationship("USA", "CHN").trust, state.FindRelationship("USA", "CHN").trust);
+            Assert.AreEqual(control.initiativesThisYear, state.initiativesThisYear);
+            string after = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(after, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [TestCase(ControlMode.Directed)]
+        [TestCase(ControlMode.DirectControl)]
+        public void ExplicitCabinetControlWinsOverForeignDelegation(ControlMode mode)
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Cooperate);
+            state.PlayerCountry.FindOfficial(Pillar.Diplomacy).mode = mode;
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+            StringAssert.Contains("Autonomous", ForeignPolicySystem.PendingReason(state, "CHN"));
+        }
+
+        [Test]
+        public void ForeignSanctionsRespectAuthorityAndDetenteBeforeSpending()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Contain);
+            state.PlayerCountry.government.type = GovernmentType.PresidentialRepublic;
+            state.PlayerCountry.government.emergencyPowers = false;
+            state.PlayerCountry.government.authorityUpgradeMask = 0;
+            state.authorizedPillarMask = 0;
+            Assert.IsFalse(AuthoritySystem.HoldsAuthority(state, Pillar.Economy));
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+            state.authorizedPillarMask = 31;
+            state.FindRelationship("USA", "CHN").sanctionsTruceMonths = 24;
+            before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [TestCase(ForeignPolicyIntent.Contain, SanctionSeverity.Pressure)]
+        [TestCase(ForeignPolicyIntent.Isolate, SanctionSeverity.Severe)]
+        public void ForeignContainmentUsesRealSanctionsWithoutRepeatedOrders(ForeignPolicyIntent intent, SanctionSeverity severity)
+        {
+            ReadyForeignPolicy("CHN", intent);
+            Assert.IsNull(state.FindSanction("USA", "CHN"));
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(severity, state.FindSanction("USA", "CHN").severity);
+            Assert.Less(state.commandPoints.current, 20);
+            state.date = state.date.NextMonth();
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [Test]
+        public void ReconciliationLiftsOnlyOursAndDoesNotSpendOnOutreachThatMonth()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Reconcile);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "USA", "CHN", SanctionSeverity.Routine));
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "CHN", "USA", SanctionSeverity.Routine));
+            float before = state.FindRelationship("USA", "CHN").relations;
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.IsNull(state.FindSanction("USA", "CHN"));
+            Assert.NotNull(state.FindSanction("CHN", "USA"));
+            Assert.AreEqual(before, state.FindRelationship("USA", "CHN").relations);
+            Assert.AreEqual(19, state.commandPoints.current);
+        }
+
+        [Test]
+        public void ObservationStopsAtItsBoundAndIgnoreDoesNotEraseANetwork()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Observe);
+            state.networks.RemoveAll(n => n.ownerId == "USA" && n.targetId == "CHN");
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            var network = state.FindNetwork("USA", "CHN");
+            Assert.AreEqual(18f, network.penetration);
+            Assert.AreEqual(18, state.commandPoints.current);
+            state.date = state.date.NextMonth();
+            network.penetration = 60f;
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.IsTrue(ForeignPolicySystem.Set(state, "CHN", ForeignPolicyIntent.Ignore));
+            Assert.AreSame(network, state.FindNetwork("USA", "CHN"));
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+        }
+
+        [Test]
+        public void BlockedPolicyDoesNotStarveAnotherCountryAndReadsArePure()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Contain);
+            ReadyForeignPolicy("IND", ForeignPolicyIntent.Cooperate);
+            state.FindRelationship("USA", "CHN").sanctionsTruceMonths = 24;
+            float before = state.FindRelationship("USA", "IND").relations;
+            string json = UnityEngine.JsonUtility.ToJson(state);
+            for (int i = 0; i < 10; i++) ForeignPolicySystem.PendingReason(state, "CHN");
+            Assert.AreEqual(json, UnityEngine.JsonUtility.ToJson(state));
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.Greater(state.FindRelationship("USA", "IND").relations, before);
+            Assert.IsNull(state.FindSanction("USA", "CHN"));
+        }
+
+        [Test]
+        public void ForeignIntentSurvivesSaveAndOldMissingLedgerStaysNeutral()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Cooperate);
+            Assert.IsTrue(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            var loaded = UnityEngine.JsonUtility.FromJson<GameState>(UnityEngine.JsonUtility.ToJson(state));
+            Assert.AreEqual(ForeignPolicyIntent.Cooperate, ForeignPolicySystem.IntentFor(loaded, "CHN"));
+            Assert.IsTrue(ForeignPolicySystem.IsDelegated(loaded, "CHN"));
+            Assert.IsFalse(ForeignPolicySystem.Execute(loaded, new TurnManager(loaded)), "Load must not allow a second action this month.");
+            loaded.mandate.strategy.foreignPolicies = null;
+            string before = UnityEngine.JsonUtility.ToJson(loaded);
+            Assert.AreEqual(ForeignPolicyIntent.Unset, ForeignPolicySystem.IntentFor(loaded, "CHN"));
+            Assert.IsFalse(ForeignPolicySystem.Execute(loaded, new TurnManager(loaded)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(loaded));
+        }
+
+        [Test]
+        public void ForeignDelegationIsReachedByTheRealMonthlyPipeline()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Cooperate);
+            var turns = new TurnManager(state);
+            SimulationPipeline.Wire(turns, state);
+            turns.EndMonth();
+            Assert.AreEqual(state.date, state.mandate.strategy.lastForeignPolicyAction);
+            Assert.IsTrue(state.notifications.Exists(n => n.title == "FOREIGN POLICY EXECUTED"));
+        }
+
+        [Test]
+        public void ForeignReconciliationCannotLiftAChamberMandate()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Reconcile);
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "USA", "CHN", SanctionSeverity.Pressure));
+            if (state.council == null) state.council = new CouncilState();
+            state.council.mandates.Add(new CouncilMandate { subjectId = "CHN", monthsRemaining = 12 });
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            StringAssert.Contains("mandated", ForeignPolicySystem.PendingReason(state, "CHN"));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [Test]
+        public void ForeignPolicyDoesNotSpendWhenUnaffordableAndStopsWhenSatisfied()
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Observe);
+            state.networks.RemoveAll(n => n.ownerId == "USA" && n.targetId == "CHN");
+            state.commandPoints.current = 0;
+            string before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Cooperate);
+            var relationship = state.FindRelationship("USA", "CHN");
+            relationship.relations = relationship.trust = 70;
+            before = UnityEngine.JsonUtility.ToJson(state);
+            Assert.IsFalse(ForeignPolicySystem.Execute(state, new TurnManager(state)));
+            Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void ForeignPolicyPanelIsBoundedPureAndNamesTheActualTarget(int columns)
+        {
+            ReadyForeignPolicy("CHN", ForeignPolicyIntent.Observe);
+            TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+            try
+            {
+                string before = UnityEngine.JsonUtility.ToJson(state);
+                var view = new DiplomacyView();
+                typeof(DiplomacyView).GetField("selectedTargetId", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, "CHN");
+                typeof(DiplomacyView).GetMethod("BuildForeignPolicyControls", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(view, new object[] { state });
+                string text = "";
+                view.Root.Query<Label>().ForEach(label =>
+                {
+                    text += label.text + "\n";
+                    foreach (var line in (label.text ?? "").Split('\n')) Assert.LessOrEqual(AsciiChart.VisibleLength(line), columns);
+                });
+                view.Root.Query<Button>().ForEach(button => Assert.LessOrEqual(AsciiChart.VisibleLength(button.text), columns));
+                StringAssert.Contains(state.FindCountry("CHN").displayName, text);
+                StringAssert.Contains("Observe", text);
+                Assert.AreEqual(before, UnityEngine.JsonUtility.ToJson(state));
+            }
+            finally { TerminalMetrics.ResetForTests(); }
+        }
+
+        [Test]
+        public void ForeignPolicyControllerPersistsIntentAndSeparateDelegation()
+        {
+            var gc = GameController.Instance; var previous = gc.State; var previousTurns = gc.Turns;
+            string oldDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-foreign-policy-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, new TurnManager(state));
+                Assert.IsTrue(gc.SetForeignPolicy("CHN", ForeignPolicyIntent.Cooperate));
+                Assert.IsFalse(ForeignPolicySystem.IsDelegated(SaveSystem.Load(0), "CHN"));
+                Assert.IsTrue(gc.DelegateForeignPolicy("CHN", true));
+                Assert.IsTrue(ForeignPolicySystem.IsDelegated(SaveSystem.Load(0), "CHN"));
+                Assert.IsTrue(gc.DelegateForeignPolicy("CHN", false));
+                Assert.IsFalse(ForeignPolicySystem.IsDelegated(SaveSystem.Load(0), "CHN"));
+                var view = new DiplomacyView();
+                typeof(DiplomacyView).GetField("selectedTargetId", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, "CHN");
+                typeof(DiplomacyView).GetMethod("BuildForeignPolicyControls", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(view, new object[] { state });
+                Button observe = null;
+                view.Root.Query<Button>().ForEach(b => { if (b.text == "OBSERVE [1 INF]") observe = b; });
+                Assert.NotNull(observe);
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(observe);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(observe, null);
+                Assert.AreEqual(ForeignPolicyIntent.Observe, ForeignPolicySystem.IntentFor(SaveSystem.Load(0), "CHN"));
+                Assert.AreEqual(ForeignPolicyIntent.Unset, ForeignPolicySystem.IntentFor(state, "IND"));
+            }
+            finally
+            {
+                SaveSystem.SaveDirectoryOverride = oldDirectory;
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                Directory.Delete(directory, true);
+            }
         }
 
         [Test]

@@ -4,6 +4,14 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Remaining-core #2 adds `StrategicPlan.foreignPolicies` (targetId, persisted intent,
+delegated flag) and `lastForeignPolicyAction` (date). Missing/null lists are neutral,
+and the default date is not a historical action. Intent ordinals append only.
+Authoring/revising never implicitly enables delegation. The last-action date
+prevents replaying the same month's delegated order after load. Additive defaults
+retain version 7; no migration or reconstruction from prose. Spec27 owns the
+ordinary-cost, current-authority and Cabinet-control contract.
+
 Roadmap29 adds `BranchForce.replacementSuspended`, default false. False retains
 ordinary replacement on existing saves; true means voluntary stand-down has
 stopped automatic purchases for that service, not explicit new orders. Counts,

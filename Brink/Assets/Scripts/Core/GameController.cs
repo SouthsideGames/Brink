@@ -867,6 +867,22 @@ namespace Brink.Core
 
         // ---------- diplomacy commands ----------
 
+        public bool SetForeignPolicy(string targetId, Data.ForeignPolicyIntent intent)
+        {
+            if (!IsRunning) return false;
+            bool ok = ForeignPolicySystem.Set(State, targetId, intent);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool DelegateForeignPolicy(string targetId, bool enabled)
+        {
+            if (!IsRunning) return false;
+            bool ok = ForeignPolicySystem.SetDelegated(State, targetId, enabled);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool DiplomaticOutreach(string targetId)
         {
             if (!MayCommand(Data.Pillar.Diplomacy)) return false;

@@ -45,6 +45,7 @@ namespace Brink.UI.Views
             AddCabinetAdvice(state, Pillar.Diplomacy);
             BuildRelationshipBoard(state);
             BuildTargetSelector(state);
+            BuildForeignPolicyControls(state);
             BuildTreatyControls(state);
             BuildLeverageTermsControls(state);
             BuildLeverageControls(state);
@@ -55,6 +56,36 @@ namespace Brink.UI.Views
             BuildBlocControls(state);
             BuildCouncilControls(state);
             BuildClearanceControls(state);
+        }
+
+        void BuildForeignPolicyControls(GameState state)
+        {
+            if (state.FindCountry(selectedTargetId) == null) return;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("POLICY TOWARD SELECTED STATE", W);
+            var current = ForeignPolicySystem.IntentFor(state, selectedTargetId);
+            AddText("terminal-text-dim").text = AsciiChart.WrapBlock(
+                state.FindCountry(selectedTargetId).displayName + ": " + current + ". " + ForeignPolicySystem.Description(current)
+                + " First intent is free; revision costs 1 INF. Authoring earns nothing. Delegation is separate: at most one paid policy action per month across all countries, after campaign orders. Other states still choose their own response.", W);
+            var row = MakeRow();
+            foreach (ForeignPolicyIntent intent in System.Enum.GetValues(typeof(ForeignPolicyIntent)))
+            {
+                var captured = intent;
+                int cost = ForeignPolicySystem.CostToSet(state, selectedTargetId, intent);
+                var button = new Button(() => { GameController.Instance.SetForeignPolicy(selectedTargetId, captured); Refresh(); })
+                    { text = intent.ToString().ToUpperInvariant() + (cost > 0 ? " [1 INF]" : "") };
+                button.AddToClassList("cmd-button");
+                if (current == intent) button.AddToClassList("primary");
+                if (state.influence < cost) Block(button, "Needs 1 Influence to revise this country's intent.");
+                row.Add(button);
+            }
+            bool delegated = ForeignPolicySystem.IsDelegated(state, selectedTargetId);
+            var delegation = new Button(() => { GameController.Instance.DelegateForeignPolicy(selectedTargetId, !delegated); Refresh(); })
+                { text = delegated ? "CANCEL DELEGATION" : "DELEGATE PAID ACTIONS" };
+            delegation.AddToClassList("cmd-button");
+            if (!delegated && (current == ForeignPolicyIntent.Unset || current == ForeignPolicyIntent.Ignore))
+                Block(delegation, "This intent authorizes no action.");
+            MakeRow().Add(delegation);
+            AddText("terminal-text-dim").text = AsciiChart.WrapBlock(ForeignPolicySystem.PendingReason(state, selectedTargetId), W);
         }
 
         void BuildClearanceControls(GameState state)

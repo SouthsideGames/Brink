@@ -1,5 +1,19 @@
 # Brink ("Unknown Game")
 
+## Remaining core — foreign-target policies (implementation, awaiting review)
+
+The master #2 means policy **toward each foreign state**, not only our national
+policy. ForeignPolicySystem now stores separate Cooperate/Contain/Isolate/
+Reconcile/Observe/Ignore intent; explicit delegation authorizes one ordinary paid
+command each month across targets, after campaign standing orders. Autonomous
+desk and held constitutional authority required; current directives win. Normal
+CP, sanctions/truce/mandate gates, collection exposure and command rewards apply.
+Changing intent costs 1 INF after first adoption and always revokes delegation;
+authoring has no action reward. Controls and autosave live in DIPLOMACY, and the
+command index names both verbs. No blanket aliases for unimplemented deterrence,
+patronage or covert attack. Spec27 and save spec10 define bounded behavior.
+This work is not independently certified and is not merged into main.
+
 ## Roadmap #30 — consequences, not equal viability
 
 This is a design-policy closure, not another penalty system. Broad pillar
