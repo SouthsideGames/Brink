@@ -141,6 +141,38 @@ A long-running Brink save should feel as though it is accumulating political-str
 - Trust remains the simulation's existing diplomatic variable. The credibility file explains the record; it does not secretly modify trust or create a parallel score.
 
 ## Failure and recovery
+- Roadmap #28 implementation: the existing non-terminal world is retained, not
+  replaced by a rescue mode. Defeat and even total conquest leave the player's
+  country/posting in the save; coups can replace its government, secession can
+  remove ground, and insolvency/isolation can persist. END MONTH, progression
+  and ordinary instruments remain. Continuing does not guarantee recovery.
+- STRATEGIST's Recovery File now routes own current conditions to existing desks:
+  war/defeat to settlement, posture and procurement; domestic breakdown/turnover
+  to institutions and Cabinet; secession to coexistence or conditional reunion;
+  financial distress/recession to budget, taxation and restructuring; sanctions
+  and absent active treaty commitments to diplomacy. These are explanatory
+  directions, not action buttons or assertions of current eligibility. Normal
+  authority, payment, targeting and counterpart acceptance still apply.
+- No controlled ground means a diminished continuing state, not an automatic
+  restoration. Controlled and occupied titled-site counts are distinct; title
+  already transferred is not misreported as occupation. A successor with no
+  remaining titled ground is not reported as an unfinished secession. No active
+  treaty is not claimed as proof of universal hostility. No foreign private
+  conditions are used to generate this file.
+- The reader now checks the ledger horizon itself: valid month, age0..11,
+  own-country, non-None metric. It takes the latest record per metric, not an
+  annual total or a causal attribution. No observations means NO RECENT EVIDENCE,
+  never improvement merely because several administrations served. The display
+  states that this is direction, not proof of successful recovery.
+- One existing recovery-loop defect is closed: CanReunify requires the successor
+  still to have titled ground. Absorption retains its country object but removes
+  that title, so neither a repeated command nor the monthly check can absorb it
+  and grant the reunion dividend again. No new flag or memory is needed. This
+  also refuses an empty successor whose title has already passed elsewhere.
+  First-reunion costs/effects are unchanged; this is not a recovery retuning.
+- Otherwise this slice changes no simulation, action price, save field, pipeline,
+  AI or scoring. It exposes existing paths and adds real-world continuation/save
+  tests. Balance/device validation is separate.
 - Failure is allowed to remain history rather than becoming a forced game-over.
 - Durable setback evidence such as wars won/lost and administrations served remains visible.
 - The recent causal ledger supplies an explicitly labelled twelve-month recovery/pressure reading. Metrics whose increase is harmful (unrest, grievance, debt, war exhaustion) are interpreted in the correct direction.

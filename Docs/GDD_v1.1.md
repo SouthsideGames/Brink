@@ -377,6 +377,16 @@ Intelligence can detect, accelerate or exploit vulnerabilities, but cannot make 
 A successful foreign-supported regime change creates a new sovereign government with its own interests, not an automatic puppet.
 Catastrophic events often create new gameplay states rather than immediate game-over: lost territory, election defeat, coup, depression, civil war and successor governments can all continue.
 True permanent loss is rare and reserved for cases such as total annexation/state dissolution or other situations where meaningful state continuity ends.
+Amendment, September 2026 (roadmap #28): the current implementation retains even
+a totally annexed country as a diminished state and keeps the operator's posting.
+The earlier possible permanent-loss exception above is not an implemented game
+over. Recovery means using the ordinary government, financial, diplomatic and
+military instruments under their real costs and refusals; it does not refund
+losses or promise restoration to the opening map. The Recovery File identifies
+current pressures and routes to those instruments, distinguishing measured recent
+direction from absent evidence. Spec33 owns the reading; existing systems own
+all consequences. A bad grade, failed mandate or unanswered crisis is not an
+instruction to reset the campaign.
 23. Events & Crisis System
 Events use a hybrid systemic + authored architecture. Simulation conditions determine eligibility, while authored situations provide high-quality choices and presentation.
 Examples: protests from inflation/election pressure, border incidents from military buildup, shortages from supplier wars, scandals, disasters and political crises.

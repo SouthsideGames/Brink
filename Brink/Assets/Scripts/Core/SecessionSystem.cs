@@ -360,6 +360,13 @@ namespace Brink.Core
         {
             if (parent == null || breakaway == null) return false;
             if (breakaway.id != $"{parent.id}_S") return false;
+            // Absorption retains the country object, but transfers its title.
+            // Without this, every later month absorbs the same rump again and
+            // repeats the unity/grievance/diplomacy recovery dividend.
+            bool hasTitle = false;
+            foreach (var location in state.locations)
+                if (location.originalOwnerId == breakaway.id) { hasTitle = true; break; }
+            if (!hasTitle) return false;
             if (breakaway.government.inCivilConflict) return false;
             if (state.IsAtWar(breakaway.id)) return false;
 

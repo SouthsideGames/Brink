@@ -1,5 +1,20 @@
 # Brink ("Unknown Game")
 
+## Roadmap #28 — better failure and recovery
+
+The operator already survives defeat, conquest, coups and fragmentation; finance,
+sanction relief and domestic recovery already have ordinary instruments. Do not
+add a free rescue/reset system. RecoveryHistorySystem now gives own-state routes
+to those desks, explicitly subject to ordinary prices and refusals, and distinguishes
+current pressure from durable loss. It filters stale/future/foreign causal evidence
+and cannot call an empty ledger recovery. STRATEGIST uses the shared renderer.
+The reading writes nothing. A separate existing reunion-loop defect is closed:
+CanReunify now requires the successor still to have titled ground, preventing
+retained country objects from being absorbed and rewarded again every month.
+No persistent fields, pipeline, action costs or AI changes. Spec33 and
+RecoveryHistoryTests cover catastrophe/save/month continuation, priced recovery
+and once-only reunion. Balance/device work is deferred, not a completion gate.
+
 ## Roadmap #27 — earned doctrines and eras
 
 StrategicEraSystem now separates selected/declared course from a durable own-office
