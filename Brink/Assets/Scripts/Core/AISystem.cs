@@ -606,8 +606,7 @@ namespace Brink.Core
                 switch (objective.type)
                 {
                     case AIObjectiveType.BuildCapability:
-                        InvestInPillars(state, country, rng);
-                        ai.actionsThisMonth++;
+                        if (InvestInPillars(state, country, rng)) ai.actionsThisMonth++;
                         break;
 
                     case AIObjectiveType.ConsolidateHome:
@@ -670,10 +669,10 @@ namespace Brink.Core
         /// Ministers raise the *pillar*; only procurement writes strength, which
         /// is why `RebuildForces` still has to be reached from somewhere.
         /// </summary>
-        static void InvestInPillars(GameState state, CountryState country, Random rng)
+        static bool InvestInPillars(GameState state, CountryState country, Random rng)
         {
-            if (country.government.leader.priority == NationalPriority.Security)
-                RebuildForces(state, country, rng);
+            return country.government.leader.priority == NationalPriority.Security
+                && RebuildForces(state, country, rng);
         }
 
         /// <summary>
@@ -684,7 +683,7 @@ namespace Brink.Core
         /// estimates, which read the pillar rather than the force, kept reporting
         /// everyone strong.
         /// </summary>
-        static void RebuildForces(GameState state, CountryState country, Random rng)
+        static bool RebuildForces(GameState state, CountryState country, Random rng)
         {
             var mil = country.military;
 
@@ -692,8 +691,7 @@ namespace Brink.Core
             // without it is hollow whatever its nominal strength.
             if (mil.logistics < 55f && rng.NextDouble() < 0.5)
             {
-                MilitarySystem.InvestInLogisticsBy(state, country.id);
-                return;
+                return MilitarySystem.InvestInLogisticsBy(state, country.id);
             }
 
             // A state at war moves money to the military, if its politics will
@@ -702,15 +700,15 @@ namespace Brink.Core
             if (!mil.warFooting && AcquisitionSystem.CanDeclareWarFooting(state, country.id, out _)
                 && rng.NextDouble() < 0.35)
             {
-                if (AcquisitionSystem.SetWarFootingBy(state, country.id, true)) return;
+                if (AcquisitionSystem.SetWarFootingBy(state, country.id, true)) return true;
             }
 
             // Replace the specific thing that is missing. A branch rebuilt only
             // through aggregate strength would refill evenly, which is not how a
             // government that just lost its carriers actually spends.
-            if (rng.NextDouble() < 0.5 && OrderWhatIsShort(state, country, rng)) return;
+            if (rng.NextDouble() < 0.5 && OrderWhatIsShort(state, country, rng)) return true;
 
-            if (mil.programs.Count >= MilitarySystem.MaxPrograms) return;
+            if (mil.programs.Count >= MilitarySystem.MaxPrograms) return false;
 
             // Re-equip whichever branch has fallen furthest behind.
             var weakest = ForceBranch.Ground;
@@ -725,10 +723,10 @@ namespace Brink.Core
             }
 
             // Only worth a programme if there is real ground to make up.
-            if (worst > 75f) return;
+            if (worst > 75f) return false;
 
             var scale = worst < 45f ? MilitarySystem.ProgramScale.Major : MilitarySystem.ProgramScale.Modest;
-            MilitarySystem.BeginProcurementBy(state, country.id, weakest, scale);
+            return MilitarySystem.BeginProcurementBy(state, country.id, weakest, scale);
         }
 
         /// <summary>
