@@ -837,7 +837,7 @@ namespace Brink.Core
         /// rules accept and the panel offers; arms control needs the regime.
         /// Every reason is a public fact.
         /// </summary>
-        static bool CommitmentGate(GameState state, CountryState actor, string targetId, TreatyCommitment commitment, TreatyClause terms, out string reason)
+        internal static bool CommitmentGate(GameState state, CountryState actor, string targetId, TreatyCommitment commitment, TreatyClause terms, out string reason)
         {
             reason = "";
             var treaty = state.FindTreaty(actor.id, targetId);
@@ -883,7 +883,7 @@ namespace Brink.Core
         }
 
         /// <summary>Write the commitment they carry through the shared treaty paths: a new treaty, a deepening, or a renewal of an expired record.</summary>
-        static bool RecordCommitment(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
+        internal static bool RecordCommitment(GameState state, string actorId, string targetId, TreatyCommitment commitment, TreatyClause terms)
         {
             var standing = state.FindTreaty(actorId, targetId);
             if (standing == null)

@@ -2,6 +2,24 @@ using System;
 
 namespace Brink.Data
 {
+    /// <summary>A dated forensic observation, not an analyst's fallible judgement.</summary>
+    [Serializable]
+    public class SponsorshipFinding
+    {
+        public string observerId;
+        public string movementId;
+        public string locationId;
+        public string sponsorId;
+        public GameDate discovered;
+        public bool filed;
+        public bool exposed;
+        public bool confronted;
+        public bool bargainAttempted;
+        public bool silencePromised;
+        public string sharedById;
+        public string Key => movementId + "@" + sponsorId;
+    }
+
     /// <summary>
     /// A question a service can be told to answer (spec 03 §10, spec 25 §5.3).
     ///

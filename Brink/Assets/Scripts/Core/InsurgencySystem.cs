@@ -76,6 +76,8 @@ namespace Brink.Core
 
         /// <summary>Political Capital an AI government pays for the same decision.</summary>
         public const float SponsorPoliticalCost = 1.5f;
+        public const float AttributionBilateralTrustCost = 26f;
+        public const float AttributionOtherTrustCost = 3.5f;
 
         /// <summary>Treasury one shipment costs the sponsor.</summary>
         public const float ShipmentTreasury = 420f;
@@ -228,7 +230,7 @@ namespace Brink.Core
         {
             if (insurgency == null || !insurgency.HasSponsor) return false;
             if (insurgency.sponsorExposed) return true;
-            return insurgency.sponsorId == observerId;
+            return insurgency.sponsorId == observerId || SponsorshipFindings.Knows(state, observerId, insurgency);
         }
 
         // ---------- what the ground will hold ----------
@@ -708,7 +710,7 @@ namespace Brink.Core
             if (relationship != null)
             {
                 relationship.relations = Clamp(relationship.relations - 22f);
-                relationship.trust = Clamp(relationship.trust - 26f);
+                relationship.trust = Clamp(relationship.trust - AttributionBilateralTrustCost);
                 relationship.SetThreatPerceivedBy(holder.id,
                     Clamp(relationship.ThreatPerceivedBy(holder.id) + 18f));
                 relationship.AddMemory(state.date,
@@ -723,7 +725,7 @@ namespace Brink.Core
             {
                 if (other == relationship) continue;
                 if (!other.Involves(sponsor.id)) continue;
-                other.trust = Clamp(other.trust - 3.5f);
+                other.trust = Clamp(other.trust - AttributionOtherTrustCost);
             }
 
             state.AddChronicle(ChronicleCategory.Intelligence, sponsor.id,

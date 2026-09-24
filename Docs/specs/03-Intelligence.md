@@ -448,6 +448,48 @@ Phase 6. This is the fog system working, not a distorted report.
 Delivered assessments are pruned after 60 months. Empty on an old save is
 correct, so no migration.
 
+### Dated sponsorship findings and responses (remaining core #19–20)
+
+`SponsorshipFindings` records actual sponsorship, not an analyst's confidence or
+`IntelProduct.accurate` flag. The existing monthly finished-intelligence update
+discovers unpublished sponsorship on our held ground with forensic capability
+and an uncompromised network at penetration65 on the real sponsor. No new random
+draw or discovery reward. Dated observer/movement/sponsor records survive filing
+and loading; legacy records start empty. A changed sponsor cannot inherit the
+evidence. `KnownSponsor` consumes it without making it public or rewriting an
+assessment. The own-only INT panel provides five response types:
+
+- **Expose (2 CP):** ordinary `Attribute` effects once, no movement/arms removal.
+- **File/reopen (0):** retain knowledge, change drawer state, no initiative.
+- **Confront (2 CP):** one private request per finding. Ordinary bilateral treaty
+  willingness without commitment burden must reach50. Acceptance calls existing
+  `WithdrawSupportBy`; refusal spends effort without publishing. Delivered arms
+  remain; no permanent restraint is promised.
+- **Share (1 CP):** give a chosen active outbound IntelligenceSharing partner
+  dated knowledge once, not a trust bonus. No new AI reaction policy.
+- **Sell our silence (2 CP):** one offer for their unconditional permanent
+  Transit, IntelligenceSharing or NonAggression clause, through existing leverage
+  gates and treaty writers. Already-shared evidence is ineligible. Acceptance
+  prevents our publication/sharing, not automatic or other exposure; sponsorship
+  may continue. Refusal records the attempt without a treaty. Filing never resets
+  either attempted response.
+
+Silence's authored valuation is mean clamped trust loss across the sponsor's
+relationships from our ordinary attribution, capped12 willingness points. Add it
+to ordinary requested-clause willingness; acceptance requires50. Reciprocity
+credits value/6 against the ordinary clause value. This is a bargaining rule,
+not guaranteed immunity from future exposure. Hidden trust/willingness values
+are not printed; replies are uncertain. New treaties use ordinary initiative/30XP,
+extensions one initiative/20XP, no extra exchange bonus. Publication, sharing and
+accepted confrontation each record one initiative; declined requests none.
+Paid controllers require authority/affordability; diplomatic responses require
+both Intelligence and Diplomacy. Automatic attribution remains unchanged.
+
+Stale/public findings cannot be spent. The panel wraps at34/49/64/104 with refusal
+reasons. This implements the five response types for one real secret, not a
+generic secret engine, invented hidden pacts or an AI bargaining caller. Balance
+and device validation remain separate from implementation completion.
+
 ### Deferred from this tranche
 
 - **`Exfiltration`** — needs a model of agents as losable assets that

@@ -626,6 +626,65 @@ namespace Brink.Core
             return product != null;
         }
 
+        public bool ExposeSponsorshipFinding(string movementId)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)
+                || !SponsorshipFindings.CanExpose(State, movementId, out _)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Publish sponsorship evidence")) return false;
+            bool ok = SponsorshipFindings.Expose(State, movementId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool FileSponsorshipFinding(string movementId)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = SponsorshipFindings.File(State, movementId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ReopenSponsorshipFinding(string key)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = SponsorshipFindings.Reopen(State, key);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ShareSponsorshipFinding(string key, string recipientId)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanShare(State, key, recipientId, out _)
+                || !MayCommand(Data.Pillar.Intelligence)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ShareCost, "Share sponsorship evidence")) return false;
+            bool ok = SponsorshipFindings.Share(State, key, recipientId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ConfrontSponsorshipFinding(string key)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanConfront(State, key, out _)
+                || !MayCommand(Data.Pillar.Intelligence) || !MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Confront sponsorship privately")) return false;
+            bool ok = SponsorshipFindings.Confront(State, key);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot); // refusal still spent effort and records the attempt
+            return ok;
+        }
+
+        public bool BargainSponsorshipFinding(string key, Data.TreatyCommitment commitment)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanBargain(State, key, commitment, out _)
+                || !MayCommand(Data.Pillar.Intelligence) || !MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Offer silence for a commitment")) return false;
+            bool ok = SponsorshipFindings.Bargain(State, key, commitment);
+            SaveSystem.Save(State, AutosaveSlot); // shared treaty writers own successful rewards
+            return ok;
+        }
+
         /// <summary>Hunt for a foreign service inside our own (spec 03 §7c).</summary>
         public bool MoleHunt()
         {

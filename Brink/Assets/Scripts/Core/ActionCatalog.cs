@@ -324,6 +324,12 @@ namespace Brink.Core
                 "No network anywhere. Analysis is a product of collection, not a substitute.",
                 verbs: new[] { nameof(GameController.CommissionEstimate) });
 
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Handle sponsorship evidence", "2 CP expose/confront/bargain; 1 share; 0 file/reopen",
+                "Publish attribution, ask privately for withdrawal, share with an intelligence partner, or exchange our silence for a commitment. Diplomatic responses need both authorities; replies are uncertain. Filing preserves the evidence.",
+                verbs: new[] { nameof(GameController.ExposeSponsorshipFinding), nameof(GameController.FileSponsorshipFinding),
+                    nameof(GameController.ReopenSponsorshipFinding), nameof(GameController.ShareSponsorshipFinding),
+                    nameof(GameController.ConfrontSponsorshipFinding), nameof(GameController.BargainSponsorshipFinding) });
+
             Add(Pillar.Intelligence, "INTELLIGENCE", "Mole hunt",
                 $"{IntelligenceSystem.MoleHuntCost} CP",
                 "Search our own service for a foreign one. A hunt that finds nothing still "

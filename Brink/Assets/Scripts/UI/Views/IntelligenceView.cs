@@ -44,6 +44,7 @@ namespace Brink.UI.Views
             AddCabinetAdvice(state, Pillar.Intelligence);
             BuildEstimateBoard(state);
             BuildFinishedIntelligence(state);
+            BuildFindings(state);
             BuildDefensivePosture(state, player);
             BuildNetworkControls(state);
             BuildInsurgencySupport(state, player);
@@ -110,6 +111,59 @@ namespace Brink.UI.Views
                     Block(button, block);
             }
             ExplainBlockedCommands(row);
+        }
+
+        void BuildFindings(GameState state)
+        {
+            foreach (var finding in SponsorshipFindings.For(state, state.playerCountryId))
+            {
+                AddText("terminal-text-bright").text = AsciiChart.WrapBlock(
+                    "CLASSIFIED FINDING — " + SponsorshipFindings.Describe(state, finding), W);
+                string id = finding.Key;
+                var row = MakeRow();
+                if (finding.filed)
+                {
+                    AddButton(row, "REOPEN FILE", null,
+                        () => { GameController.Instance.ReopenSponsorshipFinding(id); Refresh(); });
+                    continue;
+                }
+                var expose = AddButton(row, $"EXPOSE [{SponsorshipFindings.ExposureCost} CP]", null,
+                    () => { GameController.Instance.ExposeSponsorshipFinding(id); Refresh(); });
+                if (!SponsorshipFindings.CanExpose(state, id, out string reason)) Block(expose, reason);
+                AddButton(row, "FILE WITHOUT ACTION", null,
+                    () => { GameController.Instance.FileSponsorshipFinding(id); Refresh(); });
+                ExplainBlockedCommands(row);
+                row = MakeRow();
+                var confront = AddButton(row, "SEEK WITHDRAWAL [2 CP]", null,
+                    () => { GameController.Instance.ConfrontSponsorshipFinding(id); Refresh(); });
+                if (!SponsorshipFindings.CanConfront(state, id, out reason)) Block(confront, reason);
+                GateOnAuthority(row, Pillar.Diplomacy, state);
+                ExplainBlockedCommands(row);
+                AddText().text = AsciiChart.WrapBlock("Reply uncertain. Diplomatic responses need Intelligence and Diplomacy authority. Withdrawal leaves delivered weapons; silence prevents only our publication/sharing, not other discovery.", W);
+                foreach (var commitment in new[] { TreatyCommitment.Transit, TreatyCommitment.IntelligenceSharing, TreatyCommitment.NonAggression })
+                {
+                    var captured = commitment;
+                    row = MakeRow();
+                    string label = commitment == TreatyCommitment.IntelligenceSharing ? "INTEL"
+                        : commitment == TreatyCommitment.NonAggression ? "NON-AGGR" : "TRANSIT";
+                    var bargain = AddButton(row, "SILENCE FOR " + label + " [2 CP]", null,
+                        () => { GameController.Instance.BargainSponsorshipFinding(id, captured); Refresh(); });
+                    if (!SponsorshipFindings.CanBargain(state, id, captured, out reason)) Block(bargain, reason);
+                    GateOnAuthority(row, Pillar.Diplomacy, state);
+                    ExplainBlockedCommands(row);
+                }
+                foreach (var recipient in state.countries)
+                {
+                    var treaty = state.FindTreaty(state.playerCountryId, recipient.id);
+                    if (treaty == null || !treaty.Carries(state, state.playerCountryId, TreatyCommitment.IntelligenceSharing)) continue;
+                    string recipientId = recipient.id;
+                    row = MakeRow();
+                    var share = AddButton(row, "SHARE: " + recipientId + " [1 CP]", null,
+                        () => { GameController.Instance.ShareSponsorshipFinding(id, recipientId); Refresh(); });
+                    if (!SponsorshipFindings.CanShare(state, id, recipientId, out reason)) Block(share, reason);
+                    ExplainBlockedCommands(row);
+                }
+            }
         }
 
         static string ShortQuestion(EstimateQuestion question)

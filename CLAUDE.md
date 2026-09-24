@@ -1,5 +1,18 @@
 # Brink ("Unknown Game")
 
+## Remaining core — sponsorship findings (awaiting independent review)
+
+Spec03§10: dated evidence from actual sponsorship, forensic capability and an
+uncompromised65+ network, on own ground. Never infer truth from analyst.accurate
+or prose. Existing monthly hook, no new RNG. Optional saved list, empty legacy
+default, version7. Expose/file/confront/share/silence bargain cost2/0/2/1/2 CP.
+Attempts persist; recipients gain knowledge, not trust gifts. Silence blocks our
+publication/sharing, never automatic attribution. Reuse existing attribution,
+withdrawal and treaty writers; no generic secret engine or AI bargaining caller.
+Valuation is capped mean attribution trust loss, not guaranteed future immunity.
+Author .NET tests and Unity-reference compilation are not native execution,
+independent review or balance certification.
+
 ## Remaining core — ministry inheritance (awaiting independent review)
 
 CountryState.institutionalMemory survives minister replacement. Existing notable

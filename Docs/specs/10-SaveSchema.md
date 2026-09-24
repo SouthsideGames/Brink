@@ -4,6 +4,14 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Remaining-core #19–20 adds GameState.sponsorshipFindings: optional list of dated
+observerId/movementId/locationId/sponsorId evidence, filed/exposed/confronted/
+bargainAttempted/silencePromised flags and sharedById. Missing/null lists read
+empty; no legacy history is invented, no migration or version change (7).
+Key is derived movement@sponsor, not another saved field. Attempts and silence
+survive load; filing does not erase knowledge or reset attempts. Spec03§10 owns
+discovery, stale-evidence gates and all five response choices.
+
 Remaining-core #16 adds CountryState.institutionalMemory, keyed by Pillar with
 successes, setbacks, riskImprint and lastOutcome. Missing/null/empty records are
 neutral; default records with no outcomes confer no imprint. Written only by

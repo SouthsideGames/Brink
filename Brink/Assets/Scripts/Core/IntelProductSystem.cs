@@ -119,6 +119,7 @@ namespace Brink.Core
 
         public static void MonthlyUpdate(GameState state)
         {
+            SponsorshipFindings.Discover(state);
             foreach (var product in state.intelProducts)
             {
                 if (product.delivered) continue;
