@@ -1,5 +1,197 @@
 # Brink ("Unknown Game")
 
+## Remaining core — foreign project support (awaiting review)
+
+Spec02: DIPLOMACY requests one ring-fenced instalment for own industrial/site work
+from an active received TradePreference partner.2 CP accepted/declined; actual
+decision uses relations60/trust50 and donor cash, never previewed hidden treasury.
+Debit donor, optional programme.externalFunding (legacy0), consume in ordinary
+work before own cash; no instant progress/treasury grant. Pause retains funding,
+cancel/abandon forfeits it, no stacking. Player donations cannot be auto-authorized
+by the actor-generic path; no AI caller. Real controller autosaves and is indexed.
+Version7 unchanged, but this IS a Data change. Author harness/reference compile
+is not native/independent review. No balance or trajectory claim.
+
+## Remaining core — construction imports (awaiting review)
+
+Spec02: delivered Materials supply>=10 permits two paid industrial work-months
+per calendar month if two remain and treasury covers both. Otherwise one; lack
+of even one instalment still lapses. Existing site gates precede payment. No new
+fields, extra completion benefit or free acceleration. UI distinguishes work
+months and possible doubled monthly spending. Shared TradeSystem.Supply carries
+sanctions/embargo/route gates. This changes trajectories; tuning/balance is not
+certified. Author .NET/reference compilation is not native execution/review.
+
+## Remaining core — construction setbacks (awaiting review)
+
+Spec02: successful Sabotage affects national Industry work; AirStrike affects
+Energy work at its exact target site. At most two completed work-months are lost,
+never beyond original duration; ordinary payment/lapse/pause/completion follows.
+Private owner-only receipt, no attacker queue leak, refund, new fields or RNG.
+This changes simulation outcomes and is not trajectory/balance certified. Foreign
+funding/trade acceleration remain separate work. Author harness/reference compile
+is not native execution or independent review.
+
+## Remaining core — opt-in crisis animation (awaiting review)
+
+Spec28: PLAY ART / PAUSE ART defaults off on each Show. Thirteen bounded frames
+use the existing scene scheduler at700ms; pause freezes, Hide/decision stops,
+Show resets. No countdown, recommendation, simulation clock/RNG or saved setting.
+Direct callback/button tests do not measure native scheduler timing/attachment;
+Unity-reference compile is not native execution. Archive scenes remain static.
+
+## Remaining core — archive and crisis art (awaiting review)
+
+Spec28: transparent clipped sprite stamps extend the existing canvas. CHRONICLE
+illustrates the newest visible record on the current page, with category/typed
+metadata only, never prose classification or live-status claims. The renderer
+also enforces WorldWire.CanShow. Crisis art stays inside the scroll reader and
+does not select or alter choices. Static, deterministic, no saved fields or RNG.
+This is not animation or an exhaustive event catalogue. Author .NET checks and
+actual Unity-reference compilation are not native runtime or independent review.
+
+## Remaining core — map connections (awaiting review)
+
+Spec28: Diplomatic mode draws only our treaties with a live commitment and lists
+direction, terms and active/dormant/expired/broken status. Military adds our
+recorded foreign bases, never foreign networks or a launch-permission promise.
+Trade lines are schematic agreements; own port/passage/mine/detour and authored
+infrastructure readouts reuse existing readers, with reciprocal sanctions closure
+explicit. Missing positions remain listed. No saved state or simulation change.
+Author harness/reference compilation is not native or independent verification.
+
+Author .NET2313/2305/7/1 against retained b093adc2302/2294/7/1: eleven additions
+(four Chronicle repair, seven map), zero removals/shared outcome/failure-message
+changes. Focused171/171; six mutants killed1/1/1/1/1/4, byte-restored38/38.
+Unity-reference compile only; real save and fallback unchanged.
+
+## Chronicle visibility repair (awaiting review)
+
+ChronicleView header totals/categories now share WorldWire.CanShow with entries.
+Country/category filters narrow SHOWING/paging, not the visible archive total.
+Four-width regression requires the entire readout unchanged after hidden foreign
+events, while preserving own-secret/public counts and pure rendering. No state
+or simulation change. Focused/mutation evidence is author .NET, not native review;
+do not relabel the previous full-suite measurement as a run on this repair.
+
+## Remaining core — bilateral treaty conditions (awaiting review)
+
+Spec04: RelationsAtLeast60 and NoMutualOccupation append two live clause triggers.
+Shared ClauseIsActive gates the existing consumers; expiry wins, unknown enums
+stay inert, withdrawal/relations recovery reactivates without a new signature.
+Occupation uses current title versus holder, not historic origin or third-party
+occupation. Existing proposal, leverage and renewal paths retain the condition;
+the DIPLOMACY selector exposes both. No new serialized field, save version or
+automatic sanctions-removal/DMZ effect. Existing0.70 conditional valuation is
+reused, not newly balance-certified. Author harness tests/reference compilation
+must not be presented as native execution or independent review.
+
+Author .NET full2302/2294/7/1 against retained2288/2280/7/1: fourteen additions,
+zero removals or shared outcome/failure-message changes. Focused108/108; six
+mutants killed2/1/2/1/2/1 and source-byte-restored, restored49/49. Actual Unity
+reference compile passes, native execution outstanding. Real saves unchanged.
+
+## Remaining core — sanctions assessments (awaiting independent review)
+
+Spec29: selected sanctions now have a pre-order staff assessment, separating
+public pressure/shared own blowback from fallible bands and dated collected
+reports. No hidden foreign capacity/AI profile, no simulated reactions. General
+trade and already-closed commodity links must not promise another supply loss.
+Mandate is known support, not a forecast of allied participation. Own competence
+changes staff judgment only. Forecast rendering never creates a missing plan.
+No persistence or tuning change; author harness evidence is not native execution.
+
+Author .NET2288/2280/7/1 versus retained2276/2268/7/1: twelve additions,
+zero removals/shared outcome/failure-message changes. Focused114/114; five
+mutation kills1/1/1/1/1, restored95/95. Unity-reference compile only. Shared
+blowback extraction still needs native arithmetic verification; no balance claim.
+
+## Remaining core — staged programmes (awaiting independent review)
+
+Spec30 describes OPERATOR's ordered cross-pillar programme: collection, assessment,
+outreach, logistics and energy works, optional treasury/peace spending gates,
+explicit authorization, Autonomous desks and ordinary paid commands. One monthly
+attempt from shared CP after campaign/foreign orders; cumulative CP cap is not a
+treasury cap. Observe actual delivery/attainment, not an order or hidden accuracy.
+Deadlines are advisory; pause/abandon never refunds or cancels existing projects.
+Optional saved record/history, no old-save delegation, version7. No AI authoring
+or generic scripting. Author .NET evidence and Unity-reference compilation are
+not native execution or independent review. Preserve save isolation in all tests.
+
+Author .NET full2276/2268/7/1 against retained2259/2251/7/1:17 additions,
+zero removals/shared outcome/failure-message changes. Focused124/124, seven
+mutations killed1/1/1/1/1/1/2 and byte-restored. Initial authorization mutant
+survived until a paused-but-otherwise-ready case removed masking by other gates.
+Unity-reference compile passed; native execution remains outstanding.
+
+## Remaining core — sponsorship findings (awaiting independent review)
+
+Spec03§10: dated evidence from actual sponsorship, forensic capability and an
+uncompromised65+ network, on own ground. Never infer truth from analyst.accurate
+or prose. Existing monthly hook, no new RNG. Optional saved list, empty legacy
+default, version7. Expose/file/confront/share/silence bargain cost2/0/2/1/2 CP.
+Attempts persist; recipients gain knowledge, not trust gifts. Silence blocks our
+publication/sharing, never automatic attribution. Reuse existing attribution,
+withdrawal and treaty writers; no generic secret engine or AI bargaining caller.
+Valuation is capped mean attribution trust loss, not guaranteed future immunity.
+Author .NET tests and Unity-reference compilation are not native execution,
+independent review or balance certification.
+
+## Remaining core — ministry inheritance (awaiting independent review)
+
+CountryState.institutionalMemory survives minister replacement. Existing notable
+Cabinet outcomes add capped, dated risk experience (+2 success/-3 setback,
+[-12,12], 0.99 monthly retention). Effective risk drives only existing delegated
+variance and initiative probability, equally for AI; no extra draw or reward,
+competence bonus, new tick or legacy backfill. Direct Control writes no outcome;
+elapsed time still fades the imprint. CABINET meeting/dossier show counts and
+effective risk separately from minister tenure. Optional additive fields retain
+save version7. Specs32/10 define this real behavior change; do not claim unchanged
+world trajectories or balance from a compile/focused check.
+
+Author .NET full2232:2224 passed,7 failed,1 inconclusive (TRX NotExecuted).
+Nine new tests pass; no new failing names. The war failure changed assertion:
+paired five-seed diagnostics measure base5/5 open,112.0 confrontation-months
+versus feature3/5,112.6. Base already exceeds the110 duration bound; its earlier
+endpoint assertion hid that. Four-seed instrument test now inconclusive rather
+than passing. Do not call these unchanged results, harmless noise, native
+measurements or certified balance. Focused79/79; six mutation kills1/2/1/2/3/3.
+
+## Remaining core — displacement map (awaiting review)
+
+MAP adds a seventh mode for current hosting connections involving our country.
+It shares DisplacementSystem.ReceivingWeights with monthly allocation, retaining
+the original accumulation expression rather than adding a rounded intermediate.
+Only own aggregate indices and connection direction are shown; foreign-to-foreign
+connections and foreign quantities stay hidden. Schematic lines are not tracked
+journeys. Borders change target allocation, not the existing hosted population.
+No saved state, new tick or changed thresholds. Specs19/28 own the contract.
+
+## Remaining core — material intelligence revisions (awaiting review)
+
+Collection now retains a Priority report and Secret Chronicle entry when two
+consecutive collected estimates move materially: both Moderate+, disjoint bands,
+at least10 points and30% midpoint movement. Both dated ranges remain visible.
+This is a change of belief, never proof of deception or a claim about true foreign
+state. Only our collection reports; no new RNG draw, reward or saved field.
+StrategicSurpriseSystem.RevisionText is pure; existing collection calls it once
+on replacement. Views do not generate events. Spec03 owns the reporting gates.
+This closes the estimate-revision event, not the wider secret-response lifecycle.
+
+## Remaining core — foreign-target policies (implementation, awaiting review)
+
+The master #2 means policy **toward each foreign state**, not only our national
+policy. ForeignPolicySystem now stores separate Cooperate/Contain/Isolate/
+Reconcile/Observe/Ignore intent; explicit delegation authorizes one ordinary paid
+command each month across targets, after campaign standing orders. Autonomous
+desk and held constitutional authority required; current directives win. Normal
+CP, sanctions/truce/mandate gates, collection exposure and command rewards apply.
+Changing intent costs 1 INF after first adoption and always revokes delegation;
+authoring has no action reward. Controls and autosave live in DIPLOMACY, and the
+command index names both verbs. No blanket aliases for unimplemented deterrence,
+patronage or covert attack. Spec27 and save spec10 define bounded behavior.
+This work is not independently certified and is not merged into main.
+
 ## Roadmap #30 — consequences, not equal viability
 
 This is a design-policy closure, not another penalty system. Broad pillar

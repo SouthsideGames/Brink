@@ -876,6 +876,13 @@ namespace Brink.Core
             if (clause == null) { reason = "NO TERMS."; return false; }
             if (clause.durationMonths < 0) { reason = "A TERM CANNOT BE NEGATIVE."; return false; }
             if (clause.trigger == TreatyClauseTrigger.Always) return true;
+            if (clause.trigger == TreatyClauseTrigger.RelationsAtLeast60
+                || clause.trigger == TreatyClauseTrigger.NoMutualOccupation)
+            {
+                if (!string.IsNullOrEmpty(clause.triggerCountryId))
+                { reason = "THIS CONDITION DOES NOT NAME A THIRD STATE."; return false; }
+                return true;
+            }
             if (clause.trigger != TreatyClauseTrigger.ConflictWithCountry) { reason = "UNKNOWN TRIGGER."; return false; }
             if (string.IsNullOrEmpty(clause.triggerCountryId)) { reason = "A CONFLICT TRIGGER MUST NAME A STATE."; return false; }
             if (clause.triggerCountryId == proposerId || clause.triggerCountryId == targetId)
@@ -902,6 +909,10 @@ namespace Brink.Core
             var parts = new List<string>();
             if (clause.trigger == TreatyClauseTrigger.ConflictWithCountry)
                 parts.Add($"IF CONFLICT WITH {(state.FindCountry(clause.triggerCountryId)?.displayName ?? clause.triggerCountryId).ToUpperInvariant()}");
+            if (clause.trigger == TreatyClauseTrigger.RelationsAtLeast60)
+                parts.Add("WHILE BILATERAL RELATIONS ARE AT LEAST 60");
+            if (clause.trigger == TreatyClauseTrigger.NoMutualOccupation)
+                parts.Add("WHILE NEITHER HOLDS THE OTHER'S TITLED GROUND");
             if (clause.durationMonths > 0)
             {
                 int total = from.year * 12 + from.month - 1 + clause.durationMonths;

@@ -250,13 +250,13 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text =
                 $"  {running.Count} of {IndustrialSystem.MaxProgrammes} under way."
                 + (running.Count > 0
-                    ? $"  Committed: {TotalMonthlyCost(player):F0} a month while work is active; contested sites pause without payment."
+                    ? $"  Base instalments: {TotalMonthlyCost(player):F0}/MO; qualifying Materials imports can double paid work and monthly spending. Contested sites pause without payment."
                     : "  Money spent here becomes capacity in years, not months.");
 
             foreach (var programme in running)
             {
                 AddText("terminal-text-bright").text = IndustrialSystem.ProjectName(programme, GameController.Instance.State);
-                AddText("terminal-text-dim").text = IndustrialSystem.ProjectProgress(player, programme);
+                AddText("terminal-text-dim").text = IndustrialSystem.ProjectProgress(player, programme, GameController.Instance.State);
                 var captured = programme;
                 var cancelRow = new VisualElement();
                 cancelRow.AddToClassList("button-row");
@@ -606,6 +606,7 @@ namespace Brink.UI.Views
             actionRow.AddToClassList("button-row");
             Root.Add(actionRow);
 
+            AddText("sig-advice").text = StrategicForecastSystem.SanctionsAssessment(state, selectedTargetId, selectedSeverity, W);
             var existing = state.FindSanction(state.playerCountryId, selectedTargetId);
             if (existing == null)
             {

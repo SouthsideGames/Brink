@@ -13,6 +13,35 @@ namespace Brink.Core
     /// </summary>
     public static class StrategicSurpriseSystem
     {
+        /// <summary>
+        /// A change in collected belief, not a claim that truth or deception has
+        /// been discovered. Inputs contain the same ranges the operator sees.
+        /// Consecutive months only: no invented baseline after a collection gap.
+        /// </summary>
+        public static string RevisionText(IntelEstimate previous, IntelEstimate current)
+        {
+            if (previous == null || current == null || !previous.everCollected || !current.everCollected
+                || previous.observerId != current.observerId || previous.targetId != current.targetId
+                || previous.domain != current.domain || current.asOf.MonthsSince(previous.asOf) != 1
+                || previous.confidence < ConfidenceGrade.Moderate || current.confidence < ConfidenceGrade.Moderate)
+                return "";
+
+            float change = current.reportedValue - previous.reportedValue;
+            float magnitude = Math.Abs(change);
+            // Disjoint bands reject ordinary uncertainty; the absolute floor
+            // prevents a small low-baseline change becoming a dramatic percent.
+            if (magnitude < 10f || magnitude < Math.Abs(previous.reportedValue) * 0.30f
+                || magnitude <= previous.margin + current.margin)
+                return "";
+
+            return $"{current.domain.ToString().ToUpperInvariant()} assessment revised "
+                + (change < 0f ? "DOWNWARD" : "UPWARD") + ". "
+                + $"{previous.asOf}: EST {previous.RangeText}, CONF {previous.confidence.ToString().ToUpperInvariant()}; "
+                + $"{current.asOf}: EST {current.RangeText}, CONF {current.confidence.ToString().ToUpperInvariant()}. "
+                + "Our picture changed; this does not establish when or why reality changed. "
+                + "Review commitments that relied on the earlier assessment.";
+        }
+
         public sealed class Exposure
         {
             public Pillar pillar;

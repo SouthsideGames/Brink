@@ -26,6 +26,73 @@ namespace Brink.Tests
 
         // ---------- the crisis modal reaches its own bottom ----------
 
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void CrisisAnimationIsOptInBoundedAndStopsWithoutDeciding(int columns)
+        {
+            try
+            {
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var crisis = new ActiveCrisis { title = "WAIT", body = "No countdown" };
+                crisis.options.Add(new CrisisOption { label = "WAIT" });
+                int decision = -1;
+                string before = SaveSystem.ToJson(state);
+                var panel = new CrisisPanel(); panel.Show(crisis, i => decision = i);
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var scene = (Label)typeof(CrisisPanel).GetField("scene", flags).GetValue(panel);
+                var motion = (Button)typeof(CrisisPanel).GetField("motion", flags).GetValue(panel);
+                void Tick() => typeof(CrisisPanel).GetMethod("AdvanceArt", flags).Invoke(panel, null);
+                void Click(Button button)
+                {
+                    var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                    if (clickable != null) clickable.GetType().GetMethod("Invoke", flags).Invoke(clickable, new object[] { null });
+                    else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                }
+                string still = scene.text; Tick(); Assert.AreEqual(still, scene.text);
+                Assert.AreEqual("PLAY ART", motion.text); Click(motion);
+                Assert.AreEqual("PAUSE ART", motion.text);
+                var frames = new System.Collections.Generic.HashSet<string>();
+                for (int i = 0; i < 26; i++)
+                {
+                    Tick(); frames.Add(scene.text);
+                    foreach (string line in scene.text.Split('\n')) Assert.AreEqual(TerminalMetrics.OverlayColumns, line.Length);
+                }
+                Assert.AreEqual(13, frames.Count);
+                Click(motion); string paused = scene.text; Tick(); Assert.AreEqual(paused, scene.text);
+                Click(motion); panel.Hide(); paused = scene.text; Tick(); Assert.AreEqual(paused, scene.text);
+                Assert.AreEqual("PLAY ART", motion.text);
+                Click(motion); panel.Show(crisis, i => decision = i); Tick(); Assert.AreEqual(still, scene.text);
+                Click(motion);
+                Click(panel.Root.Q<ScrollView>().Q<Button>());
+                Assert.AreEqual(0, decision); Assert.AreEqual("PLAY ART", motion.text);
+                paused = scene.text; Tick(); Assert.AreEqual(paused, scene.text);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { TerminalMetrics.ResetForTests(); }
+        }
+
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void CrisisSceneLivesInTheScrollerWithoutDecidingOrChangingOptions(int columns)
+        {
+            try
+            {
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var crisis = new ActiveCrisis { title = "DECIDE", body = "A known situation" };
+                crisis.options.Add(new CrisisOption { label = "WAIT", description = "A consequence" });
+                int decision = -1;
+                var panel = new CrisisPanel(); panel.Show(crisis, i => decision = i);
+                var reader = panel.Root.Q<ScrollView>();
+                Label scene = null;
+                reader.Query<Label>().ForEach(l => { if (l.ClassListContains("terminal-figure")) scene = l; });
+                Assert.NotNull(scene);
+                Assert.AreEqual(AsciiPillarArt.Crisis(TerminalMetrics.OverlayColumns), scene.text);
+                foreach (string line in scene.text.Split('\n')) Assert.LessOrEqual(line.Length, TerminalMetrics.OverlayColumns);
+                int count = 0; reader.Query<Button>().ForEach(b => { count++; StringAssert.Contains("WAIT", b.text); });
+                Assert.AreEqual(1, count); Assert.AreEqual(-1, decision);
+                Assert.AreEqual("A known situation", crisis.body);
+            }
+            finally { TerminalMetrics.ResetForTests(); }
+        }
+
         [Test]
         public void CrisisModal_EveryOptionIsReachableOnAShortScreen()
         {

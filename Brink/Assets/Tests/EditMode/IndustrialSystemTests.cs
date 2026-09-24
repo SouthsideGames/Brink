@@ -46,6 +46,237 @@ namespace Brink.Tests
 
         // ---------- it is a real sink ----------
 
+        IndustrialProgramme FundingFixture()
+        {
+            var owner = state.PlayerCountry; owner.economy.programmes.Clear();
+            state.trade.Clear(); state.treaties.Clear(); state.sanctions.Clear(); state.confrontations.Clear();
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            var treaty = new Treaty { countryA = owner.id, countryB = "CHN", signedDate = state.date };
+            treaty.commitments.Add(TreatyCommitment.TradePreference); state.treaties.Add(treaty);
+            var relation = state.FindRelationship(owner.id, "CHN"); relation.relations = 70; relation.trust = 70;
+            state.FindCountry("CHN").resources.treasury = 1000;
+            return owner.economy.programmes.Single();
+        }
+
+        [TestCase(0f)] [TestCase(-50f)]
+        public void ForeignGrantPaysOrdinaryWorkNotGeneralTreasuryAndSurvivesSave(float treasury)
+        {
+            var work = FundingFixture(); var owner = state.PlayerCountry; owner.resources.treasury = treasury;
+            int cp = state.commandPoints.current; int initiative = state.initiativesThisYear;
+            Assert.IsTrue(IndustrialSystem.RequestFunding(state, turns, "CHN", work.sector));
+            Assert.AreEqual(cp - 2, state.commandPoints.current); Assert.AreEqual(initiative + 1, state.initiativesThisYear);
+            Assert.AreEqual(905, state.FindCountry("CHN").resources.treasury);
+            Assert.AreEqual(treasury, owner.resources.treasury); Assert.AreEqual(12, work.monthsRemaining);
+            Assert.AreEqual(95, work.externalFunding);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(95, loaded.PlayerCountry.economy.programmes.Single().externalFunding);
+            IndustrialSystem.MonthlyUpdate(loaded);
+            Assert.AreEqual(treasury, loaded.PlayerCountry.resources.treasury);
+            Assert.AreEqual(11, loaded.PlayerCountry.economy.programmes.Single().monthsRemaining);
+            Assert.AreEqual(0, loaded.PlayerCountry.economy.programmes.Single().externalFunding);
+            IndustrialSystem.MonthlyUpdate(loaded);
+            Assert.AreEqual(0, loaded.PlayerCountry.economy.programmes.Count, "Grant does not fund work forever.");
+        }
+
+        [Test]
+        public void LegacyFundingDefaultsToZeroAndTradePreferenceMustBeReceivedAndLive()
+        {
+            var work = FundingFixture(); work.externalFunding = 95f;
+            string json = SaveSystem.ToJson(state).Replace("\"externalFunding\"", "\"unrecognisedOldFunding\"");
+            Assert.AreEqual(0, SaveSystem.FromJson(json).PlayerCountry.economy.programmes.Single().externalFunding);
+            work.externalFunding = 0;
+            var treaty = state.FindTreaty(state.playerCountryId, "CHN");
+            treaty.clauses.Add(new TreatyClause { commitment = TreatyCommitment.TradePreference,
+                side = ClauseSide.WeProvide });
+            Assert.IsFalse(IndustrialSystem.CanRequestFunding(state, state.playerCountryId, "CHN", work.sector, out _));
+            treaty.clauses[0].side = ClauseSide.TheyProvide;
+            Assert.IsTrue(IndustrialSystem.CanRequestFunding(state, state.playerCountryId, "CHN", work.sector, out _));
+            treaty.broken = true;
+            Assert.IsFalse(IndustrialSystem.CanRequestFunding(state, state.playerCountryId, "CHN", work.sector, out _));
+        }
+
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void FundingButtonUsesPaidControllerAndIsolatedAutosave(int columns)
+        {
+            var work = FundingFixture(); var gc = GameController.Instance;
+            var oldState = gc.State; var oldTurns = gc.Turns; string prior = SaveSystem.SaveDirectoryOverride;
+            string folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "brink-funding-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = folder;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, turns);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                var view = new DiplomacyView();
+                typeof(DiplomacyView).GetField("selectedTargetId", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, "CHN");
+                CouncilSystem.EnsureSeated(state); // existing full-view seat initialization, not funding preview
+                string before = SaveSystem.ToJson(state); view.Refresh();
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                var button = view.Root.Query<Button>().ToList().Single(b => b.text == "REQUEST INDUSTRY [2 CP]");
+                Assert.IsTrue(button.enabledSelf); Assert.LessOrEqual(button.text.Length, columns);
+                int cp = state.commandPoints.current;
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                Assert.AreEqual(cp - 2, state.commandPoints.current); Assert.AreEqual(95, work.externalFunding);
+                Assert.IsTrue(System.IO.File.Exists(System.IO.Path.Combine(folder, "slot_0.json")));
+                Assert.AreEqual(95, SaveSystem.FromJson(System.IO.File.ReadAllText(System.IO.Path.Combine(folder, "slot_0.json")))
+                    .PlayerCountry.economy.programmes.Single().externalFunding);
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, oldState);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, oldTurns);
+                SaveSystem.SaveDirectoryOverride = prior; TerminalMetrics.ResetForTests();
+                if (System.IO.Directory.Exists(folder)) System.IO.Directory.Delete(folder, true);
+            }
+        }
+
+        [Test]
+        public void DeclineCostsRequestCpButPreviewDoesNotReadForeignTreasury()
+        {
+            var work = FundingFixture();
+            Assert.IsTrue(IndustrialSystem.CanRequestFunding(state, state.playerCountryId, "CHN", work.sector, out string rich));
+            state.FindCountry("CHN").resources.treasury = 0;
+            string before = SaveSystem.ToJson(state);
+            Assert.IsTrue(IndustrialSystem.CanRequestFunding(state, state.playerCountryId, "CHN", work.sector, out string poor));
+            Assert.AreEqual(rich, poor); Assert.AreEqual(before, SaveSystem.ToJson(state));
+            int cp = state.commandPoints.current; int initiative = state.initiativesThisYear;
+            Assert.IsFalse(IndustrialSystem.RequestFunding(state, turns, "CHN", work.sector));
+            Assert.AreEqual(cp - 2, state.commandPoints.current); Assert.AreEqual(initiative, state.initiativesThisYear);
+            Assert.AreEqual(0, work.externalFunding); Assert.AreEqual(12, work.monthsRemaining);
+        }
+
+        [Test]
+        public void FundingCannotStackOrCashOutAndInvalidRequestsSpendNothing()
+        {
+            var work = FundingFixture(); state.treaties.Clear(); int cp = state.commandPoints.current;
+            Assert.IsFalse(IndustrialSystem.RequestFunding(state, turns, "CHN", work.sector));
+            Assert.AreEqual(cp, state.commandPoints.current);
+            work = FundingFixture();
+            Assert.IsTrue(IndustrialSystem.RequestFunding(state, turns, "CHN", work.sector));
+            cp = state.commandPoints.current;
+            Assert.IsFalse(IndustrialSystem.RequestFunding(state, turns, "CHN", work.sector));
+            Assert.AreEqual(cp, state.commandPoints.current); Assert.AreEqual(905, state.FindCountry("CHN").resources.treasury);
+            float own = state.PlayerCountry.resources.treasury;
+            IndustrialSystem.Cancel(state, state.playerCountryId, work.sector);
+            Assert.AreEqual(own, state.PlayerCountry.resources.treasury);
+            Assert.AreEqual(905, state.FindCountry("CHN").resources.treasury);
+            Assert.AreEqual(0, state.PlayerCountry.economy.programmes.Count);
+        }
+
+        [TestCase(95f, 1)] [TestCase(189f, 1)] [TestCase(190f, 2)] [TestCase(500f, 2)]
+        public void DeliveredMaterialsAccelerateOnlyAffordablePaidWork(float treasury, int workMonths)
+        {
+            var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear(); state.trade.Clear(); state.sanctions.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f, focus = TradeFocus.Materials });
+            Assert.GreaterOrEqual(TradeSystem.Supply(state, owner.id, TradeFocus.Materials), IndustrialSystem.AcceleratedWorkSupply);
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            var work = owner.economy.programmes.Single(); owner.resources.treasury = treasury;
+            float industry = owner.resources.industrialEndowment;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(12 - workMonths, work.monthsRemaining);
+            Assert.AreEqual(treasury - 95f * workMonths, owner.resources.treasury);
+            Assert.AreEqual(industry, owner.resources.industrialEndowment, "No benefits before completion.");
+            StringAssert.Contains("second work-month", IndustrialSystem.ProjectProgress(owner, work, state));
+        }
+
+        [TestCase(false)] [TestCase(true)]
+        public void ClosedOrWrongCommodityCannotAccelerateConstruction(bool embargo)
+        {
+            var owner = state.PlayerCountry; owner.economy.programmes.Clear(); state.trade.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f,
+                focus = embargo ? TradeFocus.Materials : TradeFocus.Energy, embargoed = embargo });
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            float treasury = owner.resources.treasury;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(11, owner.economy.programmes.Single().monthsRemaining);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+        }
+
+        [Test]
+        public void ImportedConstructionCompletesOnceWithOnlyTheRemainingInstalment()
+        {
+            var owner = state.PlayerCountry; owner.economy.programmes.Clear(); state.trade.Clear(); state.sanctions.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f, focus = TradeFocus.Materials });
+            var site = EnergySite(); IndustrialSystem.BeginSiteBy(state, owner.id, site.id);
+            owner.economy.programmes.Single().monthsRemaining = 1;
+            float treasury = owner.resources.treasury;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+            Assert.IsTrue(site.energyWorks); Assert.AreEqual(0, owner.economy.programmes.Count);
+            Assert.AreEqual(1, state.chronicle.Count(e => e.text.StartsWith("PROJECT COMPLETE:")));
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+        }
+
+        [TestCase(12, 0)] [TestCase(11, 1)] [TestCase(5, 2)] [TestCase(0, 0)]
+        public void DamageLosesOnlyCompletedWorkAndReplacementIsStillPaid(int remaining, int lost)
+        {
+            var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear();
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            var work = owner.economy.programmes.Single(); work.monthsRemaining = remaining;
+            work.locationId = ""; // old serializers may normalize a missing national location
+            float cash = owner.resources.treasury;
+            Assert.AreEqual(lost, IndustrialSystem.DamageWork(state, owner.id, EconomicSector.Industry));
+            Assert.AreEqual(remaining + lost, work.monthsRemaining);
+            Assert.AreEqual(cash, owner.resources.treasury, "No instant refund or charge.");
+            if (lost > 0)
+            {
+                Assert.AreEqual(Publicity.Secret, state.chronicle.Last().publicity);
+                StringAssert.Contains("Replacement work", state.chronicle.Last().text);
+                IndustrialSystem.MonthlyUpdate(state);
+                Assert.AreEqual(cash - 95f, owner.resources.treasury);
+                Assert.AreEqual(remaining + lost - 1, work.monthsRemaining);
+            }
+        }
+
+        [Test]
+        public void SuccessfulSabotageSetsBackIndustryWorkWithoutRevealingTheForeignQueue()
+        {
+            var target = state.FindCountry("CHN"); target.economy.programmes.Clear();
+            IndustrialSystem.BeginBy(state, target.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            IndustrialSystem.BeginBy(state, target.id, EconomicSector.Energy, IndustrialScale.Maintenance);
+            var industry = target.economy.programmes.Single(p => p.sector == EconomicSector.Industry);
+            var energy = target.economy.programmes.Single(p => p.sector == EconomicSector.Energy);
+            industry.monthsRemaining = energy.monthsRemaining = 5;
+            IntelligenceSystem.EstablishNetwork(state, turns, target.id, IntelDomain.Military);
+            state.FindNetwork(state.playerCountryId, target.id).penetration = 100f;
+            target.counterIntel.counterIntelligence = 0f;
+            Assert.IsTrue(IntelligenceSystem.RunCovertOperation(state, turns, target.id, CovertOperation.Sabotage));
+            Assert.AreEqual(7, industry.monthsRemaining); Assert.AreEqual(5, energy.monthsRemaining);
+            var record = state.chronicle.Single(e => e.text.StartsWith("PROJECT SET BACK:"));
+            Assert.AreEqual(target.id, record.countryId); Assert.AreEqual(Publicity.Secret, record.publicity);
+            Assert.IsFalse(WorldWire.CanShow(state, record));
+        }
+
+        [Test]
+        public void SiteStrikeDamagesOnlyWorkAtItsTargetAndCannotCreateOrCompleteAProject()
+        {
+            var site = EnergySite(); var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear();
+            IndustrialSystem.BeginSiteBy(state, owner.id, site.id);
+            var work = owner.economy.programmes.Single(); work.monthsRemaining = 5;
+            var other = EnergySite("OTHER");
+            var apply = typeof(MilitarySystem).GetMethod("ApplyNonCapturingSuccess", BindingFlags.Static | BindingFlags.NonPublic);
+            apply.Invoke(null, new object[] { state, state.FindCountry("CHN"), owner, other, OperationType.AirStrike });
+            Assert.AreEqual(5, work.monthsRemaining);
+            apply.Invoke(null, new object[] { state, state.FindCountry("CHN"), owner, site, OperationType.AirStrike });
+            Assert.AreEqual(7, work.monthsRemaining);
+            for (int i = 0; i < 20; i++) IndustrialSystem.DamageWork(state, owner.id, EconomicSector.Energy, site.id);
+            Assert.AreEqual(12, work.monthsRemaining);
+            Assert.IsFalse(site.energyWorks); Assert.AreEqual(1, owner.economy.programmes.Count);
+            owner.resources.treasury = 0;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(0, owner.economy.programmes.Count); Assert.IsFalse(site.energyWorks);
+        }
+
         StrategicLocation EnergySite(string id = "TEST_ENERGY")
         {
             var site = new StrategicLocation { id = id, displayName = "Test Energy Region " + id,

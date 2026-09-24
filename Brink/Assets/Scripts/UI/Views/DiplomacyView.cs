@@ -27,6 +27,9 @@ namespace Brink.UI.Views
         /// <summary>The treaty being negotiated: what each side would carry.</summary>
         readonly List<TreatyClause> draftClauses = new List<TreatyClause>();
         string draftTriggerCountryId = "";
+        TreatyClauseTrigger draftLocalTrigger = TreatyClauseTrigger.Always;
+        TreatyClauseTrigger DraftTrigger => draftLocalTrigger != TreatyClauseTrigger.Always ? draftLocalTrigger
+            : string.IsNullOrEmpty(draftTriggerCountryId) ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry;
         int draftDurationMonths;
 
         /// <summary>The commodity currently offered as the concession (spec 04 §5h).</summary>
@@ -45,6 +48,7 @@ namespace Brink.UI.Views
             AddCabinetAdvice(state, Pillar.Diplomacy);
             BuildRelationshipBoard(state);
             BuildTargetSelector(state);
+            BuildForeignPolicyControls(state);
             BuildTreatyControls(state);
             BuildLeverageTermsControls(state);
             BuildLeverageControls(state);
@@ -55,6 +59,56 @@ namespace Brink.UI.Views
             BuildBlocControls(state);
             BuildCouncilControls(state);
             BuildClearanceControls(state);
+            BuildProjectFunding(state);
+        }
+
+        void BuildProjectFunding(GameState state)
+        {
+            if (state.PlayerCountry.economy.programmes.Count == 0 || state.FindCountry(selectedTargetId) == null) return;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("PROJECT SUPPORT", W);
+            AddText().text = "Ask the selected trade-preference partner for one instalment [2 CP]. "
+                + "Relations of at least 60 and trust of at least 50 are needed; the partner may still decline. "
+                + "Funding is ring-fenced, not treasury or instant progress. Unused grants are forfeited on cancellation or abandonment.";
+            foreach (var work in state.PlayerCountry.economy.programmes)
+            {
+                var sector = work.sector;
+                AddText().text = IndustrialSystem.ProjectName(work, state) + $" — requested grant {IndustrialSystem.MonthlyCostFor(work.scale):F0}.";
+                var button = AddButton(MakeRow(), "REQUEST " + sector.ToString().ToUpperInvariant() + " [2 CP]", null,
+                    () => { GameController.Instance.RequestProjectFunding(selectedTargetId, sector); Refresh(); });
+                if (!IndustrialSystem.CanRequestFunding(state, state.playerCountryId, selectedTargetId, sector, out string reason))
+                    Block(button, reason);
+                else if (state.commandPoints.current < 2) Block(button, "Needs 2 CP for the request, accepted or declined.");
+            }
+        }
+
+        void BuildForeignPolicyControls(GameState state)
+        {
+            if (state.FindCountry(selectedTargetId) == null) return;
+            AddText("terminal-text-bright").text = AsciiChart.BoxHeader("POLICY TOWARD SELECTED STATE", W);
+            var current = ForeignPolicySystem.IntentFor(state, selectedTargetId);
+            AddText("terminal-text-dim").text = AsciiChart.WrapBlock(
+                state.FindCountry(selectedTargetId).displayName + ": " + current + ". " + ForeignPolicySystem.Description(current)
+                + " First intent is free; revision costs 1 INF. Authoring earns nothing. Delegation is separate: at most one paid policy action per month across all countries, after campaign orders. Other states still choose their own response.", W);
+            var row = MakeRow();
+            foreach (ForeignPolicyIntent intent in System.Enum.GetValues(typeof(ForeignPolicyIntent)))
+            {
+                var captured = intent;
+                int cost = ForeignPolicySystem.CostToSet(state, selectedTargetId, intent);
+                var button = new Button(() => { GameController.Instance.SetForeignPolicy(selectedTargetId, captured); Refresh(); })
+                    { text = intent.ToString().ToUpperInvariant() + (cost > 0 ? " [1 INF]" : "") };
+                button.AddToClassList("cmd-button");
+                if (current == intent) button.AddToClassList("primary");
+                if (state.influence < cost) Block(button, "Needs 1 Influence to revise this country's intent.");
+                row.Add(button);
+            }
+            bool delegated = ForeignPolicySystem.IsDelegated(state, selectedTargetId);
+            var delegation = new Button(() => { GameController.Instance.DelegateForeignPolicy(selectedTargetId, !delegated); Refresh(); })
+                { text = delegated ? "CANCEL DELEGATION" : "DELEGATE PAID ACTIONS" };
+            delegation.AddToClassList("cmd-button");
+            if (!delegated && (current == ForeignPolicyIntent.Unset || current == ForeignPolicyIntent.Ignore))
+                Block(delegation, "This intent authorizes no action.");
+            MakeRow().Add(delegation);
+            AddText("terminal-text-dim").text = AsciiChart.WrapBlock(ForeignPolicySystem.PendingReason(state, selectedTargetId), W);
         }
 
         void BuildClearanceControls(GameState state)
@@ -425,6 +479,8 @@ namespace Brink.UI.Views
                                 var trigger = state.FindCountry(clause.triggerCountryId);
                                 qualifier += $" IF CONFLICT WITH {trigger?.displayName.ToUpperInvariant() ?? clause.triggerCountryId}";
                             }
+                            if (clause.trigger == TreatyClauseTrigger.RelationsAtLeast60) qualifier += " WHILE RELATIONS >= 60";
+                            if (clause.trigger == TreatyClauseTrigger.NoMutualOccupation) qualifier += " WHILE NO MUTUAL OCCUPATION";
                             if (clause.durationMonths > 0)
                                 qualifier += $" {DiplomacySystem.ClauseTermText(treaty, commitment)}";
                             if (!treaty.ClauseIsActive(state, commitment)) qualifier += " [DORMANT]";
@@ -610,11 +666,7 @@ namespace Brink.UI.Views
                 conditionRow.AddToClassList("button-row");
                 Root.Add(conditionRow);
 
-                var triggerCountry = state.FindCountry(draftTriggerCountryId);
-                AddButton(conditionRow,
-                    string.IsNullOrEmpty(draftTriggerCountryId)
-                        ? "TRIGGER: ALWAYS"
-                        : $"TRIGGER: CONFLICT WITH {triggerCountry?.displayName.ToUpperInvariant() ?? draftTriggerCountryId}",
+                AddButton(conditionRow, TriggerLabel(state),
                     null, () => { CycleTrigger(state); Refresh(); });
 
                 AddButton(conditionRow,
@@ -674,10 +726,10 @@ namespace Brink.UI.Views
         /// </summary>
         /// <summary>The condition and term the three exchanges ask for, as a clause; null when unconditional and permanent.</summary>
         TreatyClause LeverageTerms()
-            => string.IsNullOrEmpty(draftTriggerCountryId) && draftDurationMonths <= 0 ? null
+            => DraftTrigger == TreatyClauseTrigger.Always && draftDurationMonths <= 0 ? null
                : new TreatyClause
                {
-                   trigger = string.IsNullOrEmpty(draftTriggerCountryId) ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry,
+                   trigger = DraftTrigger,
                    triggerCountryId = draftTriggerCountryId,
                    durationMonths = draftDurationMonths
                };
@@ -693,9 +745,7 @@ namespace Brink.UI.Views
             if (target == null) return;
             AddText("terminal-text-bright").text = "\n" + AsciiChart.BoxHeader("TERMS FOR WHAT THEY WOULD CARRY", W);
             var row = MakeRow();
-            var triggerCountry = state.FindCountry(draftTriggerCountryId);
-            AddButton(row, string.IsNullOrEmpty(draftTriggerCountryId) ? "TRIGGER: ALWAYS"
-                : $"TRIGGER: CONFLICT WITH {triggerCountry?.displayName.ToUpperInvariant() ?? draftTriggerCountryId}", null, () => { CycleTrigger(state); Refresh(); });
+            AddButton(row, TriggerLabel(state), null, () => { CycleTrigger(state); Refresh(); });
             AddButton(row, draftDurationMonths <= 0 ? "TERM: PERMANENT" : $"TERM: {draftDurationMonths / 12} YEAR(S)", null, () => { CycleDuration(); Refresh(); });
             var terms = LeverageTerms();
             string text = DiplomacySystem.TermsText(state, DiplomaticLeverage.RequestedClause(TreatyCommitment.Transit, terms), state.date);
@@ -961,8 +1011,7 @@ namespace Brink.UI.Views
                 {
                     commitment = commitment,
                     side = ClauseSide.Mutual,
-                    trigger = string.IsNullOrEmpty(draftTriggerCountryId)
-                        ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry,
+                    trigger = DraftTrigger,
                     triggerCountryId = draftTriggerCountryId,
                     durationMonths = draftDurationMonths
                 });
@@ -977,9 +1026,23 @@ namespace Brink.UI.Views
             }
         }
 
-        /// <summary>Cycle through an unconditional agreement and each valid third-state trigger.</summary>
+        string TriggerLabel(GameState state)
+            => DraftTrigger == TreatyClauseTrigger.RelationsAtLeast60 ? "TRIGGER: RELATIONS >= 60"
+                : DraftTrigger == TreatyClauseTrigger.NoMutualOccupation ? "TRIGGER: NO MUTUAL OCCUPATION"
+                : DraftTrigger == TreatyClauseTrigger.Always ? "TRIGGER: ALWAYS"
+                : $"TRIGGER: CONFLICT WITH {state.FindCountry(draftTriggerCountryId)?.displayName.ToUpperInvariant() ?? draftTriggerCountryId}";
+
+        /// <summary>Cycle existing conflict conditions, then the two bilateral conditions.</summary>
         void CycleTrigger(GameState state)
         {
+            if (draftLocalTrigger != TreatyClauseTrigger.Always)
+            {
+                draftLocalTrigger = draftLocalTrigger == TreatyClauseTrigger.RelationsAtLeast60
+                    ? TreatyClauseTrigger.NoMutualOccupation : TreatyClauseTrigger.Always;
+                draftTriggerCountryId = "";
+                ApplyDraftConditions();
+                return;
+            }
             var candidates = new List<string>();
             foreach (var country in state.countries)
                 if (country.id != state.playerCountryId && country.id != selectedTargetId)
@@ -988,6 +1051,7 @@ namespace Brink.UI.Views
             int current = candidates.IndexOf(draftTriggerCountryId);
             int next = string.IsNullOrEmpty(draftTriggerCountryId) ? 0 : current + 1;
             draftTriggerCountryId = next >= 0 && next < candidates.Count ? candidates[next] : "";
+            if (string.IsNullOrEmpty(draftTriggerCountryId)) draftLocalTrigger = TreatyClauseTrigger.RelationsAtLeast60;
             ApplyDraftConditions();
         }
 
@@ -1003,8 +1067,7 @@ namespace Brink.UI.Views
         {
             foreach (var clause in draftClauses)
             {
-                clause.trigger = string.IsNullOrEmpty(draftTriggerCountryId)
-                    ? TreatyClauseTrigger.Always : TreatyClauseTrigger.ConflictWithCountry;
+                clause.trigger = DraftTrigger;
                 clause.triggerCountryId = draftTriggerCountryId;
                 clause.durationMonths = draftDurationMonths;
             }

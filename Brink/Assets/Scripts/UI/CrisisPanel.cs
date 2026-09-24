@@ -29,8 +29,13 @@ namespace Brink.UI
 
         readonly Label title;
         readonly Label body;
+        readonly Label scene;
         readonly VisualElement options;
         readonly ScrollView reader;
+        readonly Button motion;
+        readonly IVisualElementScheduledItem animation;
+        bool playing;
+        int frame;
 
         public CrisisPanel()
         {
@@ -45,6 +50,11 @@ namespace Brink.UI
             title.AddToClassList("crisis-title");
             Root.Add(title);
 
+            // Opt-in every time: no motion before consent and no saved game preference.
+            motion = new Button(() => SetAnimation(!playing)) { text = "PLAY ART" };
+            motion.AddToClassList("cmd-button");
+            Root.Add(motion);
+
             reader = new ScrollView(ScrollViewMode.Vertical)
             {
                 verticalScrollerVisibility = ScrollerVisibility.Hidden,
@@ -57,10 +67,33 @@ namespace Brink.UI
             body.AddToClassList("crisis-body");
             reader.Add(body);
 
+            scene = new Label();
+            scene.AddToClassList("terminal-figure");
+            scene.AddToClassList("terminal-text-dim");
+            reader.Add(scene);
+
             options = new VisualElement();
             options.AddToClassList("crisis-options");
             reader.Add(options);
+            animation = scene.schedule.Execute(AdvanceArt).Every(700);
+            animation.Pause();
         }
+
+        void SetAnimation(bool enabled)
+        {
+            playing = enabled;
+            motion.text = enabled ? "PAUSE ART" : "PLAY ART";
+            if (enabled) animation.Resume(); else animation.Pause();
+        }
+
+        void AdvanceArt()
+        {
+            if (!playing) return;
+            frame = frame % 13 + 1;
+            scene.text = AsciiPillarArt.Crisis(TerminalMetrics.OverlayColumns, frame);
+        }
+
+        public void Hide() => SetAnimation(false);
 
         /// <summary>
         /// Put one crisis in front of the operator. `decide` receives the option
@@ -68,15 +101,18 @@ namespace Brink.UI
         /// </summary>
         public void Show(ActiveCrisis crisis, Action<int> decide)
         {
+            SetAnimation(false);
+            frame = 0;
             title.text = crisis.title;
             body.text = crisis.body;
+            scene.text = AsciiPillarArt.Crisis(TerminalMetrics.OverlayColumns);
 
             options.Clear();
             for (int i = 0; i < crisis.options.Count; i++)
             {
                 var option = crisis.options[i];
                 int index = i;
-                var button = new Button(() => decide?.Invoke(index))
+                var button = new Button(() => { Hide(); decide?.Invoke(index); })
                 { text = $"{i + 1}. {option.label}" };
                 button.AddToClassList("crisis-option-button");
                 options.Add(button);

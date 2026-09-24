@@ -1,8 +1,14 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Reflection;
+using Brink.Core;
+using Brink.UI.Views;
 using Brink.Data;
 using Brink.UI;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -14,6 +20,293 @@ namespace Brink.Tests
         public void SetUp()
         {
             state = WorldFactory.CreateDebugWorld(seed: 6120);
+        }
+
+        string PrepareDisplacement()
+        {
+            foreach (var country in state.countries)
+            {
+                country.displacement.displaced = country.displacement.hosted = 0f;
+                country.displacement.bordersClosed = true;
+            }
+            var nearby = state.countries.Find(c => c.id != state.playerCountryId
+                && GeographySystem.DistanceBetween(state, c.id, state.playerCountryId) <= DisplacementSystem.ReachableDistance);
+            Assert.NotNull(nearby, "This fixture requires a real reachable host.");
+            nearby.displacement.bordersClosed = false;
+            state.PlayerCountry.displacement.displaced = 20f;
+            return nearby.id;
+        }
+
+        [Test]
+        public void DiplomaticMapFollowsLiveDirectionDormancyExpiryAndBrokenRecords()
+        {
+            state.treaties.Clear();
+            var treaty = new Treaty { countryA = "IND", countryB = state.playerCountryId, signedDate = state.date };
+            treaty.commitments.Add(TreatyCommitment.Transit);
+            treaty.clauses.Add(new TreatyClause { commitment = TreatyCommitment.Transit, side = ClauseSide.WeProvide,
+                trigger = TreatyClauseTrigger.RelationsAtLeast60, durationMonths = 12 });
+            state.treaties.Add(treaty);
+            var relation = state.FindRelationship("IND", state.playerCountryId);
+            relation.relations = 59;
+            string dormant = AsciiMapModes.Render(state, null, WorldMapMode.Diplomatic, 104, 23);
+            StringAssert.Contains("THEY CARRY; DORMANT", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            StringAssert.Contains("WHILE BILATERAL RELATIONS ARE AT LEAST 60", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            StringAssert.Contains("EXPIRES BEFORE", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            relation.relations = 60;
+            Assert.AreNotEqual(dormant, AsciiMapModes.Render(state, null, WorldMapMode.Diplomatic, 104, 23));
+            StringAssert.Contains("THEY CARRY; ACTIVE", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            for (int i = 0; i < 12; i++) state.date = state.date.NextMonth();
+            StringAssert.Contains("EXPIRED", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            Assert.AreEqual(dormant, AsciiMapModes.Render(state, null, WorldMapMode.Diplomatic, 104, 23));
+            treaty.broken = true;
+            StringAssert.Contains("BROKEN", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+        }
+
+        [Test]
+        public void ConnectionViewsExcludeThirdPartyRecordsButKeepUnmappedOwnRecords()
+        {
+            foreach (var site in state.locations) site.foreignOperatorId = "";
+            string before = AsciiMapModes.ConnectionReadout(state, WorldMapMode.Military);
+            string map = AsciiMapModes.Render(state, null, WorldMapMode.Military, 104, 23);
+            var port = state.FindLocation("IND_PRT"); port.foreignOperatorId = "CHN";
+            Assert.AreEqual(before, AsciiMapModes.ConnectionReadout(state, WorldMapMode.Military));
+            Assert.AreEqual(map, AsciiMapModes.Render(state, null, WorldMapMode.Military, 104, 23));
+            port.foreignOperatorId = state.playerCountryId;
+            StringAssert.Contains(port.displayName, AsciiMapModes.ConnectionReadout(state, WorldMapMode.Military));
+            Assert.AreNotEqual(map, AsciiMapModes.Render(state, null, WorldMapMode.Military, 104, 23));
+            state.treaties.Clear();
+            var foreign = new Treaty { countryA = "CHN", countryB = "RUS" };
+            foreign.commitments.Add(TreatyCommitment.Transit); state.treaties.Add(foreign);
+            string diplomatic = AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic);
+            foreign.commitments.Add(TreatyCommitment.MutualDefense);
+            Assert.AreEqual(diplomatic, AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+            var unknown = new Treaty { countryA = state.playerCountryId, countryB = "UNMAPPED" };
+            unknown.commitments.Add(TreatyCommitment.Transit); state.treaties.Add(unknown);
+            StringAssert.Contains("UNMAPPED", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Diplomatic));
+        }
+
+        [Test]
+        public void TradeReadoutUsesActualMineDependenciesAndReciprocalSanctions()
+        {
+            state.trade.Clear(); state.sanctions.Clear();
+            var link = new TradeRelation { countryA = state.playerCountryId, countryB = "CHN", focus = TradeFocus.Energy, volume = 40 };
+            state.trade.Add(link);
+            string before = AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade);
+            state.trade.Add(new TradeRelation { countryA = "RUS", countryB = "IND", volume = 99 });
+            Assert.AreEqual(before, AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade));
+            var port = TradeSystem.PortFor(state, "CHN");
+            port.mineHazardUntilMonth = state.date.year * 12 + state.date.month + 6;
+            StringAssert.Contains(TradeSystem.PortDependencyReadout(state, link), AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade));
+            StringAssert.Contains("Mine exposure", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade));
+            Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "CHN", state.playerCountryId, SanctionSeverity.Routine));
+            Assert.IsFalse(link.embargoed, "Sub-Severe sanctions close delivery without a flag.");
+            StringAssert.Contains("SANCTIONS/EMBARGO CLOSE", AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade));
+            Assert.AreEqual(0f, TradeSystem.Supply(state, state.playerCountryId, TradeFocus.Energy));
+            foreach (var c in StrategicConnections.All)
+            {
+                string expected = StrategicConnections.Readout(state, c);
+                if (expected.Length > 0) StringAssert.Contains(expected, AsciiMapModes.ConnectionReadout(state, WorldMapMode.Trade));
+            }
+        }
+
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void ActualConnectionModeButtonsShowPureWrappedReadouts(int columns)
+        {
+            var gc = GameController.Instance; var prior = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 640f, Breakpoints.FromColumns(columns));
+                string saved = SaveSystem.ToJson(state);
+                foreach (string mode in new[] { "DIPLOMATIC", "MILITARY", "TRADE" })
+                {
+                    var view = new WorldMapView(); view.Refresh();
+                    Button button = null;
+                    view.Root.Query<Button>().ForEach(b => { if (b.text == mode) button = b; });
+                    Assert.NotNull(button);
+                    var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                    if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(clickable, new object[] { null });
+                    else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                    string heading = mode == "DIPLOMATIC" ? "OUR TREATY RECORD" : mode == "MILITARY" ? "OUR RECORDED FOREIGN BASES" : "OUR TRADE DEPENDENCIES";
+                    bool found = false;
+                    view.Root.Query<Label>().ForEach(l => {
+                        if ((l.text ?? "").Contains(heading)) found = true;
+                        if (!TerminalShellController.IsReadout(l) || l.ClassListContains("terminal-figure")) return;
+                        foreach (string line in (l.text ?? "").Split('\n')) Assert.LessOrEqual(AsciiChart.VisibleLength(line), columns, line);
+                    });
+                    Assert.IsTrue(found, heading);
+                }
+                Assert.AreEqual(saved, SaveSystem.ToJson(state));
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, prior); TerminalMetrics.ResetForTests(); }
+        }
+
+        [Test]
+        public void DisplacementLinksFollowDirectionAndBorderPolicyWithoutErasingHostedPeople()
+        {
+            string host = PrepareDisplacement();
+            var links = AsciiMapModes.DisplacementLinks(state);
+            Assert.AreEqual(1, links.Count);
+            Assert.AreEqual((state.playerCountryId, host), links[0]);
+            string open = AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23);
+            state.FindCountry(host).displacement.bordersClosed = true;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            Assert.AreNotEqual(open, AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23));
+            state.PlayerCountry.displacement.displaced = 0f;
+            state.PlayerCountry.displacement.bordersClosed = false;
+            state.FindCountry(host).displacement.displaced = 20f;
+            Assert.AreEqual((host, state.playerCountryId), AsciiMapModes.DisplacementLinks(state)[0]);
+            state.PlayerCountry.displacement.hosted = 9f;
+            state.PlayerCountry.displacement.bordersClosed = true;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            StringAssert.Contains("HOSTED 9.0", AsciiMapModes.Summary(state, WorldMapMode.Displacement));
+            StringAssert.Contains("not people already hosted", AsciiMapModes.DisplacementReadout(state));
+        }
+
+        [Test]
+        public void DisplacementDoesNotRevealThirdPartyConnectionsOrForeignAmounts()
+        {
+            string host = PrepareDisplacement();
+            string before = AsciiMapModes.DisplacementReadout(state);
+            string map = AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23);
+            foreach (var country in state.countries)
+                if (country.id != state.playerCountryId)
+                {
+                    country.displacement.displaced = 87f;
+                    country.displacement.hosted = 93f;
+                }
+            Assert.AreEqual(before, AsciiMapModes.DisplacementReadout(state));
+            Assert.AreEqual(map, AsciiMapModes.Render(state, null, WorldMapMode.Displacement, 104, 23));
+            Assert.AreEqual(1, AsciiMapModes.DisplacementLinks(state).Count);
+        }
+
+        [Test]
+        public void DisplacementZeroAndUnknownPositionsDoNotInventConnections()
+        {
+            PrepareDisplacement();
+            state.PlayerCountry.displacement.displaced = 0.99f;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            var unknown = new CountryState { id = "UNMAPPED", displayName = "Unmapped state" };
+            state.countries.Add(unknown);
+            unknown.displacement.displaced = 40f;
+            state.PlayerCountry.displacement.bordersClosed = false;
+            Assert.IsEmpty(AsciiMapModes.DisplacementLinks(state));
+            Assert.IsEmpty(DisplacementSystem.ReceivingWeights(state, unknown, out float total));
+            Assert.AreEqual(0f, total);
+        }
+
+        [Test]
+        public void TitledSuccessorRemainsListedWithoutInventingAMapCoordinate()
+        {
+            string host = PrepareDisplacement();
+            state.FindCountry(host).displacement.bordersClosed = true;
+            var successor = new CountryState { id = "NEW_HOST", displayName = "New receiving government" };
+            state.countries.Add(successor);
+            var ground = state.locations.Find(l => l.originalOwnerId == host);
+            Assert.NotNull(ground);
+            ground.originalOwnerId = successor.id;
+            ground.ownerId = successor.id;
+            Assert.IsNull(WorldFactory.FindProfile(successor.id));
+            Assert.NotNull(GeographySystem.PositionFor(state, successor.id));
+            var links = AsciiMapModes.DisplacementLinks(state);
+            Assert.AreEqual(1, links.Count);
+            Assert.AreEqual((state.playerCountryId, successor.id), links[0]);
+            StringAssert.Contains(successor.displayName, AsciiMapModes.DisplacementReadout(state));
+            StringAssert.Contains("Unmapped endpoints remain listed", AsciiMapModes.DisplacementReadout(state));
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void DisplacementOverlayIsLiveBoundedPureAndPreservesCountryLabels(int columns)
+        {
+            PrepareDisplacement();
+            string before = JsonUtility.ToJson(state);
+            foreach (int rows in RealMapHeights)
+            {
+                var baseRows = AsciiWorldMap.Render(state, state.playerCountryId, columns, rows).Split('\n');
+                string map = AsciiMapModes.Render(state, state.playerCountryId, WorldMapMode.Displacement, columns, rows);
+                var lines = map.Split('\n');
+                Assert.AreEqual(rows, lines.Length);
+                Assert.AreNotEqual(string.Join("\n", baseRows), map, "The displacement overlay drew nothing.");
+                for (int y = 0; y < rows; y++)
+                {
+                    Assert.AreEqual(columns, lines[y].Length);
+                    for (int x = 0; x < columns; x++)
+                        if (IsCountryLabel(baseRows[y][x])) Assert.AreEqual(baseRows[y][x], lines[y][x]);
+                }
+            }
+            foreach (string text in new[] { AsciiMapModes.DisplacementReadout(state),
+                AsciiMapModes.Legend(WorldMapMode.Displacement), AsciiMapModes.Summary(state, WorldMapMode.Displacement) })
+                foreach (string line in AsciiChart.WrapBlock(text, columns).Split('\n'))
+                    Assert.LessOrEqual(line.Length, columns);
+            Assert.AreEqual(before, JsonUtility.ToJson(state));
+        }
+
+        [Test]
+        public void SharedDisplacementWeightsMatchTheOriginalAllocationInOrder()
+        {
+            foreach (int seed in new[] { 4747, 6120, 982 })
+            {
+                var world = WorldFactory.CreateDebugWorld(seed);
+                for (int closed = 0; closed < world.countries.Count; closed++)
+                {
+                    world.countries[closed].displacement.bordersClosed = true;
+                    foreach (var source in world.countries)
+                    {
+                        source.displacement.displaced = 20f;
+                        var expected = new Dictionary<string, float>();
+                        float expectedTotal = 0f;
+                        foreach (var host in world.countries)
+                        {
+                            if (host.id == source.id || host.displacement.bordersClosed) continue;
+                            float distance = GeographySystem.DistanceBetween(world, source.id, host.id);
+                            if (distance > DisplacementSystem.ReachableDistance) continue;
+                            float weight = 1f / Math.Max(4f, distance);
+                            expected[host.id] = weight;
+                            expectedTotal += weight;
+                        }
+                        var actual = DisplacementSystem.ReceivingWeights(world, source, out float total);
+                        CollectionAssert.AreEqual(expected, actual);
+                        Assert.AreEqual(expectedTotal, total);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void MapOffersDisplacementModeAndTheActualButtonDisplaysItsReadout()
+        {
+            PrepareDisplacement();
+            var gc = GameController.Instance;
+            var previous = gc.State;
+            string oldSave = SaveSystem.SaveDirectoryOverride;
+            string directory = Path.Combine(Path.GetTempPath(), "brink-displacement-map-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                var view = new WorldMapView();
+                typeof(WorldMapView).GetMethod("Build", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(view, null);
+                Button button = null;
+                view.Root.Query<Button>().ForEach(b => { if (b.text == "DISPLACEMENT") button = b; });
+                Assert.NotNull(button);
+                var clickable = typeof(Button).GetProperty("clickable")?.GetValue(button);
+                if (clickable != null) clickable.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(clickable, new object[] { null });
+                else typeof(Button).GetMethod("SendClick").Invoke(button, null);
+                bool found = false;
+                view.Root.Query<Label>().ForEach(l => { if ((l.text ?? "").Contains("CURRENT HOSTING CONNECTIONS")) found = true; });
+                Assert.IsTrue(found, "Selecting the mode must show its real readout, not only change a label.");
+                Assert.IsEmpty(Directory.GetFiles(directory), "A map interaction must not save.");
+            }
+            finally
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                SaveSystem.SaveDirectoryOverride = oldSave;
+                Directory.Delete(directory, true);
+            }
         }
 
         [Test]

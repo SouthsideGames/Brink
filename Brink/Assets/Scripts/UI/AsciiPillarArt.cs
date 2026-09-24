@@ -1,4 +1,5 @@
 using System;
+using Brink.Core;
 using Brink.Data;
 
 namespace Brink.UI
@@ -10,6 +11,49 @@ namespace Brink.UI
     /// </summary>
     public static class AsciiPillarArt
     {
+        /// <summary>Illustrate the record's category, never infer an event from its prose.</summary>
+        public static string Record(GameState state, ChronicleEntry entry, int width)
+        {
+            if (!WorldWire.CanShow(state, entry)) return "";
+            var c = new AsciiCanvas(Math.Max(1, width), 7);
+            string heading = entry.historicalEvent == HistoricalEvent.SanctionsImposed ? "SANCTIONS RECORD"
+                : entry.historicalEvent == HistoricalEvent.ConductReview ? "CONDUCT REVIEW"
+                : entry.category.ToString().ToUpperInvariant() + " RECORD";
+            c.Text(1, 0, heading);
+            int mid = c.Width / 2;
+            c.Line(1, 5, c.Width - 2, 5, '_');
+            switch (entry.category)
+            {
+                case ChronicleCategory.Military:
+                    c.Stamp(mid - 9, 2, "   /\\        /\\", "__[==]______ [==]__", "  /__\\      /__\\"); break;
+                case ChronicleCategory.Economic:
+                    c.Stamp(mid - 9, 1, "    |        |", "  __|__    __|__", " /|_|_|\\__/|_|_|\\", " |_____|  |_____|"); break;
+                case ChronicleCategory.Diplomatic:
+                    c.Stamp(mid - 9, 2, " [ A ]      [ B ]", "   |==========|", "   | CHANNEL  |"); break;
+                case ChronicleCategory.Intelligence:
+                    c.Stamp(mid - 9, 1, "       .---.", " o-----| ? |-----o", " |     '---'     |", " o--------------o"); break;
+                case ChronicleCategory.Political:
+                    c.Stamp(mid - 9, 1, "       /\\", "   ___/  \\___", "  | | |  | | |", " _|_|_|__|_|_|_"); break;
+                default:
+                    c.Stamp(mid - 8, 1, " .------.------.", " | ==== | ==== |", " | ==== | ==== |", " '------^------'"); break;
+            }
+            if (entry.historicalEvent == HistoricalEvent.SanctionsImposed)
+                c.Text(mid - 5, 3, "[BLOCKED]");
+            c.Text(1, 6, entry.date.DisplayString + " — ARCHIVE, NOT LIVE STATUS");
+            return c.ToString();
+        }
+
+        public static string Crisis(int width, int frame = 0)
+        {
+            var c = new AsciiCanvas(Math.Max(1, width), 5);
+            int mid = c.Width / 2;
+            c.Text(1, 0, "DECISION PENDING");
+            c.Stamp(mid - 9, 1, "       [ ? ]", "         |", "   +-----+-----+", "   v     v     v");
+            // A travelling signal, not a countdown or an option recommendation.
+            if (frame != 0) c.Plot(mid - 6 + ((frame - 1) % 13 + 13) % 13, 3, 'o');
+            return c.ToString();
+        }
+
         public static string Render(GameState state, Pillar pillar, int width)
         {
             var country = state?.PlayerCountry;

@@ -87,6 +87,72 @@ namespace Brink.Tests
         // ---------- balance is a real axis ----------
 
         [Test]
+        public void RelationshipConditionSignsAndReactivatesAtItsExactBoundary()
+        {
+            state.treaties.Clear(); Warm("IND", 95, 95);
+            SignExpectingAcceptance("IND", new List<TreatyClause> { new TreatyClause {
+                commitment = TreatyCommitment.Transit, side = ClauseSide.TheyProvide,
+                trigger = TreatyClauseTrigger.RelationsAtLeast60, durationMonths = 12 } });
+            var treaty = state.FindTreaty(state.playerCountryId, "IND");
+            var relation = state.FindRelationship(state.playerCountryId, "IND");
+            relation.relations = 59.99f;
+            Assert.IsFalse(treaty.Carries(state, "IND", TreatyCommitment.Transit));
+            relation.relations = 60;
+            Assert.IsTrue(treaty.Carries(state, "IND", TreatyCommitment.Transit));
+            Assert.IsFalse(treaty.Carries(state, state.playerCountryId, TreatyCommitment.Transit));
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.IsTrue(loaded.FindTreaty(state.playerCountryId, "IND").Carries(loaded, "IND", TreatyCommitment.Transit));
+            for (int i = 0; i < 12; i++) state.date = state.date.NextMonth();
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit), "Expiry still wins over a satisfied condition.");
+        }
+
+        [Test]
+        public void OccupationConditionFollowsBothSidesCurrentTitleAndHolding()
+        {
+            state.treaties.Clear(); Warm("IND", 95, 95);
+            SignExpectingAcceptance("IND", new List<TreatyClause> { new TreatyClause {
+                commitment = TreatyCommitment.Transit, trigger = TreatyClauseTrigger.NoMutualOccupation } });
+            var treaty = state.FindTreaty(state.playerCountryId, "IND");
+            Assert.IsTrue(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+            var site = state.locations.Find(s => s.originalOwnerId == "IND");
+            Assert.IsNotNull(site); site.ownerId = state.playerCountryId;
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+            site.ownerId = "IND";
+            Assert.IsTrue(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+            var ours = state.locations.Find(s => s.originalOwnerId == state.playerCountryId);
+            ours.ownerId = "IND";
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+            ours.ownerId = "CHN";
+            Assert.IsTrue(treaty.ClauseIsActive(state, TreatyCommitment.Transit), "Third-party occupation is not this condition.");
+        }
+
+        [TestCase(TreatyClauseTrigger.RelationsAtLeast60)]
+        [TestCase(TreatyClauseTrigger.NoMutualOccupation)]
+        public void NewConditionsSurviveLeverageCopiesAndRejectThirdCountryArguments(TreatyClauseTrigger trigger)
+        {
+            var terms = new TreatyClause { trigger = trigger, durationMonths = 36 };
+            Assert.IsTrue(DiplomacySystem.ClauseTermsAreValid(state, state.playerCountryId, "IND", terms, out _));
+            var copy = DiplomaticLeverage.RequestedClause(TreatyCommitment.Transit, terms);
+            Assert.AreEqual(trigger, copy.trigger); Assert.AreEqual(36, copy.durationMonths);
+            Assert.AreEqual(ClauseSide.TheyProvide, copy.side);
+            StringAssert.Contains("WHILE", DiplomacySystem.TermsText(state, copy, state.date));
+            terms.triggerCountryId = "CHN";
+            Assert.IsFalse(DiplomacySystem.ClauseTermsAreValid(state, state.playerCountryId, "IND", terms, out _));
+        }
+
+        [Test]
+        public void UnknownSavedTriggerDoesNotMasqueradeAsConflict()
+        {
+            var treaty = new Treaty { countryA = state.playerCountryId, countryB = "IND" };
+            treaty.commitments.Add(TreatyCommitment.Transit);
+            treaty.clauses.Add(new TreatyClause { commitment = TreatyCommitment.Transit,
+                trigger = (TreatyClauseTrigger)999, triggerCountryId = "CHN" });
+            state.confrontations.Add(new Confrontation { initiatorId = state.playerCountryId,
+                defenderId = "CHN", escalation = EscalationState.LimitedConflict });
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+        }
+
+        [Test]
         public void AnEvenTreatyIsBalancedHoweverLargeItIs()
         {
             // Scale and fairness are different axes. Five mutual commitments is a

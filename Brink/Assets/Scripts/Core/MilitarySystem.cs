@@ -1186,6 +1186,7 @@ namespace Brink.Core
                 case OperationType.AirStrike:
                     target.garrison = Clamp(target.garrison - 14f);
                     StrategicConnections.Disrupt(state, target);
+                    IndustrialSystem.DamageWork(state, target.ownerId, EconomicSector.Energy, target.id);
                     if (defender != null)
                     {
                         defender.resources.industrialCapacity =

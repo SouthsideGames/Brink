@@ -24,6 +24,7 @@ namespace Brink.UI.Views
             BuildStanding(state);
             BuildMandate(state);
             BuildStrategy(state);
+            BuildStagedProgramme(state);
             BuildHistoricalCourse(state);
             BuildForecast(state);
             BuildDirectives(state);
@@ -76,6 +77,64 @@ namespace Brink.UI.Views
                         (string.IsNullOrEmpty(p.latestMemory) ? "" : $"\n   latest: {p.latestMemory}");
                 }
                 AddText("terminal-text-dim").text = "  This explains existing diplomatic trust and memory; it does not create a second credibility score.";
+            }
+        }
+
+        void BuildStagedProgramme(GameState state)
+        {
+            AddText("terminal-text-bright").text = AsciiChart.WrapBlock(StagedProgrammeSystem.Status(state), W);
+            var plan = StagedProgrammeSystem.For(state);
+            var actions = new List<string> { "Collection", "Outreach", "Logistics", "EnergyWorks", "Assessment" };
+            var action = new DropdownField("ACTION", actions, 0); Root.Add(action);
+            var condition = new DropdownField("ONLY WHEN", new List<string> { "Always", "Treasury nonnegative", "No active front" }, 0); Root.Add(condition);
+            var ids = new List<string>(); var names = new List<string>();
+            foreach (var country in state.countries) if (country.id != state.playerCountryId)
+            { ids.Add(country.id); names.Add(country.id + " / " + country.displayName); }
+            foreach (var site in state.locations) if (site.ownerId == state.playerCountryId && site.type == LocationType.EnergyRegion)
+            { ids.Add(site.id); names.Add(site.id + " / " + site.displayName); }
+            if (ids.Count == 0) return;
+            var target = new DropdownField("COUNTRY / ENERGY SITE", names, 0); Root.Add(target);
+            var threshold = new TextField("TARGET 1–95") { value = "60" }; Root.Add(threshold);
+            var earliest = new TextField("START MONTH 0–120") { value = "0" }; Root.Add(earliest);
+            var deadline = new TextField("DUE MONTH 0–120") { value = "12" }; Root.Add(deadline);
+            var budget = new TextField("TOTAL CP CAP 0–120") { value = (plan?.commandPointBudget ?? 12).ToString() }; Root.Add(budget);
+            AddText().text = AsciiChart.WrapBlock("Collection needs a foreign country; outreach targets both relations and trust. Logistics ignores target country. EnergyWorks needs an owned energy site. Assessment commissions Strategic Intent and waits for delivery, not truth. Those last two ignore the numerical target. Conditions gate spending, not observation. Schedule is months since plan creation. Reorder or remove an unstarted stage to revise it; edits pause authorization.", W);
+            var feedback = AddText("sig-advice");
+            var row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
+            var add = new Button(() => {
+                if (!int.TryParse(threshold.value, out int goal) || !int.TryParse(earliest.value, out int start)
+                    || !int.TryParse(deadline.value, out int due) || !GameController.Instance.AddProgrammeStage(
+                        (ProgrammeAction)(action.index + 1), ids[target.index], goal, start, due, (ProgrammeCondition)condition.index))
+                { feedback.text = AsciiChart.WrapBlock("Cannot add: check target, 1–95 goal, 0–120 ordered dates, six-stage limit and abandonment.", W); return; }
+                Refresh();
+            }) { text = "ADD STAGE (NO ACTION)" }; add.AddToClassList("cmd-button"); row.Add(add);
+            var authorize = new Button(() => {
+                if (!int.TryParse(budget.value, out int cap) || !GameController.Instance.AuthorizeStagedProgramme(true, cap))
+                { feedback.text = AsciiChart.WrapBlock("Cannot authorize: unfinished plan, current desk authority and CP cap at least already spent are required.", W); return; }
+                Refresh();
+            }) { text = "AUTHORIZE WITH CP CAP" }; authorize.AddToClassList("cmd-button"); row.Add(authorize);
+            row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
+            foreach (string choice in new[] { "PAUSE", "ABANDON", "NEW PLAN" })
+            {
+                string captured = choice;
+                var button = new Button(() => {
+                    bool ok = captured == "PAUSE" ? GameController.Instance.AuthorizeStagedProgramme(false, 0)
+                        : captured == "ABANDON" ? GameController.Instance.AbandonStagedProgramme() : GameController.Instance.NewStagedProgramme();
+                    if (ok) Refresh(); else feedback.text = "Finish or abandon before NEW PLAN.";
+                }) { text = choice }; button.AddToClassList("cmd-button"); row.Add(button);
+            }
+            if (plan?.stages != null) for (int i = 0; i < plan.stages.Count; i++)
+            {
+                int index = i; var stage = plan.stages[i];
+                if (stage == null || stage.started || stage.completed) continue;
+                row = new VisualElement(); row.AddToClassList("button-row"); Root.Add(row);
+                var remove = new Button(() => { GameController.Instance.RemoveProgrammeStage(index); Refresh(); }) { text = "REMOVE STAGE " + (i + 1) };
+                remove.AddToClassList("cmd-button"); row.Add(remove);
+                if (i > 0 && !plan.stages[i - 1].started && !plan.stages[i - 1].completed)
+                {
+                    var move = new Button(() => { GameController.Instance.MoveProgrammeStageEarlier(index); Refresh(); }) { text = "MOVE EARLIER" };
+                    move.AddToClassList("cmd-button"); row.Add(move);
+                }
             }
         }
 

@@ -380,7 +380,8 @@ monthIndex = date.MonthsSince(startDate)
 rng        = Random(rngSeed × 92821 + monthIndex × 31 + (int)office
                     + Hash.Of(country.id) × 7)
 
-variance    = (U(0,1) × 2 − 1) × riskTolerance/100 × 0.3
+effectiveRisk = clamp(riskTolerance + dated ministry imprint (spec32), 0,100)
+variance    = (U(0,1) × 2 − 1) × effectiveRisk/100 × 0.3
 performance = clamp(competence/100 + variance, 0, 1.2)
 amount      = 0.05 + performance × 0.25
 amount     ×= GovernmentSystem.PriorityMultiplierFor(leader.priority, office)
@@ -444,7 +445,7 @@ to either win the priority or take the desk over personally.
 ### Significant outcomes
 
 ```
-eventChance = 0.04 + riskTolerance/100 × 0.06         → 4%..10% per official-month
+eventChance = 0.04 + effectiveRisk/100 × 0.06         → 4%..10% per official-month
 success     = U(0,1) < performance × 0.7 + 0.15
 ```
 

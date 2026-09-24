@@ -282,6 +282,43 @@ namespace Brink.Core
 
         // ---------- intelligence commands ----------
 
+        public bool AddProgrammeStage(Data.ProgrammeAction action, string targetId, float threshold, int earliest, int deadline,
+            Data.ProgrammeCondition condition = Data.ProgrammeCondition.Always)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Add(State, action, targetId, threshold, earliest, deadline, condition)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool AuthorizeStagedProgramme(bool enabled, int totalBudget)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Authorize(State, enabled, totalBudget)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool RemoveProgrammeStage(int index)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Remove(State, index)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool MoveProgrammeStageEarlier(int index)
+        {
+            if (!IsRunning || !StagedProgrammeSystem.MoveEarlier(State, index)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool AbandonStagedProgramme()
+        {
+            if (!IsRunning || !StagedProgrammeSystem.Abandon(State)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
+        public bool NewStagedProgramme()
+        {
+            if (!IsRunning || !StagedProgrammeSystem.StartNew(State)) return false;
+            SaveSystem.Save(State, AutosaveSlot); return true;
+        }
+
         public bool EstablishNetwork(string targetId, Data.IntelDomain focus)
         {
             if (!MayCommand(Data.Pillar.Intelligence)) return false;
@@ -437,6 +474,15 @@ namespace Brink.Core
             bool ok = IndustrialSystem.BeginSite(State, Turns, locationId);
             if (ok) SaveSystem.Save(State, AutosaveSlot);
             return ok;
+        }
+
+        public bool RequestProjectFunding(string partnerId, Data.EconomicSector sector)
+        {
+            if (!IsRunning || !IndustrialSystem.CanRequestFunding(State, State.playerCountryId, partnerId, sector, out _)) return false;
+            if (!MayCommand(Data.Pillar.Diplomacy)) return false;
+            bool accepted = IndustrialSystem.RequestFunding(State, Turns, partnerId, sector);
+            SaveSystem.Save(State, AutosaveSlot); // a declined request can still spend CP
+            return accepted;
         }
 
         // ---------- fiscal statecraft (spec 02 §9, spec 25 Tranche A) ----------
@@ -612,18 +658,69 @@ namespace Brink.Core
                 GameLog.Warn("INTEL", reason);
                 return false;
             }
-            if (!Turns.SpendCommandPoints(IntelProductSystem.CommissionCost,
-                    $"Commission {question} assessment")) return false;
-
-            var product = IntelProductSystem.CommissionBy(
-                State, State.playerCountryId, targetId, question);
-            if (product != null)
-            {
-                ProgressionSystem.RecordInitiative(State);
-                ProgressionSystem.AwardXP(State, 10, "Assessment commissioned");
-            }
+            var product = IntelProductSystem.Commission(State, Turns, targetId, question);
+            if (product == null) return false;
             SaveSystem.Save(State, AutosaveSlot);
             return product != null;
+        }
+
+        public bool ExposeSponsorshipFinding(string movementId)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)
+                || !SponsorshipFindings.CanExpose(State, movementId, out _)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Publish sponsorship evidence")) return false;
+            bool ok = SponsorshipFindings.Expose(State, movementId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool FileSponsorshipFinding(string movementId)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = SponsorshipFindings.File(State, movementId);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ReopenSponsorshipFinding(string key)
+        {
+            if (!MayCommand(Data.Pillar.Intelligence)) return false;
+            bool ok = SponsorshipFindings.Reopen(State, key);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ShareSponsorshipFinding(string key, string recipientId)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanShare(State, key, recipientId, out _)
+                || !MayCommand(Data.Pillar.Intelligence)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ShareCost, "Share sponsorship evidence")) return false;
+            bool ok = SponsorshipFindings.Share(State, key, recipientId);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ConfrontSponsorshipFinding(string key)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanConfront(State, key, out _)
+                || !MayCommand(Data.Pillar.Intelligence) || !MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Confront sponsorship privately")) return false;
+            bool ok = SponsorshipFindings.Confront(State, key);
+            if (ok) ProgressionSystem.RecordInitiative(State);
+            SaveSystem.Save(State, AutosaveSlot); // refusal still spent effort and records the attempt
+            return ok;
+        }
+
+        public bool BargainSponsorshipFinding(string key, Data.TreatyCommitment commitment)
+        {
+            if (!IsRunning || !SponsorshipFindings.CanBargain(State, key, commitment, out _)
+                || !MayCommand(Data.Pillar.Intelligence) || !MayCommand(Data.Pillar.Diplomacy)) return false;
+            if (!Turns.SpendCommandPoints(SponsorshipFindings.ExposureCost, "Offer silence for a commitment")) return false;
+            bool ok = SponsorshipFindings.Bargain(State, key, commitment);
+            SaveSystem.Save(State, AutosaveSlot); // shared treaty writers own successful rewards
+            return ok;
         }
 
         /// <summary>Hunt for a foreign service inside our own (spec 03 §7c).</summary>
@@ -866,6 +963,22 @@ namespace Brink.Core
         }
 
         // ---------- diplomacy commands ----------
+
+        public bool SetForeignPolicy(string targetId, Data.ForeignPolicyIntent intent)
+        {
+            if (!IsRunning) return false;
+            bool ok = ForeignPolicySystem.Set(State, targetId, intent);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool DelegateForeignPolicy(string targetId, bool enabled)
+        {
+            if (!IsRunning) return false;
+            bool ok = ForeignPolicySystem.SetDelegated(State, targetId, enabled);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
 
         public bool DiplomaticOutreach(string targetId)
         {

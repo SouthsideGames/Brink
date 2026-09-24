@@ -23,6 +23,48 @@ namespace Brink.Tests
             => s.AddChronicle(ChronicleCategory.Economic, actor, "A public measure.", publicity,
                 HistoricalEvent.SanctionsImposed, target);
 
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void RecordScenesAreCategoryBoundedVisibleClippedAndPure(int width)
+        {
+            var s = EmptyRecord();
+            var drawings = new System.Collections.Generic.HashSet<string>();
+            foreach (ChronicleCategory category in Enum.GetValues(typeof(ChronicleCategory)))
+            {
+                var entry = new ChronicleEntry { countryId = s.playerCountryId, category = category, date = s.date,
+                    text = "COUP ELECTION WAR: prose must not select an event", publicity = Publicity.Secret };
+                string json = SaveSystem.ToJson(s);
+                string art = AsciiPillarArt.Record(s, entry, width);
+                Assert.IsTrue(drawings.Add(art), "Categories need distinct compositions.");
+                Assert.AreEqual(7, art.Split('\n').Length);
+                foreach (string line in art.Split('\n')) Assert.AreEqual(width, line.Length);
+                entry.text = "A completely different claim";
+                Assert.AreEqual(art, AsciiPillarArt.Record(s, entry, width));
+                Assert.AreEqual(json, SaveSystem.ToJson(s));
+                entry.countryId = "CHN";
+                Assert.AreEqual("", AsciiPillarArt.Record(s, entry, width));
+            }
+            Assert.AreEqual("", AsciiPillarArt.Record(s, null, width));
+        }
+
+        [Test]
+        public void ChronicleSceneFollowsTheVisiblePageRatherThanTheHiddenTail()
+        {
+            var s = EmptyRecord(); var gc = GameController.Instance; var prior = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, s);
+                for (int i = 0; i < 25; i++)
+                    s.AddChronicle(i == 0 ? ChronicleCategory.Military : ChronicleCategory.Economic, s.playerCountryId, "OWN RECORD", Publicity.Secret);
+                s.AddChronicle(ChronicleCategory.Political, "CHN", "HIDDEN TAIL", Publicity.Secret);
+                var view = new ChronicleView(); view.Refresh();
+                string Scene() => view.Root.Query<Label>().ToList().Single(l => l.ClassListContains("terminal-figure")).text;
+                StringAssert.Contains("ECONOMIC RECORD", Scene());
+                typeof(ChronicleView).GetField("page", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(view, 1);
+                view.Refresh(); StringAssert.Contains("MILITARY RECORD", Scene());
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, prior); }
+        }
+
         [Test]
         public void RealSanctionProducerWritesOneDatedPublicActAndRefusalWritesNone()
         {
@@ -257,6 +299,46 @@ namespace Brink.Tests
             }
             finally {typeof(GameController).GetProperty("State").SetValue(gc,prior);TerminalMetrics.ResetForTests();}
         }
+        [TestCase(34)] [TestCase(49)] [TestCase(64)] [TestCase(104)]
+        public void HiddenChronicleEventsCannotChangeCountsCategoriesOrPaging(int columns)
+        {
+            var s = EmptyRecord();
+            s.AddChronicle(ChronicleCategory.Diplomatic, "CHN", "PUBLIC AGREEMENT", Publicity.Public);
+            var gc = GameController.Instance; var prior = gc.State;
+            try
+            {
+                typeof(GameController).GetProperty("State").SetValue(gc, s);
+                TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Breakpoints.FromColumns(columns));
+                string Render(ChronicleView view)
+                {
+                    view.Refresh();
+                    return string.Join("\n", view.Root.Query<Label>().ToList().Select(l => l.text))
+                        + string.Join("|", view.Root.Query<Button>().ToList().Select(b => b.text));
+                }
+                var view = new ChronicleView();
+                string before = Render(view);
+                for (int i = 0; i < 30; i++)
+                    s.AddChronicle(ChronicleCategory.Military, "CHN", "HIDDEN SECRET", Publicity.Secret);
+                s.AddChronicle(ChronicleCategory.Intelligence, "CHN", "HIDDEN CATEGORY", Publicity.Public);
+                string save = SaveSystem.ToJson(s);
+                Assert.AreEqual(before, Render(view), "Hidden records must not affect even totals, categories or page controls.");
+                Assert.AreEqual(save, SaveSystem.ToJson(s), "Rendering must remain pure.");
+                s.AddChronicle(ChronicleCategory.Intelligence, s.playerCountryId, "OUR PRIVATE RECORD", Publicity.Secret);
+                s.AddChronicle(ChronicleCategory.Economic, "IND", "PUBLIC ECONOMIC RECORD", Publicity.Public);
+                string shown = System.Text.RegularExpressions.Regex.Replace(Render(view), @"\s+", " ");
+                StringAssert.Contains("3 ENTRIES", shown);
+                StringAssert.Contains("INTELLIGENCE 1", shown);
+                StringAssert.Contains("OUR PRIVATE RECORD", shown);
+                typeof(ChronicleView).GetField("countryFilter", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(view, "CHN");
+                shown = System.Text.RegularExpressions.Regex.Replace(Render(view), @"\s+", " ");
+                StringAssert.Contains("3 ENTRIES", shown);
+                StringAssert.Contains("SHOWING: 1", shown);
+                StringAssert.DoesNotContain("HIDDEN SECRET", shown);
+                StringAssert.DoesNotContain("OUR PRIVATE RECORD", shown);
+            }
+            finally { typeof(GameController).GetProperty("State").SetValue(gc, prior); TerminalMetrics.ResetForTests(); }
+        }
+
         [Test]
         public void RepeatedPublicRecordCreatesIdentityWithoutChangingState()
         {

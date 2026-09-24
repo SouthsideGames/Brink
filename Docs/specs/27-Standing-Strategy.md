@@ -30,6 +30,45 @@ Each policy changes the default emphasis of both a favoured and a strained Auton
 
 Policies are trade-offs in strategic posture, not claims about real countries. Their purpose is to make different national archetypes produce different unattended priorities.
 
+## Foreign-target intent (remaining-core implementation, 2026-09-24)
+
+National policy above answers how our own government works. `ForeignPolicySystem`
+adds a separate saved policy for each foreign country: Cooperate, Contain,
+Isolate, Reconcile, Observe or Ignore, plus Unset. The DIPLOMACY target selector
+chooses which entry to edit. First adoption per target is free; changing an
+existing intent costs 1 Influence, including after it has been cleared. Repeating
+the same choice is inert. Authoring gives no XP or initiative. A changed intent
+always cancels its old delegation; it cannot silently authorize a different verb.
+
+Delegation is an explicit, free toggle. After monthly CP refresh and campaign
+standing orders, at most one policy action runs across all targets. It uses the
+ordinary paid command and its normal rewards/consequences, not an actor-generic
+free command. The responsible desk must be staffed and Autonomous, and current
+constitutional authority must already be held. Directed/Direct Control wins;
+no unsolicited approval request occurs. Skipped, satisfied and unaffordable
+policies do not block later ones. The roster start rotates with the month.
+
+- Cooperate: ordinary outreach until both relations and trust reach 70.
+- Contain: Pressure sanctions if no own regime exists; no automatic upgrade.
+- Isolate: Severe sanctions if none exist, including real embargo/blowback.
+- Reconcile: lift our non-chamber-mandated regime, otherwise outreach as above.
+- Observe: establish Military collection, then expand to penetration 60; wait
+  while compromised. Ordinary exposure/collection/decay remain in force.
+- Ignore/Unset: no delegated action; do not delete treaties, sanctions or networks.
+
+Reimposition waits for detente to expire. Sanctions still undergo ordinary review
+and may lapse; delegation can impose again afterward. This is a persistent policy,
+not a promise to preserve an otherwise ineligible sanction forever. Collection
+can need renewed work after decay. No covert attack, automatic war, treaty or
+counterpart acceptance is implied. Other illustrative intent names (e.g. patronage
+or deterrence) need distinct honest command mappings, not cosmetic aliases.
+
+Saved `foreignPolicies` defaults empty (null is handled); `lastForeignPolicyAction`
+defaults to an unused date. It prevents a second successful policy action in the
+same month, including after load. Save version remains 7; no invented old history.
+The controller autosaves authoring and delegation. Pure readouts expose only the
+operator's intent, own networks and ordinary public/owned relationship state.
+
 ## Player-authored objectives
 The operator may maintain up to three self-authored objectives. The OPERATOR panel supports both measurable conditions and freeform intent. Measurable objectives supply a measure, target and optional country id for relationship goals; supported conditions are current-state conditions that can be evaluated without borrowing the mandate's historical baseline.
 

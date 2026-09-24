@@ -36,6 +36,9 @@ namespace Brink.UI.Views
             BuildHeader(state, entries.Count);
             BuildFilters(state);
             AddText().text = HistoricalIdentitySystem.Render(state, countryFilter ?? state.playerCountryId);
+            int sceneIndex = entries.Count - 1 - page * PageSize;
+            if (sceneIndex >= 0 && sceneIndex < entries.Count)
+                AddFigure("terminal-text-dim").text = AsciiPillarArt.Record(state, entries[sceneIndex], W);
             BuildEntries(state, entries);
             BuildPager(entries.Count);
         }
@@ -59,18 +62,21 @@ namespace Brink.UI.Views
 
         void BuildHeader(GameState state, int matching)
         {
+            // Counts reveal information too: use the same boundary as entries,
+            // before the operator's country/category filters narrow the page.
+            var visible = state.chronicle.FindAll(entry => WorldWire.CanShow(state, entry));
             var text = AddText("terminal-text-bright");
             var sb = new StringBuilder();
             sb.AppendLine(AsciiChart.BoxHeader("WORLD CHRONICLE", W));
 
             int years = state.date.MonthsSince(state.startDate) / 12;
             sb.AppendLine($" {state.startDate.DisplayString} — {state.date.DisplayString}   " +
-                          $"{years} YEAR(S) ON RECORD   {state.chronicle.Count} ENTRIES");
+                          $"{years} YEAR(S) ON RECORD   {visible.Count} ENTRIES");
             sb.AppendLine($" SHOWING: {matching}");
 
             // A quick read of what kind of history this save has been.
             var counts = new Dictionary<ChronicleCategory, int>();
-            foreach (var entry in state.chronicle)
+            foreach (var entry in visible)
             {
                 counts.TryGetValue(entry.category, out int existing);
                 counts[entry.category] = existing + 1;

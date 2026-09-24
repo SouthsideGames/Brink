@@ -45,6 +45,10 @@ namespace Brink.UI.Views
             AddFigure().text = AsciiMapModes.Render(
                 state, selectedCountryId, mapMode, W, TerminalMetrics.MapRows);
             AddText("terminal-text-dim").text = AsciiMapModes.Legend(mapMode);
+            if (mapMode == WorldMapMode.Displacement)
+                AddText().text = AsciiMapModes.DisplacementReadout(state);
+            string connections = AsciiMapModes.ConnectionReadout(state, mapMode);
+            if (!string.IsNullOrEmpty(connections)) AddText().text = connections;
 
             BuildSelector(state, zoomOnSelect: false);
 

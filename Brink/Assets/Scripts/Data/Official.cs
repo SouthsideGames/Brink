@@ -3,6 +3,17 @@ using System.Collections.Generic;
 
 namespace Brink.Data
 {
+    /// <summary>Ministry-owned experience, independent of whoever holds the seat.</summary>
+    [Serializable]
+    public class InstitutionalMemory
+    {
+        public Pillar office;
+        public int successes;
+        public int setbacks;
+        public float riskImprint;
+        public GameDate lastOutcome;
+    }
+
     /// <summary>Control modes for a pillar official (GDD §7.2).</summary>
     /// <summary>
     /// One line of what a delegated official did this month (GDD §8, §28.1).

@@ -14,12 +14,35 @@ ASCII is Brink's visual medium, not decoration around a text interface. Presenta
 - Bresenham line drawing;
 - box drawing;
 - import from an existing text figure;
+- clipped sprite stamping with transparent spaces (later non-space cells layer over earlier ones);
 - exact-width/exact-height rendering.
 
 It owns clipping and layering rules so maps, scenes and future pillar art do not each reimplement them.
 
+## Archive and crisis scenes
+
+CHRONICLE illustrates the newest visible record on the selected page. Six
+category compositions reuse canvas sprites; typed sanctions and conduct records
+can label the scene more specifically. Prose never classifies an election, coup
+or battle, and the renderer independently applies WorldWire.CanShow. Archive art
+is historical illustration, not current status, a reconstructed location or a
+claim about the outcome. Filtering and paging precede scene selection.
+
+The crisis modal places a generic decision illustration inside its existing
+scroll reader, alongside the body and choices. It neither selects an option nor
+changes its cost, callback or availability. Both surfaces are deterministic,
+clipped to their supplied column width, and leave saves and simulation RNG alone.
+Archive scenes remain static. Crisis art offers PLAY ART / PAUSE ART, defaults
+off each time the modal is shown, and advances a thirteen-frame travelling signal
+every 700ms using the existing UI Toolkit scheduler. This is neither a countdown
+nor an option recommendation. Pausing freezes the current frame; hiding or choosing
+stops it, and a new Show returns to static art. No saved preference, simulation
+tick or RNG is involved. Native scheduler attachment and actual layout/device
+verification remain separate from direct lifecycle-callback tests. This bounded
+composition/animation surface is not an exhaustive historical scene catalogue.
+
 ## World map modes
-The MAP world layer now exposes six modes:
+The MAP world layer now exposes eight modes:
 
 1. **Political** — the existing public standing map.
 2. **Military** — live confrontation routes, Total War emphasis and occupied-ground signals.
@@ -29,10 +52,36 @@ The MAP world layer now exposes six modes:
 6. **Activity** — countries with one or multiple public events on last month's
    World Wire, so the map shows where the simulation just moved rather than only
    standing structures.
+7. **Displacement** — current hosting connections involving our country, with
+   source/host markers and a directional text list. The shared displacement
+   allocator supplies the connections. These are contributions to hosting
+   targets, not tracked journeys, exact headcounts or travel corridors. Borders
+   and geographic reach apply live; closed borders do not erase people hosted.
+   Only our aggregate displaced/hosted indices are printed. Foreign-to-foreign
+   connections and foreign quantities are not revealed. Successors without
+   authored map labels remain in the list when their titled ground gives them
+   a reachable position; unknown geography grants no connection. Lines are
+   schematic. The ordinary mode button reaches the overlay and list.
 
 Modes are views over the authoritative save. They add no persistent state and do not alter simulation resolution.
 
 ## Fog rules
+
+**Diplomatic** appends an eighth mode: a schematic line for our treaties with at
+least one currently active commitment. The accompanying record keeps direction,
+conditions and term, and distinguishes ACTIVE/DORMANT/EXPIRED/BROKEN. Unknown map
+positions remain in text. It reuses ClauseIsActive/SideFor/TermsText, not a new
+compliance prediction. Third-party treaties are excluded from this mode.
+
+Military now marks our recorded foreign allocations with B and lists the site
+and current holder. This is not a promise of current launch permission and never
+shows another service's basing network. Country drill-down keeps its existing
+collection boundary. Trade lines mean agreements, not shipping itineraries or
+delivered stock. Its list uses PortDependencyReadout for named ports/passages,
+detours and mine exposure, explicitly marks sanctions/embargo commodity closure
+in either direction, and includes the existing own-scoped StrategicConnections
+readouts. No invented blockade duration, route graph or simulated delivery.
+
 Map modes follow the same information contract as the rest of Brink:
 
 - Political standing is public.
@@ -42,8 +91,16 @@ Map modes follow the same information contract as the rest of Brink:
 - Bloc membership is treated as public diplomatic structure.
 - Activity delegates visibility to `WorldWire` and never reads secret or
   Intelligence-category chronicle entries directly.
+- Displacement describes our incoming/outgoing hosting connections, not a global
+  population census. Its pure reader shares the real allocation eligibility;
+  it creates no route state or new simulation effect.
 
 A presentation layer must never become a shortcut around `IntelligenceSystem`.
+
+CHRONICLE's total-entry and category counts use `WorldWire.CanShow`, just like
+its entries. They count all visible records before the operator's country or
+category filter; SHOWING and paging count that filtered subset. Hidden foreign
+events cannot change the header, and our own secret records remain visible.
 
 ## Responsive contract
 Every mode renders into the exact grid requested by the terminal. The authored world remains 80×21 conceptually, while country coordinates and route geometry scale into the current device grid. Overlay lines do not overwrite country labels or the underlying landmass unless an explicit signal must win the cell.

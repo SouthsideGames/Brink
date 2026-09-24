@@ -145,6 +145,9 @@ namespace Brink.Data
         /// </summary>
         public List<IntelProduct> intelProducts = new List<IntelProduct>();
 
+        /// <summary>Private dated evidence. Legacy saves begin with no invented findings.</summary>
+        public List<SponsorshipFinding> sponsorshipFindings = new List<SponsorshipFinding>();
+
         /// <summary>When each event definition last fired (GDD §23 cooldowns).</summary>
         public List<EventCooldown> eventCooldowns = new List<EventCooldown>();
 

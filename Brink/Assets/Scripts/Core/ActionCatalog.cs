@@ -81,6 +81,16 @@ namespace Brink.Core
             if (state?.PlayerCountry == null) return entries;
 
             var player = state.PlayerCountry;
+            Add(Pillar.Government, "OPERATOR", "Plan and authorize a staged programme",
+                "Planning free; ordinary CP and treasury costs at execution",
+                "Up to six ordered collection, assessment, outreach, logistics and energy-work stages, with explicit spending conditions. Separate authorization, live authority and Autonomous desks required. A hard CP cap does not cap ongoing treasury costs. Pause or abandon freely.",
+                true, "", verbs: new[] { nameof(GameController.AddProgrammeStage), nameof(GameController.AuthorizeStagedProgramme),
+                    nameof(GameController.RemoveProgrammeStage), nameof(GameController.MoveProgrammeStageEarlier),
+                    nameof(GameController.AbandonStagedProgramme), nameof(GameController.NewStagedProgramme) });
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Set foreign-country intent and delegation",
+                "Free first intent; 1 INF revision; ordinary CP on execution",
+                "Separate policy for each foreign state. Explicit delegation allows one paid action per month across policies, after campaign orders. Autonomous desk and current authority required; cancel freely.",
+                true, "", verbs: new[] { nameof(GameController.SetForeignPolicy), nameof(GameController.DelegateForeignPolicy) });
             var confrontation = state.ActiveConfrontation;
             bool atWar = confrontation != null && !confrontation.resolved
                          && confrontation.escalation >= EscalationState.LimitedConflict;
@@ -299,6 +309,10 @@ namespace Brink.Core
 
             // ---------- intelligence ----------
 
+            Add(Pillar.Diplomacy, "DIPLOMACY", "Request project funding", "2 CP",
+                "Ask a trade-preference partner for one ring-fenced instalment. They can decline; unused grants are forfeited on cancellation or abandonment.",
+                verbs: new[] { nameof(GameController.RequestProjectFunding) });
+
             Add(Pillar.Intelligence, "INTELLIGENCE", "Establish a network", "2 CP",
                 "Collection against one state in one domain. Everything else here needs it first.",
                 verbs: new[] { nameof(GameController.EstablishNetwork) });
@@ -319,6 +333,12 @@ namespace Brink.Core
                 deepNetwork || AnyNetwork(state),
                 "No network anywhere. Analysis is a product of collection, not a substitute.",
                 verbs: new[] { nameof(GameController.CommissionEstimate) });
+
+            Add(Pillar.Intelligence, "INTELLIGENCE", "Handle sponsorship evidence", "2 CP expose/confront/bargain; 1 share; 0 file/reopen",
+                "Publish attribution, ask privately for withdrawal, share with an intelligence partner, or exchange our silence for a commitment. Diplomatic responses need both authorities; replies are uncertain. Filing preserves the evidence.",
+                verbs: new[] { nameof(GameController.ExposeSponsorshipFinding), nameof(GameController.FileSponsorshipFinding),
+                    nameof(GameController.ReopenSponsorshipFinding), nameof(GameController.ShareSponsorshipFinding),
+                    nameof(GameController.ConfrontSponsorshipFinding), nameof(GameController.BargainSponsorshipFinding) });
 
             Add(Pillar.Intelligence, "INTELLIGENCE", "Mole hunt",
                 $"{IntelligenceSystem.MoleHuntCost} CP",

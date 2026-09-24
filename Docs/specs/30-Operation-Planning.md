@@ -54,6 +54,48 @@ Because execution uses the ordinary command path, it also awards the ordinary XP
 
 Planning remains inert. The separate standing-order toggle is the act that delegates execution; turning it off returns the plan to staff intent without deleting a step.
 
+## Cross-department staged programmes
+
+The OPERATOR panel also owns one current staged programme, separate from military
+campaign orders and the older single-objective Cabinet programme. Up to six ordered
+stages reuse ordinary paid collection, StrategicIntent assessment, diplomatic
+outreach, logistics investment and site energy-works commands. No generic script
+language or second action resolver is introduced.
+
+Each stage names a target, an earliest month and advisory deadline (0–120 months
+from adoption), and a measurable goal. Collection measures uncompromised own
+penetration; outreach requires both relations and trust; logistics measures own
+logistics. Energy works waits for actual completion, not authorization. Assessment
+waits for the specifically commissioned product to be delivered, never for its
+hidden accuracy flag. Numeric goals apply only to the first three numeric stages.
+
+Planning is free and separate from authorization. Editing intent revokes approval.
+Execution requires an Autonomous staffed desk, current pillar authority, the next
+stage's optional own-state condition (nonnegative treasury or no unresolved own
+front), live availability, ordinary CP and a cumulative authorized CP ceiling.
+An independently delegated foreign policy on the same target blocks programme
+execution to avoid conflicting instructions. After monthly CP refresh, campaign
+orders and foreign policy run first; the programme has at most one ordinary action
+from the remaining shared budget. Restarting does not create another monthly slot.
+
+Monthly observation can record attainment even while authorization is paused;
+conditions gate spending, not recognition of outcomes. Only the first incomplete
+stage advances per observation. Attainment is history, not a guarantee that a
+relationship, asset or capability remains forever. There is no completion reward.
+Deadlines show DELAYED but do not impose an invented penalty or force execution.
+
+The CP ceiling is not a treasury ceiling: real projects retain their ordinary
+funding obligations. An ordered project that lapses is not automatically bought
+again; abandoning/replacing the plan does not cancel projects, refund costs or
+undo consequences. Assessment stages likewise do not repeatedly buy a missing
+or delayed answer. Unstarted stages may be removed or moved earlier; started
+history stays. Abandoned or completed plans can be archived before starting anew.
+
+The optional record lives under Mandate.strategy, with archived records beside it.
+Old saves have no programme and no implied authorization; save version remains7.
+No AI authoring policy is added. UI reads are pure and wrapped; controller edits
+autosave through the existing isolated-test boundary.
+
 ## Validation contract
 
 Focused edit-mode tests cover intent-only creation, posting-strategy persistence, exact next-step reconciliation, defensive copying of directives, default-manual behaviour, normal CP charging, one-step-per-month execution, blocked-order waiting and save/load persistence.

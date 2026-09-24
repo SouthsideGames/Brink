@@ -240,6 +240,29 @@ namespace Brink.Core
 
         // ---------- the monthly tick ----------
 
+        /// <summary>
+        /// Current weights for hosting targets, not tracked journeys or
+        /// headcounts. Shared by monthly resolution and the displacement map.
+        /// The source's displaced value is not changed or projected here.
+        /// </summary>
+        public static Dictionary<string, float> ReceivingWeights(GameState state, CountryState source,
+            out float weightTotal)
+        {
+            var weights = new Dictionary<string, float>();
+            weightTotal = 0f;
+            if (source == null || source.displacement.displaced < 1f) return weights;
+            foreach (var host in state.countries)
+            {
+                if (host.id == source.id || host.displacement.bordersClosed) continue;
+                float distance = GeographySystem.DistanceBetween(state, source.id, host.id);
+                if (distance > ReachableDistance) continue;
+                float weight = 1f / Math.Max(4f, distance);
+                weights[host.id] = weight;
+                weightTotal += weight;
+            }
+            return weights;
+        }
+
         public static void MonthlyUpdate(GameState state)
         {
             // 1. What each country is producing.
@@ -267,28 +290,8 @@ namespace Brink.Core
 
             foreach (var source in state.countries)
             {
-                if (source.displacement.displaced < 1f) continue;
-
-                float weightTotal = 0f;
-                var weights = new Dictionary<string, float>();
-
-                foreach (var host in state.countries)
-                {
-                    if (host.id == source.id) continue;
-                    if (host.displacement.bordersClosed) continue;
-
-                    float distance = GeographySystem.DistanceBetween(state, source.id, host.id);
-                    if (distance > ReachableDistance) continue;
-
-                    // Nearer states carry more of it. You inherit your
-                    // neighbours' problems; that is what a neighbour is.
-                    float weight = 1f / Math.Max(4f, distance);
-                    weights[host.id] = weight;
-                    weightTotal += weight;
-                }
-
-                if (weightTotal <= 0f) continue;   // nowhere open within reach
-
+                var weights = ReceivingWeights(state, source, out float weightTotal);
+                if (weightTotal <= 0f) continue;
                 foreach (var pair in weights)
                     arrivals[pair.Key] += source.displacement.displaced * (pair.Value / weightTotal);
             }

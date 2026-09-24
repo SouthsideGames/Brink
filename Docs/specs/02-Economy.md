@@ -5,6 +5,73 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+### Foreign project support
+
+DIPLOMACY requests one instalment for an existing own industrial/site project
+from the selected partner. It costs2 CP accepted or declined; invalid, already
+funded, unaffordable-CP or unauthorized requests do not charge. Eligibility uses
+an active TradePreference **received from** that partner, no bilateral sanctions
+or confrontation, and a still-controlled project site. This is a request enabled
+by an economic relationship, not a claim that trade preference obliges payment.
+
+The partner accepts when relations>=60, trust>=50 and its actual treasury covers
+the instalment. Its treasury is debited; the programme's optional externalFunding
+field receives the exact cost. The public eligibility/readout never tests foreign
+treasury; a paid request can be declined without revealing the reason. A generic
+caller cannot authorize a donation from the player. No AI request caller exists.
+
+Funding is ring-fenced, never cash or instant progress. Ordinary monthly work
+spends it first, including the materials-enabled second instalment when own funds
+cover the rest. Negative own treasury does not eat the grant. Site pauses retain
+it; cancellation/abandonment forfeits the unused balance with no donor/recipient
+refund. New requests are refused until the current grant is used. Later broken
+relations do not claw back delivered funding. Each party gets its own secret
+receipt; no foreign project browser or private queue disclosure is introduced.
+Accepted player requests count one initiative, no new XP bucket. Controller
+requests autosave even on decline. Older saves default externalFunding to0;
+CurrentSaveVersion remains7. No SaveSystem/migration/pipeline changes.
+
+This completes the bounded funding interaction for industrial and energy-site
+projects; it does not add loans, ownership stakes, research/procurement funding,
+automatic aid policy or a general multilateral project-finance system. Conditions
+and thresholds are implementation rules, not balance certification.
+
+### Delivered-material construction throughput
+
+At least10 Materials supply points from the existing TradeSystem.Supply reader
+permit two funded work-months per calendar month instead of one. Both instalments
+must be affordable and at least two work-months must remain; otherwise work pays
+and advances once. Insufficient funds for even one instalment still causes lapse.
+Site denial/abandonment gates run first. The final single month charges once and
+completion benefits/rewards still occur once. No new saved state or extra yield.
+
+This uses delivered supply, including commodity, sanctions in either direction,
+embargoes, tariffs and route effects, not stored agreement volume or domestic
+material stock. Supplies enable throughput, not free work; total unchanged work
+still costs the same, but monthly cash pressure can double and disruptions remove
+the speed benefit. Own project readouts disclose this. The10-point threshold and
+two-month cap are implementation tuning, not balance certification. Research and
+procurement are not accelerated by this industrial construction rule.
+
+### Construction setbacks
+
+Successful covert Sabotage now sets back the target's national Industry project;
+a successful AirStrike sets back Energy construction at that exact held site.
+These reuse the existing success paths and their costs, not a free damage verb or
+an extra random roll. They undo at most two completed work-months, never taking
+remaining work above its original duration or resurrecting a completed queue.
+An untouched project loses nothing. Other sectors/sites are unaffected.
+
+Replacement work uses ordinary monthly payment and completion, including funding
+lapse and contested-site pause. No refund, instant charge or extra completion
+reward is created. The owner's secret Chronicle/notice identifies the project
+and work lost; the attacker gets no private queue/progress information. Existing
+sector/garrison/infrastructure effects still apply to their distinct quantities.
+Completed energy works are not destroyed by this construction rule. No new save
+fields; existing monthsRemaining persists the setback. This is bounded targeting
+through existing sabotage/strike commands, not a new project browser. Foreign
+funding and trade acceleration are separate remaining interactions.
+
 ### Roadmap 25 completion batch — routing and infrastructure
 
 This section supersedes the earlier slice's statements that there is no route

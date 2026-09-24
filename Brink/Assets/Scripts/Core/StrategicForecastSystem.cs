@@ -62,7 +62,7 @@ namespace Brink.Core
             string tradeoff = Tradeoff(doctrine);
             if (!string.IsNullOrEmpty(tradeoff)) sb.AppendLine("  YES, BUT: " + tradeoff);
 
-            var plan = StrategySystem.Ensure(state);
+            var plan = state.mandate?.strategy;
             if (plan != null && plan.objectives.Count > 0)
             {
                 int met = 0;
@@ -74,6 +74,72 @@ namespace Brink.Core
             sb.Append("CONFIDENCE: HIGH on our own arithmetic; MEDIUM on delegated intent; " +
                       "LOW on the independent world's response. This is a staff estimate, not a future save-state preview.");
             return Brink.UI.AsciiChart.WrapBlock(sb.ToString(), width);
+        }
+
+        /// <summary>Staff judgment from public commitments and collected reports, never a future-state simulation.</summary>
+        public static string SanctionsAssessment(GameState state, string targetId, SanctionSeverity severity, int width)
+        {
+            if (state?.PlayerCountry == null || targetId == state.playerCountryId
+                || state.FindCountry(targetId) == null || !Enum.IsDefined(typeof(SanctionSeverity), severity))
+                return "NO SANCTIONS ASSESSMENT AVAILABLE.";
+            var relation = state.FindRelationship(state.playerCountryId, targetId);
+            var sb = new StringBuilder("CABINET ASSESSMENT — PROPOSED " + severity.ToString().ToUpperInvariant() + " MEASURES\n");
+            if (!EconomySystem.CanImposeSanctions(state, targetId, severity, out string reason))
+                sb.AppendLine("UNAVAILABLE: " + reason);
+            if (relation?.sanctionsTruceMonths > 0)
+                sb.AppendLine("DÉTENTE: imposition is refused while the bilateral truce runs.");
+            if (state.FindSanction(state.playerCountryId, targetId) != null)
+            {
+                sb.AppendLine("Existing measures are not replaced or stacked by this order.");
+                return Brink.UI.AsciiChart.WrapBlock(sb.ToString(), Math.Max(20, width));
+            }
+            var proposed = new Sanction { senderId = state.playerCountryId, targetId = targetId, severity = severity };
+            float blowback = EconomySystem.SanctionBlowbackTerm(state, state.playerCountryId, proposed);
+            var economic = IntelligenceSystem.GetEstimate(state, state.playerCountryId, targetId, IntelDomain.Economic);
+            var military = IntelligenceSystem.GetEstimate(state, state.playerCountryId, targetId, IntelDomain.Military);
+            sb.AppendLine("TARGET ECONOMIC DAMAGE: " + Judgment(state, Pillar.Economy, targetId, proposed.Weight)
+                + " pressure assessment, not a GDP-loss prediction.");
+            sb.AppendLine("Initial sanction-pressure weight " + proposed.Weight.ToString("F2")
+                + "; adaptation reduces this term over time. Other economic effects remain world-dependent.");
+            sb.AppendLine("TARGET CAPACITY: " + Report(economic));
+            sb.AppendLine("DOMESTIC BLOWBACK: " + Judgment(state, Pillar.Economy, targetId, blowback)
+                + "; current own-cost term " + blowback.ToString("F2") + " (not a treasury bill).");
+            var link = state.FindTrade(state.playerCountryId, targetId);
+            bool closed = link == null || link.embargoed || state.FindSanction(targetId, state.playerCountryId) != null;
+            sb.AppendLine(link == null ? "TRADE: no bilateral link to close."
+                : link.focus == TradeFocus.General ? "TRADE: this general link carries no commodity supply; trade-health effects are separate."
+                : closed ? "TRADE: commodity supply is already closed; do not count a second supply loss."
+                : "TRADE: bilateral commodity supply closes in both directions, even below Severe. This is additional to pressure and blowback.");
+            sb.AppendLine("RETALIATION: " + (military == null || military.confidence == ConfidenceGrade.None
+                ? "UNCERTAIN — no collected military assessment."
+                : Judgment(state, Pillar.Intelligence, targetId,
+                    (relation != null && relation.relations < EconomySystem.SanctionHostilityLine ? 1.5f : 0.5f)
+                    + military.reportedValue / 100f) + " staff concern, not a probability; reported military " + Report(military)));
+            sb.AppendLine("ALLIED SUPPORT: " + (CouncilSystem.SanctionsMandated(state, targetId)
+                ? "a current chamber mandate reduces our modeled blowback. No further participation promised."
+                : "UNCERTAIN — no chamber mandate. Alliances do not automatically join this order."));
+            var front = state.ActiveConfrontationFor(state.playerCountryId);
+            sb.AppendLine("ESCALATION: " + (front != null && !front.resolved && front.Involves(targetId)
+                ? "adds pressure to the existing confrontation; no next escalation level is guaranteed."
+                : "this order does not itself open a confrontation. Hostility can shape later choices."));
+            sb.Append("CONFIDENCE: exact on stated current-rule terms; staff bands can be wrong. "
+                + "Foreign reactions are not simulated. Collection dates and bands describe reports, not hidden truth.");
+            return Brink.UI.AsciiChart.WrapBlock(sb.ToString(), Math.Max(20, width));
+        }
+
+        static string Report(IntelEstimate estimate)
+            => estimate == null || estimate.confidence == ConfidenceGrade.None ? "NO ASSESSMENT"
+                : estimate.RangeText + " / " + estimate.confidence + " as of " + estimate.asOf.DisplayString;
+
+        static string Judgment(GameState state, Pillar pillar, string targetId, float pressure)
+        {
+            var official = state.PlayerCountry.FindOfficial(pillar);
+            if (official == null) return "UNCERTAIN (desk vacant)";
+            // Stable staff misreading of known inputs, not a calibrated outcome model.
+            float noise = ((Hash.Of(official.id + ":" + targetId) & 65535) / 65535f * 2f - 1f)
+                * (1f - Math.Max(0f, Math.Min(1f, official.competence / 100f)));
+            float reading = pressure + noise;
+            return reading < 0.8f ? "LOW" : reading < 2f ? "MODERATE" : "HIGH";
         }
 
         public static int ClampHorizon(int months)

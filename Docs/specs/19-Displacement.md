@@ -70,6 +70,15 @@ in worlds with successors can change. No new persistent state is introduced.
 
 `hosted` approaches its share at 0.12 rising, 0.06 falling.
 
+`ReceivingWeights` is the shared read-only source for the monthly allocation and
+the MAP displacement mode. It preserves country iteration, weighting and the
+existing accumulation expression; it does not pre-round a new intermediate
+arrival amount. Sources below one displaced point contribute nothing, as before.
+The map reveals only connections involving the player, not foreign quantities.
+It is a snapshot of allocation eligibility, not a saved per-pair journey ledger;
+an AI border change at the end of a tick can therefore change the next target
+before existing hosted people have returned home. See spec28 for presentation.
+
 ## 5. What hosting costs, and what it is worth
 
 | Effect | Route |

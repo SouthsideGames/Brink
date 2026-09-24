@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Brink.Core;
 using Brink.Data;
 using NUnit.Framework;
+using UnityEngine.UIElements;
 
 namespace Brink.Tests
 {
@@ -62,6 +63,390 @@ namespace Brink.Tests
         }
 
         // ---------- analysis is a product of collection ----------
+
+        [Test]
+        public void FindingControllerChargesOnceAndAutosavesOnlyInIsolatedDirectory()
+        {
+            var gc = GameController.Instance;
+            var previous = gc.State; var previousTurns = gc.Turns;
+            string oldDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "brink-finding-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, turns);
+                var movement = PlantFindingEvidence();
+                SponsorshipFindings.Discover(state);
+                var finding = SponsorshipFindings.For(state, state.playerCountryId)[0];
+                state.commandPoints.current = 1;
+                string before = SaveSystem.ToJson(state);
+                Assert.IsFalse(gc.ExposeSponsorshipFinding(finding.Key));
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                state.commandPoints.current = 10;
+                Assert.IsTrue(gc.ExposeSponsorshipFinding(finding.Key));
+                Assert.AreEqual(8, state.commandPoints.current);
+                Assert.IsTrue(SaveSystem.Load(0).sponsorshipFindings[0].exposed);
+                before = SaveSystem.ToJson(state);
+                Assert.IsFalse(gc.ExposeSponsorshipFinding(finding.Key));
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+                Assert.IsTrue(gc.FileSponsorshipFinding(finding.Key));
+                Assert.AreEqual(8, state.commandPoints.current);
+                Assert.IsTrue(SaveSystem.Load(0).sponsorshipFindings[0].filed);
+            }
+            finally
+            {
+                SaveSystem.SaveDirectoryOverride = oldDirectory;
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                System.IO.Directory.Delete(directory, true);
+            }
+        }
+
+        [TestCase(34)]
+        [TestCase(49)]
+        [TestCase(64)]
+        [TestCase(104)]
+        public void FindingPanelIsOwnOnlyWrappedAndPure(int columns)
+        {
+            PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            state.sponsorshipFindings.Add(new SponsorshipFinding { observerId = SomeoneElse().id,
+                sponsorId = "SECRET FOREIGN MARKER", locationId = "FOREIGN PLACE", discovered = state.date });
+            string before = SaveSystem.ToJson(state);
+            Brink.UI.TerminalMetrics.Update((columns + 1) * 8f, 8f, 500f, Brink.UI.Breakpoints.FromColumns(columns));
+            try
+            {
+                var view = new Brink.UI.Views.IntelligenceView();
+                typeof(Brink.UI.Views.IntelligenceView).GetMethod("BuildFindings",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(view, new object[] { state });
+                string output = "";
+                view.Root.Query<UnityEngine.UIElements.Label>().ForEach(label => {
+                    output += label.text;
+                    foreach (string line in label.text.Split('\n')) Assert.LessOrEqual(line.Length, columns);
+                });
+                StringAssert.Contains("CLASSIFIED FINDING", output);
+                StringAssert.DoesNotContain("SECRET FOREIGN MARKER", output);
+                Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally { Brink.UI.TerminalMetrics.ResetForTests(); }
+        }
+
+        Insurgency PlantFindingEvidence()
+        {
+            var sponsor = SomeoneElse();
+            var place = state.locations.Find(l => l.ownerId == state.playerCountryId);
+            Assert.IsNotNull(place);
+            state.PlayerCountry.technology.capabilities.Add(new HeldCapability { capabilityId = "CAP_FORENSICS", maturity = 100f });
+            GiveUsANetwork(sponsor.id, 65f);
+            var movement = new Insurgency { id = "FINDING_TEST", locationId = place.id,
+                sponsorId = sponsor.id, strength = 40f, support = 40f, armsSupplied = 20f };
+            state.insurgencies.Add(movement);
+            return movement;
+        }
+
+        void FindingDiplomaticClimate(float warmth)
+        {
+            state.treaties.Clear(); state.confrontations.Clear();
+            foreach (var relation in state.relationships)
+            {
+                relation.relations = relation.trust = relation.strategicAlignment = warmth;
+                relation.memoryWeight = 0f;
+                relation.threatPerceptionOfA = relation.threatPerceptionOfB = 0f;
+            }
+        }
+
+        [TestCase("share", 1, true)]
+        [TestCase("confront", 2, true)]
+        [TestCase("confront-decline", 2, false)]
+        [TestCase("bargain", 2, true)]
+        [TestCase("bargain-decline", 2, false)]
+        public void FindingResponsesUsePaidControllersAndPersistAttempts(string action, int cost, bool accepts)
+        {
+            var gc = GameController.Instance; var previous = gc.State; var previousTurns = gc.Turns;
+            string oldDirectory = SaveSystem.SaveDirectoryOverride;
+            string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "brink-finding-response-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(directory);
+            try
+            {
+                SaveSystem.SaveDirectoryOverride = directory;
+                typeof(GameController).GetProperty("State").SetValue(gc, state);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, turns);
+                var movement = PlantFindingEvidence(); SponsorshipFindings.Discover(state);
+                var finding = state.sponsorshipFindings[0];
+                FindingDiplomaticClimate(accepts ? 100f : 0f);
+                string ally = state.countries.Find(c => c.id != state.playerCountryId && c.id != finding.sponsorId).id;
+                if (action == "share")
+                {
+                    var pact = new Treaty { countryA = state.playerCountryId, countryB = ally, signedDate = state.date };
+                    pact.commitments.Add(TreatyCommitment.IntelligenceSharing); state.treaties.Add(pact);
+                }
+                Func<bool> send = () => action == "share" ? gc.ShareSponsorshipFinding(finding.Key, ally)
+                    : action.StartsWith("confront") ? gc.ConfrontSponsorshipFinding(finding.Key)
+                    : gc.BargainSponsorshipFinding(finding.Key, TreatyCommitment.Transit);
+                state.commandPoints.current = 0;
+                string before = SaveSystem.ToJson(state);
+                Assert.IsFalse(send()); Assert.AreEqual(before, SaveSystem.ToJson(state));
+                state.commandPoints.current = 10;
+                int initiatives = state.initiativesThisYear;
+                Assert.AreEqual(accepts, send());
+                Assert.AreEqual(10 - cost, state.commandPoints.current);
+                Assert.AreEqual(initiatives + (accepts ? 1 : 0), state.initiativesThisYear);
+                var loaded = SaveSystem.Load(0);
+                Assert.AreEqual(SaveSystem.ToJson(state), SaveSystem.ToJson(loaded));
+                before = SaveSystem.ToJson(state);
+                Assert.IsFalse(send()); Assert.AreEqual(before, SaveSystem.ToJson(state));
+            }
+            finally
+            {
+                SaveSystem.SaveDirectoryOverride = oldDirectory;
+                typeof(GameController).GetProperty("State").SetValue(gc, previous);
+                typeof(GameController).GetProperty("Turns").SetValue(gc, previousTurns);
+                System.IO.Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public void SilenceValueCanCarryARealOfferAtTheMarginWithoutPublishing()
+        {
+            var movement = PlantFindingEvidence(); SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            FindingDiplomaticClimate(50f);
+            var relationship = state.FindRelationship(state.playerCountryId, finding.sponsorId);
+            var clauses = new List<TreatyClause> { new TreatyClause { commitment = TreatyCommitment.Transit, side = ClauseSide.TheyProvide } };
+            bool found = false;
+            for (int warmth = 0; warmth <= 100; warmth++)
+            {
+                relationship.relations = warmth;
+                float bare = DiplomacySystem.TreatyWillingness(state, state.playerCountryId, finding.sponsorId, clauses);
+                if (bare < 50f && bare + SponsorshipFindings.SilenceValue(state, finding.Key) >= 50f) { found = true; break; }
+            }
+            Assert.IsTrue(found, "Fixture has no margin where the finding matters.");
+            Assert.IsTrue(SponsorshipFindings.Bargain(state, finding.Key, TreatyCommitment.Transit));
+            Assert.IsFalse(movement.sponsorExposed);
+            Assert.IsTrue(finding.silencePromised);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void PrivateConfrontationClosesOnlyAnAcceptedChannelAndCannotBeReplayed(bool accepted)
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            FindingDiplomaticClimate(accepted ? 100f : 0f);
+            Assert.AreEqual(accepted, DiplomacySystem.TreatyWillingness(state, state.playerCountryId,
+                movement.sponsorId, new List<TreatyCommitment>()) >= 50f, "Fixture must separate willingness.");
+            Assert.AreEqual(accepted, SponsorshipFindings.Confront(state, finding.Key));
+            Assert.AreEqual(accepted ? "" : finding.sponsorId, movement.sponsorId);
+            Assert.IsTrue(finding.confronted);
+            Assert.IsFalse(movement.sponsorExposed);
+            Assert.AreEqual(40f, movement.strength); Assert.AreEqual(20f, movement.armsSupplied);
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.Confront(state, finding.Key));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void SharingRequiresAnActiveOutboundClauseAndGivesOnlyTheChosenPartnerKnowledge()
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            var ally = state.countries.Find(c => c.id != state.playerCountryId && c.id != finding.sponsorId);
+            FindingDiplomaticClimate(100f);
+            Assert.IsFalse(SponsorshipFindings.CanShare(state, finding.Key, ally.id, out _));
+            var treaty = new Treaty { countryA = state.playerCountryId, countryB = ally.id, signedDate = state.date };
+            treaty.commitments.Add(TreatyCommitment.IntelligenceSharing);
+            treaty.clauses.Add(new TreatyClause { commitment = TreatyCommitment.IntelligenceSharing, side = ClauseSide.TheyProvide });
+            state.treaties.Add(treaty);
+            Assert.IsFalse(SponsorshipFindings.CanShare(state, finding.Key, ally.id, out _));
+            treaty.clauses[0].side = ClauseSide.WeProvide;
+            Assert.IsTrue(SponsorshipFindings.Share(state, finding.Key, ally.id));
+            Assert.IsTrue(InsurgencySystem.KnownSponsor(state, ally.id, movement));
+            Assert.IsFalse(movement.sponsorExposed);
+            Assert.AreEqual(2, state.sponsorshipFindings.Count);
+            Assert.AreEqual(finding.discovered, SponsorshipFindings.Find(state, ally.id, finding.Key).discovered);
+            Assert.IsFalse(SponsorshipFindings.CanBargain(state, finding.Key, TreatyCommitment.Transit, out _));
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.Share(state, finding.Key, ally.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            treaty.broken = true;
+            Assert.IsFalse(SponsorshipFindings.CanShare(state, finding.Key, ally.id, out _));
+        }
+
+        [Test]
+        public void SilenceValuationUsesTheClampedOrdinaryPublicationTrustLoss()
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            foreach (var r in state.relationships) r.trust = r.Involves(state.playerCountryId) ? 2f : 1f;
+            var copy = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            InsurgencySystem.Attribute(copy, copy.insurgencies.Find(i => i.id == movement.id),
+                copy.FindLocation(movement.locationId), copy.PlayerCountry, copy.FindCountry(movement.sponsorId));
+            float sum = 0f; int count = 0;
+            foreach (var r in state.relationships)
+                if (r.Involves(movement.sponsorId))
+                { sum += r.trust - copy.FindRelationship(r.countryA, r.countryB).trust; count++; }
+            string before = SaveSystem.ToJson(state);
+            Assert.AreEqual(Math.Min(12f, sum / count), SponsorshipFindings.SilenceValue(state, finding.Key), 0.00001f);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SilenceBargainWritesTheirClauseOnceAndBlocksOurPublication(bool extending)
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            FindingDiplomaticClimate(100f);
+            if (extending)
+            {
+                var old = new Treaty { countryA = finding.sponsorId, countryB = state.playerCountryId, signedDate = state.date };
+                old.commitments.Add(TreatyCommitment.NonAggression);
+                state.treaties.Add(old);
+            }
+            int initiatives = state.initiativesThisYear;
+            Assert.IsTrue(SponsorshipFindings.Bargain(state, finding.Key, TreatyCommitment.Transit));
+            Assert.IsTrue(finding.silencePromised);
+            var treaty = state.FindTreaty(state.playerCountryId, finding.sponsorId);
+            Assert.IsTrue(treaty.Carries(finding.sponsorId, TreatyCommitment.Transit));
+            Assert.IsFalse(treaty.Carries(state.playerCountryId, TreatyCommitment.Transit));
+            Assert.AreEqual(initiatives + 1, state.initiativesThisYear);
+            Assert.AreEqual(finding.sponsorId, movement.sponsorId);
+            Assert.IsFalse(movement.sponsorExposed);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            string before = SaveSystem.ToJson(loaded);
+            Assert.IsFalse(SponsorshipFindings.Expose(loaded, finding.Key));
+            Assert.IsFalse(SponsorshipFindings.Bargain(loaded, finding.Key, TreatyCommitment.IntelligenceSharing));
+            Assert.AreEqual(before, SaveSystem.ToJson(loaded));
+        }
+
+        [Test]
+        public void RejectedSilenceOfferKeepsEvidenceAndMovementButCannotFarmRepeatedOffers()
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            FindingDiplomaticClimate(0f);
+            int initiatives = state.initiativesThisYear;
+            Assert.IsFalse(SponsorshipFindings.Bargain(state, finding.Key, TreatyCommitment.Transit));
+            Assert.IsTrue(finding.bargainAttempted); Assert.IsFalse(finding.silencePromised);
+            Assert.AreEqual(0, state.treaties.Count); Assert.AreEqual(initiatives, state.initiativesThisYear);
+            Assert.IsTrue(SponsorshipFindings.CanExpose(state, finding.Key, out _));
+            Assert.IsFalse(SponsorshipFindings.CanBargain(state, finding.Key, TreatyCommitment.NonAggression, out _));
+            Assert.IsTrue(SponsorshipFindings.File(state, finding.Key));
+            Assert.IsTrue(SponsorshipFindings.Reopen(state, finding.Key));
+            Assert.IsFalse(finding.filed);
+            Assert.IsFalse(SponsorshipFindings.CanBargain(state, finding.Key, TreatyCommitment.Transit, out _));
+        }
+
+        [Test]
+        public void SoldSilenceBlocksOurSharingButDoesNotDisableOrdinaryAttribution()
+        {
+            var movement = PlantFindingEvidence(); SponsorshipFindings.Discover(state);
+            var finding = state.sponsorshipFindings[0];
+            FindingDiplomaticClimate(100f);
+            var ally = state.countries.Find(c => c.id != state.playerCountryId && c.id != finding.sponsorId);
+            var pact = new Treaty { countryA = state.playerCountryId, countryB = ally.id, signedDate = state.date };
+            pact.commitments.Add(TreatyCommitment.IntelligenceSharing); state.treaties.Add(pact);
+            Assert.IsTrue(SponsorshipFindings.CanShare(state, finding.Key, ally.id, out _));
+            Assert.IsTrue(SponsorshipFindings.Bargain(state, finding.Key, TreatyCommitment.Transit));
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.Share(state, finding.Key, ally.id));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            InsurgencySystem.Attribute(state, movement, state.FindLocation(movement.locationId),
+                state.PlayerCountry, state.FindCountry(finding.sponsorId));
+            Assert.IsTrue(movement.sponsorExposed);
+            Assert.IsTrue(state.FindTreaty(state.playerCountryId, finding.sponsorId)
+                .Carries(finding.sponsorId, TreatyCommitment.Transit));
+        }
+
+        [TestCase("thin")]
+        [TestCase("compromised")]
+        [TestCase("no-forensics")]
+        [TestCase("foreign-ground")]
+        [TestCase("public")]
+        public void PrivateFindingRequiresForensicCollectionAndOurGround(string gate)
+        {
+            var movement = PlantFindingEvidence();
+            if (gate == "thin") state.FindNetwork(state.playerCountryId, movement.sponsorId).penetration = 64.99f;
+            if (gate == "compromised") state.FindNetwork(state.playerCountryId, movement.sponsorId).compromised = true;
+            if (gate == "no-forensics") state.PlayerCountry.technology.capabilities.RemoveAll(c => c.capabilityId == "CAP_FORENSICS");
+            if (gate == "foreign-ground") state.FindLocation(movement.locationId).ownerId = movement.sponsorId;
+            if (gate == "public") movement.sponsorExposed = true;
+            string before = SaveSystem.ToJson(state);
+            SponsorshipFindings.Discover(state);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void MonthlyDiscoveryIsDatedPrivateDurableAndDoesNotPromoteAnalystAccuracy()
+        {
+            var movement = PlantFindingEvidence();
+            var misleading = new IntelProduct { observerId = state.playerCountryId, targetId = movement.sponsorId,
+                delivered = true, accurate = false, question = EstimateQuestion.SubversionSponsorship,
+                commissioned = state.date, answer = "No evidence." };
+            state.intelProducts.Add(misleading);
+            Assert.IsFalse(InsurgencySystem.KnownSponsor(state, state.playerCountryId, movement));
+            IntelProductSystem.MonthlyUpdate(state);
+            var findings = SponsorshipFindings.For(state, state.playerCountryId);
+            Assert.AreEqual(1, findings.Count);
+            Assert.AreEqual(state.date, findings[0].discovered);
+            Assert.IsFalse(movement.sponsorExposed);
+            Assert.IsTrue(InsurgencySystem.KnownSponsor(state, state.playerCountryId, movement));
+            Assert.IsFalse(misleading.accurate);
+            Assert.AreEqual("No evidence.", misleading.answer);
+            string before = SaveSystem.ToJson(state);
+            SponsorshipFindings.Discover(state);
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            var loaded = SaveSystem.FromJson(before);
+            Assert.AreEqual(1, SponsorshipFindings.For(loaded, loaded.playerCountryId).Count);
+            var legacy = SaveSystem.FromJson(before.Replace("\"sponsorshipFindings\"", "\"omittedFindings\""));
+            Assert.AreEqual(0, SponsorshipFindings.For(legacy, legacy.playerCountryId).Count);
+        }
+
+        [Test]
+        public void ExposureAppliesExactlyOrdinaryAttributionOnce()
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = SponsorshipFindings.For(state, state.playerCountryId)[0];
+            var control = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            var controlMovement = control.insurgencies.Find(i => i.id == movement.id);
+            InsurgencySystem.Attribute(control, controlMovement, control.FindLocation(movement.locationId),
+                control.PlayerCountry, control.FindCountry(movement.sponsorId));
+            Assert.IsTrue(SponsorshipFindings.Expose(state, finding.Key));
+            control.sponsorshipFindings[0].exposed = true;
+            Assert.AreEqual(SaveSystem.ToJson(control), SaveSystem.ToJson(state));
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.Expose(state, finding.Key));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.AreEqual(40f, movement.strength);
+            Assert.AreEqual(20f, movement.armsSupplied);
+        }
+
+        [Test]
+        public void FiledEvidenceStaysKnownButStaleEvidenceCannotExposeANewSponsor()
+        {
+            var movement = PlantFindingEvidence();
+            SponsorshipFindings.Discover(state);
+            var finding = SponsorshipFindings.For(state, state.playerCountryId)[0];
+            Assert.IsTrue(SponsorshipFindings.File(state, finding.Key));
+            string before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.File(state, finding.Key));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.IsTrue(InsurgencySystem.KnownSponsor(state, state.playerCountryId, movement));
+            movement.sponsorId = state.countries.Find(c => c.id != state.playerCountryId && c.id != finding.sponsorId).id;
+            Assert.IsFalse(InsurgencySystem.KnownSponsor(state, state.playerCountryId, movement));
+            before = SaveSystem.ToJson(state);
+            Assert.IsFalse(SponsorshipFindings.Expose(state, finding.Key));
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+            Assert.AreEqual("", SponsorshipFindings.Describe(state, new SponsorshipFinding { observerId = movement.sponsorId }));
+        }
 
         [Test]
         public void NothingCanBeAskedWithoutANetwork()
