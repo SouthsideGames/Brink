@@ -1,5 +1,20 @@
 # Brink ("Unknown Game")
 
+## Roadmap29 — strategic freedom
+
+Do not add national strategy locks or promise every radical course will succeed.
+Treaty/bloc withdrawal, patronage through real asymmetric provisions, coercion,
+autarky attempts, constitutional changes and borders already have instruments.
+AcquisitionSystem now permits complete service retirement without refund, ending
+its orders/programmes and saving replacementSuspended; shared WorstShortfall
+honours it for automatic orders, and the AI programme selector also skips it.
+Resume restores permission, not equipment.
+Explicit new spending stays possible. EndgameSystem can abandon prepared work
+without erasing prior uses or active consequences. Real controller/panel/index
+paths, ordinary authority/CP/autosave; no new AI chooser. Specs01/14/10.
+Balance/device work is deferred, not an implementation completion gate. #30
+not started. Author evidence never substitutes for native independent review.
+
 ## Roadmap #28 — better failure and recovery
 
 The operator already survives defeat, conquest, coups and fragmentation; finance,

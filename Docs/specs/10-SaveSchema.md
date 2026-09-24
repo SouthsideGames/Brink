@@ -4,6 +4,12 @@ Source: `Core/SaveSystem.cs`, `Data/GameState.cs`. GDD §30, §36.
 
 ## 1. Model
 
+Roadmap29 adds `BranchForce.replacementSuspended`, default false. False retains
+ordinary replacement on existing saves; true means voluntary stand-down has
+stopped automatic purchases for that service, not explicit new orders. Counts,
+backlogs, programmes and strategic progress still use existing fields. Version7
+is unchanged; no migration or pipeline subscription is added.
+
 Roadmap #27 adds optional CountryState.strategicConduct: a bounded own-posting
 monthly accumulator (since, lastObserved, months, heldMonths[5], lastEarnedName,
 lastEarnedDate). Missing records start on first observation, not from invented

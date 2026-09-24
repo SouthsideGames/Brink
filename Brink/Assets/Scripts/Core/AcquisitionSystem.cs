@@ -30,6 +30,75 @@ namespace Brink.Core
     {
         /// <summary>Command capacity to place an order.</summary>
         public const int OrderCost = 1;
+        public const int StandDownCost = 2;
+        public const int ResumeReplacementCost = 1;
+
+        public static bool CanStandDown(GameState state, string actorId, ForceBranch branch, out string reason)
+        {
+            var actor = state?.FindCountry(actorId);
+            reason = "No such state or service.";
+            if (actor == null || !Enum.IsDefined(typeof(ForceBranch), branch)) return false;
+            var force = actor.military.Get(branch);
+            if (!force.replacementSuspended) { reason = ""; return true; }
+            foreach (var stock in force.inventory.stocks)
+                if (stock.count > 0f || stock.onOrder > 0f) { reason = ""; return true; }
+            foreach (var program in actor.military.programs)
+                if (program.branch == branch) { reason = ""; return true; }
+            reason = "Already retired, with replacement stopped and no orders or programmes.";
+            return false;
+        }
+
+        /// <summary>Irreversible retirement, not storage: no refund or magic civilian dividend.</summary>
+        public static bool StandDownBy(GameState state, string actorId, ForceBranch branch)
+        {
+            if (!CanStandDown(state, actorId, branch, out _)) return false;
+            var actor = state.FindCountry(actorId);
+            var force = actor.military.Get(branch);
+            force.replacementSuspended = true;
+            foreach (var stock in force.inventory.stocks) { stock.count = 0f; stock.onOrder = 0f; }
+            force.SyncStrength();
+            force.experience = 0f;
+            for (int i = actor.military.programs.Count - 1; i >= 0; i--)
+                if (actor.military.programs[i].branch == branch)
+                {
+                    state.AddChronicle(ChronicleCategory.Military, actorId,
+                        $"PROCUREMENT TERMINATED: {actor.military.programs[i].label} cancelled by voluntary stand-down.");
+                    actor.military.programs.RemoveAt(i);
+                }
+            string message = $"{branch} service retired; its equipment, experience and paid backlog are forfeited without refund. "
+                + "Its procurement programmes end and automatic replacement stops. Treaties, wars and strategic instruments remain.";
+            state.AddChronicle(ChronicleCategory.Military, actorId, message, Publicity.Public);
+            if (actorId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Priority, "SERVICE RETIRED", message, actorId, desk: ReportingDesk.Military);
+            return true;
+        }
+
+        public static bool StandDown(GameState state, TurnManager turns, ForceBranch branch)
+        {
+            if (!CanStandDown(state, state.playerCountryId, branch, out _)) return false;
+            if (!turns.SpendCommandPoints(StandDownCost, $"Retire {branch} service")) return false;
+            if (!StandDownBy(state, state.playerCountryId, branch)) return false;
+            ProgressionSystem.RecordInitiative(state);
+            return true;
+        }
+
+        public static bool ResumeReplacementBy(GameState state, string actorId, ForceBranch branch)
+        {
+            var actor = state?.FindCountry(actorId);
+            if (actor == null || !Enum.IsDefined(typeof(ForceBranch), branch)
+                || !actor.military.Get(branch).replacementSuspended) return false;
+            actor.military.Get(branch).replacementSuspended = false;
+            state.AddChronicle(ChronicleCategory.Military, actorId,
+                $"Automatic replacement resumed for {branch}. No equipment restored; new orders cost treasury and take time.");
+            return true;
+        }
+
+        public static bool ResumeReplacement(GameState state, TurnManager turns, ForceBranch branch)
+        {
+            if (!Enum.IsDefined(typeof(ForceBranch), branch) || !state.PlayerCountry.military.Get(branch).replacementSuspended) return false;
+            if (!turns.SpendCommandPoints(ResumeReplacementCost, $"Resume {branch} replacement")) return false;
+            return ResumeReplacementBy(state, state.playerCountryId, branch);
+        }
 
         /// <summary>Political capital to put the state on a war footing.</summary>
         public const float WarFootingCost = 5f;
@@ -154,6 +223,7 @@ namespace Brink.Core
                 if (asset.branch == ForceBranch.Naval && landlocked) continue;
 
                 var force = country.military.Get(asset.branch);
+                if (force.replacementSuspended) continue;
                 float target = asset.baselineAt100 * (EstablishmentFor(country, asset.branch) / 100f);
                 if (target <= 0.01f) continue;
 

@@ -746,6 +746,28 @@ namespace Brink.UI.Views
 
             // War footing first: it changes what every order below is worth.
             var mil = player.military;
+            AddText("sig-advice").text = "VOLUNTARY STAND-DOWN — retire all equipment and experience in one service, "
+                + "forfeit its paid backlog and cancel its programmes without refund. Automatic replacement stays stopped, "
+                + "including PREPARE FOR WAR. Explicit new orders and programmes still work. "
+                + "Wars, treaties, posture costs, research and strategic instruments are not cancelled. "
+                + "Gradual resale remains available through CABINET: DRAW DOWN.";
+            foreach (ForceBranch branch in System.Enum.GetValues(typeof(ForceBranch)))
+            {
+                var captured = branch;
+                bool stopped = mil.Get(branch).replacementSuspended;
+                AddText().text = $" {branch.ToString().ToUpperInvariant()} — AUTOMATIC REPLACEMENT {(stopped ? "STOPPED" : "PERMITTED")}";
+                var retirementRow = MakeRow();
+                var retire = new Button(() => { GameController.Instance.StandDownService(captured); Refresh(); })
+                { text = $"RETIRE ALL {branch.ToString().ToUpperInvariant()} [{AcquisitionSystem.StandDownCost} CP]" };
+                retire.AddToClassList("cmd-button"); retire.AddToClassList("danger");
+                if (!AcquisitionSystem.CanStandDown(state, player.id, branch, out string reason)) Block(retire, reason);
+                retirementRow.Add(retire);
+                var resume = new Button(() => { GameController.Instance.ResumeServiceReplacement(captured); Refresh(); })
+                { text = $"RESUME {branch.ToString().ToUpperInvariant()} [{AcquisitionSystem.ResumeReplacementCost} CP]" };
+                resume.AddToClassList("cmd-button");
+                if (!stopped) Block(resume, "Automatic replacement is already permitted.");
+                retirementRow.Add(resume);
+            }
             var footingRow = MakeRow();
 
             if (mil.warFooting)

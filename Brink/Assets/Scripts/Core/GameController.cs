@@ -1181,6 +1181,16 @@ namespace Brink.Core
             return ok;
         }
 
+        public bool AbandonEndgame(Data.EndgameType type)
+        {
+            if (!IsRunning || !EndgameSystem.CanAbandon(State, State.playerCountryId, type, out _)
+                || State.commandPoints.current < EndgameSystem.AbandonCost) return false;
+            if (!MayCommand(EndgameSystem.PillarOf(type))) return false;
+            bool ok = EndgameSystem.Abandon(State, Turns, type);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
         public bool BeginResearch(string capabilityId)
         {
             if (!IsRunning) return false;
@@ -1298,6 +1308,27 @@ namespace Brink.Core
         {
             if (!MayCommand(Data.Pillar.Military)) return false;
             bool ok = AcquisitionSystem.Order(State, Turns, kind, count);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool StandDownService(Data.ForceBranch branch)
+        {
+            if (!IsRunning || !AcquisitionSystem.CanStandDown(State, State.playerCountryId, branch, out _)
+                || State.commandPoints.current < AcquisitionSystem.StandDownCost) return false;
+            if (!MayCommand(Data.Pillar.Military)) return false;
+            bool ok = AcquisitionSystem.StandDown(State, Turns, branch);
+            if (ok) SaveSystem.Save(State, AutosaveSlot);
+            return ok;
+        }
+
+        public bool ResumeServiceReplacement(Data.ForceBranch branch)
+        {
+            if (!IsRunning || !System.Enum.IsDefined(typeof(Data.ForceBranch), branch)
+                || !State.PlayerCountry.military.Get(branch).replacementSuspended
+                || State.commandPoints.current < AcquisitionSystem.ResumeReplacementCost) return false;
+            if (!MayCommand(Data.Pillar.Military)) return false;
+            bool ok = AcquisitionSystem.ResumeReplacement(State, Turns, branch);
             if (ok) SaveSystem.Save(State, AutosaveSlot);
             return ok;
         }

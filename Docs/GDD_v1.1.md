@@ -64,6 +64,14 @@ The player may directly direct a pillar when political/constitutional authority 
 Direct intervention consumes scarce Command Points; delegation preserves player bandwidth.
 Prefer consequences over artificial restrictions. Bad decisions are allowed when institutionally/capability-wise possible.
 Strategic pivots are allowed, but previous commitments, preparation, credibility, losses and momentum still matter.
+Roadmap29: radical courses use ordinary instruments, not locked national classes
+or guaranteed success. Treaty/bloc exits, coercion, institutional change, domestic
+investment, asymmetric patron relationships and changing borders may be attempted
+under their existing costs and refusals. Complete conventional service retirement
+forfeits equipment and paid orders and can stop automatic replacement; resuming
+restores no equipment. Prepared strategic instruments may separately be abandoned
+without refunds or erasing past use. These exits complement gradual Cabinet
+drawdown; they do not end wars, release obligations or manufacture rehabilitation.
 The AI plays the same strategic simulation under imperfect information and may make understandable mistakes.
 Every pillar must be viable as a primary playstyle and capable of contributing to victory.
 Progression primarily expands strategic knowledge, control, options and specialization rather than granting magical national power.

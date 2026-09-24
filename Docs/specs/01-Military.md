@@ -13,6 +13,24 @@ is specified in **spec 14**, not here.
 
 ## 1. Force structure
 
+**Roadmap29 — voluntary retirement.** At MILITARY, retire all conventional
+equipment of a chosen Ground/Air/Naval service for2CP. Counts and its paid backlog
+become zero, strength synchronizes, experience becomes zero, and that branch's
+procurement programmes terminate. No treasury or manpower refund is invented.
+`BranchForce.replacementSuspended` is saved, default false; the shared
+`WorstShortfall` reader skips it, covering routine, directed and AI orders;
+the AI's separate weakest-service programme selector also skips it.
+An already empty/stopped branch with no programmes refuses without spending.
+Resume costs1CP and only clears that flag: equipment must be bought and delivered
+again. Explicit new paid orders/programmes remain legal while it is stopped.
+Stand-down records one initiative; resume grants none, and neither awards XP.
+System commands are actor-generic; controller commands require Military authority
+and autosave. Public retirement history records the act, not a foreign inventory.
+Wars, obligations, posture bills, war footing, technology, missile defences and
+strategic instruments are unchanged. Strategic preparation can be abandoned
+separately (spec14); gradual paid resale remains Cabinet DRAW DOWN. No passive
+world changes when the new flag is absent/false, and no new AI chooser is added.
+
 **Roadmap 25 connection completion.** Existing ground/basing reach is retained.
 A temporarily disabled connection endpoint cannot act as a launch position.
 Three named air corridors connect DEU_AIR–TUR_AIR, TUR_AIR–IND_AIR and
