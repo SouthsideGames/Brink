@@ -599,6 +599,189 @@ namespace Brink.Tests
                 "and it must not have pretended to move the figure either");
         }
 
+        CountryState CappedRivalWorld(out AIState ai)
+        {
+            state.difficulty = Difficulty.Standard;
+            var country = state.FindCountry("IND");
+            ai = Observer(state, "IND");
+            ai.profile.aggression = 30f;
+            ai.profile.caution = 0f;
+            ai.profile.patience = 100f;
+            country.counterIntel.counterIntelligence = 60f;
+            country.counterIntel.deceptionStrength = 55f;
+            state.networks.RemoveAll(n => n.ownerId == country.id);
+            foreach (var other in state.countries)
+            {
+                other.endgames.preparations.Clear();
+                if (other.id == country.id) continue;
+                var relation = state.FindRelationship(country.id, other.id);
+                relation.relations = 50f;
+                relation.threatPerceptionOfA = relation.threatPerceptionOfB = 0f;
+                state.networks.Add(new IntelNetwork { ownerId = country.id, targetId = other.id,
+                    focus = IntelDomain.Military, penetration = 100f });
+            }
+            var rival = state.FindRelationship(country.id, "RUS");
+            rival.threatPerceptionOfA = rival.threatPerceptionOfB = 100f;
+            var alternative = state.FindRelationship(country.id, "CHN");
+            alternative.threatPerceptionOfA = alternative.threatPerceptionOfB = 90f;
+            state.FindNetwork(country.id, "CHN").penetration = 50f;
+            return country;
+        }
+
+        static void Plan(GameState state, AIState ai, CountryState country, System.Random rng)
+        {
+            var method = typeof(AISystem).GetMethod("FormObjectives",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method);
+            method.Invoke(null, new object[] { state, ai, country, rng });
+        }
+
+        [Test]
+        public void ACappedRivalDoesNotDisplaceAnActionableRival()
+        {
+            var country = CappedRivalWorld(out var ai);
+            Plan(state, ai, country, new CapabilityRoll(0.5));
+            Assert.AreEqual(AIObjectiveType.CounterRival, OnlyObjective(ai));
+            Assert.AreEqual("CHN", ai.objectives[0].targetId,
+                "the stronger but exhausted rival took the only slot");
+            Dispatch(state, ai, country, new CapabilityRoll(0.5));
+            Assert.AreEqual(1, ai.actionsThisMonth);
+            Assert.AreEqual(54f, state.FindNetwork("IND", "CHN").penetration);
+            Assert.AreEqual(100f, state.FindNetwork("IND", "RUS").penetration);
+        }
+
+        [TestCase(Difficulty.Standard)]
+        [TestCase(Difficulty.Challenging)]
+        [TestCase(Difficulty.Ruthless)]
+        public void AStoredCappedRivalIsReconsideredBeforeReview(Difficulty difficulty)
+        {
+            var country = CappedRivalWorld(out var ai);
+            state.difficulty = difficulty;
+            ai.objectives.Clear();
+            if (difficulty != Difficulty.Standard)
+                ai.objectives.Add(new AIObjective { type = AIObjectiveType.BuildCapability });
+            ai.objectives.Add(new AIObjective { type = AIObjectiveType.CounterRival, targetId = "RUS" });
+            var stale = ai.objectives[ai.objectives.Count - 1];
+            Plan(state, ai, country, new CapabilityRoll(0.5));
+            Assert.IsFalse(ai.objectives.Contains(stale), "an exhausted held objective waited for review");
+            Assert.IsFalse(ai.objectives.Exists(o => o.type == AIObjectiveType.CounterRival && o.targetId == "RUS"));
+            Assert.IsTrue(ai.objectives.Exists(o => o.type == AIObjectiveType.CounterRival && o.targetId == "CHN"));
+            Assert.LessOrEqual(ai.objectives.Count, AISystem.ActionBudget(difficulty));
+        }
+
+        [Test]
+        public void MonthlyPlanningMovesOffTheCappedRival()
+        {
+            var country = CappedRivalWorld(out var ai);
+            // Hold a settled military strategy so this tests retargeting, not
+            // the opening choice of a different strategic path and its biases.
+            ai.path = StrategicPath.MilitaryDominance;
+            ai.monthsOnPath = 10;
+            ai.disposition = 1f;
+            state.aiStates.RemoveAll(a => a != ai);
+            ai.objectives = new List<AIObjective> {
+                new AIObjective { type = AIObjectiveType.CounterRival, targetId = "RUS" } };
+            AISystem.MonthlyThink(state);
+            Assert.AreEqual(AIObjectiveType.CounterRival, OnlyObjective(ai));
+            Assert.AreEqual("CHN", ai.objectives[0].targetId);
+            Assert.AreEqual(54f, state.FindNetwork(country.id, "CHN").penetration);
+            Assert.AreEqual(1, ai.actionsThisMonth);
+        }
+
+        [TestCase("station")]
+        [TestCase("hardening")]
+        [TestCase("deception")]
+        [TestCase("coercion")]
+        [TestCase("collection")]
+        public void EachRemainingRivalResponseIsEligibleAndActs(string response)
+        {
+            var country = CappedRivalWorld(out var ai);
+            Assert.IsFalse(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"));
+            if (response == "station") state.networks.RemoveAll(n => n.ownerId == "IND" && n.targetId == "RUS");
+            if (response == "hardening") country.counterIntel.counterIntelligence = 44f;
+            if (response == "deception")
+            {
+                country.pillars.intelligence = 60f;
+                country.counterIntel.deceptionStrength = 40f;
+                state.FindRelationship("IND", "RUS").relations = 40f;
+            }
+            if (response == "coercion")
+            {
+                ai.profile.aggression = 80f;
+                state.FindRelationship("IND", "RUS").relations = 20f;
+            }
+            if (response == "collection") state.FindNetwork("IND", "RUS").penetration = 99f;
+            string before = SaveSystem.ToJson(state);
+            int sequence = state.actionSequence;
+            for (int i = 0; i < 25; i++)
+                Assert.IsTrue(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"));
+            Assert.AreEqual(before, SaveSystem.ToJson(state), "eligibility must be read-only");
+            Assert.AreEqual(sequence, state.actionSequence);
+            ai.objectives = new List<AIObjective> {
+                new AIObjective { type = AIObjectiveType.CounterRival, targetId = "RUS" } };
+            Dispatch(state, ai, country, new CapabilityRoll(0));
+            Assert.AreEqual(1, ai.actionsThisMonth);
+            if (response == "station") Assert.AreEqual(15f, state.FindNetwork("IND", "RUS").penetration);
+            if (response == "hardening") Assert.AreEqual(47f, country.counterIntel.counterIntelligence);
+            if (response == "deception") Assert.Greater(country.counterIntel.deceptionStrength, 40f);
+            if (response == "coercion") Assert.IsNotNull(state.FindSanction("IND", "RUS"));
+            if (response == "collection") Assert.AreEqual(100f, state.FindNetwork("IND", "RUS").penetration);
+        }
+
+        [TestCase("truce")]
+        [TestCase("exposure")]
+        [TestCase("existing")]
+        [TestCase("aggression")]
+        [TestCase("cause")]
+        public void BlockedCoercionDoesNotKeepACappedRivalEligible(string gate)
+        {
+            var country = CappedRivalWorld(out var ai);
+            ai.profile.aggression = 60f;
+            var relation = state.FindRelationship("IND", "RUS");
+            relation.relations = 20f;
+            state.trade.RemoveAll(t => t.Involves("IND") && t.Involves("RUS"));
+            Assert.IsTrue(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"), "unblocked control");
+            if (gate == "truce") relation.sanctionsTruceMonths = 1;
+            if (gate == "exposure") state.trade.Add(new TradeRelation { countryA = "IND", countryB = "RUS", volume = 55f });
+            if (gate == "existing") Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, "IND", "RUS", SanctionSeverity.Pressure));
+            if (gate == "aggression") ai.profile.aggression = 45f;
+            if (gate == "cause") relation.relations = 30f;
+            Assert.IsFalse(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"));
+            // The distinct-response reader shared with pre-emption must agree.
+            country.resources.treasury = 0f;
+            Assert.IsFalse(AISystem.PreemptionResponseRemains(state, ai, country, "RUS"));
+            var rng = new CapabilityRoll(0);
+            ai.objectives = new List<AIObjective> {
+                new AIObjective { type = AIObjectiveType.CounterRival, targetId = "RUS" } };
+            string before = SaveSystem.ToJson(state);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(0, ai.actionsThisMonth);
+            Assert.AreEqual(0, rng.draws, "an unavailable response must not roll");
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
+        [Test]
+        public void AFullyCollectedRivalCanStillAwaitACoercionRoll()
+        {
+            var country = CappedRivalWorld(out var ai);
+            ai.profile.aggression = 80f;
+            state.FindRelationship("IND", "RUS").relations = 20f;
+            var held = new AIObjective { type = AIObjectiveType.CounterRival, targetId = "RUS" };
+            ai.objectives = new List<AIObjective> { held };
+            var rng = new CapabilityRoll(0.99);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(0, ai.actionsThisMonth);
+            Assert.AreEqual(1, rng.draws);
+            Assert.IsTrue(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"));
+            Plan(state, ai, country, rng);
+            Assert.AreSame(held, ai.objectives[0], "a failed appetite roll is not exhaustion");
+            Assert.AreEqual(1, rng.draws, "no retry or replan draws before ordinary review");
+            Dispatch(state, ai, country, new CapabilityRoll(0));
+            Assert.AreEqual(1, ai.actionsThisMonth);
+            Assert.IsNotNull(state.FindSanction("IND", "RUS"));
+            Assert.IsFalse(AISystem.CounterRivalResponseRemains(state, ai, country, "RUS"));
+        }
+
         [Test]
         public void TheEligibilityQuestionChangesNothing()
         {

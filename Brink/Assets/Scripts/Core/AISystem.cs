@@ -179,8 +179,8 @@ namespace Brink.Core
             // Patient governments stay the course; impatient ones churn.
             //
             // A plan the world has already answered is the one exception, and it
-            // is not impatience. `HoldsAnAnsweredPreemption` asks only whether a
-            // pre-emption we are still carrying has run out of responses — the
+            // is not impatience. `HoldsAnExhaustedResponse` asks only whether a
+            // pre-emption or counter-rival plan has run out of responses — the
             // same question that raised it. Without this, a government that
             // finished hardening in the first month of its cycle declined the
             // objective every month until the next review and planned nothing
@@ -190,7 +190,7 @@ namespace Brink.Core
             int reviewInterval = 3 + (int)(ai.profile.patience / 20f);
             if (ai.objectives.Count > 0
                 && ai.objectives[0].monthsPursued % reviewInterval != 0
-                && !HoldsAnAnsweredPreemption(state, ai, country))
+                && !HoldsAnExhaustedResponse(state, ai, country))
                 return;
 
             var candidates = new List<AIObjective>();
@@ -286,7 +286,7 @@ namespace Brink.Core
                         priority = 60f + programme * 1.6f
                     });
 
-                if (threat - cautionPenalty > 35f)
+                if (threat - cautionPenalty > 35f && CounterRivalResponseRemains(state, ai, country, other.id))
                     candidates.Add(new AIObjective
                     {
                         type = AIObjectiveType.CounterRival,
@@ -785,7 +785,7 @@ namespace Brink.Core
         }
 
         /// <summary>
-        /// Whether a pre-emption this government is still carrying has since run
+        /// Whether a pre-emption or counter-rival plan still held has since run
         /// out of responses, so the plan is worth reconsidering now rather than at
         /// the next scheduled review.
         ///
@@ -808,13 +808,15 @@ namespace Brink.Core
         /// Read-only and free of randomness, like the predicate it defers to, so
         /// asking the question cannot change the answer to anything else.
         /// </summary>
-        static bool HoldsAnAnsweredPreemption(GameState state, AIState ai, CountryState country)
+        static bool HoldsAnExhaustedResponse(GameState state, AIState ai, CountryState country)
         {
             for (int i = 0; i < ai.objectives.Count; i++)
             {
                 var objective = ai.objectives[i];
-                if (objective.type != AIObjectiveType.PreemptProgramme) continue;
-                if (!PreemptionResponseRemains(state, ai, country, objective.targetId)) return true;
+                if (objective.type == AIObjectiveType.PreemptProgramme
+                    && !PreemptionResponseRemains(state, ai, country, objective.targetId)) return true;
+                if (objective.type == AIObjectiveType.CounterRival
+                    && !CounterRivalResponseRemains(state, ai, country, objective.targetId)) return true;
             }
             return false;
         }
@@ -845,8 +847,26 @@ namespace Brink.Core
             if (state.FindNetwork(country.id, targetId) == null) return true;
             if (country.counterIntel.counterIntelligence < 45f) return true;
             if (DeceptionAvailable(state, country, targetId)) return true;
-            return state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f
-                   && EconomySystem.SanctionCauseStands(state, country.id, targetId);
+            return RivalCoercionAvailable(state, ai, country, targetId);
+        }
+
+        /// <summary>Read-only eligibility, not a guarantee that an appetite roll succeeds.</summary>
+        public static bool CounterRivalResponseRemains(GameState state, AIState ai, CountryState country,
+            string targetId)
+        {
+            if (country == null || string.IsNullOrEmpty(targetId)
+                || targetId == country.id || state.FindCountry(targetId) == null) return false;
+            return CounterRivalHasDistinctResponse(state, ai, country, targetId)
+                   || state.FindNetwork(country.id, targetId).penetration < 100f;
+        }
+
+        static bool RivalCoercionAvailable(GameState state, AIState ai, CountryState country, string targetId)
+        {
+            if (state.FindSanction(country.id, targetId) != null || ai.profile.aggression <= 45f
+                || !EconomySystem.SanctionCauseStands(state, country.id, targetId)
+                || state.FindRelationship(country.id, targetId)?.sanctionsTruceMonths > 0) return false;
+            var link = state.FindTrade(country.id, targetId);
+            return link == null || link.volume < 55f || ai.profile.aggression > 70f;
         }
 
         /// <summary>
@@ -1108,7 +1128,7 @@ namespace Brink.Core
         /// <summary>Counter a rival across whichever pillar is currently available.</summary>
         static bool CounterRival(GameState state, AIState ai, CountryState country, string targetId, Random rng)
         {
-            if (string.IsNullOrEmpty(targetId)) return false;
+            if (!CounterRivalResponseRemains(state, ai, country, targetId)) return false;
 
             // 1. Collect first — you cannot counter what you cannot see.
             var network = state.FindNetwork(country.id, targetId);
@@ -1145,13 +1165,9 @@ namespace Brink.Core
             // imposed for a cause and lifted when the cause is gone; before
             // this a rival was sanctioned at 35% a month for as long as it
             // stayed a rival, and the review could never catch up.
-            if (state.FindSanction(country.id, targetId) == null && ai.profile.aggression > 45f
-                && EconomySystem.SanctionCauseStands(state, country.id, targetId))
+            if (RivalCoercionAvailable(state, ai, country, targetId))
             {
-                var link = state.FindTrade(country.id, targetId);
-                float exposure = link != null ? link.volume : 0f;
-                bool worthIt = exposure < 55f || ai.profile.aggression > 70f;
-                if (worthIt && rng.NextDouble() < 0.20)
+                if (rng.NextDouble() < 0.20)
                 {
                     var severity = ai.profile.aggression > 70f ? SanctionSeverity.Coercive : SanctionSeverity.Pressure;
                     return EconomySystem.ImposeSanctionsBy(state, country.id, targetId, severity, "RIVALRY");
