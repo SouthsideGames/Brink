@@ -1,5 +1,22 @@
 # Brink ("Unknown Game")
 
+## Remaining core — bilateral treaty conditions (awaiting review)
+
+Spec04: RelationsAtLeast60 and NoMutualOccupation append two live clause triggers.
+Shared ClauseIsActive gates the existing consumers; expiry wins, unknown enums
+stay inert, withdrawal/relations recovery reactivates without a new signature.
+Occupation uses current title versus holder, not historic origin or third-party
+occupation. Existing proposal, leverage and renewal paths retain the condition;
+the DIPLOMACY selector exposes both. No new serialized field, save version or
+automatic sanctions-removal/DMZ effect. Existing0.70 conditional valuation is
+reused, not newly balance-certified. Author harness tests/reference compilation
+must not be presented as native execution or independent review.
+
+Author .NET full2302/2294/7/1 against retained2288/2280/7/1: fourteen additions,
+zero removals or shared outcome/failure-message changes. Focused108/108; six
+mutants killed2/1/2/1/2/1 and source-byte-restored, restored49/49. Actual Unity
+reference compile passes, native execution outstanding. Real saves unchanged.
+
 ## Remaining core — sanctions assessments (awaiting independent review)
 
 Spec29: selected sanctions now have a pre-order staff assessment, separating

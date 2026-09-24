@@ -192,7 +192,9 @@ namespace Brink.Data
     public enum TreatyClauseTrigger
     {
         Always = 0,
-        ConflictWithCountry = 1
+        ConflictWithCountry = 1,
+        RelationsAtLeast60 = 2,
+        NoMutualOccupation = 3
     }
 
     /// <summary>One commitment in a treaty, and which side actually bears it.</summary>
@@ -307,6 +309,17 @@ namespace Brink.Data
                 && state.date.MonthsSince(ClauseStart(clause)) >= clause.durationMonths) return false;
 
             if (clause.trigger == TreatyClauseTrigger.Always) return true;
+            if (clause.trigger == TreatyClauseTrigger.RelationsAtLeast60)
+                return state.FindRelationship(countryA, countryB)?.relations >= 60f;
+            if (clause.trigger == TreatyClauseTrigger.NoMutualOccupation)
+            {
+                if (state.FindCountry(countryA) == null || state.FindCountry(countryB) == null) return false;
+                foreach (var site in state.locations)
+                    if ((site.originalOwnerId == countryA && site.ownerId == countryB)
+                        || (site.originalOwnerId == countryB && site.ownerId == countryA)) return false;
+                return true;
+            }
+            if (clause.trigger != TreatyClauseTrigger.ConflictWithCountry) return false;
             if (string.IsNullOrEmpty(clause.triggerCountryId)
                 || clause.triggerCountryId == countryA || clause.triggerCountryId == countryB)
                 return false;

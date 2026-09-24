@@ -80,6 +80,106 @@ namespace Brink.Tests
         Sanction Impose(SanctionSeverity severity, string on = null) { on = on ?? target; Assert.IsTrue(EconomySystem.ImposeSanctionsBy(state, state.playerCountryId, on, severity, "PLAYER"), "fixture: could not impose"); return state.FindSanction(state.playerCountryId, on); }
         static TreatyClause ClauseOf(Treaty t, TreatyCommitment c) => t.clauses.Find(x => x.commitment == c);
 
+        [TestCase(TreatyClauseTrigger.RelationsAtLeast60, 0)]
+        [TestCase(TreatyClauseTrigger.RelationsAtLeast60, 1)]
+        [TestCase(TreatyClauseTrigger.RelationsAtLeast60, 2)]
+        [TestCase(TreatyClauseTrigger.NoMutualOccupation, 0)]
+        [TestCase(TreatyClauseTrigger.NoMutualOccupation, 1)]
+        [TestCase(TreatyClauseTrigger.NoMutualOccupation, 2)]
+        public void BilateralConditionsSurviveEachRealExchange(TreatyClauseTrigger trigger, int exchange)
+        {
+            string partner = exchange == 2 ? successor : target;
+            Warm(partner, 95);
+            var terms = new TreatyClause { trigger = trigger, durationMonths = 12 };
+            if (exchange == 1) Impose(SanctionSeverity.Coercive);
+            int cp = state.commandPoints.current;
+            bool accepted = exchange == 0
+                ? gc.OfferSupplyForCommitment(partner, TradeFocus.Energy, TreatyCommitment.Transit, terms)
+                : exchange == 1 ? gc.OfferSanctionsReliefForCommitment(partner, TreatyCommitment.Transit, terms)
+                : gc.OfferRecognitionForCommitment(partner, TreatyCommitment.Transit, terms);
+            Assert.IsTrue(accepted, "Fixture must reach accepted real exchange.");
+            Assert.AreEqual(cp - 2, state.commandPoints.current);
+            var treaty = state.FindTreaty(state.playerCountryId, partner);
+            Assert.AreEqual(trigger, ClauseOf(treaty, TreatyCommitment.Transit).trigger);
+            Assert.IsTrue(treaty.Carries(state, partner, TreatyCommitment.Transit));
+            Advance(12);
+            Assert.IsFalse(treaty.ClauseIsActive(state, TreatyCommitment.Transit));
+            var renewal = DiplomaticLeverage.RenewableClause(state, state.playerCountryId, partner, TreatyCommitment.Transit);
+            Assert.IsNotNull(renewal); Assert.AreEqual(trigger, renewal.trigger);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(state));
+            Assert.AreEqual(trigger, ClauseOf(loaded.FindTreaty(state.playerCountryId, partner), TreatyCommitment.Transit).trigger);
+        }
+
+        [TestCase(TreatyClauseTrigger.RelationsAtLeast60)]
+        [TestCase(TreatyClauseTrigger.NoMutualOccupation)]
+        public void BilateralConditionControlsTheWireAndRenewsThroughThePaidCommand(TreatyClauseTrigger trigger)
+        {
+            Warm(target, 95);
+            Assert.IsFalse(WorldWire.Watches(state, target), "fixture: no other wire access");
+            var terms = new TreatyClause { trigger = trigger, durationMonths = 12 };
+            Assert.IsTrue(gc.OfferSupplyForCommitment(target, TradeFocus.Energy, TreatyCommitment.IntelligenceSharing, terms));
+            Assert.IsTrue(WorldWire.Watches(state, target));
+            var relation = state.FindRelationship(state.playerCountryId, target);
+            var site = state.locations.Find(x => x.originalOwnerId == target && x.ownerId == target);
+            Assert.IsNotNull(site);
+            if (trigger == TreatyClauseTrigger.RelationsAtLeast60) relation.relations = 59.99f;
+            else site.ownerId = state.playerCountryId;
+            Assert.IsFalse(WorldWire.Watches(state, target), "signed but dormant must not reveal the wire");
+            if (trigger == TreatyClauseTrigger.RelationsAtLeast60) relation.relations = 60f;
+            else site.ownerId = target;
+            Assert.IsTrue(WorldWire.Watches(state, target), "live compliance restores the actual consumer");
+            Advance(12);
+            Assert.IsFalse(WorldWire.Watches(state, target), "expiry still wins");
+            Impose(SanctionSeverity.Coercive); Warm(target, 95);
+            int cp = state.commandPoints.current;
+            Assert.IsFalse(gc.OfferSanctionsReliefForCommitment(target, TreatyCommitment.IntelligenceSharing, Terms(null, 12)));
+            Assert.AreEqual(cp, state.commandPoints.current, "different condition cannot silently amend the promise");
+            Assert.IsTrue(gc.OfferSanctionsReliefForCommitment(target, TreatyCommitment.IntelligenceSharing, terms));
+            Assert.AreEqual(cp - 2, state.commandPoints.current);
+            var treaty = state.FindTreaty(state.playerCountryId, target);
+            Assert.AreEqual(1, treaty.clauses.Count);
+            Assert.AreEqual(trigger, ClauseOf(treaty, TreatyCommitment.IntelligenceSharing).trigger);
+            Assert.IsTrue(WorldWire.Watches(state, target));
+        }
+
+        [Test]
+        public void BilateralConditionsAreReachableInTheDraftCycleAndRenderWithoutWritingState()
+        {
+            Warm(target, 95);
+            // Initial chamber seating belongs to the existing view, not clause selection.
+            new DiplomacyView().Refresh();
+            string before = SaveSystem.ToJson(state);
+            foreach (var (cols, size) in new[] { (34, SizeClass.Compact), (49, SizeClass.Compact), (64, SizeClass.Medium), (104, SizeClass.Large) })
+            {
+                TerminalMetrics.Update(cols * 8 + 8, 8, 640, size);
+                var view = new DiplomacyView();
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                typeof(DiplomacyView).GetField("selectedTargetId", flags).SetValue(view, target);
+                var cycle = typeof(DiplomacyView).GetMethod("CycleTrigger", flags);
+                var local = typeof(DiplomacyView).GetField("draftLocalTrigger", flags);
+                for (int i = 0; i < state.countries.Count + 1 && (TreatyClauseTrigger)local.GetValue(view) == TreatyClauseTrigger.Always; i++)
+                    cycle.Invoke(view, new object[] { state });
+                foreach (var trigger in new[] { TreatyClauseTrigger.RelationsAtLeast60, TreatyClauseTrigger.NoMutualOccupation })
+                {
+                    Assert.AreEqual(trigger, local.GetValue(view));
+                    view.Refresh(); TerminalShellController.ApplyTextPolicy(view.Root, DisplaySettings.ParagraphSpacing, cols);
+                    string expected = trigger == TreatyClauseTrigger.RelationsAtLeast60 ? "TRIGGER: RELATIONS >= 60" : "TRIGGER: NO MUTUAL OCCUPATION";
+                    bool found = false;
+                    view.Root.Query<Button>().ForEach(b => { if (b.text == expected) found = true; });
+                    Assert.IsTrue(found, expected);
+                    view.Root.Query<Label>().ForEach(l => {
+                        if (!TerminalShellController.IsReadout(l) || l.ClassListContains("terminal-figure")) return;
+                        foreach (string line in (l.text ?? "").Split('\n')) Assert.LessOrEqual(AsciiChart.VisibleLength(line), cols, line);
+                    });
+                    var terms = (TreatyClause)typeof(DiplomacyView).GetMethod("LeverageTerms", flags).Invoke(view, null);
+                    Assert.AreEqual(trigger, terms.trigger);
+                    cycle.Invoke(view, new object[] { state });
+                }
+                Assert.AreEqual(TreatyClauseTrigger.Always, local.GetValue(view));
+            }
+            Assert.AreEqual(before, SaveSystem.ToJson(state));
+        }
+
         [Test]
         public void Supply_CarriesAFiniteTerm_AndPricesItsScopeOnce()
         {

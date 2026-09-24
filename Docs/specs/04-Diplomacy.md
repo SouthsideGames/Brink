@@ -173,6 +173,12 @@ Each `TreatyClause` may additionally carry one live trigger and a term:
 - `Always` (the zero/default value) or `ConflictWithCountry`, naming a third
   state. The latter applies while either treaty signatory is in an unresolved
   `LimitedConflict`-or-higher confrontation with that state.
+- `RelationsAtLeast60`: bilateral relations must currently be at least 60,
+  including equality. Missing relations do not activate it.
+- `NoMutualOccupation`: neither signatory currently holds a site titled to the
+  other (`originalOwnerId` is the current title, including settled cessions).
+  Third-party occupation is outside this bilateral promise; missing signatories
+  do not activate it. Withdrawal reactivates it and reoccupation suspends it.
 - `durationMonths`, measured from the clause's `effectiveDate` (or
   `Treaty.signedDate` for old saves); zero is permanent.
 
@@ -180,6 +186,13 @@ The constraints compose. A five-year transit clause tied to conflict with a
 named state is usable only during that conflict and only before its five-year
 term ends. Missing clause records, zero-valued fields and old saves remain
 unconditional and permanent.
+
+The two bilateral triggers append enum values without adding saved fields or
+changing existing values. They name no third state. Unknown saved triggers stay
+inactive. These are live conditions on an existing commitment, not automatic
+sanctions removal, a withdrawal order or a DMZ enforcement system. Expiry always
+wins. They use the existing conditional scope discount (0.70); that shared
+pricing assumption is not a claim of balance certification.
 
 `Treaty.ClauseIsActive` is the single activation rule. Defense call-ins, foreign
 basing, deliberate intelligence sharing and arms-control enforcement all use
@@ -920,7 +933,8 @@ WOULD CARRY panel on DIPLOMACY; `LeverageTermsTests`.
 
 **One clause, carried whole.** Every exchange asks for one clause they carry.
 The operator may bound it with the existing conditional-agreement model — the
-`ConflictWithCountry` trigger naming a third state, a supported term (permanent,
+`ConflictWithCountry` trigger naming a third state, either bilateral condition
+described above, a supported term (permanent,
 one, three or five years: `DiplomacySystem.SupportedTermMonths`), or both. The
 requested clause is built once (`RequestedClause`: commitment, `TheyProvide`,
 exactly the requested trigger, state and term) and is the clause the gate
