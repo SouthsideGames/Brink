@@ -44,6 +44,12 @@ namespace Brink.Core
         /// <summary>One completed site's contribution before the national ceiling clamp.</summary>
         public const float SiteEnergyPoints = 7f;
 
+        public const float AcceleratedWorkSupply = 10f;
+
+        /// <summary>Delivered materials enable throughput, never free funded work.</summary>
+        public static bool HasConstructionImports(GameState state, string countryId)
+            => TradeSystem.Supply(state, countryId, TradeFocus.Materials) >= AcceleratedWorkSupply;
+
         /// <summary>
         /// Treasury cost per month of a programme, by scale. Charged monthly
         /// rather than up front so a programme is a standing commitment the
@@ -60,7 +66,7 @@ namespace Brink.Core
             }
         }
 
-        /// <summary>How long it runs, in months.</summary>
+        /// <summary>Funded work-months required; import throughput can shorten calendar duration.</summary>
         public static int MonthsFor(IndustrialScale scale)
         {
             switch (scale)
@@ -88,12 +94,12 @@ namespace Brink.Core
             switch (scale)
             {
                 case IndustrialScale.Modernisation:
-                    return "Rebuild it to a modern standard. Three years and expensive, "
+                    return "Rebuild it to a modern standard. Thirty-six funded work-months and expensive, "
                          + "and it changes what the sector is capable of.";
                 case IndustrialScale.Expansion:
-                    return "Build more of what already works. Two years at moderate cost.";
+                    return "Build more of what already works. Twenty-four funded work-months at moderate cost.";
                 default:
-                    return "Repair and maintain. A year, cheap, and it holds the line "
+                    return "Repair and maintain. Twelve funded work-months, cheap, and it holds the line "
                          + "rather than moving it.";
             }
         }
@@ -161,23 +167,26 @@ namespace Brink.Core
                 foreach (var work in owner.economy.programmes)
                     if (work.locationId == site.id)
                         return result + (denied ? "PAUSED: contested; no payment or progress. " : "UNDER CONSTRUCTION. ")
-                            + ProjectProgress(owner, work);
+                            + ProjectProgress(owner, work, state);
             return result + "Not developed. One build per site.";
         }
 
         /// <summary>Funded work, not elapsed calendar time. Read-only, including legacy saves.</summary>
-        public static string ProjectProgress(CountryState country, IndustrialProgramme programme)
+        public static string ProjectProgress(CountryState country, IndustrialProgramme programme, GameState state = null)
         {
             int duration = MonthsFor(programme.scale);
             int remaining = Math.Max(0, Math.Min(duration, programme.monthsRemaining));
             float cost = MonthlyCostFor(programme.scale);
             return $"FUNDED WORK: {duration - remaining}/{duration} MONTHS. "
-                + $"REMAINING: {remaining} MONTHS AT {cost:F0}/MO ({remaining * cost:F0} AT CURRENT TERMS).\n"
+                + $"REMAINING: {remaining} MONTHS AT {cost:F0}/WORK-MO ({remaining * cost:F0} AT CURRENT TERMS).\n"
                 + (country.resources.treasury >= cost
                     ? "Treasury now covers the next instalment."
                     : "Treasury now falls short of the next instalment.")
                 + " Funding is checked when work resolves; income and other commitments can change this. "
-                + "If funding fails, the project lapses without completion benefits or a refund.";
+                + "If funding fails, the project lapses without completion benefits or a refund."
+                + (state == null ? "" : (HasConstructionImports(state, country.id)
+                    ? " Materials imports permit a second work-month if both instalments are affordable; no extra completion benefit."
+                    : "One work-month per month; 10 delivered Materials supply permits two paid work-months."));
         }
 
         public static bool CanBegin(GameState state, string actorId, out string reason)
@@ -223,12 +232,12 @@ namespace Brink.Core
             };
             country.economy.programmes.Add(programme);
             state.AddChronicle(ChronicleCategory.Economic, actorId,
-                $"PROJECT BEGUN: {ProjectName(programme, state)}. {MonthsFor(scale)} funded months at {MonthlyCostFor(scale):F0}/MO.");
+                $"PROJECT BEGUN: {ProjectName(programme, state)}. {MonthsFor(scale)} funded months at {MonthlyCostFor(scale):F0}/WORK-MO.");
 
             if (country.isPlayer)
                 state.AddNotification(NotificationClass.Advisory, "PROGRAMME BEGUN",
                     $"{ProjectName(programme, state)}. "
-                    + $"{MonthsFor(scale)} months at {MonthlyCostFor(scale):F0} a month.",
+                    + $"{MonthsFor(scale)} funded work-months at {MonthlyCostFor(scale):F0} each. Materials imports can accelerate paid work.",
                     actorId, desk: ReportingDesk.Economy);
 
             return true;
@@ -349,8 +358,10 @@ namespace Brink.Core
                         continue;
                     }
 
-                    country.resources.treasury -= cost;
-                    programme.monthsRemaining--;
+                    int workMonths = programme.monthsRemaining > 1 && HasConstructionImports(state, country.id)
+                        && country.resources.treasury >= cost * 2f ? 2 : 1;
+                    country.resources.treasury -= cost * workMonths;
+                    programme.monthsRemaining -= workMonths;
 
                     if (programme.monthsRemaining > 0) continue;
 

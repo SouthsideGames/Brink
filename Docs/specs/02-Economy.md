@@ -5,6 +5,23 @@ Source: `Core/EconomySystem.cs`, `Data/EconomyState.cs`,
 
 ## 1. Macro model
 
+### Delivered-material construction throughput
+
+At least10 Materials supply points from the existing TradeSystem.Supply reader
+permit two funded work-months per calendar month instead of one. Both instalments
+must be affordable and at least two work-months must remain; otherwise work pays
+and advances once. Insufficient funds for even one instalment still causes lapse.
+Site denial/abandonment gates run first. The final single month charges once and
+completion benefits/rewards still occur once. No new saved state or extra yield.
+
+This uses delivered supply, including commodity, sanctions in either direction,
+embargoes, tariffs and route effects, not stored agreement volume or domestic
+material stock. Supplies enable throughput, not free work; total unchanged work
+still costs the same, but monthly cash pressure can double and disruptions remove
+the speed benefit. Own project readouts disclose this. The10-point threshold and
+two-month cap are implementation tuning, not balance certification. Research and
+procurement are not accelerated by this industrial construction rule.
+
 ### Construction setbacks
 
 Successful covert Sabotage now sets back the target's national Industry project;

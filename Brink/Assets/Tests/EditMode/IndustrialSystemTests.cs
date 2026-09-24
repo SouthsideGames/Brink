@@ -46,6 +46,55 @@ namespace Brink.Tests
 
         // ---------- it is a real sink ----------
 
+        [TestCase(95f, 1)] [TestCase(189f, 1)] [TestCase(190f, 2)] [TestCase(500f, 2)]
+        public void DeliveredMaterialsAccelerateOnlyAffordablePaidWork(float treasury, int workMonths)
+        {
+            var owner = state.PlayerCountry;
+            owner.economy.programmes.Clear(); state.trade.Clear(); state.sanctions.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f, focus = TradeFocus.Materials });
+            Assert.GreaterOrEqual(TradeSystem.Supply(state, owner.id, TradeFocus.Materials), IndustrialSystem.AcceleratedWorkSupply);
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            var work = owner.economy.programmes.Single(); owner.resources.treasury = treasury;
+            float industry = owner.resources.industrialEndowment;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(12 - workMonths, work.monthsRemaining);
+            Assert.AreEqual(treasury - 95f * workMonths, owner.resources.treasury);
+            Assert.AreEqual(industry, owner.resources.industrialEndowment, "No benefits before completion.");
+            StringAssert.Contains("second work-month", IndustrialSystem.ProjectProgress(owner, work, state));
+        }
+
+        [TestCase(false)] [TestCase(true)]
+        public void ClosedOrWrongCommodityCannotAccelerateConstruction(bool embargo)
+        {
+            var owner = state.PlayerCountry; owner.economy.programmes.Clear(); state.trade.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f,
+                focus = embargo ? TradeFocus.Materials : TradeFocus.Energy, embargoed = embargo });
+            IndustrialSystem.BeginBy(state, owner.id, EconomicSector.Industry, IndustrialScale.Maintenance);
+            float treasury = owner.resources.treasury;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(11, owner.economy.programmes.Single().monthsRemaining);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+        }
+
+        [Test]
+        public void ImportedConstructionCompletesOnceWithOnlyTheRemainingInstalment()
+        {
+            var owner = state.PlayerCountry; owner.economy.programmes.Clear(); state.trade.Clear(); state.sanctions.Clear();
+            state.FindCountry("CHN").resources.strategicMaterials = 100f;
+            state.trade.Add(new TradeRelation { countryA = owner.id, countryB = "CHN", volume = 100f, focus = TradeFocus.Materials });
+            var site = EnergySite(); IndustrialSystem.BeginSiteBy(state, owner.id, site.id);
+            owner.economy.programmes.Single().monthsRemaining = 1;
+            float treasury = owner.resources.treasury;
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+            Assert.IsTrue(site.energyWorks); Assert.AreEqual(0, owner.economy.programmes.Count);
+            Assert.AreEqual(1, state.chronicle.Count(e => e.text.StartsWith("PROJECT COMPLETE:")));
+            IndustrialSystem.MonthlyUpdate(state);
+            Assert.AreEqual(treasury - 95f, owner.resources.treasury);
+        }
+
         [TestCase(12, 0)] [TestCase(11, 1)] [TestCase(5, 2)] [TestCase(0, 0)]
         public void DamageLosesOnlyCompletedWorkAndReplacementIsStillPaid(int remaining, int lost)
         {

@@ -1,5 +1,15 @@
 # Brink ("Unknown Game")
 
+## Remaining core — construction imports (awaiting review)
+
+Spec02: delivered Materials supply>=10 permits two paid industrial work-months
+per calendar month if two remain and treasury covers both. Otherwise one; lack
+of even one instalment still lapses. Existing site gates precede payment. No new
+fields, extra completion benefit or free acceleration. UI distinguishes work
+months and possible doubled monthly spending. Shared TradeSystem.Supply carries
+sanctions/embargo/route gates. This changes trajectories; tuning/balance is not
+certified. Author .NET/reference compilation is not native execution/review.
+
 ## Remaining core — construction setbacks (awaiting review)
 
 Spec02: successful Sabotage affects national Industry work; AirStrike affects
