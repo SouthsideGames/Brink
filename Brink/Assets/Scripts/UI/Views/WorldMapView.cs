@@ -47,6 +47,8 @@ namespace Brink.UI.Views
             AddText("terminal-text-dim").text = AsciiMapModes.Legend(mapMode);
             if (mapMode == WorldMapMode.Displacement)
                 AddText().text = AsciiMapModes.DisplacementReadout(state);
+            string connections = AsciiMapModes.ConnectionReadout(state, mapMode);
+            if (!string.IsNullOrEmpty(connections)) AddText().text = connections;
 
             BuildSelector(state, zoomOnSelect: false);
 

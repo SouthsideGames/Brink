@@ -1,5 +1,20 @@
 # Brink ("Unknown Game")
 
+## Remaining core — map connections (awaiting review)
+
+Spec28: Diplomatic mode draws only our treaties with a live commitment and lists
+direction, terms and active/dormant/expired/broken status. Military adds our
+recorded foreign bases, never foreign networks or a launch-permission promise.
+Trade lines are schematic agreements; own port/passage/mine/detour and authored
+infrastructure readouts reuse existing readers, with reciprocal sanctions closure
+explicit. Missing positions remain listed. No saved state or simulation change.
+Author harness/reference compilation is not native or independent verification.
+
+Author .NET2313/2305/7/1 against retained b093adc2302/2294/7/1: eleven additions
+(four Chronicle repair, seven map), zero removals/shared outcome/failure-message
+changes. Focused171/171; six mutants killed1/1/1/1/1/4, byte-restored38/38.
+Unity-reference compile only; real save and fallback unchanged.
+
 ## Chronicle visibility repair (awaiting review)
 
 ChronicleView header totals/categories now share WorldWire.CanShow with entries.

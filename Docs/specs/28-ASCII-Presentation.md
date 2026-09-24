@@ -19,7 +19,7 @@ ASCII is Brink's visual medium, not decoration around a text interface. Presenta
 It owns clipping and layering rules so maps, scenes and future pillar art do not each reimplement them.
 
 ## World map modes
-The MAP world layer now exposes seven modes:
+The MAP world layer now exposes eight modes:
 
 1. **Political** — the existing public standing map.
 2. **Military** — live confrontation routes, Total War emphasis and occupied-ground signals.
@@ -43,6 +43,22 @@ The MAP world layer now exposes seven modes:
 Modes are views over the authoritative save. They add no persistent state and do not alter simulation resolution.
 
 ## Fog rules
+
+**Diplomatic** appends an eighth mode: a schematic line for our treaties with at
+least one currently active commitment. The accompanying record keeps direction,
+conditions and term, and distinguishes ACTIVE/DORMANT/EXPIRED/BROKEN. Unknown map
+positions remain in text. It reuses ClauseIsActive/SideFor/TermsText, not a new
+compliance prediction. Third-party treaties are excluded from this mode.
+
+Military now marks our recorded foreign allocations with B and lists the site
+and current holder. This is not a promise of current launch permission and never
+shows another service's basing network. Country drill-down keeps its existing
+collection boundary. Trade lines mean agreements, not shipping itineraries or
+delivered stock. Its list uses PortDependencyReadout for named ports/passages,
+detours and mine exposure, explicitly marks sanctions/embargo commodity closure
+in either direction, and includes the existing own-scoped StrategicConnections
+readouts. No invented blockade duration, route graph or simulated delivery.
+
 Map modes follow the same information contract as the rest of Brink:
 
 - Political standing is public.

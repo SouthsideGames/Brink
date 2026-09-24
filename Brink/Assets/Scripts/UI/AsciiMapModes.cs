@@ -13,7 +13,8 @@ namespace Brink.UI
         Intelligence,
         Blocs,
         Activity,
-        Displacement
+        Displacement,
+        Diplomatic
     }
 
     /// <summary>
@@ -38,6 +39,7 @@ namespace Brink.UI
                 case WorldMapMode.Blocs: DrawBlocs(state, canvas); break;
                 case WorldMapMode.Activity: DrawActivity(state, canvas); break;
                 case WorldMapMode.Displacement: DrawDisplacement(state, canvas); break;
+                case WorldMapMode.Diplomatic: DrawDiplomatic(state, canvas); break;
             }
             return canvas.ToString();
         }
@@ -51,6 +53,7 @@ namespace Brink.UI
                 case WorldMapMode.Trade: pillar = Pillar.Economy; break;
                 case WorldMapMode.Intelligence: pillar = Pillar.Intelligence; break;
                 case WorldMapMode.Blocs: pillar = Pillar.Diplomacy; break;
+                case WorldMapMode.Diplomatic: pillar = Pillar.Diplomacy; break;
                 default: pillar = Pillar.Government; break;
             }
             return AsciiPillarArt.Render(state, pillar, width);
@@ -61,9 +64,11 @@ namespace Brink.UI
             switch (mode)
             {
                 case WorldMapMode.Military:
-                    return "  × confrontation   * total-war front   O occupied ground";
+                    return "  × confrontation   * total-war front   O occupied ground   B our recorded foreign base";
                 case WorldMapMode.Trade:
-                    return "  · our trade route   x embargoed route   $ sanctions involving us";
+                    return "  · our agreement   x embargo flag   $ sanctions involving us. Schematic links, not shipping paths or guaranteed delivery.";
+                case WorldMapMode.Diplomatic:
+                    return "  : our treaty with a live commitment. Direction and dormant/expired promises are listed below.";
                 case WorldMapMode.Intelligence:
                     return "  : collection route   ? thin access   ^ established access   @ deep access";
                 case WorldMapMode.Blocs:
@@ -81,6 +86,8 @@ namespace Brink.UI
         {
             switch (mode)
             {
+                case WorldMapMode.Diplomatic:
+                    return "OUR SIGNED COMMITMENTS — LIVE CONDITIONS, NOT A PREDICTION OF COMPLIANCE";
                 case WorldMapMode.Displacement:
                     var own = state.PlayerCountry.displacement;
                     return $"OUR DISPLACED {own.displaced:F1}   HOSTED {own.hosted:F1} (share indices, not headcounts)   "
@@ -148,6 +155,79 @@ namespace Brink.UI
                 if (!Point(GeographySystem.HostOf(location), canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, +1, 'O');
             }
+            foreach (var location in state.locations)
+                if (location.foreignOperatorId == state.playerCountryId
+                    && Point(GeographySystem.HostOf(location), canvas, out int x, out int y))
+                    PlotSignal(canvas, claimed, x, y, -1, 'B');
+        }
+
+        static void DrawDiplomatic(GameState state, AsciiCanvas canvas)
+        {
+            foreach (var treaty in state.treaties)
+            {
+                if (!treaty.Involves(state.playerCountryId)) continue;
+                bool active = false;
+                foreach (var commitment in treaty.commitments)
+                    if (treaty.ClauseIsActive(state, commitment)) active = true;
+                if (active && Point(treaty.countryA, canvas, out int ax, out int ay)
+                    && Point(treaty.countryB, canvas, out int bx, out int by))
+                    canvas.Line(ax, ay, bx, by, ':', overwrite: false);
+            }
+        }
+
+        public static string ConnectionReadout(GameState state, WorldMapMode mode)
+        {
+            var text = new System.Text.StringBuilder();
+            if (mode == WorldMapMode.Diplomatic)
+            {
+                text.AppendLine("OUR TREATY RECORD");
+                foreach (var treaty in state.treaties)
+                {
+                    if (!treaty.Involves(state.playerCountryId)) continue;
+                    string partner = treaty.PartnerOf(state.playerCountryId);
+                    foreach (var commitment in treaty.commitments)
+                    {
+                        string status = treaty.broken ? "BROKEN" : treaty.ClauseIsExpired(state, commitment) ? "EXPIRED"
+                            : treaty.ClauseIsActive(state, commitment) ? "ACTIVE" : "DORMANT";
+                        string side = treaty.SideFor(state.playerCountryId, commitment) == ClauseSide.Mutual ? "BOTH CARRY"
+                            : treaty.Carries(state.playerCountryId, commitment) ? "WE CARRY" : "THEY CARRY";
+                        var clause = treaty.clauses.Find(c => c.commitment == commitment);
+                        var start = clause != null && clause.effectiveDate.month >= 1 && clause.effectiveDate.month <= 12
+                            ? clause.effectiveDate : treaty.signedDate;
+                        string terms = clause == null ? "" : DiplomacySystem.TermsText(state, clause, start);
+                        text.AppendLine($"{state.FindCountry(partner)?.displayName ?? partner}: {commitment} — {side}; {status}. {terms}");
+                    }
+                }
+                text.Append("Lines require a mapped position; unmapped signatories remain in this record.");
+            }
+            else if (mode == WorldMapMode.Military)
+            {
+                text.AppendLine("OUR RECORDED FOREIGN BASES — ALLOCATION, NOT A GUARANTEE OF LAUNCH ACCESS");
+                foreach (var site in state.locations)
+                    if (site.foreignOperatorId == state.playerCountryId)
+                        text.AppendLine($"{site.displayName}: held by {state.FindCountry(site.ownerId)?.displayName ?? site.ownerId}.");
+                text.Append("Only our allocations are shown. Unmapped sites remain listed; operations still check current access.");
+            }
+            else if (mode == WorldMapMode.Trade)
+            {
+                text.AppendLine("OUR TRADE DEPENDENCIES — AGREEMENTS ARE NOT DELIVERED STOCK");
+                foreach (var link in state.trade)
+                {
+                    if (!link.Involves(state.playerCountryId)) continue;
+                    string partner = link.PartnerOf(state.playerCountryId);
+                    bool closed = link.embargoed || state.FindSanction(state.playerCountryId, partner) != null
+                        || state.FindSanction(partner, state.playerCountryId) != null;
+                    text.AppendLine($"{state.FindCountry(partner)?.displayName ?? partner}: {link.focus}; "
+                        + (closed ? "SANCTIONS/EMBARGO CLOSE COMMODITY DELIVERY. " : "NO SANCTIONS/EMBARGO CLOSURE. ")
+                        + TradeSystem.PortDependencyReadout(state, link));
+                }
+                foreach (var connection in StrategicConnections.All)
+                {
+                    string readout = StrategicConnections.Readout(state, connection);
+                    if (!string.IsNullOrEmpty(readout)) text.AppendLine(readout);
+                }
+            }
+            return text.ToString();
         }
 
         // Only connections involving our country: no third-party flow census
