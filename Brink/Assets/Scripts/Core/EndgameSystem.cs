@@ -21,6 +21,38 @@ namespace Brink.Core
     {
         public const int PreparationCost = 2;
         public const int ExecutionCost = 4;
+        public const int AbandonCost = 1;
+
+        public static bool CanAbandon(GameState state, string actorId, EndgameType type, out string reason)
+        {
+            var actor = state?.FindCountry(actorId);
+            reason = "No prepared work to abandon.";
+            if (actor == null || !Enum.IsDefined(typeof(EndgameType), type)) return false;
+            foreach (var preparation in actor.endgames.preparations)
+                if (preparation.type == type && preparation.progress > 0f) { reason = ""; return true; }
+            return false;
+        }
+
+        public static bool AbandonBy(GameState state, string actorId, EndgameType type)
+        {
+            if (!CanAbandon(state, actorId, type, out _)) return false;
+            foreach (var preparation in state.FindCountry(actorId).endgames.preparations)
+                if (preparation.type == type) preparation.progress = 0f;
+            // Retain everUsed, executed records and ongoing effects. This is not absolution.
+            string message = $"Preparation for {NameOf(type)} abandoned without refund. "
+                + "Past uses and any ongoing consequences remain; rebuilding requires ordinary funding and preparation.";
+            state.AddChronicle(CategoryFor(type), actorId, message);
+            if (actorId == state.playerCountryId)
+                state.AddNotification(NotificationClass.Advisory, "PREPARATION ABANDONED", message, actorId);
+            return true;
+        }
+
+        public static bool Abandon(GameState state, TurnManager turns, EndgameType type)
+        {
+            if (!CanAbandon(state, state.playerCountryId, type, out _)) return false;
+            if (!turns.SpendCommandPoints(AbandonCost, $"Abandon {NameOf(type)}")) return false;
+            return AbandonBy(state, state.playerCountryId, type);
+        }
 
         /// <summary>Monthly progress from one funded preparation effort.</summary>
         public const float PreparationRate = 4.5f;

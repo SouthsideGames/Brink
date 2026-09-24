@@ -717,6 +717,7 @@ namespace Brink.Core
             float worst = float.MaxValue;
             foreach (ForceBranch branch in Enum.GetValues(typeof(ForceBranch)))
             {
+                if (mil.Get(branch).replacementSuspended) continue;
                 float strength = mil.Get(branch).strength;
                 if (strength >= worst) continue;
                 worst = strength;

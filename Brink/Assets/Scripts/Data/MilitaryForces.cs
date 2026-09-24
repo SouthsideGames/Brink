@@ -55,6 +55,10 @@ namespace Brink.Data
         /// </summary>
         public float experience;
 
+        /// <summary>Voluntary stand-down: do not automatically replace this service.
+        /// False in old saves. Explicit new orders/programmes remain the operator's choice.</summary>
+        public bool replacementSuspended;
+
         /// <summary>
         /// What this branch actually holds (GDD §19, amended). Counts are the
         /// truth; <see cref="strength"/> is a cached mirror of them.

@@ -186,6 +186,16 @@ namespace Brink.Core
                 $"{AssetCatalog.All.Count} counted classes across air, sea and ground. "
                 + "Steel takes years, people take months; industry decides throughput.",
                 verbs: new[] { nameof(GameController.OrderAssets) });
+            Add(Pillar.Military, "MILITARY", "Retire a service", $"{AcquisitionSystem.StandDownCost} CP",
+                "Retire all equipment and experience in one branch, forfeit its paid backlog, end its programmes and stop automatic replacement. "
+                + "No refund, peace or treaty release. Explicit new orders remain possible.",
+                verbs: new[] { nameof(GameController.StandDownService) });
+            bool stoppedService = player.military.ground.replacementSuspended || player.military.air.replacementSuspended
+                || player.military.naval.replacementSuspended;
+            Add(Pillar.Military, "MILITARY", "Resume service replacement", $"{AcquisitionSystem.ResumeReplacementCost} CP",
+                "Permit ordinary paid replacement again. Restores no equipment, experience or cancelled order.",
+                stoppedService, "No service has automatic replacement stopped.",
+                verbs: new[] { nameof(GameController.ResumeServiceReplacement) });
             Add(Pillar.Military, "MILITARY", "Set war footing", "5 PC + upkeep",
                 "Roughly doubles delivery tempo. Gated on political backing rather than money — "
                 + "moving the budget is something a chamber grants — and it lapses when it "
@@ -582,6 +592,12 @@ namespace Brink.Core
             Add(Pillar.Military, "ENDGAME", "Execute an instrument", "4 CP",
                 "Only when prepared, and only against a state we are confronting.",
                 verbs: new[] { nameof(GameController.ExecuteEndgame) });
+            bool preparedWork = false;
+            foreach (var preparation in player.endgames.preparations) if (preparation.progress > 0f) preparedWork = true;
+            Add(Pillar.Military, "ENDGAME", "Abandon strategic preparation", $"{EndgameSystem.AbandonCost} CP",
+                "Forfeit preparation without refund; past uses and ongoing consequences remain. Requires authority over its pillar.",
+                preparedWork, "No prepared work to abandon.",
+                verbs: new[] { nameof(GameController.AbandonEndgame) });
             Add(Pillar.Government, "BRIEFING", "Hold for a stretch",
                 $"Up to {HoldSystem.MaxMonths} months of capacity",
                 "Stand back through a quiet run of months. It stops the moment anything needs "

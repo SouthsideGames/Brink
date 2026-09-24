@@ -19,6 +19,16 @@ consequences that outlast the moment it is used.
 
 ## 2. Gates
 
+Roadmap29 adds a deliberate exit: ABANDON PREPARATION at1CP, available for any
+positive progress including a ready instrument, through the corresponding
+pillar's authority gate. Actor-generic `AbandonBy` zeros progress but preserves
+the preparation record's `everUsed`, research, executed history and all ongoing
+effects (including mobilization). No refund, XP, initiative or trust reset.
+The controller autosaves. Empty/invalid requests refuse before spending;
+rebuilding requires the existing capability, fiscal, treasury and preparation
+gates. Current detection reads the new progress; historical knowledge and
+opponent memories are not magically purged. No new AI abandonment policy.
+
 **To prepare:** hold the required capability at ≥ 0.6 maturity (holding it is not
 commanding it), and a pillar ≥ 65.
 

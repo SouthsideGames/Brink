@@ -125,6 +125,14 @@ namespace Brink.UI.Views
 
             var row = MakeRow();
 
+            AddText("terminal-text-dim").text = "Abandoning forfeits prepared work without refund; "
+                + "past uses, ongoing effects and acquired knowledge remain. It does not promise immediate foreign trust.";
+            var abandon = new Button(() => { GameController.Instance.AbandonEndgame(type); Refresh(); })
+            { text = $"ABANDON PREPARATION [{EndgameSystem.AbandonCost} CP]" };
+            abandon.AddToClassList("cmd-button"); abandon.AddToClassList("danger");
+            if (!EndgameSystem.CanAbandon(state, player.id, type, out string abandonReason)) Block(abandon, abandonReason);
+            row.Add(abandon);
+
             if (canPrepare && !ready)
             {
                 AddButton(row, $"PREPARE [{EndgameSystem.PreparationCost} CP]", null, () =>
