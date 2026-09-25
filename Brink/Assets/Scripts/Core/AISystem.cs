@@ -1387,6 +1387,20 @@ namespace Brink.Core
             return prize;
         }
 
+        /// <summary>
+        /// The most war load a target's overstretch can add to a claimant's
+        /// perceived weakness (x9, so at most +18 — about two limited wars).
+        ///
+        /// Being tied down elsewhere is a genuine opening (GDD §16), but the
+        /// uncapped term compounded: every war opened against a busy state
+        /// raised its commitment, which raised every other state's claim on
+        /// it. Measured natively (2026-09-25, Full/RUS seed 44449,
+        /// Challenging): 18 separate root wars from 16 attackers against one
+        /// target, the term reaching +73 and outranking every other objective.
+        /// The cap keeps the opening and ends the pile-on feedback.
+        /// </summary>
+        public const float OverstretchOpeningCap = 2f;
+
         // Read the same current cause at selection and execution. A held plan
         // is intent, not permission to ignore improved relations or new reports.
         static bool ClaimJustified(GameState state, CountryState country, string targetId,
@@ -1400,7 +1414,8 @@ namespace Brink.Core
             float perceivedStrength = PerceivedStrength(state, country.id, target, IntelDomain.Military);
             perceivedWeakness = Math.Max(0f, country.pillars.military - perceivedStrength);
             if (TheatreSystem.IsOverstretched(state, targetId))
-                perceivedWeakness += TheatreSystem.TotalCommitment(state, targetId) * 9f;
+                perceivedWeakness += Math.Min(TheatreSystem.TotalCommitment(state, targetId),
+                    OverstretchOpeningCap) * 9f;
             bool deepRivalry = relationship.relations < 25f;
             return (perceivedWeakness > 8f || deepRivalry) && relationship.relations < 50f;
         }

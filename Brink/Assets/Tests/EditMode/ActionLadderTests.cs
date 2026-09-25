@@ -852,6 +852,41 @@ namespace Brink.Tests
             method.Invoke(null, new object[] { state, ai, country, rng });
         }
 
+        static float ClaimWeakness(GameState state, CountryState country, string targetId)
+        {
+            var method = typeof(AISystem).GetMethod("ClaimJustified",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method, "AISystem.ClaimJustified was renamed without updating this guard");
+            var args = new object[] { state, country, targetId, 0f };
+            method.Invoke(null, args);
+            return (float)args[3];
+        }
+
+        // The overstretch opening is capped: two limited wars already make a
+        // target an opening, but further wars must not keep raising every
+        // other state's claim on it (the measured pile-on feedback).
+        [TestCase(new[] { "LimitedConflict" }, 0f)]                       // 1.0, not overstretched
+        [TestCase(new[] { "LimitedConflict", "Crisis" }, 13.05f)]          // 1.45, below the cap
+        [TestCase(new[] { "LimitedConflict", "LimitedConflict" }, 18f)]    // 2.0, at the cap
+        [TestCase(new[] { "LimitedConflict", "LimitedConflict", "LimitedConflict" }, 18f)]
+        [TestCase(new[] { "TotalWar", "TotalWar", "TotalWar", "LimitedConflict", "LimitedConflict", "LimitedConflict" }, 18f)]
+        public void OverstretchOpeningIsCapped(string[] escalations, float expectedBonus)
+        {
+            var country = state.FindCountry("IND");
+            var target = state.FindCountry("RUS");
+            state.confrontations.Clear();
+            float baseline = ClaimWeakness(state, country, target.id);
+            string[] others = { "CHN", "DEU", "JPN", "TUR", "SAU", "POL" };
+            for (int i = 0; i < escalations.Length; i++)
+                state.confrontations.Add(new Confrontation
+                {
+                    id = "CAP-" + i, initiatorId = others[i], defenderId = target.id,
+                    escalation = (EscalationState)System.Enum.Parse(typeof(EscalationState), escalations[i])
+                });
+            Assert.AreEqual(expectedBonus, ClaimWeakness(state, country, target.id) - baseline, 0.001f,
+                "Overstretch must add at most OverstretchOpeningCap x 9 to a claimant's perceived weakness.");
+        }
+
         [TestCase(50f, 20f, false)]
         [TestCase(30f, 0f, false)]
         [TestCase(20f, 0f, true)]
