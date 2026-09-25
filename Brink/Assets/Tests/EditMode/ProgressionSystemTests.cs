@@ -146,6 +146,61 @@ namespace Brink.Tests
                 "Holding the same line during a war should score better than during calm.");
         }
 
+        // ---------- difficulty adjustment is visible (spec 07 §3) ----------
+
+        [Test]
+        public void DifficultyBonus_IsTheScoreDifferenceAndIsRecorded()
+        {
+            EvaluationRecord At(Difficulty difficulty)
+            {
+                var sim = WorldFactory.CreateDebugWorld(58);
+                sim.difficulty = difficulty;
+                ProgressionSystem.CaptureYearSnapshot(sim);
+                return ProgressionSystem.EvaluateYear(sim, sim.date.year);
+            }
+
+            var standard = At(Difficulty.Standard);
+            foreach (Difficulty difficulty in System.Enum.GetValues(typeof(Difficulty)))
+            {
+                var record = At(difficulty);
+                float bonus = ProgressionSystem.DifficultyScoreBonus(difficulty);
+                Assert.AreEqual(standard.score + bonus, record.score, 0.0001f,
+                    "The stated difficulty bonus must be exactly what the score gained.");
+                Assert.AreEqual(bonus, record.difficultyBonus, "the record stores the bonus applied");
+                Assert.AreEqual(difficulty.ToString(), record.difficultyApplied);
+                StringAssert.Contains($"+{bonus:F0}", ProgressionSystem.DifficultyLine(record));
+            }
+            Assert.AreEqual(0f, ProgressionSystem.DifficultyScoreBonus(Difficulty.Standard));
+            Assert.AreEqual(3f, ProgressionSystem.DifficultyScoreBonus(Difficulty.Challenging));
+            Assert.AreEqual(6f, ProgressionSystem.DifficultyScoreBonus(Difficulty.Ruthless));
+        }
+
+        [Test]
+        public void DifficultyNotes_StateEveryBonusFromTheSharedDefinition()
+        {
+            string note = ProgressionSystem.DifficultyChoiceNote();
+            foreach (Difficulty difficulty in System.Enum.GetValues(typeof(Difficulty)))
+                StringAssert.Contains($"+{ProgressionSystem.DifficultyScoreBonus(difficulty):F0} at {difficulty}", note);
+            StringAssert.Contains("never their statistics", note);
+            StringAssert.Contains("above 100", ProgressionSystem.PositionScoreNote());
+        }
+
+        [Test]
+        public void DifficultyLine_IsAbsentForRecordsThatNeverStoredIt()
+        {
+            var legacy = new EvaluationRecord { year = 1984, score = 70f };
+            Assert.IsNull(ProgressionSystem.DifficultyLine(legacy),
+                "An old save's evaluation must not be given a bonus nobody recorded.");
+
+            var sim = WorldFactory.CreateDebugWorld(59);
+            sim.difficulty = Difficulty.Ruthless;
+            ProgressionSystem.CaptureYearSnapshot(sim);
+            ProgressionSystem.EvaluateYear(sim, sim.date.year);
+            var loaded = SaveSystem.FromJson(SaveSystem.ToJson(sim));
+            Assert.AreEqual("Ruthless", loaded.evaluations[0].difficultyApplied);
+            Assert.AreEqual(6f, loaded.evaluations[0].difficultyBonus);
+        }
+
         [Test]
         public void Evaluation_CrisisHandlingCounts()
         {

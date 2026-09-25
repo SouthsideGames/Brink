@@ -339,8 +339,8 @@ namespace Brink.Core
             // decade of conquest moved the grade by a tenth of a letter through
             // that channel alone. Capped, so a map painter still has to govern.
             score += Math.Min(12f, Math.Max(0, LocationsHeld(state) - OpeningHoldings(state)) * 1.5f);
-            if (state.difficulty == Difficulty.Challenging) score += 3f;
-            if (state.difficulty == Difficulty.Ruthless) score += 6f;
+            float difficultyBonus = DifficultyScoreBonus(state.difficulty);
+            score += difficultyBonus;
 
             var grade = GradeFor(score);
             int points = SkillPointsFor(grade);
@@ -358,6 +358,8 @@ namespace Brink.Core
                 crisisScore = crisis,
                 initiativeScore = initiative,
                 efficiencyScore = efficiency,
+                difficultyApplied = state.difficulty.ToString(),
+                difficultyBonus = difficultyBonus,
                 summary = BuildSummary(grade, wasAtWar, pillarDelta, gdpGrowth, state)
             };
 
@@ -390,7 +392,7 @@ namespace Brink.Core
             AwardXP(state, 25 + points * 15, "Annual evaluation");
 
             state.AddNotification(NotificationClass.Priority, $"ANNUAL EVALUATION {year} — GRADE {grade}",
-                $"{record.summary} {points} skill point(s) awarded.", player.id);
+                $"{record.summary} {DifficultyLine(record) ?? ""}".TrimEnd() + $" {points} skill point(s) awarded.", player.id);
             state.AddChronicle(ChronicleCategory.System, player.id,
                 $"Annual evaluation {year}: grade {grade}.");
             FileYearInReview(state, year);
@@ -568,6 +570,49 @@ namespace Brink.Core
         /// feedback and reward, welded to one number. Retune the payout curve
         /// alongside any band change, never one without the other.
         /// </summary>
+        /// <summary>
+        /// The flat addition every annual evaluation score receives for the
+        /// difficulty it was played at (GDD §25.2). The one definition: the
+        /// score, the stored record and every screen that explains it read
+        /// this, so what the player is told is what was added.
+        /// </summary>
+        public static float DifficultyScoreBonus(Difficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case Difficulty.Ruthless: return 6f;
+                case Difficulty.Challenging: return 3f;
+                default: return 0f;
+            }
+        }
+
+        /// <summary>
+        /// One line naming the difficulty adjustment a year's score carried.
+        /// Null for a record written before the adjustment was stored — an
+        /// old save's years are not given a bonus nobody recorded.
+        /// </summary>
+        public static string DifficultyLine(EvaluationRecord record)
+        {
+            if (record == null || string.IsNullOrEmpty(record.difficultyApplied)) return null;
+            return $"Difficulty ({record.difficultyApplied.ToUpperInvariant()}) added +{record.difficultyBonus:F0} to this score.";
+        }
+
+        /// <summary>What the difficulty choice changes, and what it adds to the grade.</summary>
+        public static string DifficultyChoiceNote()
+            => "Difficulty changes how foreign governments think — how many moves each makes a month, "
+               + "how far ahead it plans and, at Ruthless, how readily it commits to war — never their statistics. "
+               + "Because a harder world is harder to govern well, every annual evaluation score gains "
+               + $"+{DifficultyScoreBonus(Difficulty.Standard):F0} at Standard, "
+               + $"+{DifficultyScoreBonus(Difficulty.Challenging):F0} at Challenging and "
+               + $"+{DifficultyScoreBonus(Difficulty.Ruthless):F0} at Ruthless. "
+               + "Ruthless is meant to feel like near-constant war.";
+
+        /// <summary>Why the POS component runs high early and settles later.</summary>
+        public static string PositionScoreNote()
+            => "POS scores this year's gains — new treaties, relations won, ground taken — so a year "
+               + "of building can score well above 100 and a steady year settles near 50. A lower POS "
+               + "after the early years usually means the network is built, not that the country is slipping.";
+
         public static EvaluationGrade GradeFor(float score)
         {
             // S and A moved up (2026-08): a first year of answering two crises

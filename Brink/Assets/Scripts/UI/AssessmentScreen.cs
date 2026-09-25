@@ -183,6 +183,10 @@ namespace Brink.UI
             AddDifficulty(Difficulty.Challenging, "CHALLENGING — THE MEASURED GAME");
             AddDifficulty(Difficulty.Ruthless, "RUTHLESS — THEY PLAN, AND THEY ACT");
 
+            var difficultyNote = AddLabel("terminal-text-dim");
+            difficultyNote.style.whiteSpace = WhiteSpace.Normal;
+            difficultyNote.text = " " + ProgressionSystem.DifficultyChoiceNote();
+
             var note = AddLabel("terminal-text-dim");
             note.style.whiteSpace = WhiteSpace.Normal;
             note.text = "\n One reassignment is permitted before your posting is entered into the record.\n";

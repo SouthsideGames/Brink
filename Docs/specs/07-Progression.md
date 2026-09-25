@@ -155,8 +155,31 @@ score = trajectory×0.18 + economy×0.20 + stability×0.14
 adversity = (1 if at war) + sanctionPressure×0.25 + (0.5 if exhaustion > 40)
 score += adversity × 6
 score += min(12, max(0, locationsHeld − openingHoldings) × 1.5)   ← conquest, directly
-score += 3 (Challenging) / 6 (Ruthless)
+score += DifficultyScoreBonus(difficulty)   ← 0 Standard / 3 Challenging / 6 Ruthless
 ```
+
+**The difficulty adjustment is shown, not hidden** (2026-09-25, user decision).
+Harder difficulty is meant to score higher: a native 360-run measurement found
+the same operator scoring about 4–5 points more on Ruthless than Standard,
+because the bonus more than offsets the added difficulty, and that was kept
+deliberately. `ProgressionSystem.DifficultyScoreBonus` is the single
+definition read by the score, the stored record and every screen.
+`EvaluationRecord.difficultyApplied` / `difficultyBonus` store what each year
+received; both are empty on older saves and are not reconstructed, so no
+screen claims a bonus nobody recorded. The OPERATOR evaluation list prints the
+line under each year, the annual-evaluation notification repeats it, and the
+assessment difficulty picker states all three bonuses and what difficulty
+changes (AI reasoning, never statistics; Ruthless is near-constant war by
+design). Guarded by `ProgressionSystemTests.DifficultyBonus_*` /
+`DifficultyNotes_*` / `DifficultyLine_*`.
+
+**`position` is uncapped and front-loaded, and the player is told so**
+(2026-09-25, user decision). It scores the *year's* gains in treaties,
+relations and ground, so an operator building a network scores it far above
+100 early (measured mean ≈ 207 in year one for the diplomacy bot) and near 50
+once the network exists. That produces an apparent late-decade grade decline
+that is scoring structure, not national decline. It is left uncapped;
+`ProgressionSystem.PositionScoreNote` explains it under the evaluation list.
 
 Every weight above is verified against `ProgressionSystem.EvaluateYear` (the
 weights were re-transcribed 2026-08-26; this section had drifted from the code
