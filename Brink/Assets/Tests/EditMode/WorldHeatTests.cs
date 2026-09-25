@@ -266,10 +266,11 @@ namespace Brink.Tests
             // words — and those fronts close with it. Counting every satellite
             // as a war of its own reported a single bloc war as six, which is
             // the flames-versus-peace question asked of the wrong quantity.
-            // Wars a government *chose* are held to the old ceiling; the fronts
-            // those wars pull in are bounded separately, generously, so a
-            // world that swarms every aggressor still cannot become one where
-            // every state is always fighting.
+            // Chosen wars retain their ceiling. The former 72 lifetime-front
+            // ceiling conflated more roots with a broken cascade. The approved
+            // replacement measures each country's armed-month exposure, plus
+            // live pair uniqueness and closure with the root, every month.
+            // This is a changed acceptance criterion, not the old test passing.
             int[] seeds = { 4242, 9090, 8686, 5171, 6301, 2468 };
             int aiWars = 0, aiFronts = 0;
             int worldsWithAWar = 0;
@@ -277,7 +278,29 @@ namespace Brink.Tests
 
             foreach (int seed in seeds)
             {
-                var state = RunPassive(seed, 360);
+                var state = WorldFactory.CreateDebugWorld(seed);
+                var turns = new TurnManager(state);
+                SimulationPipeline.Wire(turns, state);
+                var observed = new Dictionary<string, int>();
+                var armed = new Dictionary<string, int>();
+                for (int month = 0; month < 360; month++)
+                {
+                    turns.EndMonth();
+                    AssertFrontIntegrity(state);
+                    foreach (var country in state.countries)
+                    {
+                        if (!observed.ContainsKey(country.id))
+                        { observed[country.id] = 0; armed[country.id] = 0; }
+                        observed[country.id]++;
+                        // Union of fronts: overlapping wars count once here.
+                        if (state.confrontations.Exists(c => !c.resolved
+                            && c.Involves(country.id)
+                            && c.escalation >= EscalationState.LimitedConflict))
+                            armed[country.id]++;
+                    }
+                }
+                foreach (var pair in observed)
+                    AssertArmedExposure(armed[pair.Key], pair.Value, $"{seed}/{pair.Key}");
                 int here = 0, fronts = 0;
                 foreach (var confrontation in state.confrontations)
                 {
@@ -304,9 +327,59 @@ namespace Brink.Tests
             Assert.LessOrEqual(aiWars, 40,
                 $"{aiWars} AI-vs-AI wars in {seeds.Length * 30} world-years ({perWorld}) — the "
                 + "world is in flames, which is as flat as a world at peace.");
-            Assert.LessOrEqual(aiFronts, 72,
-                $"{aiFronts} alliance fronts in {seeds.Length * 30} world-years ({perWorld}) — "
-                + "every war is a world war, which is the cascade the 2026-09 repair damped.");
+            TestContext.WriteLine($"World heat: {aiWars} chosen wars / {aiFronts} fronts ({perWorld}).");
+        }
+
+        static void AssertArmedExposure(int armed, int observed, string context)
+        {
+            Assert.Greater(observed, 0, context);
+            Assert.Less(armed * 2, observed,
+                $"{context}: armed conflict occupied {armed}/{observed} observed months; "
+                + "fighting must not be the majority/resting state.");
+        }
+
+        static void AssertFrontIntegrity(GameState state)
+        {
+            var pairs = new HashSet<string>();
+            foreach (var front in state.confrontations)
+            {
+                if (front.resolved) continue;
+                string a = front.initiatorId, b = front.defenderId;
+                string pair = string.CompareOrdinal(a, b) < 0 ? a + "|" + b : b + "|" + a;
+                Assert.IsTrue(pairs.Add(pair), $"Duplicate live confrontation for {pair}.");
+                if (!front.IsObligationEntry) continue;
+                var root = state.FindConfrontation(front.obligationRootId);
+                Assert.IsNotNull(root, $"Missing root for {front.id}.");
+                Assert.IsFalse(root.resolved, $"Front {front.id} remained open after root {root.id}.");
+            }
+        }
+
+        [TestCase(49, 100, true)]
+        [TestCase(50, 100, false)]
+        [TestCase(51, 100, false)]
+        [TestCase(1, 2, false)]
+        public void ArmedExposureGuardRejectsHalfOrMore(int armed, int observed, bool allowed)
+        {
+            if (allowed) Assert.DoesNotThrow(() => AssertArmedExposure(armed, observed, "fixture"));
+            else Assert.Throws<AssertionException>(() => AssertArmedExposure(armed, observed, "fixture"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void FrontIntegrityGuardRejectsDuplicatesAndClosedRoots(bool closedRoot)
+        {
+            var world = WorldFactory.CreateDebugWorld(4242);
+            world.confrontations.Clear();
+            var root = new Confrontation { id = "ROOT", initiatorId = "RUS", defenderId = "USA" };
+            var front = new Confrontation { id = "FRONT", initiatorId = "IND", defenderId = "RUS",
+                obligationRootId = root.id };
+            world.confrontations.Add(root);
+            world.confrontations.Add(front);
+            Assert.DoesNotThrow(() => AssertFrontIntegrity(world));
+            if (closedRoot) root.resolved = true;
+            else world.confrontations.Add(new Confrontation
+                { id = "DUPLICATE", initiatorId = "RUS", defenderId = "IND" });
+            Assert.Throws<AssertionException>(() => AssertFrontIntegrity(world));
         }
 
         [Test]

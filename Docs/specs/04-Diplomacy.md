@@ -535,6 +535,32 @@ spec 11 §1.
 
 ### 8a. The cascade, damped (core stability repair, 2026-09)
 
+**2026-09-25 acceptance revision (user-approved, native recheck pending).**
+The historical 72-front ceiling described below is superseded, not raised.
+Six 360-month worlds still require at least four AI wars/fronts overall, activity
+in at least three worlds, and at most 40 chosen non-player wars. Front totals
+remain reported. Monthly post-turn observations now require each country,
+including the player and successors, to spend **less than half its observed
+months** in unresolved LimitedConflict-or-higher confrontations. Overlapping
+fronts count once per country-month. Each month's unresolved pairs must be
+unique (either direction), and every open obligation front must have an open
+root. Successors accrue observations only after they appear.
+
+This deliberately changes the acceptance contract: accumulated front count
+does not distinguish repeated short wars from sustained warfare. Native review
+on the preceding patched tree measured 47 versus 77 fronts, no observed orphan
+fronts, and all-country armed exposure 7.5% versus 9.2%; non-player exposure
+5.3% versus 7.1%. That is increased activity, not demonstrated equivalence or
+certified balance. The new 50% criterion is a design choice, not a statistical
+confidence bound inferred from six seeds. Tests exercise its exact boundary and
+reject synthetic duplicate fronts and closed roots.
+
+Limits: monthly snapshots can miss within-month fighting; this is not a rolling
+window guarantee, a peak-concurrency cap, or a balance certification. Legal
+defensive commitments remain priced by the game, not capped by a new test
+constant. The separate 110 confrontation-month limit remains unchanged. Earlier
+figures and the original ceiling below are retained as historical evidence.
+
 The audit measured ~11 AI wars per 30-year world against a baseline of 1.25,
 21 of 22 being obligation entries, and single states carrying eight fronts. The
 mechanism was correct; the decision under it was near-unconditional. Four
