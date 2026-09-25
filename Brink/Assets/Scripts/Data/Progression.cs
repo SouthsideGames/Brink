@@ -90,6 +90,15 @@ namespace Brink.Data
 
         /// <summary>What the year cost relative to what it delivered (GDD §25.2).</summary>
         public float efficiencyScore;
+
+        /// <summary>
+        /// The difficulty the year was graded at and the flat bonus it added
+        /// (<see cref="Brink.Core.ProgressionSystem.DifficultyScoreBonus"/>).
+        /// Empty on records from older saves: the bonus was applied but never
+        /// stored, and is not reconstructed.
+        /// </summary>
+        public string difficultyApplied;
+        public float difficultyBonus;
     }
 
     /// <summary>
