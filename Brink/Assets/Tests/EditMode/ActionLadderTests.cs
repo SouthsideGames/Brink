@@ -852,6 +852,34 @@ namespace Brink.Tests
             method.Invoke(null, new object[] { state, ai, country, rng });
         }
 
+        [TestCase(50f, 20f, false)]
+        [TestCase(30f, 0f, false)]
+        [TestCase(20f, 0f, true)]
+        [TestCase(30f, 9f, true)]
+        public void HeldClaimRequiresItsCurrentJustification(float relations, float weakness, bool expected)
+        {
+            var country = state.FindCountry("IND");
+            var target = state.FindCountry("RUS");
+            var ai = Observer(state, country.id);
+            state.confrontations.Clear();
+            country.stability = 80f;
+            country.warExhaustion = 0f;
+            var pair = state.FindRelationship(country.id, target.id);
+            pair.settlementTruceMonths = 0;
+            pair.relations = 20f; // The held claim initially has a genuine rivalry.
+            ai.objectives.Clear();
+            ai.objectives.Add(new AIObjective { type = AIObjectiveType.AssertClaim, targetId = target.id });
+            country.pillars.military = AISystem.PerceivedStrength(state, country.id, target, IntelDomain.Military) + weakness;
+            pair.relations = relations; // Conditions at execution, before the next review.
+            var rng = new CapabilityRoll(0);
+            Dispatch(state, ai, country, rng);
+            Assert.AreEqual(expected ? 1 : 0, state.confrontations.Count,
+                "A held claim must retain hostility and either weakness or deep rivalry.");
+            Assert.AreEqual(expected ? 1 : 0, ai.actionsThisMonth);
+            Assert.AreEqual(expected ? 1 : 0, rng.draws,
+                "An unjustified claim must decline before the commitment roll.");
+        }
+
         sealed class CapabilityRoll : System.Random
         {
             readonly double value;

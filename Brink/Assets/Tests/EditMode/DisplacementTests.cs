@@ -183,19 +183,67 @@ namespace Brink.Tests
             Ruin(subject);
             subject.displacement.displaced = 40f;
 
-            // Repair it, and keep it repaired.
+            // This is the recovery contract, not a passive-world war budget.
+            // Tick displacement directly so new wars/occupation cannot silently
+            // invalidate the premise. The pressure cases below cover those costs.
             for (int month = 0; month < 96; month++)
             {
                 subject.livingStandards = 70f;
                 subject.warExhaustion = 0f;
                 subject.resources.foodSecurity = subject.resources.foodEndowment;
-                turns.EndMonth();
+                Assert.AreEqual(0f, DisplacementSystem.DisplacementTargetFor(state, subject),
+                    0.001f, "Recovery requires all displacement pressures to be absent.");
+                DisplacementSystem.MonthlyUpdate(state);
             }
 
             Assert.Less(subject.displacement.displaced, 12f,
                 "Eight years after the country became liveable again, the same share of its "
                 + "people were still displaced. Every value in this system has to have a "
                 + "reachable path back.");
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OccupationSustainsDisplacementUntilPressureEnds(bool atWar)
+        {
+            var subject = state.countries.Find(c => !c.isPlayer);
+            subject.livingStandards = 70f;
+            subject.warExhaustion = 0f;
+            subject.resources.foodSecurity = subject.resources.foodEndowment;
+            var ground = state.locations.Find(l => l.originalOwnerId == subject.id);
+            Assert.IsNotNull(ground);
+            ground.ownerId = state.playerCountryId;
+            ground.strategicValue = 80f;
+            var war = new Confrontation
+            {
+                id = "RECOVERY-PRESSURE", initiatorId = state.playerCountryId,
+                defenderId = subject.id, escalation = EscalationState.LimitedConflict,
+                resolved = !atWar
+            };
+            state.confrontations.Add(war);
+            Assert.AreEqual(80f, TerritorySystem.LostValue(state, subject.id), 0.001f);
+            float target = atWar ? 10f : 4f;
+            subject.displacement.displaced = 40f;
+            for (int month = 0; month < 96; month++)
+            {
+                Assert.AreEqual(target, DisplacementSystem.DisplacementTargetFor(state, subject), 0.001f);
+                DisplacementSystem.MonthlyUpdate(state);
+                Assert.GreaterOrEqual(subject.displacement.displaced, target,
+                    "Good food and standards must not erase continued occupation or war.");
+            }
+            Assert.Less(subject.displacement.displaced, target + 1f,
+                "Displacement should approach the remaining pressure, not stay frozen.");
+
+            // Fixture-only removal of the remaining causes, not a free game verb.
+            ground.ownerId = subject.id;
+            war.resolved = true;
+            for (int month = 0; month < 96; month++)
+            {
+                Assert.AreEqual(0f, DisplacementSystem.DisplacementTargetFor(state, subject), 0.001f);
+                DisplacementSystem.MonthlyUpdate(state);
+            }
+            Assert.Less(subject.displacement.displaced, 1f,
+                "After occupation and war end, their displacement must also recover.");
         }
 
         // ---------- the world uses the verb ----------

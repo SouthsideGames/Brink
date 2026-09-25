@@ -301,9 +301,6 @@ namespace Brink.Core
                 // theatres: a war on one side of the world becomes somebody
                 // else's opening on the other, which is the thing that makes the
                 // map structural rather than a picture.
-                float perceivedWeakness = Math.Max(0f, country.pillars.military - perceivedStrength);
-                if (TheatreSystem.IsOverstretched(state, other.id))
-                    perceivedWeakness += TheatreSystem.TotalCommitment(state, other.id) * 9f;
 
                 // A claim needs either an exploitable weakness or a genuine
                 // rivalry. The weakness-only gate meant two well-matched rivals
@@ -313,8 +310,7 @@ namespace Brink.Core
                 // sanctioning itself into depression. Peer rivals do fight; what
                 // they need is a reason, and coldness plus a resource prize is
                 // one.
-                bool deepRivalry = relationship.relations < 25f;
-                if ((perceivedWeakness > 8f || deepRivalry) && relationship.relations < 50f)
+                if (ClaimJustified(state, country, other.id, out float perceivedWeakness))
                 {
                     // Ambition is bounded by reach (GDD §16). A government does
                     // not press a claim it has no way to prosecute, so a weak
@@ -1391,9 +1387,27 @@ namespace Brink.Core
             return prize;
         }
 
+        // Read the same current cause at selection and execution. A held plan
+        // is intent, not permission to ignore improved relations or new reports.
+        static bool ClaimJustified(GameState state, CountryState country, string targetId,
+            out float perceivedWeakness)
+        {
+            perceivedWeakness = 0f;
+            if (country == null || string.IsNullOrEmpty(targetId) || targetId == country.id) return false;
+            var target = state.FindCountry(targetId);
+            var relationship = state.FindRelationship(country.id, targetId);
+            if (target == null || relationship == null) return false;
+            float perceivedStrength = PerceivedStrength(state, country.id, target, IntelDomain.Military);
+            perceivedWeakness = Math.Max(0f, country.pillars.military - perceivedStrength);
+            if (TheatreSystem.IsOverstretched(state, targetId))
+                perceivedWeakness += TheatreSystem.TotalCommitment(state, targetId) * 9f;
+            bool deepRivalry = relationship.relations < 25f;
+            return (perceivedWeakness > 8f || deepRivalry) && relationship.relations < 50f;
+        }
+
         static bool AssertClaim(GameState state, AIState ai, CountryState country, string targetId, Random rng)
         {
-            if (string.IsNullOrEmpty(targetId)) return false;
+            if (!ClaimJustified(state, country, targetId, out _)) return false;
 
             // Fronts are priced, not forbidden — the same gate the player is
             // held to. The old check here was a flat "not while anyone involved
