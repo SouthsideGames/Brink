@@ -2218,6 +2218,22 @@ three had passed for a long time:
       world. Guarded by `MapAndLayoutTests` at folded and unfolded dimensions;
       final hardware feel remains part of the end-of-roadmap device pass.
 
+- [x] **Z Fold pass 2: the size class stops chasing its own tail, and the
+      maps become real geography** (spec 09 §§5, 9, 10). Unfolding still cut
+      sentences off until a panel change: the class was read from the content
+      width, which the class changes by moving the nav rail, so near the 64-column
+      line Medium (side rail, ~60 columns) and Compact (top strip, ~70) flipped and
+      the last measurement won. `Breakpoints.FromAvailableWidth` judges each class
+      by what *its own* rail leaves (rail costs pinned to the stylesheet by test),
+      plus a 250 ms settle watchdog that rebuilds only a view formatted for a stale
+      width. MAP now draws real outlines, state/provincial lines (US with AK/HI
+      insets) and intel-gated terrain from Natural Earth, baked by
+      `Tools/mapgen/generate_map_atlas.py` into `UI/MapAtlas.Generated.cs` — edit
+      the generator, never the generated file. **Presentation only**: distance and
+      reach still read authored `mapX`/`mapY`; terrain does not yet affect any
+      operation. World markers sit on real capitals, nudged by `MarkerSlots`, and
+      overlays read the same slots. Author .NET harness only; Unity and the device
+      pass remain the authority.
 - [x] **Institutional continuity is visible and evolves** (spec 32). Cabinet
       personality previously read a first-month minister and a ten-year
       incumbent identically even though `monthsInOffice` was already

@@ -26,32 +26,11 @@ namespace Brink.UI
 
         public const int Height = 21;
 
-        // Landmass silhouette. Deliberately impressionistic: a briefing-room
-        // chart, not a projection. Rows are Height tall, columns Width wide.
-        static readonly string[] Landmass =
-        {
-            "                                                                              ",
-            "      .-~~-.                    .-~~~~~-.        .-~~~~~~~-.                  ",
-            "     /      \\_.-~~-.        .-~/         \\~~-..-~         \\.-~-.             ",
-            "    |   .          `-.     /  |            |               |     \\            ",
-            "    |               .-'   |   `.          .'                `.    |           ",
-            "     \\            _/       \\    `-.____.-'                    \\  /            ",
-            "      |          |          `-.                          .-~~-'  |            ",
-            "      |          |             |                        |        |            ",
-            "       \\        /              |         .-~~-.         |       /             ",
-            "        |      |               `-.    .-'      `-.     /       |              ",
-            "        |      |                  |  |            |   |        |              ",
-            "         \\     |                  |  `.          .'   |       /               ",
-            "          |    |                   \\   `-.____.-'    /       |                ",
-            "          |   /                     |             .-'        |                ",
-            "          |  |                      |            |          /                 ",
-            "          \\  |                      `-.       .-'          |                  ",
-            "           | |                         |     |         .-~~-.                 ",
-            "           | |                         |     |        /      \\                ",
-            "            \\|                          \\   /        |        |               ",
-            "                                         `-'          `-....-'                ",
-            "                                                                              "
-        };
+        /// <summary>Glyph for land on the world chart. Overlays treat it as open ground.</summary>
+        public const char Land = '░';
+
+        /// <summary>Glyph for our own and the selected state's land.</summary>
+        public const char Highlight = '▒';
 
         /// <summary>
         /// Render the map. Countries appear at their authored coordinates with a
@@ -63,30 +42,36 @@ namespace Brink.UI
         /// <summary>
         /// Render the map into an arbitrary grid.
         ///
-        /// The chart is authored at 78×21 but the panel is whatever the device
-        /// gives us, so the silhouette and every marker are sampled into the
-        /// target grid rather than assuming a fixed width. On a folding phone's
-        /// cover screen that is roughly half the columns and half the rows, and
-        /// the map still reads.
+        /// The landmass is the real one (Natural Earth, baked by
+        /// `Tools/mapgen`), stippled the way a briefing-room plot is, and resampled
+        /// into whatever grid the panel measures. Our own ground and the current
+        /// selection are shaded more heavily so the eye finds them first.
+        ///
+        /// Country markers sit on each capital. On a small grid several capitals
+        /// share a cell — Europe is seven characters wide at 104 columns — so
+        /// <see cref="MarkerSlots"/> moves a crowded marker to the nearest free
+        /// slot in a fixed order. Overlays read the same slots, so a line drawn
+        /// to a country always ends on its label.
         /// </summary>
         public static string Render(GameState state, string selectedCountryId, int columns, int rows)
         {
             columns = Math.Max(28, columns);
             rows = Math.Max(8, rows);
 
-            float scaleX = (float)columns / Width;
-            float scaleY = (float)rows / Height;
+            var land = MapAtlas.Resample(MapAtlas.World, columns, rows, 0.25f);
+            char own = MapAtlas.WorldLetter(state.playerCountryId);
+            char selected = MapAtlas.WorldLetter(selectedCountryId);
 
             var grid = new char[rows][];
             for (int y = 0; y < rows; y++)
             {
                 grid[y] = new char[columns];
-                int sourceY = Math.Min(Landmass.Length - 1, (int)(y / scaleY));
-                string row = sourceY >= 0 ? Landmass[sourceY] : "";
                 for (int x = 0; x < columns; x++)
                 {
-                    int sourceX = (int)(x / scaleX);
-                    grid[y][x] = sourceX < row.Length ? row[sourceX] : ' ';
+                    char cell = land[y][x];
+                    grid[y][x] = cell == ' ' ? ' '
+                        : (own != '\0' && cell == own) || (selected != '\0' && cell == selected) ? Highlight
+                        : Land;
                 }
             }
 
@@ -94,15 +79,22 @@ namespace Brink.UI
             foreach (var location in state.locations)
             {
                 if (location.type != LocationType.Chokepoint) continue;
-                var owner = WorldFactory.FindProfile(GeographySystem.HostOf(location));
-                if (owner == null) continue;
-                Plot(grid, Scale(owner.mapX + 3, scaleX), Scale(owner.mapY + 1, scaleY), '#');
+                if (MapAtlas.TryWorldSite(location.id, out float fx, out float fy))
+                {
+                    Plot(grid, Cell(fx, columns), Cell(fy, rows), '#');
+                    continue;
+                }
+                // A site with no real position (the deliberately generic
+                // contested lane) sits just off its host's capital.
+                if (MapAtlas.TryWorldAnchor(GeographySystem.HostOf(location), out fx, out fy))
+                    Plot(grid, Cell(fx, columns) + 3, Cell(fy, rows) + 1, '#');
             }
 
-            foreach (var profile in WorldFactory.Profiles)
+            foreach (var pair in MarkerSlots(state, columns, rows))
             {
-                var country = state.FindCountry(profile.id);
-                if (country == null) continue;
+                var country = state.FindCountry(pair.Key);
+                var profile = WorldFactory.FindProfile(pair.Key);
+                if (country == null || profile == null) continue;
 
                 string code = profile.mapCode ?? profile.id.Substring(0, 2);
                 bool isPlayer = country.isPlayer;
@@ -112,9 +104,7 @@ namespace Brink.UI
                 char left = isPlayer ? '[' : isSelected ? '>' : StatusMarker(state, profile.id);
                 char right = isPlayer ? ']' : isSelected ? '<' : ' ';
 
-                int x0 = Scale(profile.mapX, scaleX);
-                int y0 = Scale(profile.mapY, scaleY);
-
+                int x0 = pair.Value.x, y0 = pair.Value.y;
                 Plot(grid, x0, y0, left);
                 Plot(grid, x0 + 1, y0, code.Length > 0 ? code[0] : '?');
                 Plot(grid, x0 + 2, y0, code.Length > 1 ? code[1] : '?');
@@ -130,7 +120,67 @@ namespace Brink.UI
             return sb.ToString();
         }
 
+        const int MarkerWidth = 4;
+
+        /// <summary>
+        /// Where each state's four-cell marker starts, for a grid of this size.
+        ///
+        /// Placed in roster order: a marker takes the slot centred on its capital
+        /// if that slot is free, otherwise the nearest free slot, preferring the
+        /// same row and nearby columns over moving rows (a row is twice as far
+        /// on screen as a column). Deterministic and pure; it depends only on the
+        /// grid size and which states exist.
+        /// </summary>
+        public static Dictionary<string, (int x, int y)> MarkerSlots(GameState state, int columns, int rows)
+        {
+            var slots = new Dictionary<string, (int x, int y)>();
+            var used = new bool[rows, columns];
+            int maxX = Math.Max(0, columns - MarkerWidth);
+
+            foreach (var profile in WorldFactory.Profiles)
+            {
+                if (state.FindCountry(profile.id) == null) continue;
+
+                int ax, ay;
+                if (MapAtlas.TryWorldAnchor(profile.id, out float fx, out float fy))
+                {
+                    ax = Cell(fx, columns) - 1;
+                    ay = Cell(fy, rows);
+                }
+                else
+                {
+                    ax = Scale(profile.mapX, (float)columns / Width);
+                    ay = Scale(profile.mapY, (float)rows / Height);
+                }
+                ax = Math.Max(0, Math.Min(maxX, ax));
+                ay = Math.Max(0, Math.Min(rows - 1, ay));
+
+                bool placed = false;
+                for (int radius = 0; radius <= columns + 2 * rows && !placed; radius++)
+                for (int dy = 0; dy <= radius / 2 && !placed; dy++)
+                {
+                    int dx = radius - 2 * dy;
+                    foreach (int sy in dy == 0 ? new[] { 0 } : new[] { dy, -dy })
+                    foreach (int sx in dx == 0 ? new[] { 0 } : new[] { dx, -dx })
+                    {
+                        int x = ax + sx, y = ay + sy;
+                        if (placed || x < 0 || x > maxX || y < 0 || y >= rows) continue;
+                        bool free = true;
+                        for (int i = 0; i < MarkerWidth && free; i++) if (used[y, x + i]) free = false;
+                        if (!free) continue;
+                        for (int i = 0; i < MarkerWidth; i++) used[y, x + i] = true;
+                        slots[profile.id] = (x, y);
+                        placed = true;
+                    }
+                }
+            }
+            return slots;
+        }
+
         static int Scale(int value, float scale) => (int)Math.Round(value * scale);
+
+        static int Cell(float fraction, int size)
+            => Math.Max(0, Math.Min(size - 1, (int)(fraction * size)));
 
         /// <summary>
         /// A single character summarising how a state stands toward us. Derived
@@ -158,7 +208,7 @@ namespace Brink.UI
         }
 
         public static string Legend =>
-            "  [US] our post   +partner   -friendly   ~rival   !hostile   # chokepoint";
+            "  [US] our post   +partner   -friendly   ~rival   !hostile   # chokepoint   ▒ our ground / selection";
 
         /// <summary>
         /// The USS class carrying a country's standing as colour.

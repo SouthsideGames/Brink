@@ -26,6 +26,56 @@ namespace Brink.UI
         public const int MediumMinColumns = 64;
         public const int LargeMinColumns = 82;
 
+        /// <summary>
+        /// Points the navigation rail takes beside the content, per layout.
+        /// Keep in step with `.nav-rail`, `.bp-medium .nav-rail` and
+        /// `.bp-short .nav-rail` in TerminalShell.uss (width + margin-right);
+        /// `BreakpointTests` parses the stylesheet and fails if they drift.
+        /// Compact puts the rail above the content, so it costs no width.
+        /// </summary>
+        public const float LargeRailPt = 174f;
+        public const float MediumRailPt = 78f;
+        public const float ShortRailPt = 56f;
+
+        public static float RailCost(SizeClass size, bool shortScreen)
+        {
+            if (shortScreen) return ShortRailPt;
+            switch (size)
+            {
+                case SizeClass.Large: return LargeRailPt;
+                case SizeClass.Medium: return MediumRailPt;
+                default: return 0f;
+            }
+        }
+
+        /// <summary>
+        /// The size class for a screen, from the width shared by the rail and
+        /// the content rather than from the content alone.
+        ///
+        /// **Deciding from content columns was a feedback loop.** The class
+        /// decides where the rail goes, and the rail decides how wide the content
+        /// is: an unfolded Z Fold measured about 70 columns with the rail on top
+        /// (so Medium), Medium moved a 78pt rail to the side (so about 60 columns,
+        /// so Compact), and the layout flipped between the two. Whichever
+        /// measurement landed last won, so the screen could show the side rail
+        /// with text wrapped for the full width — sentences cut off at the right
+        /// edge until switching panels rebuilt it.
+        ///
+        /// Here each class is judged by the columns *it* would leave the content,
+        /// so the answer does not depend on the answer and a width change settles
+        /// in one step. The largest class that still meets its own threshold wins.
+        /// </summary>
+        public static SizeClass FromAvailableWidth(float availablePt, float charWidthPt, bool shortScreen)
+        {
+            if (charWidthPt <= 0.01f || availablePt <= 0f) return SizeClass.Compact;
+            foreach (var size in new[] { SizeClass.Large, SizeClass.Medium })
+            {
+                int columns = (int)((availablePt - RailCost(size, shortScreen)) / charWidthPt) - 1;
+                if (FromColumns(columns) >= size) return size;
+            }
+            return SizeClass.Compact;
+        }
+
         public static SizeClass FromColumns(int columns)
         {
             if (columns >= LargeMinColumns) return SizeClass.Large;

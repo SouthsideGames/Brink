@@ -142,8 +142,8 @@ namespace Brink.UI
             foreach (var front in state.confrontations)
             {
                 if (front.resolved) continue;
-                if (!Point(front.initiatorId, canvas, out int ax, out int ay)
-                    || !Point(front.defenderId, canvas, out int bx, out int by)) continue;
+                if (!Point(state, front.initiatorId, canvas, out int ax, out int ay)
+                    || !Point(state, front.defenderId, canvas, out int bx, out int by)) continue;
                 canvas.Line(ax, ay, bx, by,
                     front.escalation == EscalationState.TotalWar ? '*' : '×', overwrite: false);
             }
@@ -152,12 +152,12 @@ namespace Brink.UI
             foreach (var location in state.locations)
             {
                 if (!location.IsOccupied) continue;
-                if (!Point(GeographySystem.HostOf(location), canvas, out int x, out int y)) continue;
+                if (!Point(state, GeographySystem.HostOf(location), canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, +1, 'O');
             }
             foreach (var location in state.locations)
                 if (location.foreignOperatorId == state.playerCountryId
-                    && Point(GeographySystem.HostOf(location), canvas, out int x, out int y))
+                    && Point(state, GeographySystem.HostOf(location), canvas, out int x, out int y))
                     PlotSignal(canvas, claimed, x, y, -1, 'B');
         }
 
@@ -169,8 +169,8 @@ namespace Brink.UI
                 bool active = false;
                 foreach (var commitment in treaty.commitments)
                     if (treaty.ClauseIsActive(state, commitment)) active = true;
-                if (active && Point(treaty.countryA, canvas, out int ax, out int ay)
-                    && Point(treaty.countryB, canvas, out int bx, out int by))
+                if (active && Point(state, treaty.countryA, canvas, out int ax, out int ay)
+                    && Point(state, treaty.countryB, canvas, out int bx, out int by))
                     canvas.Line(ax, ay, bx, by, ':', overwrite: false);
             }
         }
@@ -261,8 +261,8 @@ namespace Brink.UI
             var marked = new HashSet<string>();
             foreach (var link in DisplacementLinks(state))
             {
-                if (!Point(link.source, canvas, out int ax, out int ay)
-                    || !Point(link.host, canvas, out int bx, out int by)) continue;
+                if (!Point(state, link.source, canvas, out int ax, out int ay)
+                    || !Point(state, link.host, canvas, out int bx, out int by)) continue;
                 canvas.Line(ax, ay, bx, by, ':', overwrite: false);
                 if (marked.Add("s:" + link.source)) PlotSignal(canvas, claimed, ax, ay, -1, '}');
                 if (marked.Add("h:" + link.host)) PlotSignal(canvas, claimed, bx, by, +1, '{');
@@ -275,8 +275,8 @@ namespace Brink.UI
             foreach (var trade in state.trade)
             {
                 if (!trade.Involves(state.playerCountryId)) continue;
-                if (!Point(trade.countryA, canvas, out int ax, out int ay)
-                    || !Point(trade.countryB, canvas, out int bx, out int by)) continue;
+                if (!Point(state, trade.countryA, canvas, out int ax, out int ay)
+                    || !Point(state, trade.countryB, canvas, out int bx, out int by)) continue;
                 canvas.Line(ax, ay, bx, by, trade.embargoed ? 'x' : '·', overwrite: false);
             }
 
@@ -284,7 +284,7 @@ namespace Brink.UI
             {
                 if (sanction.senderId != state.playerCountryId && sanction.targetId != state.playerCountryId) continue;
                 string other = sanction.senderId == state.playerCountryId ? sanction.targetId : sanction.senderId;
-                if (!Point(other, canvas, out int x, out int y)) continue;
+                if (!Point(state, other, canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, -1, '$');
             }
         }
@@ -292,11 +292,11 @@ namespace Brink.UI
         static void DrawIntelligence(GameState state, AsciiCanvas canvas)
         {
             var claimed = new HashSet<int>();
-            if (!Point(state.playerCountryId, canvas, out int px, out int py)) return;
+            if (!Point(state, state.playerCountryId, canvas, out int px, out int py)) return;
             foreach (var network in state.networks)
             {
                 if (network.ownerId != state.playerCountryId || network.compromised) continue;
-                if (!Point(network.targetId, canvas, out int tx, out int ty)) continue;
+                if (!Point(state, network.targetId, canvas, out int tx, out int ty)) continue;
                 canvas.Line(px, py, tx, ty, ':', overwrite: false);
                 char access = network.penetration >= 55f ? '@'
                     : network.penetration >= 20f ? '^' : '?';
@@ -309,11 +309,11 @@ namespace Brink.UI
             foreach (var bloc in state.blocs)
             {
                 if (bloc.dissolved || bloc.memberIds.Count < 2) continue;
-                if (!Point(bloc.leaderId, canvas, out int lx, out int ly)) continue;
+                if (!Point(state, bloc.leaderId, canvas, out int lx, out int ly)) continue;
                 foreach (var member in bloc.memberIds)
                 {
                     if (member == bloc.leaderId) continue;
-                    if (!Point(member, canvas, out int mx, out int my)) continue;
+                    if (!Point(state, member, canvas, out int mx, out int my)) continue;
                     canvas.Line(lx, ly, mx, my, '=', overwrite: false);
                 }
             }
@@ -324,7 +324,7 @@ namespace Brink.UI
             var claimed = new HashSet<int>();
             foreach (var pair in RecentActivity(state))
             {
-                if (!Point(pair.Key, canvas, out int x, out int y)) continue;
+                if (!Point(state, pair.Key, canvas, out int x, out int y)) continue;
                 PlotSignal(canvas, claimed, x, y, -1, pair.Value > 1 ? '*' : '•');
             }
         }
@@ -398,15 +398,19 @@ namespace Brink.UI
             => char.IsLetterOrDigit(cell)
                || cell == '[' || cell == ']' || cell == '<' || cell == '>';
 
-        static bool Point(string countryId, AsciiCanvas canvas, out int x, out int y)
+        /// <summary>
+        /// The cell an overlay attaches to for a country: the middle of its
+        /// marker, read from the same slots the base map placed it in, so a line
+        /// drawn to a state ends on that state's label wherever crowding moved it.
+        /// </summary>
+        static bool Point(GameState state, string countryId, AsciiCanvas canvas, out int x, out int y)
         {
             x = y = 0;
-            var profile = WorldFactory.FindProfile(countryId);
-            if (profile == null) return false;
-            float sx = (float)canvas.Width / AsciiWorldMap.Width;
-            float sy = (float)canvas.Height / AsciiWorldMap.Height;
-            x = Math.Max(0, Math.Min(canvas.Width - 1, (int)Math.Round((profile.mapX + 1.5f) * sx)));
-            y = Math.Max(0, Math.Min(canvas.Height - 1, (int)Math.Round(profile.mapY * sy)));
+            if (countryId == null) return false;
+            var slots = AsciiWorldMap.MarkerSlots(state, canvas.Width, canvas.Height);
+            if (!slots.TryGetValue(countryId, out var slot)) return false;
+            x = Math.Min(canvas.Width - 1, slot.x + 1);
+            y = slot.y;
             return true;
         }
     }

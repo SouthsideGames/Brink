@@ -38,13 +38,22 @@ namespace Brink.UI
             return canvas;
         }
 
+        /// <summary>
+        /// A cell a non-overwriting stroke may draw into: blank, or the world
+        /// chart's stippled land. Land is ground, not information — an overlay
+        /// line crossing a continent must stay visible, and before the landmass
+        /// was filled it simply ran over blank interior.
+        /// </summary>
+        public static bool IsOpen(char cell)
+            => cell == ' ' || cell == AsciiWorldMap.Land || cell == AsciiWorldMap.Highlight;
+
         public char At(int x, int y)
             => InBounds(x, y) ? cells[y][x] : '\0';
 
         public void Plot(int x, int y, char glyph, bool overwrite = true)
         {
             if (!InBounds(x, y)) return;
-            if (!overwrite && cells[y][x] != ' ') return;
+            if (!overwrite && !IsOpen(cells[y][x])) return;
             cells[y][x] = glyph;
         }
 

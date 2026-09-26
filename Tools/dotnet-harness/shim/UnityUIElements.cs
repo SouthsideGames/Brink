@@ -169,6 +169,7 @@ namespace UnityEngine.UIElements
         public float flexGrow, flexShrink, unityParagraphSpacing;
         public float borderLeftWidth, borderRightWidth, borderTopWidth, borderBottomWidth;
         public DisplayStyle display;
+        public FlexDirection flexDirection;
         public Visibility visibility;
         public object color, backgroundColor;
     }
