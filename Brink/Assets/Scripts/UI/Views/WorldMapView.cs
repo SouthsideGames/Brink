@@ -96,8 +96,11 @@ namespace Brink.UI.Views
                 ? "terminal-text-dim" : "terminal-text-bright");
             coverage.text = $" COVERAGE: {AsciiCountryMap.DescribeLevel(level)}";
 
-            AddFigure().text = AsciiCountryMap.Render(state, selectedCountryId, W, TerminalMetrics.MapRows);
+            AddFigure().text = AsciiCountryMap.Render(state, selectedCountryId, W,
+                AsciiCountryMap.RowsFor(W, TerminalMetrics.MapRows));
             AddText("terminal-text-dim").text = AsciiCountryMap.Legend;
+            AddText(level >= AsciiCountryMap.DetailLevel.Detailed ? "terminal-text" : "terminal-text-dim").text =
+                AsciiCountryMap.DescribeTerrain(state, selectedCountryId);
 
             var back = MakeRow();
             var button = new Button(() => { zoomed = false; Refresh(); }) { text = "◄ WORLD MAP" };

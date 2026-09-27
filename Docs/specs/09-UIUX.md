@@ -303,10 +303,32 @@ everyone else.
 
 The order of operations in `TerminalShellController` matters and is commented in
 place: `UpdateMetrics` measures the probe label, derives
-`columns = floor(contentWidth / charWidth) − 1`, calls
-`ApplySizeClass(Breakpoints.FromColumns(columns))`, and only then hands the size
-class to `TerminalMetrics.Update`. **Columns must be measured before the size
-class is chosen**, because the class is now expressed in them.
+`columns = floor(contentWidth / charWidth) − 1`, chooses the class with
+`Breakpoints.FromAvailableWidth(contentWidth + railWidthNow, charWidth, short)`,
+and only then hands the size class to `TerminalMetrics.Update`.
+
+**The class is chosen from the width the rail and content share, never from the
+content alone** (Z Fold report, 2026-09). The class decides where the rail goes
+and the rail decides how wide the content is: an unfolded Fold measured ~70
+columns with the rail on top (Medium), Medium moved a 78pt rail to the side
+(~60 columns, Compact), and the layout flipped between the two. Whichever
+measurement landed last won, so the screen could show the side rail with text
+wrapped for the full width — sentences cut off at the right edge until changing
+panels rebuilt them. `FromAvailableWidth` judges each class by the columns *it*
+would leave after its own rail (`RailCost`: Large 174pt, Medium 78pt, `bp-short`
+56pt, Compact 0 — width + margin-right from the stylesheet, guarded by
+`BreakpointTests.RailCosts_MatchTheStylesheet`) and takes the largest that still
+meets its own threshold, so the answer no longer depends on the answer.
+`railWidthNow` is read from the same resolved layout as the content width, so the
+two always add up to the same total whatever layout measured them.
+
+**Settle watchdog.** Every 250 ms the shell re-measures (one text measurement)
+and rebuilds the visible view only if it was formatted for a different column
+count than the panel now has (`TerminalView.FormattedColumns`), or the
+assessment for a different count than `RefreshAll` last used. A geometry event
+that lands while the panel scale is still settling can no longer leave a screen
+wrapped for the old width. An open monthly briefing is re-wrapped on every
+`RefreshAll` for the same reason.
 
 `ApplySizeClass` swaps the class on `terminal-root` and USS does the rest.
 `ApplyNavLabels` shows full `Id` strings only at `Large` and the three-letter
@@ -762,26 +784,51 @@ Both are authored at one size and **sampled** into whatever grid they are given,
 so the same chart reads on a cover screen at roughly half the columns and half
 the rows.
 
-**`AsciiWorldMap`** — authored silhouette 78×21, deliberately impressionistic: a
-briefing-room chart, not a projection. `Width` is declared
-`= GeographySystem.MapWidth` and must never be redeclared as a literal: longitude
-wraps at that value in the distance model, and a renderer that disagreed with it
-would draw a world the simulation does not measure (spec 01 §3b).
-`Render(state, selected)` defaults to
-`TerminalMetrics.Columns × TerminalMetrics.MapRows`; the explicit overload floors
-at 28 columns and 8 rows. Chokepoints are plotted first as `#` so a country
-marker always wins the cell. Each country prints its two-letter `mapCode` framed
-by a standing glyph (`[XX]` ours, `>XX<` selected, otherwise `! ~ - +` or space).
+**Real geography, baked** (2026-09). Outlines, state/provincial lines, terrain
+and site positions come from Natural Earth (public domain) via
+`Tools/mapgen/generate_map_atlas.py`, which writes `UI/MapAtlas.Generated.cs`:
+run-length-encoded character rasters stored at roughly twice the widest panel,
+resampled at render time by `MapAtlas.Resample` / `ResampleTerrain`. The game
+reads no geographic file at runtime. **Presentation only**: distance, reach and
+theatres still come from the authored `mapX`/`mapY` (spec 01 §3b), so redrawing
+a coastline can never move a balance figure. To change a frame, a site position
+or the region grouping, edit the generator's tables and re-run it; never edit the
+generated file by hand.
 
-This is **countries, routes and chokepoints — not tiles.** It is not a
+**`AsciiWorldMap`** — the real landmass stippled `░` (our own ground and the
+selection `▒`), sampled into any grid ≥ 28×8. `Width`/`Height` (80×21) remain
+the default dimensions; `Width` is still declared `= GeographySystem.MapWidth`.
+Chokepoints plot first as `#` at their real position (the generic
+`CONTESTED_LANE` sits just off its host's capital). Each country prints its
+two-letter `mapCode` framed by a standing glyph (`[XX]` ours, `>XX<` selected,
+otherwise `! ~ - +` or space) on its capital. `MarkerSlots` resolves crowding —
+Europe is seven columns wide at 104 — by moving a marker to the nearest free
+four-cell slot, rows costing twice columns, in roster order; overlays attach
+through the same slots so a line ends on its label. `AsciiCanvas.IsOpen` treats
+`░`/`▒` as open ground so overlay strokes cross continents.
+
+This is still **countries, routes and chokepoints — not tiles.** It is not a
 province-painting board (GDD §16).
 
-**`AsciiCountryMap`** — the country-scale chart, drawn as a rounded box with
-installations placed inside it. Site positions are derived from a hash of the
-location id, so a site sits in the same place every time you look at it. Markers:
-`@` capital (followed by `=XX`), `P` port, `A` airbase, `I` industry, `E` energy,
-`#` chokepoint, `^` pass, `*` foreign force present, `!` occupied. Clamped to
-30–100 columns and ≥ 7 rows.
+**`AsciiCountryMap`** — the country's real outline with its internal lines
+(admin-1 units when there are ≤ 40, otherwise Natural Earth's coarser grouping:
+regions for FRA/ITA/JPN/RUS/VNM, the four nations for GBR, none for TUR). The US
+chart carries Alaska and Hawaii as insets in the bottom-left. The chart keeps its
+own aspect, centred in exactly `columns` per row, up to `RowsFor(columns,
+mapRows)` = max(mapRows, min(34, columns/2)) rows — taller than the world map
+because the chart is the screen's subject and the view scrolls. Outline glyphs
+follow which sides are open (`| - / \`, `o` for islets); internal lines are drawn
+on one side only (`|`, `_`). Lower-case state codes (`tx`) appear only where a
+clear run of interior fits them. Markers: `@` capital (+`=XX`), `P` port, `A`
+airbase, `I` industry, `E` energy, `M` materials, `V` pass, `#` chokepoint, `*`
+foreign force present, `!` occupied; terrain `^` mountains and `.` desert
+(stippled on alternate cells), `~` river or lake. Sites sit at their real
+positions; two in one cell spread to the nearest free cell in a fixed order. A
+state with no baked chart (a secession successor) falls back to the old box with
+hash-placed sites (`RenderSchematic`). `DescribeTerrain` prints mountain, desert
+and water shares and the named ranges, deserts and rivers.
+
+Terrain is **descriptive only** — no operation resolves against it yet.
 
 ---
 
@@ -819,9 +866,9 @@ about installations, but any network at all lifts you off the public floor.
 
 | Level | Reached by | Chart | Written readout |
 |---|---|---|---|
-| `Public` | default | Border and capital only | "Our reporting does not extend inside this country." Nothing else is named |
+| `Public` | default | Real outline, state lines and capital | "Our reporting does not extend inside this country." Nothing else is named |
 | `Sites` | confidence ≥ `Low` **or** penetration ≥ 20 | All known sites plotted by type | Site names and types; occupation shown. Closes with a prompt that condition is still unknown |
-| `Detailed` | confidence ≥ `High` **or** penetration ≥ 55 | Plus `*` for foreign basing | Garrison as a range with a confidence grade; foreign forces named |
+| `Detailed` | confidence ≥ `High` **or** penetration ≥ 55 | Plus `*` for foreign basing, and terrain (ranges, deserts, rivers) with its written survey | Garrison as a range with a confidence grade; foreign forces named |
 | `Complete` | it is our own country | Everything | Exact garrison and defence values |
 
 A compromised network contributes zero penetration. `DescribeLevel` prints the

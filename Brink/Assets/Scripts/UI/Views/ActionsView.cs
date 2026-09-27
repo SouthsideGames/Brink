@@ -46,7 +46,7 @@ namespace Brink.UI.Views
 
             AddText("terminal-text-dim").text = openOnly
                 ? " Showing commands open to you now. Switch to ALL to study blocked capabilities and what would unlock them."
-                : " Open commands are listed before blocked capabilities. Blocked commands stay visible because knowing what would unlock them is part of the game.";
+                : " Open commands are listed before blocked capabilities.";
         }
 
         void BuildFilters()

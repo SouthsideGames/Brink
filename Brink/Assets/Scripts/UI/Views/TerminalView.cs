@@ -32,6 +32,13 @@ namespace Brink.UI.Views
             Root.style.display = DisplayStyle.None;
         }
 
+        /// <summary>
+        /// The column count this view was last built and wrapped for. The shell
+        /// compares it with the live measurement so a fold or rotation that lands
+        /// between layout passes cannot leave a screen wrapped for the old width.
+        /// </summary>
+        public int FormattedColumns { get; private set; } = -1;
+
         public void SetVisible(bool visible)
         {
             Root.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
@@ -50,6 +57,7 @@ namespace Brink.UI.Views
         /// </summary>
         public void Refresh()
         {
+            FormattedColumns = TerminalMetrics.Columns;
             Build();
             FormatText(Root);
             GateOnAffordability(Root);

@@ -124,6 +124,16 @@ namespace Brink.Tests
             Assert.AreEqual('B', canvas.At(1, 0));
             Assert.AreEqual(' ', canvas.At(1, 1));
         }
+
+        [Test]
+        public void Canvas_OverlayLinesCrossTheWorldChartsLand()
+        {
+            var canvas = new AsciiCanvas(6, 1, AsciiWorldMap.Land);
+            canvas.Plot(3, 0, AsciiWorldMap.Highlight);
+            canvas.Line(0, 0, 5, 0, ':', overwrite: false);
+            Assert.AreEqual("::::::", canvas.ToString(),
+                "Stippled land is ground, not information: a line over a continent must stay visible.");
+        }
     }
 
     public class BreakpointTests
@@ -137,6 +147,79 @@ namespace Brink.Tests
             Assert.AreEqual(SizeClass.Medium, Breakpoints.FromColumns(Breakpoints.LargeMinColumns - 1));
             Assert.AreEqual(SizeClass.Large, Breakpoints.FromColumns(Breakpoints.LargeMinColumns));
             Assert.AreEqual(SizeClass.Large, Breakpoints.FromColumns(120));
+        }
+
+        /// <summary>
+        /// The Z Fold report: the class used to be read from the content width,
+        /// which the class itself changes by moving the rail, so a width near a
+        /// threshold flipped between layouts and left text wrapped for the other
+        /// one. Judged from the shared width, each class must leave itself enough
+        /// columns, and the next class up must not have fitted.
+        /// </summary>
+        [Test]
+        public void FromAvailableWidth_ChoosesAClassThatFitsItsOwnRail()
+        {
+            const float charWidth = 7.8f;
+            foreach (bool shortScreen in new[] { false, true })
+            for (float width = 250f; width <= 1400f; width += 3f)
+            {
+                var size = Breakpoints.FromAvailableWidth(width, charWidth, shortScreen);
+                int Columns(SizeClass c) => (int)((width - Breakpoints.RailCost(c, shortScreen)) / charWidth) - 1;
+
+                if (size != SizeClass.Compact)
+                    Assert.GreaterOrEqual(Breakpoints.FromColumns(Columns(size)), size,
+                        $"{size} at {width}pt leaves only {Columns(size)} columns once its own rail is placed");
+                if (size != SizeClass.Large)
+                {
+                    var bigger = size + 1;
+                    Assert.Less(Breakpoints.FromColumns(Columns(bigger)), bigger,
+                        $"{bigger} would have fitted at {width}pt");
+                }
+            }
+        }
+
+        [Test]
+        public void FromAvailableWidth_IsTheSameWhicheverLayoutMeasuredIt()
+        {
+            // Width shared by rail and content is what each layout's measurement
+            // adds back up to, so the decision cannot depend on the current class.
+            const float charWidth = 7.8f;
+            for (float total = 400f; total <= 900f; total += 5f)
+            {
+                var answers = new System.Collections.Generic.HashSet<SizeClass>();
+                foreach (SizeClass current in System.Enum.GetValues(typeof(SizeClass)))
+                {
+                    float content = total - Breakpoints.RailCost(current, false);
+                    answers.Add(Breakpoints.FromAvailableWidth(content + Breakpoints.RailCost(current, false), charWidth, false));
+                }
+                Assert.AreEqual(1, answers.Count, $"the size class at {total}pt depends on the layout that measured it");
+            }
+        }
+
+        [Test]
+        public void RailCosts_MatchTheStylesheet()
+        {
+            string path = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(),
+                "Assets/Resources/UI/TerminalShell.uss");
+            Assert.IsTrue(System.IO.File.Exists(path), $"Stylesheet not found at {path}");
+            string uss = System.IO.File.ReadAllText(path);
+
+            float Px(string selector, string property)
+            {
+                int start = uss.IndexOf(selector + " {", System.StringComparison.Ordinal);
+                Assert.GreaterOrEqual(start, 0, $"no rule for {selector}");
+                int end = uss.IndexOf('}', start);
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    uss.Substring(start, end - start), @"(?m)^\s*" + property + @":\s*([0-9.]+)px");
+                Assert.IsTrue(match.Success, $"{selector} has no {property}");
+                return float.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            float baseMargin = Px(".nav-rail", "margin-right");
+            Assert.AreEqual(Breakpoints.LargeRailPt, Px(".nav-rail", "width") + baseMargin);
+            Assert.AreEqual(Breakpoints.MediumRailPt, Px(".bp-medium .nav-rail", "width") + baseMargin);
+            Assert.AreEqual(Breakpoints.ShortRailPt,
+                Px(".bp-short .nav-rail", "width") + Px(".bp-short .nav-rail", "margin-right"));
         }
 
         [Test]
